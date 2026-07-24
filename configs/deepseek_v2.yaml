@@ -1,0 +1,70 @@
+model_class: frankesteindecoder
+model:
+  dims:
+    vocab_size: 102400
+    hidden_size: 5120
+    num_layers: 60
+    num_loops: 1
+    num_heads: 128
+    dropout: 0.0
+    layer_pattern:
+    - mla_attn
+    mode: decoder
+  use_bitnet: false
+  norm:
+    type: rms_norm
+  embedding:
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  use_moe: true
+  ffn_hidden_size: 12288
+  ffn_activation: swiglu
+  num_experts: 160
+  top_k_experts: 6
+  attention:
+    mla:
+      latent_rank: 512
+training:
+  task: mlm
+  batch_size: 1
+  dataloader_workers: 2
+  max_length: 4096
+  mlm_probability: 0.15
+  max_samples: 20000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: ./temp_data/v2_dataset_cache
+  gradient_accumulation_steps: 16
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1.0e-06
+      adamw-lr_norms: 5.0e-06
+      adamw-lr_attention: 3.0e-06
+      adamw-lr_other: 2.0e-06
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_embeddings:
+      - 0.9
+      - 0.95
+      adamw-betas_norms:
+      - 0.9
+      - 0.95
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-eps_embeddings: 1.0e-08
+      adamw-eps_norms: 1.0e-08
+      adamw-eps_attention: 1.0e-08
+      adamw-eps_other: 1.0e-08
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  gradient_log_interval: 10
