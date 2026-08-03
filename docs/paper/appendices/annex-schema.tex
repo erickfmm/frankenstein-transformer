@@ -152,6 +152,15 @@ attention.engram.embed\_dim\_per\_head & int $\ge 1$ & Embedding dimension per h
 attention.engram.kernel\_size & int $\ge 1$ & Causal depthwise conv kernel width for Engram. \\
 attention.engram.seed & int & Random seed for N-gram hash multipliers. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.mhc.*}} \\
+\midrule
+mhc.enabled & bool & Enable the manifold-constrained n-stream residual (mHC, arXiv:2512.24880). Default: \texttt{false}. \\
+mhc.expansion\_rate & int $\ge 1$ & Residual-stream expansion factor $n$. The stream becomes $n \times$ \texttt{hidden\_size}. $1$ recovers the identity mapping. Default: 4. \\
+mhc.sinkhorn\_iters & int $\ge 1$ & Sinkhorn-Knopp normalisation rounds constraining $H^{\text{res}}$ to be doubly stochastic. Default: 20. \\
+mhc.gating\_init & float $> 0$ & Initial value of the mHC gating scalars $\alpha$. Default: 0.01. \\
+mhc.checkpoint & bool & Gradient checkpointing on mHC layers to mitigate the $\sim n\times$ activation-memory increase. Default: \texttt{false}. \\
+mhc.full\_prec\_under\_bitnet & bool & Keep the mHC coefficient projection full-precision under BitNet. Default: \texttt{true}. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.* (flat top-level)}} \\
 \midrule
 use\_moe & bool & Enable Mixture of Experts in FFN layers. \\
@@ -412,6 +421,7 @@ The schema enforces the following cross-component validation rules, implemented 
     \item When \texttt{base\_model} is set, \texttt{training.task} is required. If \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} is also required.
     \item \texttt{task: mlm} requires \texttt{training.optimizer}; \texttt{task: sbert} requires \texttt{training.sbert}.
     \item \texttt{bitnet\_routers=true} requires \texttt{use\_bitnet=true}. The flag has no effect otherwise.
+    \item \texttt{use\_mhc=true} (mHC n-stream residual) and \texttt{use\_mixture\_of\_depths=true} are mutually exclusive. Enabling both raises a \texttt{ValueError}: MoD token routing operates on a single $C$-dimensional stream, which conflicts with the n-stream residual.
     \item \texttt{fasa\_attn} and \texttt{sparge\_attn} are evaluation-only layer types. They raise \texttt{RuntimeError} if used during training. They must not appear in \texttt{model.dims.layer\_pattern} for training runs.
     \item \texttt{model\_class: frankensteindecoder} forces \texttt{model.dims.mode: decoder} at runtime. Setting \texttt{model.dims.mode: encoder} with this class is overridden.
     \item Either \texttt{base\_model} must be present, or both \texttt{model\_class} and \texttt{model} must be present. The schema rejects configurations that provide neither or an incomplete combination.

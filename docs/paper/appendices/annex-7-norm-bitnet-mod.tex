@@ -1,7 +1,7 @@
 \section{Normalization, Quantization, Depth Routing, and Runtime Algorithms}
 \label{sec:annex-norm-bitnet-mod}
 
-This annex collects the implementation-level detail for normalization variants, BitNet-style ternary quantization, adaptive depth routing (Mixture-of-Depths), conditional memory (Engram), factorized embeddings, and the runtime algorithms (training-step stability controls, SBERT inference router) that support the configuration-driven pipeline. The main sections defer to this annex for the mathematical formulations and pseudocode; the bibliography keys cited here resolve against \texttt{docs/bibliography/}.
+This annex collects the implementation-level detail for normalization variants, BitNet-style ternary quantization, adaptive depth routing (Mixture-of-Depths), conditional memory (Engram), factorized embeddings, and the runtime algorithms (training-step stability controls, SBERT inference router) that support the configuration-driven pipeline. (The manifold-constrained residual connections of mHC are documented separately in Annex~9.) The main sections defer to this annex for the mathematical formulations and pseudocode; the bibliography keys cited here resolve against \texttt{docs/bibliography/}.
 
 \subsection{Normalization Variants: LayerNorm, RMSNorm, pRMSNorm, Dynamic Tanh, Dynamic Erf, and FlashNorm}
 

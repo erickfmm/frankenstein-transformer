@@ -15,7 +15,7 @@ The seventeen implemented mixer architectures span major research directions in 
 
 The sparse attention coverage is comprehensive, but implementation of training-free methods (FASA, SpargeAttn) raises runtime errors during training, reflecting architectural constraints: these methods require pretrained checkpoints from full-attention models or specific fine-tuning procedures that are not currently automated.
 
-The gated mechanism coverage is strong across major categories (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax).
+The gated mechanism coverage is strong across major categories (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax). Residual-stream macro-design is covered through the manifold-constrained n-stream residual (mHC) \citep{xie_mhc_2025}, whose Sinkhorn--Knopp projection onto the Birkhoff polytope restores the identity-mapping property lost by unconstrained Hyper-Connections; mHC is validated only at the level of the published 3B--27B MoE experiments, and the framework would benefit from independent reproductions at smaller scales (see Appendix~\ref{sec:annex-mhc}).
 
 \subsection{Optimizer Landscape Fragmentation}
 

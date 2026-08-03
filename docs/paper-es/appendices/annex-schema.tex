@@ -152,6 +152,15 @@ attention.engram.embed\_dim\_per\_head & int $\ge 1$ & Dimensión de embedding p
 attention.engram.kernel\_size & int $\ge 1$ & Ancho de kernel de convolución depthwise causal para Engram. \\
 attention.engram.seed & int & Semilla aleatoria para multiplicadores hash de N-gramas. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.mhc.*}} \\
+\midrule
+mhc.enabled & bool & Activar el flujo residual de $n$ streams restringido por variedad (mHC, arXiv:2512.24880). Por defecto: \texttt{false}. \\
+mhc.expansion\_rate & int $\ge 1$ & Factor de expansión del flujo residual $n$. El flujo pasa a ser $n \times$ \texttt{hidden\_size}. $1$ recupera el mapeo de identidad. Por defecto: 4. \\
+mhc.sinkhorn\_iters & int $\ge 1$ & Rondas de normalización Sinkhorn-Knopp que restringen $H^{\text{res}}$ a ser doblemente estocástica. Por defecto: 20. \\
+mhc.gating\_init & float $> 0$ & Valor inicial de los escalares de compuerta mHC $\alpha$. Por defecto: 0.01. \\
+mhc.checkpoint & bool & Gradient checkpointing en capas mHC para mitigar el aumento de $\sim n\times$ en memoria de activaciones. Por defecto: \texttt{false}. \\
+mhc.full\_prec\_under\_bitnet & bool & Mantener la proyección de coeficientes mHC en precisión completa bajo BitNet. Por defecto: \texttt{true}. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.* (nivel superior plano)}} \\
 \midrule
 use\_moe & bool & Activar Mezcla de Expertos en capas FFN. \\
@@ -412,6 +421,7 @@ El esquema impone las siguientes reglas de validación entre componentes, implem
     \item Cuando \texttt{base\_model} está configurado, \texttt{training.task} es obligatorio. Si \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} también es obligatorio.
     \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}.
     \item \texttt{bitnet\_routers=true} requiere \texttt{use\_bitnet=true}. La bandera no tiene efecto en caso contrario.
+    \item \texttt{use\_mhc=true} (flujo residual de $n$ streams mHC) y \texttt{use\_mixture\_of\_depths=true} son mutuamente excluyentes. Habilitar ambos lanza un \texttt{ValueError}: el enrutamiento MoD de tokens opera sobre un flujo $C$-dimensional único, en conflicto con el flujo residual de $n$ streams.
     \item \texttt{fasa\_attn} y \texttt{sparge\_attn} son tipos de capa solo para evaluación. Lanzan \texttt{RuntimeError} si se usan durante el entrenamiento. No deben aparecer en \texttt{model.dims.layer\_pattern} para ejecuciones de entrenamiento.
     \item \texttt{model\_class: frankensteindecoder} fuerza \texttt{model.dims.mode: decoder} en tiempo de ejecución. Establecer \texttt{model.dims.mode: encoder} con esta clase se sobrescribe.
     \item O bien \texttt{base\_model} debe estar presente, o bien tanto \texttt{model\_class} como \texttt{model} deben estar presentes. El esquema rechaza configuraciones que no proporcionen ninguno o una combinación incompleta.

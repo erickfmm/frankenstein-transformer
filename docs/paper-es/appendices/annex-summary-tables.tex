@@ -179,6 +179,34 @@ FlashNorm & $x_i / \sqrt{\frac{1}{d}\sum_j x_j^2 + \epsilon}$ & solo RMS (sin pe
 \end{longtable}
 \normalsize
 
+\subsection{Conexiones Residuales}
+
+La Tabla~\ref{tab:all-residuals} compara los esquemas de conexión residual disponibles en el código base: el residual de identidad estándar y el flujo residual de $n$ streams restringido por variedad (mHC) \citep{xie_mhc_2025}. $n$ es el factor de expansión del flujo, $C$ la dimensión oculta, $t_{\max}$ el número de iteraciones Sinkhorn--Knopp y $\alpha$ los escalares de compuerta. HC (Hyper-Connexions sin restricción) se lista como referencia pero \emph{no} está expuesto en este código base.
+
+\small
+\begin{longtable}{p{2.2cm}p{4.6cm}p{3.2cm}p{3.0cm}}
+\toprule
+\textbf{Esquema} & \textbf{Actualización del Flujo} & \textbf{Restricción} & \textbf{Referencia} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Esquema} & \textbf{Actualización del Flujo} & \textbf{Restricción} & \textbf{Referencia} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{\textit{continúa en la página siguiente}} \\
+\endfoot
+\bottomrule
+\caption{Esquemas de conexión residual. $x_l \in \mathbb{R}^{C}$ (estándar) o $\mathbb{R}^{n \times C}$ (HC/mHC) es el flujo en la capa $l$, $F$ la función de capa y $H^{\text{pre}}, H^{\text{post}}, H^{\text{res}}$ los mapeos aprendidos de lectura/escritura/mezcla. mHC se controla con los campos de esquema \texttt{model.mhc}; los detalles completos están en el Anexo~9.}
+\label{tab:all-residuals}
+\endlastfoot
+Residual estándar & $x_{l+1} = x_l + F(x_l, W_l)$ & Mapeo de identidad (por construcción) & \citep{he_deep_2016} \\
+Hyper-Connexions (HC) & $x_{l+1} = H^{\text{res}}_l x_l + (H^{\text{post}}_l)^{\top} F(H^{\text{pre}}_l x_l, W_l)$ & Sin restricción & \citep{xie_mhc_2025} \\
+mHC (este código base) & misma actualización que HC & $H^{\text{res}}_l$ doblemente estocástica vía Sinkhorn--Knopp ($t_{\max} = 20$), $H^{\text{pre}} = \sigma(\cdot)$, $H^{\text{post}} = 2\sigma(\cdot)$, init $\alpha$ en $0.01$ & \citep{xie_mhc_2025} \\
+\bottomrule
+\end{longtable}
+\normalsize
+
 \subsection{Funciones de Activación}
 
 La Tabla~\ref{tab:all-activations-es} cataloga las 43 funciones de activación disponibles a través del campo de esquema \texttt{ffn\_activation} (40 elementales más 3 variantes de FFN con compuerta), agrupadas por familia. ``Aprend.'' marca las activaciones con parámetros entrenables; las fórmulas completas están en el Anexo~8.

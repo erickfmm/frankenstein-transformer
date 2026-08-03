@@ -1,0 +1,226 @@
+\section{Hyper-Connexiones Restringidas por Variedad (mHC)}
+\label{sec:annex-mhc}
+
+Este anexo documenta la integración de las \emph{Hyper-Connexiones Restringidas
+por Variedad} (\emph{Manifold-Constrained Hyper-Connections}, mHC)
+\citep{xie_mhc_2025}, un marco de conexiones residuales que reemplaza el
+residual de identidad estándar por un flujo residual de $n$ streams cuya
+matriz de mezcla de flujo se restringe al politopo de Birkhoff. El cuerpo
+principal difiere a este anexo la formulación matemática, los detalles de
+implementación y los resultados reportados; las claves bibliográficas citadas
+aquí se resuelven contra \texttt{docs/bibliography/}.
+
+\subsection{Motivación: la Propiedad de Mapeo de Identidad}
+
+La conexión residual estándar \citep{he_deep_2016} propaga señales a través de
+la profundidad sin modificación: con $x_l \in \mathbb{R}^{C}$ y una función de
+capa $F$,
+\[
+x_{l+1} = x_l + F(x_l, W_l),
+\]
+de modo que, recursivamente, $x_L = x_l + \sum_{i=l}^{L-1} F(x_i, W_i)$. El
+término directo $x_l$ (el \emph{mapeo de identidad}) permite que la información
+fluya de capas superficiales a profundas sin cambios, lo que He et
+al.~\citep{he_deep_2016} identificaron como clave para el entrenamiento estable
+de redes muy profundas.
+
+Las \emph{Hyper-Connections} (HC) \citep{xie_mhc_2025} ensanchan el flujo
+residual por un factor de expansión $n$: el flujo pasa a ser
+$x_l \in \mathbb{R}^{n \times C}$ mientras que la función interna $F$ de cada
+capa sigue operando en dimensión $C$. Tres mapeos lineales aprendibles
+gobiernan el flujo en cada capa:
+\begin{itemize}[leftmargin=*]
+    \item $H^{\text{pre}}_l \in \mathbb{R}^{1 \times n}$ agrega el flujo de
+        dimensión $nC$ a la entrada de capa de dimensión $C$;
+    \item $H^{\text{post}}_l \in \mathbb{R}^{1 \times n}$ proyecta la salida de
+        la capa de vuelta al flujo;
+    \item $H^{\text{res}}_l \in \mathbb{R}^{n \times n}$ mezcla características
+        \emph{dentro} del flujo residual.
+\end{itemize}
+La propagación de una sola capa es
+\[
+x_{l+1} = H^{\text{res}}_l x_l + \big(H^{\text{post}}_l\big)^{\!\top}
+F\big(H^{\text{pre}}_l x_l, W_l\big),
+\]
+y, recursivamente, la señal profunda-a-superficial está gobernada por el mapeo
+compuesto $\prod_{i=L-1}^{l} H^{\text{res}}_{i+1}$. Debido a que
+$H^{\text{res}}_l$ no está restringida en HC, este compuesto se desvía de la
+identidad, la norma del flujo no se conserva y la señal hacia adelante/hacia
+atrás puede amplificarse o atenuarse sin límite. En un modelo MoE de 27B
+parámetros los autores reportan magnitudes de ganancia compuesta con picos
+cercanos a $3000$ (frente a $1$ para la identidad), correlacionadas con picos
+de norma de gradiente y una subida inesperada de pérdida alrededor del paso
+12k. HC además multiplica el costo de acceso a memoria por aproximadamente $n$
+(el ``muro de memoria'').
+
+\subsection{Formulación}
+
+Sea $x_l \in \mathbb{R}^{n \times C}$ el flujo en la capa $l$. Los coeficientes
+se calculan a partir del flujo aplanado
+$\tilde{x}_l = \operatorname{vec}(x_l) \in \mathbb{R}^{1 \times nC}$:
+\[
+\tilde{H}_l = \frac{1}{r_l}\Big(\alpha \odot
+\big(\tilde{x}_l\, \varphi_l\big)\Big) + b_l,
+\qquad r_l = \frac{\|\tilde{x}_l\|_2}{\sqrt{nC}},
+\]
+donde $\varphi_l \in \mathbb{R}^{nC \times (n^2+2n)}$ es una proyección lineal
+aprendida, $b_l \in \mathbb{R}^{1 \times (n^2+2n)}$ un sesgo aprendido y
+$\alpha^{\text{pre}}, \alpha^{\text{post}}, \alpha^{\text{res}} \in \mathbb{R}$
+son escalares de compuerta aprendibles inicializados a un valor pequeño ($0.01$
+en el paper y en este código base). El escalado por $1/r_l$ es matemáticamente
+equivalente a RMSNorm sobre el flujo aplanado, con la escala por dimensión
+absorbida en $\varphi_l$. Los tres bloques de coeficientes son entonces:
+\[
+H^{\text{pre}}_l = \sigma\big(\tilde{H}^{\text{pre}}_l\big),
+\qquad
+H^{\text{post}}_l = 2\,\sigma\big(\tilde{H}^{\text{post}}_l\big),
+\qquad
+H^{\text{res}}_l = \mathrm{SK}\big(\exp(\tilde{H}^{\text{res}}_l)\big),
+\]
+donde $\sigma$ es la sigmoide logística (que impone no negatividad y evita la
+cancelación de señal por coeficientes de signo mixto) y
+$\mathrm{SK}(\cdot)$ es la proyección Sinkhorn--Knopp sobre el conjunto de
+matrices doblemente estocásticas
+\[
+\mathcal{M}^{\text{res}} = \big\{\, H \in \mathbb{R}^{n \times n} \;:\;
+H \ge 0,\;\; H\,\mathbf{1}_n = \mathbf{1}_n,\;\;
+\mathbf{1}_n^{\top} H = \mathbf{1}_n^{\top} \,\big\},
+\]
+es decir, el politopo de Birkhoff (la envolvente convexa de las matrices de
+permutación). Partiendo de $M^{(0)} = \exp(\tilde{H}^{\text{res}}_l)$, la
+proyección alterna normalizaciones de filas y columnas,
+\[
+M^{(t)} = T_c\big(T_r(M^{(t-1)})\big),
+\]
+para $t = 1, \ldots, t_{\max}$ rondas ($t_{\max} = 20$ por defecto tanto en el
+paper como en este código base). Finalmente, la entrada de capa y el flujo
+actualizado son
+\[
+F^{\text{pre}}_l = H^{\text{pre}}_l x_l \in \mathbb{R}^{1 \times C},
+\qquad
+x_{l+1} = H^{\text{res}}_l x_l +
+\big(H^{\text{post}}_l\big)^{\!\top} \otimes F\big(F^{\text{pre}}_l, W_l\big).
+\]
+
+\subsection{Propiedades de la Restricción de Variedad}
+
+Restringir $H^{\text{res}}_l$ al politopo de Birkhoff restaura el
+comportamiento de conservación del residual de identidad y garantiza tres
+propiedades \citep{xie_mhc_2025}:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Preservación de norma}: la norma espectral satisface
+        $\|H^{\text{res}}_l\|_2 \le 1$ (mapeo no expansivo), mitigando la
+        explosión de gradientes.
+    \item \textbf{Cerradura composicional}: las matrices doblemente
+        estocásticas son cerradas bajo multiplicación, por lo que el compuesto
+        $\prod_i H^{\text{res}}_{i}$ sigue siendo doblemente estocástico a
+        profundidad arbitraria, preservando la propiedad de mapeo de identidad
+        entre \emph{cualesquiera} dos profundidades.
+    \item \textbf{Interpretación geométrica}: como el politopo de Birkhoff es
+        la envolvente convexa de las matrices de permutación,
+        $H^{\text{res}}_l x$ es una combinación convexa de permutaciones de
+        características, es decir, un mecanismo monótono de mezcla de
+        información entre streams.
+\end{enumerate}
+Cuando $n = 1$ la condición doblemente estocástica degenera al escalar $1$,
+recuperando el mapeo de identidad exacto. Con $t_{\max}$ finito la proyección
+es aproximada, y la ganancia compuesta hacia atrás se desvía de $1$ pero
+permanece acotada (alrededor de $1.6$ en las ejecuciones de 27B del paper, una
+reducción de ~3 órdenes de magnitud frente a los $\approx 3000$ de HC).
+
+\subsection{Implementación en Frankenstein Transformer}
+
+mHC es un reemplazo opcional de la conexión residual estándar, controlado por
+el sub-objeto \texttt{model.mhc} (esquema jerárquico) o por las claves planas
+\texttt{use\_mhc}, con \texttt{additionalProperties: false} a nivel de
+sub-objeto:
+
+\begin{itemize}[leftmargin=*]
+    \item \texttt{enabled} (\texttt{use\_mhc}, bool, por defecto
+        \texttt{false}): reemplazar el residual estándar por el flujo residual
+        de $n$ streams.
+    \item \texttt{expansion\_rate} (\texttt{mhc\_expansion\_rate}, int $\ge 1$,
+        por defecto $4$): factor de expansión del flujo $n$; el flujo pasa a
+        ser $n \times \texttt{hidden\_size}$ mientras los internos de la capa
+        permanecen en \texttt{hidden\_size}. $1$ recupera el mapeo de
+        identidad.
+    \item \texttt{sinkhorn\_iters} (\texttt{mhc\_sinkhorn\_iters}, int $\ge 1$,
+        por defecto $20$): rondas de normalización Sinkhorn--Knopp $t_{\max}$.
+    \item \texttt{gating\_init} (\texttt{mhc\_gating\_init}, float $> 0$,
+        por defecto $0.01$): valor inicial de los escalares de compuerta
+        $\alpha$.
+    \item \texttt{checkpoint} (\texttt{mhc\_checkpoint}, bool, por defecto
+        \texttt{false}): gradient checkpointing en capas mHC, intercambiando
+        cómputo por memoria para mitigar el aumento de $\sim n{\times}$ en la
+        memoria de activaciones del flujo residual de $n$ streams.
+    \item \texttt{full\_prec\_under\_bitnet}
+        (\texttt{mhc\_full\_prec\_under\_bitnet}, bool, por defecto
+        \texttt{true}): mantener la proyección de coeficientes $\varphi_l$ como
+        \texttt{nn.Linear} de precisión completa incluso cuando
+        \texttt{use\_bitnet} es \texttt{true}, evitando el ruido de
+        cuantización ternaria en los pequeños coeficientes mHC; cuando es
+        \texttt{false} (y BitNet está activado), $\varphi_l$ usa
+        \texttt{BitLinear}.
+\end{itemize}
+
+El módulo vive en \texttt{src/model/mhc.py}:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{Sinkhorn\-Knopp\-Function} (\texttt{torch.autograd.Function}):
+        el pase hacia adelante aplica las normalizaciones alternadas de filas y
+        columnas de $\exp(\cdot)$; el pase hacia atrás recomputa la iteración
+        completa bajo \texttt{torch.enable\_grad} y diferencia a través de
+        ella, obteniendo el producto Jacobiano-vector exacto (la estrategia de
+        recomputación en chip descrita en el paper).
+    \item \texttt{ManifoldHyperConnections} (\texttt{nn.Module}): contiene
+        $\varphi_l$ (\texttt{proj}), $b_l$ (\texttt{bias}) y los tres escalares
+        de compuerta \texttt{alpha\_pre}, \texttt{alpha\_post},
+        \texttt{alpha\_res}; expone \texttt{fpre} (proyectar el flujo a la
+        entrada de capa), \texttt{recombine} (actualizar el flujo con la salida
+        de la capa) y \texttt{mappings} (calcular $H^{\text{pre}},
+        H^{\text{post}}, H^{\text{res}}$).
+\end{itemize}
+
+Cableado en \texttt{src/model/frankenstein\_model.py}:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{HybridLayer} gana módulos opcionales \texttt{mhc\_attn} y
+        \texttt{mhc\_ffn} (un módulo mHC por función de capa); la ruta
+        \texttt{\_forward\_dense\_mhc} ejecuta atención y FFN como funciones de
+        capa sobre el flujo compartido $(B, S, n, C)$.
+    \item \texttt{FrankensteinTransformer} expande el embedding de dimensión
+        $C$ a $(B, S, n, C)$ al entrar mediante \texttt{mhc\_in\_proj} y lo
+        colapsa de vuelta a $C$ mediante \texttt{mhc\_out\_proj} antes de la
+        cabeza.
+    \item Los parámetros mHC se enrutan al grupo de parámetros \texttt{other}
+        del optimizador.
+    \item mHC es \textbf{incompatible con \texttt{use\_mixture\_of\_depths}}:
+        el enrutamiento MoD de tokens opera sobre un flujo $C$-dimensional
+        único, en conflicto con el flujo residual de $n$ streams; se lanza un
+        \texttt{ValueError} si ambos están habilitados.
+\end{itemize}
+
+Ejemplo de configuración: \texttt{configs/examples/es\_arch\_mhc\_adamw.yaml}.
+
+\subsection{Resultados Reportados}
+
+El paper evalúa mHC (y HC) con $n = 4$, $t_{\max} = 20$ e inicialización de
+$\alpha$ en $0.01$ sobre modelos MoE estilo DeepSeek-V3 (atención MLA, RoPE,
+RMSNorm, balance de carga sin pérdida auxiliar) de 3B a 27B parámetros
+\citep{xie_mhc_2025}:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Estabilidad}: mHC elimina las subidas de pérdida de HC (p.
+        ej., cerca del paso 12k en el modelo de 27B) y mantiene acotada la
+        ganancia residual compuesta ($\approx 1.6$ frente a picos de HC de
+        $\approx 3000$).
+    \item \textbf{Calidad}: en el modelo de 27B, mHC mejora la pérdida final de
+        entrenamiento en $0.021$ sobre la línea base, supera a la línea base en
+        los 8 benchmarks de evaluación (BBH, DROP, GSM8K, HellaSwag, MATH,
+        MMLU, PIQA, TriviaQA) y a HC en 7 de 8, con las mayores ganancias en
+        tareas de razonamiento ($+2.1$ BBH, $+2.3$ DROP sobre HC).
+    \item \textbf{Escalado}: la mejora relativa de pérdida sobre la línea base
+        se mantiene a través de escalas de cómputo (3B $\to$ 9B $\to$ 27B) y a
+        través de 1T tokens de escalado de datos.
+    \item \textbf{Sobrecarga}: con kernels fusionados (TileLang), cálculo de
+        coeficientes en precisión mixta, recomputación selectiva y solapamiento
+        de comunicación DualPipe, mHC añade solo $6.7\%$ de tiempo adicional de
+        entrenamiento con $n = 4$ en el modelo de 27B.
+\end{itemize}

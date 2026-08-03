@@ -179,6 +179,34 @@ FlashNorm & $x_i / \sqrt{\frac{1}{d}\sum_j x_j^2 + \epsilon}$ & RMS only (weight
 \end{longtable}
 \normalsize
 
+\subsection{Residual Connections}
+
+Table~\ref{tab:all-residuals} compares the residual-connection schemes available in the codebase: the standard identity residual and the manifold-constrained n-stream residual (mHC) \citep{xie_mhc_2025}. $n$ is the stream expansion factor, $C$ the hidden dimension, $t_{\max}$ the Sinkhorn--Knopp iteration count, and $\alpha$ the gating scalars. HC (unconstrained Hyper-Connections) is listed for reference but is \emph{not} exposed in this codebase.
+
+\small
+\begin{longtable}{p{2.2cm}p{4.6cm}p{3.2cm}p{3.0cm}}
+\toprule
+\textbf{Scheme} & \textbf{Stream Update} & \textbf{Constraint} & \textbf{Reference} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Scheme} & \textbf{Stream Update} & \textbf{Constraint} & \textbf{Reference} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{\textit{continued on next page}} \\
+\endfoot
+\bottomrule
+\caption{Residual-connection schemes. $x_l \in \mathbb{R}^{C}$ (standard) or $\mathbb{R}^{n \times C}$ (HC/mHC) is the stream at layer $l$, $F$ the layer function, $H^{\text{pre}}, H^{\text{post}}, H^{\text{res}}$ the learned read/write/mix mappings. mHC is controlled by the \texttt{model.mhc} schema fields; full details in Annex~9.}
+\label{tab:all-residuals}
+\endlastfoot
+Standard residual & $x_{l+1} = x_l + F(x_l, W_l)$ & Identity mapping (by construction) & \citep{he_deep_2016} \\
+Hyper-Connections (HC) & $x_{l+1} = H^{\text{res}}_l x_l + (H^{\text{post}}_l)^{\top} F(H^{\text{pre}}_l x_l, W_l)$ & Unconstrained & \citep{xie_mhc_2025} \\
+mHC (this codebase) & same update as HC & $H^{\text{res}}_l$ doubly stochastic via Sinkhorn--Knopp ($t_{\max} = 20$), $H^{\text{pre}} = \sigma(\cdot)$, $H^{\text{post}} = 2\sigma(\cdot)$, $\alpha$-init $0.01$ & \citep{xie_mhc_2025} \\
+\bottomrule
+\end{longtable}
+\normalsize
+
 \subsection{Activation Functions}
 
 Table~\ref{tab:all-activations} catalogs the 43 feed-forward activation functions available through the \texttt{ffn\_activation} schema field (40 elementwise plus 3 gated-FFN variants), grouped by family. ``Learn.'' marks activations with trainable parameters; the full formulas are in Annex~8.

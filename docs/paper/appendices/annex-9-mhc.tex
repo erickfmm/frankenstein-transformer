@@ -1,0 +1,213 @@
+\section{Manifold-Constrained Hyper-Connections (mHC)}
+\label{sec:annex-mhc}
+
+This annex documents the integration of \emph{Manifold-Constrained
+Hyper-Connections} (mHC) \citep{xie_mhc_2025}, a residual-connection framework
+that replaces the standard identity residual with an $n$-stream residual whose
+stream-mixing matrix is constrained to the Birkhoff polytope. The main body
+delegates to this annex for the mathematical formulation, the implementation
+details, and the reported results; the bibliography keys cited here resolve
+against \texttt{docs/bibliography/}.
+
+\subsection{Motivation: The Identity-Mapping Property}
+
+The standard residual connection \citep{he_deep_2016} propagates signals across
+depth unmodified: with $x_l \in \mathbb{R}^{C}$ and a layer function $F$,
+\[
+x_{l+1} = x_l + F(x_l, W_l),
+\]
+so that, recursively, $x_L = x_l + \sum_{i=l}^{L-1} F(x_i, W_i)$. The direct
+term $x_l$ (the \emph{identity mapping}) lets information flow from shallow to
+deep layers unchanged, which He et al.~\citep{he_deep_2016} identified as key
+to stable training of very deep networks.
+
+\emph{Hyper-Connections} (HC) \citep{xie_mhc_2025} widen the residual stream by
+an expansion factor $n$: the stream becomes $x_l \in \mathbb{R}^{n \times C}$
+while each layer's internal function $F$ still operates at dimension $C$. Three
+learnable linear mappings govern the stream each layer:
+\begin{itemize}[leftmargin=*]
+    \item $H^{\text{pre}}_l \in \mathbb{R}^{1 \times n}$ aggregates the
+        $nC$-dimensional stream into the $C$-dimensional layer input;
+    \item $H^{\text{post}}_l \in \mathbb{R}^{1 \times n}$ maps the layer output
+        back onto the stream;
+    \item $H^{\text{res}}_l \in \mathbb{R}^{n \times n}$ mixes features
+        \emph{within} the residual stream.
+\end{itemize}
+The single-layer propagation is
+\[
+x_{l+1} = H^{\text{res}}_l x_l + \big(H^{\text{post}}_l\big)^{\!\top}
+F\big(H^{\text{pre}}_l x_l, W_l\big),
+\]
+and, recursively, the deep-to-shallow signal is governed by the composite
+mapping $\prod_{i=L-1}^{l} H^{\text{res}}_{i+1}$. Because $H^{\text{res}}_l$ is
+unconstrained in HC, this composite deviates from the identity, the stream
+norm is not conserved, and the forward/backward signal can be amplified or
+attenuated without bound. On a 27B-parameter MoE model the authors report
+composite gain magnitudes peaking near $3000$ (versus $1$ for the identity),
+correlating with gradient-norm spikes and an unexpected loss surge around step
+12k. HC also multiplies memory-access cost by roughly $n$ (the ``memory
+wall'').
+
+\subsection{Formulation}
+
+Let $x_l \in \mathbb{R}^{n \times C}$ be the stream at layer $l$. The
+coefficients are computed from the flattened stream
+$\tilde{x}_l = \operatorname{vec}(x_l) \in \mathbb{R}^{1 \times nC}$:
+\[
+\tilde{H}_l = \frac{1}{r_l}\Big(\alpha \odot
+\big(\tilde{x}_l\, \varphi_l\big)\Big) + b_l,
+\qquad r_l = \frac{\|\tilde{x}_l\|_2}{\sqrt{nC}},
+\]
+where $\varphi_l \in \mathbb{R}^{nC \times (n^2+2n)}$ is a learned linear
+projection, $b_l \in \mathbb{R}^{1 \times (n^2+2n)}$ a learned bias, and
+$\alpha^{\text{pre}}, \alpha^{\text{post}}, \alpha^{\text{res}} \in \mathbb{R}$
+are learnable gating scalars initialized to a small value ($0.01$ in the paper
+and in this codebase). The scaling by $1/r_l$ is mathematically equivalent to
+RMSNorm on the flattened stream, with the per-dimension scale absorbed into
+$\varphi_l$. The three coefficient blocks are then:
+\[
+H^{\text{pre}}_l = \sigma\big(\tilde{H}^{\text{pre}}_l\big),
+\qquad
+H^{\text{post}}_l = 2\,\sigma\big(\tilde{H}^{\text{post}}_l\big),
+\qquad
+H^{\text{res}}_l = \mathrm{SK}\big(\exp(\tilde{H}^{\text{res}}_l)\big),
+\]
+where $\sigma$ is the logistic sigmoid (enforcing non-negativity and preventing
+signal cancellation from mixed-sign coefficients) and
+$\mathrm{SK}(\cdot)$ is the Sinkhorn--Knopp projection onto the set of doubly
+stochastic matrices
+\[
+\mathcal{M}^{\text{res}} = \big\{\, H \in \mathbb{R}^{n \times n} \;:\;
+H \ge 0,\;\; H\,\mathbf{1}_n = \mathbf{1}_n,\;\;
+\mathbf{1}_n^{\top} H = \mathbf{1}_n^{\top} \,\big\},
+\]
+i.e., the Birkhoff polytope (the convex hull of permutation matrices).
+Starting from $M^{(0)} = \exp(\tilde{H}^{\text{res}}_l)$, the projection
+alternates row and column normalizations,
+\[
+M^{(t)} = T_c\big(T_r(M^{(t-1)})\big),
+\]
+for $t = 1, \ldots, t_{\max}$ rounds ($t_{\max} = 20$ by default in both the
+paper and this codebase). Finally the layer input and the updated stream are
+\[
+F^{\text{pre}}_l = H^{\text{pre}}_l x_l \in \mathbb{R}^{1 \times C},
+\qquad
+x_{l+1} = H^{\text{res}}_l x_l +
+\big(H^{\text{post}}_l\big)^{\!\top} \otimes F\big(F^{\text{pre}}_l, W_l\big).
+\]
+
+\subsection{Properties of the Manifold Constraint}
+
+Constraining $H^{\text{res}}_l$ to the Birkhoff polytope restores the
+conservation behavior of the identity residual and guarantees three properties
+\citep{xie_mhc_2025}:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Norm preservation}: the spectral norm satisfies
+        $\|H^{\text{res}}_l\|_2 \le 1$ (non-expansive map), mitigating
+        gradient explosion.
+    \item \textbf{Compositional closure}: doubly stochastic matrices are
+        closed under multiplication, so the composite
+        $\prod_i H^{\text{res}}_{i}$ remains doubly stochastic at arbitrary
+        depth, preserving the identity-mapping property between \emph{any} two
+        depths.
+    \item \textbf{Geometric interpretation}: since the Birkhoff polytope is
+        the convex hull of permutation matrices, $H^{\text{res}}_l x$ is a
+        convex combination of feature permutations, i.e., a monotonic
+        information-mixing mechanism across streams.
+\end{enumerate}
+When $n = 1$ the doubly stochastic condition degenerates to the scalar $1$,
+recovering the exact identity mapping. With finite $t_{\max}$ the projection is
+approximate, and the composite backward gain deviates from $1$ but stays
+bounded (around $1.6$ in the paper's 27B runs, a $\sim3$-orders-of-magnitude
+reduction versus HC's $\approx 3000$).
+
+\subsection{Implementation in Frankenstein Transformer}
+
+mHC is an opt-in replacement for the standard residual connection, controlled
+by the \texttt{model.mhc} sub-object (hierarchical schema) or the flat
+\texttt{use\_mhc} keys, with \texttt{additionalProperties: false} at the
+sub-object level:
+
+\begin{itemize}[leftmargin=*]
+    \item \texttt{enabled} (\texttt{use\_mhc}, bool, default \texttt{false}):
+        replace the standard residual with the n-stream residual.
+    \item \texttt{expansion\_rate} (\texttt{mhc\_expansion\_rate}, int $\ge 1$,
+        default $4$): stream expansion factor $n$; the stream becomes
+        $n \times \texttt{hidden\_size}$ while layer internals stay at
+        \texttt{hidden\_size}. $1$ recovers the identity mapping.
+    \item \texttt{sinkhorn\_iters} (\texttt{mhc\_sinkhorn\_iters}, int $\ge 1$,
+        default $20$): Sinkhorn--Knopp normalization rounds $t_{\max}$.
+    \item \texttt{gating\_init} (\texttt{mhc\_gating\_init}, float $> 0$,
+        default $0.01$): initial value of the gating scalars $\alpha$.
+    \item \texttt{checkpoint} (\texttt{mhc\_checkpoint}, bool, default
+        \texttt{false}): gradient checkpointing on mHC layers, trading compute
+        for memory to mitigate the $\sim n{\times}$ activation-memory increase
+        of the n-stream residual.
+    \item \texttt{full\_prec\_under\_bitnet}
+        (\texttt{mhc\_full\_prec\_under\_bitnet}, bool, default
+        \texttt{true}): keep the coefficient projection $\varphi_l$ a
+        full-precision \texttt{nn.Linear} even when \texttt{use\_bitnet} is
+        \texttt{true}, avoiding ternary-quantization noise on the small mHC
+        coefficients; when \texttt{false} (and BitNet enabled), $\varphi_l$
+        uses \texttt{BitLinear}.
+\end{itemize}
+
+The module lives in \texttt{src/model/mhc.py}:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{Sinkhorn\-Knopp\-Function} (\texttt{torch.autograd.Function}):
+        the forward pass applies the alternating row/column normalizations of
+        $\exp(\cdot)$; the backward pass recomputes the full iteration under
+        \texttt{torch.enable\_grad} and differentiates through it, obtaining
+        the exact Jacobian-vector product (the recompute-on-chip strategy
+        described in the paper).
+    \item \texttt{ManifoldHyperConnections} (\texttt{nn.Module}): holds
+        $\varphi_l$ (\texttt{proj}), $b_l$ (\texttt{bias}) and the three gating
+        scalars \texttt{alpha\_pre}, \texttt{alpha\_post},
+        \texttt{alpha\_res}; exposes \texttt{fpre} (project the stream down to
+        a layer input), \texttt{recombine} (update the stream with a layer
+        output) and \texttt{mappings} (compute $H^{\text{pre}}, H^{\text{post}},
+        H^{\text{res}}$).
+\end{itemize}
+
+Wiring in \texttt{src/model/frankenstein\_model.py}:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{HybridLayer} gains optional \texttt{mhc\_attn} and
+        \texttt{mhc\_ffn} modules (one mHC module per layer function); the
+        \texttt{\_forward\_dense\_mhc} path runs attention and FFN as layer
+        functions over the shared $(B, S, n, C)$ stream.
+    \item \texttt{FrankensteinTransformer} expands the $C$-dimensional
+        embedding to $(B, S, n, C)$ on entry via \texttt{mhc\_in\_proj} and
+        collapses back to $C$ via \texttt{mhc\_out\_proj} before the head.
+    \item mHC parameters route into the \texttt{other} optimizer parameter
+        group.
+    \item mHC is \textbf{incompatible with \texttt{use\_mixture\_of\_depths}}:
+        MoD token routing operates on a single $C$-dimensional stream,
+        conflicting with the n-stream residual; a \texttt{ValueError} is raised
+        if both are enabled.
+\end{itemize}
+
+Example configuration: \texttt{configs/examples/es\_arch\_mhc\_adamw.yaml}.
+
+\subsection{Reported Results}
+
+The paper evaluates mHC (and HC) with $n = 4$, $t_{\max} = 20$ and
+$\alpha$-init $0.01$ on DeepSeek-V3-style MoE models (MLA attention, RoPE,
+RMSNorm, Loss-Free load balancing) from 3B to 27B parameters
+\citep{xie_mhc_2025}:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Stability}: mHC removes HC's loss surges (e.g., near step
+        12k on the 27B model) and keeps the composite residual gain bounded
+        ($\approx 1.6$ versus HC peaks $\approx 3000$).
+    \item \textbf{Quality}: on the 27B model mHC improves final training loss
+        by $0.021$ over the baseline, beats the baseline on all 8 downstream
+        benchmarks (BBH, DROP, GSM8K, HellaSwag, MATH, MMLU, PIQA, TriviaQA)
+        and HC on 7 of 8, with the largest gains on reasoning tasks
+        ($+2.1$ BBH, $+2.3$ DROP over HC).
+    \item \textbf{Scaling}: the relative loss improvement over baseline is
+        maintained across compute scales (3B $\to$ 9B $\to$ 27B) and across
+        1T tokens of token scaling.
+    \item \textbf{Overhead}: with fused kernels (TileLang), mixed-precision
+        coefficient computation, selective recomputation, and DualPipe
+        communication overlap, mHC adds only $6.7\%$ additional training time
+        at $n = 4$ on the 27B model.
+\end{itemize}

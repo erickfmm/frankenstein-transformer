@@ -15,7 +15,7 @@ Las diecisiete arquitecturas de mezclador implementadas abarcan las principales 
 
 La cobertura de atención dispersa es completa, pero la implementación de métodos sin entrenamiento (FASA, SpargeAttn) genera errores en tiempo de ejecución durante el entrenamiento, reflejando restricciones arquitectónicas: estos métodos requieren checkpoints preentrenados de modelos de atención completa o procedimientos específicos de ajuste fino que actualmente no están automatizados.
 
-La cobertura de mecanismos de compuerta es sólida en todas las categorías principales (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax).
+La cobertura de mecanismos de compuerta es sólida en todas las categorías principales (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax). El macro-diseño del flujo residual está cubierto mediante el flujo residual de $n$ streams restringido por variedad (mHC) \citep{xie_mhc_2025}, cuya proyección Sinkhorn--Knopp sobre el politopo de Birkhoff restaura la propiedad de mapeo de identidad que pierden las Hyper-Connexions sin restricción; mHC está validado solo al nivel de los experimentos MoE publicados de 3B--27B, y el marco se beneficiaría de reproducciones independientes a escalas menores (ver Apéndice~\ref{sec:annex-mhc}).
 
 \subsection{Fragmentación del Panorama de Optimizadores}
 

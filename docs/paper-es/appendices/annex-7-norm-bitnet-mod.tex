@@ -1,7 +1,7 @@
 \section{Normalización, Cuantización, Enrutamiento de Profundidad y Algoritmos de Ejecución}
 \label{sec:annex-norm-bitnet-mod}
 
-Este anexo recopila el detalle a nivel de implementación para las variantes de normalización, cuantización ternaria estilo BitNet, enrutamiento adaptativo de profundidad (Mixture-of-Depths), memoria condicional (Engram), embeddings factorizados y los algoritmos de ejecución (controles de estabilidad del paso de entrenamiento, enrutador de inferencia SBERT) que soportan la tubería impulsada por configuración. Las secciones principales difieren a este anexo para las formulaciones matemáticas y el pseudocódigo; las claves bibliográficas citadas aquí se resuelven contra \texttt{docs/bibliography/}.
+Este anexo recopila el detalle a nivel de implementación para las variantes de normalización, cuantización ternaria estilo BitNet, enrutamiento adaptativo de profundidad (Mixture-of-Depths), memoria condicional (Engram), embeddings factorizados y los algoritmos de ejecución (controles de estabilidad del paso de entrenamiento, enrutador de inferencia SBERT) que soportan la tubería impulsada por configuración. (Las conexiones residuales restringidas por variedad de mHC se documentan por separado en el Anexo~9.) Las secciones principales difieren a este anexo para las formulaciones matemáticas y el pseudocódigo; las claves bibliográficas citadas aquí se resuelven contra \texttt{docs/bibliography/}.
 
 \subsection{Variantes de Normalización: LayerNorm, RMSNorm, pRMSNorm, Tanh Dinámico, Erf Dinámico y FlashNorm}
 
