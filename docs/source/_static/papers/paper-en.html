@@ -5,7 +5,7 @@
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="Erick F. Merino M. This work is not affiliated erickfmm@gmail.com" />
-  <title>Frankestein Transformer</title>
+  <title>Frankenstein Transformer</title>
   <style>
     html {
       line-height: 1.5;
@@ -170,7 +170,7 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Frankestein Transformer</h1>
+<h1 class="title">Frankenstein Transformer</h1>
 <p class="author">Erick F. Merino M.<br />
 This work is not affiliated<br />
 <code>erickfmm@gmail.com</code></p>
@@ -191,8 +191,8 @@ approximations. Despite this wealth of architectural and algorithmic
 advances, the research ecosystem remains fragmented: comparing sequence
 mixers and optimizers under consistent training conditions requires
 substantial engineering effort, hindering reproducibility and slowing
-scientific progress. In this work, we propose Frankestein Transformer, a
-configuration-driven CLI toolkit (<code>frankestein-transformer</code>)
+scientific progress. In this work, we propose Frankenstein Transformer, a
+configuration-driven CLI toolkit (<code>frankenstein-transformer</code>)
 that unifies the definition, training, and deployment of transformer
 models through a strict YAML schema. The toolkit supports thirty-five
 sequence mixer variants across six families (dense, recurrent, sparse,
@@ -256,8 +256,8 @@ reproducibility, slows scientific progress, and increases the barrier to
 entry for new researchers.</p>
 <p>This work addresses these challenges through a unified,
 configuration-driven experimentation toolkit available at <a
-href="https://github.com/erickfmm/frankestein-transformer"
-class="uri">https://github.com/erickfmm/frankestein-transformer</a> that
+href="https://github.com/erickfmm/frankenstein-transformer"
+class="uri">https://github.com/erickfmm/frankenstein-transformer</a> that
 provides:</p>
 <ol>
 <li><p><strong>Schema-First Design</strong>: A strict, validated
@@ -293,7 +293,7 @@ across supported Python versions.</p></li>
 </ol>
 <p>The project command surface is:</p>
 <div class="center">
-<p><code>frankestein-transformer</code></p>
+<p><code>frankenstein-transformer</code></p>
 </div>
 <p>with subcommands for encoder and decoder workflows:
 <code>train</code>, <code>deploy</code>, <code>quantize</code>,
@@ -454,7 +454,7 @@ prototyping of novel architectures. The <code>torch.nn.Module</code>
 abstraction, automatic mixed-precision training via
 <code>torch.cuda.amp</code>, and the <code>torch.compile</code> JIT
 compiler form the backbone of most contemporary transformer
-implementations. Frankestein Transformer is built entirely on PyTorch,
+implementations. Frankenstein Transformer is built entirely on PyTorch,
 leveraging its module system for composable architecture
 definitions.</p>
 <p><strong>TensorFlow</strong> <span class="citation"
@@ -548,7 +548,7 @@ architectures. None of these tools provide a systematic framework for
 experimenting with novel sequence mixer architectures, comparing diverse
 optimization algorithms under controlled conditions, or exploring the
 interaction between architectural choices and training dynamics.</p>
-<p><strong>Frankestein Transformer</strong> fills this gap by providing
+<p><strong>Frankenstein Transformer</strong> fills this gap by providing
 a schema-first configuration system purpose-built for architecture
 experimentation. Its key differentiators include:</p>
 <ul>
@@ -577,7 +577,7 @@ schema-driven form rendering with inline documentation, real-time
 validation, and CLI command generation.</p></li>
 </ul>
 <p>By decoupling architecture definition from training infrastructure
-through a validated configuration contract, Frankestein Transformer
+through a validated configuration contract, Frankenstein Transformer
 enables systematic comparison of sequence mixer families and
 optimization strategies under identical training conditions—a capability
 not provided by any existing tool in the ecosystem.</p>
@@ -611,7 +611,7 @@ with masked language modeling (MLM) objectives.</p></li>
 <li><p><strong>mini</strong>: Simplified encoder variant designed for
 smaller-scale training scenarios. Provides reduced parameter overhead
 and faster iteration for experimentation and prototyping.</p></li>
-<li><p><strong>frankesteindecoder</strong>: Autoregressive causal
+<li><p><strong>frankensteindecoder</strong>: Autoregressive causal
 decoder for LLM-style next-token generation. Enables causal attention
 masking for sequential text generation tasks. When this class is
 selected, runtime enforces <code>mode=’decoder’</code>.</p></li>
@@ -628,7 +628,7 @@ predict randomly masked tokens based on full context.</p></li>
 can only attend to previous tokens in the sequence. Required for
 autoregressive (AR) next-token prediction tasks such as language
 modeling and text generation. When
-<code>model_class=’frankesteindecoder’</code>, the system automatically
+<code>model_class=’frankensteindecoder’</code>, the system automatically
 forces <code>mode=’decoder’</code> at runtime.</p></li>
 </ul>
 <p>This dual architecture support enables the system to handle both
@@ -724,7 +724,7 @@ tasks following GPT methodology. Model learns sequential dependencies
 with causal attention where each token can only attend to preceding
 tokens.</p></li>
 <li><p><strong>Model Class</strong>: Typically uses
-<code>model_class=’frankesteindecoder’</code> for autoregressive decoder
+<code>model_class=’frankensteindecoder’</code> for autoregressive decoder
 architectures.</p></li>
 </ul>
 <p>This dual task support enables unified experimentation across both
@@ -1322,7 +1322,7 @@ recurrent models, quantization) address these challenges, and this
 toolkit lets you explore all of them.</p></li>
 </ul>
 <h1 id="sec:annex-schema">Configuration Schema Structure</h1>
-<p>The Frankestein Transformer toolkit enforces a strict YAML
+<p>The Frankenstein Transformer toolkit enforces a strict YAML
 configuration schema with <code>additionalProperties: false</code> at
 all levels. The schema is defined in <code>src/schema.yaml</code>, which
 references modular sub-schemas in <code>src/schema/</code>. Every
@@ -1345,7 +1345,7 @@ and <code>trust_remote_code</code> (bool). Required when using
 <li><p><code>model_class</code> (enum) — Model architecture variant:
 <code>frankenstein</code> (mixed-architecture encoder),
 <code>mini</code> (simplified encoder), or
-<code>frankesteindecoder</code> (autoregressive causal decoder).
+<code>frankensteindecoder</code> (autoregressive causal decoder).
 Required when <code>base_model</code> is not set.</p></li>
 <li><p><code>model</code> (object) — Model architecture parameters (see
 §<a href="#subsec:model-config" data-reference-type="ref"
@@ -2783,7 +2783,7 @@ is required. If <code>task=mlm</code>,
 evaluation-only layer types. They raise <code>RuntimeError</code> if
 used during training. They must not appear in <code>layer_pattern</code>
 for training runs.</p></li>
-<li><p><code>model_class: frankesteindecoder</code> forces
+<li><p><code>model_class: frankensteindecoder</code> forces
 <code>mode: decoder</code> at runtime. Setting
 <code>mode: encoder</code> with this class is overridden.</p></li>
 <li><p>Either <code>base_model</code> must be present, or both
@@ -2793,7 +2793,7 @@ combination.</p></li>
 </ol>
 <h1 id="sec:annex-summary-tables">Comprehensive Summary Tables</h1>
 <p>This appendix provides a complete reference of all components
-implemented in the Frankestein Transformer codebase: 35 sequence mixers
+implemented in the Frankenstein Transformer codebase: 35 sequence mixers
 across six families, 23 optimizers, 5 normalization variants, 43
 activation functions, and 4 embedding methods. Each table is
 self-contained and cross-references the bibliography.</p>

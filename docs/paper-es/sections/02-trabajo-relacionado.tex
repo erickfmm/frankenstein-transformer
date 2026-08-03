@@ -6,7 +6,7 @@ Este trabajo se sitúa en la intersección de frameworks de aprendizaje profundo
 
 El ecosistema moderno de investigación en transformers se apoya en varios frameworks fundamentales que proporcionan diferenciación automática, aceleración GPU y APIs de alto nivel para construcción de modelos.
 
-\textbf{PyTorch} \citep{paszke_pytorch_2019} se ha convertido en el framework dominante para la investigación en transformers. Su modelo de programación imperativa y grafos de cómputo dinámicos permiten depuración flexible y prototipado rápido de arquitecturas novedosas. La abstracción \texttt{torch.nn.Module}, el entrenamiento automático con precisión mixta mediante \texttt{torch.cuda.amp} y el compilador JIT \texttt{torch.compile} forman la columna vertebral de la mayoría de las implementaciones contemporáneas de transformers. Frankestein Transformer está construido completamente sobre PyTorch, aprovechando su sistema de módulos para definiciones de arquitectura componibles.
+\textbf{PyTorch} \citep{paszke_pytorch_2019} se ha convertido en el framework dominante para la investigación en transformers. Su modelo de programación imperativa y grafos de cómputo dinámicos permiten depuración flexible y prototipado rápido de arquitecturas novedosas. La abstracción \texttt{torch.nn.Module}, el entrenamiento automático con precisión mixta mediante \texttt{torch.cuda.amp} y el compilador JIT \texttt{torch.compile} forman la columna vertebral de la mayoría de las implementaciones contemporáneas de transformers. Frankenstein Transformer está construido completamente sobre PyTorch, aprovechando su sistema de módulos para definiciones de arquitectura componibles.
 
 \textbf{TensorFlow} \citep{abadi_tensorflow_2016} fue pionero en aprendizaje profundo orientado a producción con su paradigma de grafo de cómputo estático y la API de alto nivel Keras. Aunque su influencia en la investigación de transformers ha disminuido en relación con PyTorch, la infraestructura de serving de TensorFlow (\texttt{TF Serving}, \texttt{TF Lite}) y la biblioteca \texttt{tensorflow-text} siguen siendo relevantes para escenarios de despliegue.
 
@@ -38,7 +38,7 @@ Una categoría creciente de herramientas prioriza la accesibilidad y la eficienc
 
 Un hilo común entre las herramientas examinadas anteriormente es su enfoque en el ajuste fino de modelos preentrenados existentes. Hugging Face Transformers, LLaMA Factory, Axolotl y Unsloth asumen un checkpoint preentrenado como punto de partida. Oumi soporta entrenamiento desde cero pero se enfoca en arquitecturas estándar. Ninguna de estas herramientas proporciona un marco sistemático para experimentar con arquitecturas novedosas de mezcladores de secuencia, comparar diversos algoritmos de optimización bajo condiciones controladas o explorar la interacción entre elecciones arquitectónicas y dinámicas de entrenamiento.
 
-\textbf{Frankestein Transformer} llena este vacío proporcionando un sistema de configuración basado en esquemas diseñado específicamente para la experimentación arquitectónica. Sus diferenciadores clave incluyen:
+\textbf{Frankenstein Transformer} llena este vacío proporcionando un sistema de configuración basado en esquemas diseñado específicamente para la experimentación arquitectónica. Sus diferenciadores clave incluyen:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Más de 35 mezcladores de secuencia} que abarcan atención densa, bloques recurrentes/retentivos, patrones de atención dispersa, mecanismos con compuerta, enrutamiento adaptativo por profundidad y capas de memoria condicional, todos seleccionables mediante un único campo YAML.
@@ -49,4 +49,4 @@ Un hilo común entre las herramientas examinadas anteriormente es su enfoque en 
     \item \textbf{Interfaz de configuración web} que proporciona renderizado de formularios basado en esquemas con documentación en línea, validación en tiempo real y generación de comandos CLI.
 \end{itemize}
 
-Al desacoplar la definición de arquitectura de la infraestructura de entrenamiento mediante un contrato de configuración validado, Frankestein Transformer permite la comparación sistemática de familias de mezcladores de secuencia y estrategias de optimización bajo condiciones de entrenamiento idénticas---una capacidad no proporcionada por ninguna herramienta existente en el ecosistema.
+Al desacoplar la definición de arquitectura de la infraestructura de entrenamiento mediante un contrato de configuración validado, Frankenstein Transformer permite la comparación sistemática de familias de mezcladores de secuencia y estrategias de optimización bajo condiciones de entrenamiento idénticas---una capacidad no proporcionada por ninguna herramienta existente en el ecosistema.

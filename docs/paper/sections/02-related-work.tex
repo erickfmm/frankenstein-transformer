@@ -6,7 +6,7 @@ This work sits at the intersection of deep learning frameworks, training tooling
 
 The modern transformer research ecosystem rests on several foundational frameworks that provide automatic differentiation, GPU acceleration, and high-level model-building APIs.
 
-\textbf{PyTorch} \citep{paszke_pytorch_2019} has become the dominant framework for transformer research. Its imperative programming model and dynamic computation graphs enable flexible debugging and rapid prototyping of novel architectures. The \texttt{torch.nn.Module} abstraction, automatic mixed-precision training via \texttt{torch.cuda.amp}, and the \texttt{torch.compile} JIT compiler form the backbone of most contemporary transformer implementations. Frankestein Transformer is built entirely on PyTorch, leveraging its module system for composable architecture definitions.
+\textbf{PyTorch} \citep{paszke_pytorch_2019} has become the dominant framework for transformer research. Its imperative programming model and dynamic computation graphs enable flexible debugging and rapid prototyping of novel architectures. The \texttt{torch.nn.Module} abstraction, automatic mixed-precision training via \texttt{torch.cuda.amp}, and the \texttt{torch.compile} JIT compiler form the backbone of most contemporary transformer implementations. Frankenstein Transformer is built entirely on PyTorch, leveraging its module system for composable architecture definitions.
 
 \textbf{TensorFlow} \citep{abadi_tensorflow_2016} pioneered production-oriented deep learning with its static computation graph paradigm and the Keras high-level API. While its influence in transformer research has waned relative to PyTorch, TensorFlow's serving infrastructure (\texttt{TF Serving}, \texttt{TF Lite}) and the \texttt{tensorflow-text} library remain relevant for deployment scenarios.
 
@@ -38,7 +38,7 @@ A growing category of tools prioritizes accessibility and computational efficien
 
 A common thread across the tools surveyed above is their focus on fine-tuning existing pretrained models. Hugging Face Transformers, LLaMA Factory, Axolotl, and Unsloth all assume a pretrained checkpoint as the starting point. Oumi supports training from scratch but targets standard architectures. None of these tools provide a systematic framework for experimenting with novel sequence mixer architectures, comparing diverse optimization algorithms under controlled conditions, or exploring the interaction between architectural choices and training dynamics.
 
-\textbf{Frankestein Transformer} fills this gap by providing a schema-first configuration system purpose-built for architecture experimentation. Its key differentiators include:
+\textbf{Frankenstein Transformer} fills this gap by providing a schema-first configuration system purpose-built for architecture experimentation. Its key differentiators include:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{35+ sequence mixers} spanning dense attention, recurrent/retentive blocks, sparse attention patterns, gated mechanisms, adaptive depth routing, and conditional memory layers, all selectable via a single YAML field.
@@ -49,4 +49,4 @@ A common thread across the tools surveyed above is their focus on fine-tuning ex
     \item \textbf{Web-based configuration interface} providing schema-driven form rendering with inline documentation, real-time validation, and CLI command generation.
 \end{itemize}
 
-By decoupling architecture definition from training infrastructure through a validated configuration contract, Frankestein Transformer enables systematic comparison of sequence mixer families and optimization strategies under identical training conditions---a capability not provided by any existing tool in the ecosystem.
+By decoupling architecture definition from training infrastructure through a validated configuration contract, Frankenstein Transformer enables systematic comparison of sequence mixer families and optimization strategies under identical training conditions---a capability not provided by any existing tool in the ecosystem.

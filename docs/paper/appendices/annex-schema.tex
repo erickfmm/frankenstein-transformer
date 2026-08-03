@@ -1,7 +1,7 @@
 \section{Configuration Schema Structure}
 \label{sec:annex-schema}
 
-The Frankestein Transformer toolkit enforces a strict YAML configuration schema with \texttt{additionalProperties: false} at all levels. The schema is defined in \texttt{src/schema.yaml}, which references modular sub-schemas in \texttt{src/schema/}. Every configurable field must be declared in the schema; unrecognized keys are rejected at validation time. This appendix documents the complete schema structure, including all fields, their types, constraints, and cross-component validation rules.
+The Frankenstein Transformer toolkit enforces a strict YAML configuration schema with \texttt{additionalProperties: false} at all levels. The schema is defined in \texttt{src/schema.yaml}, which references modular sub-schemas in \texttt{src/schema/}. Every configurable field must be declared in the schema; unrecognized keys are rejected at validation time. This appendix documents the complete schema structure, including all fields, their types, constraints, and cross-component validation rules.
 
 \subsection{Top-Level Structure}
 
@@ -10,7 +10,7 @@ The root schema object has five top-level properties. All are optional except \t
 \begin{itemize}[nosep]
     \item \texttt{base\_model} (string) --- HuggingFace model identifier or local path for continual pretraining or SBERT fine-tuning. When set, \texttt{model\_class} and \texttt{model} are not required (the architecture is inferred from the checkpoint).
     \item \texttt{tokenizer} (object) --- Tokenizer configuration with fields \texttt{name\_or\_path} (string), \texttt{use\_fast} (bool), and \texttt{trust\_remote\_code} (bool). Required when using \texttt{base\_model} with the \texttt{mlm} task.
-    \item \texttt{model\_class} (enum) --- Model architecture variant: \texttt{frankenstein} (mixed-architecture encoder) or \texttt{frankesteindecoder} (autoregressive causal decoder). Required when \texttt{base\_model} is not set.
+    \item \texttt{model\_class} (enum) --- Model architecture variant: \texttt{frankenstein} (mixed-architecture encoder) or \texttt{frankensteindecoder} (autoregressive causal decoder). Required when \texttt{base\_model} is not set.
     \item \texttt{model} (object) --- Model architecture parameters (see \S\ref{subsec:model-config}). Required when \texttt{base\_model} is not set.
     \item \texttt{training} (object, \textbf{required}) --- Training configuration (see \S\ref{subsec:training-config}).
 \end{itemize}
@@ -413,6 +413,6 @@ The schema enforces the following cross-component validation rules, implemented 
     \item \texttt{task: mlm} requires \texttt{training.optimizer}; \texttt{task: sbert} requires \texttt{training.sbert}.
     \item \texttt{bitnet\_routers=true} requires \texttt{use\_bitnet=true}. The flag has no effect otherwise.
     \item \texttt{fasa\_attn} and \texttt{sparge\_attn} are evaluation-only layer types. They raise \texttt{RuntimeError} if used during training. They must not appear in \texttt{model.dims.layer\_pattern} for training runs.
-    \item \texttt{model\_class: frankesteindecoder} forces \texttt{model.dims.mode: decoder} at runtime. Setting \texttt{model.dims.mode: encoder} with this class is overridden.
+    \item \texttt{model\_class: frankensteindecoder} forces \texttt{model.dims.mode: decoder} at runtime. Setting \texttt{model.dims.mode: encoder} with this class is overridden.
     \item Either \texttt{base\_model} must be present, or both \texttt{model\_class} and \texttt{model} must be present. The schema rejects configurations that provide neither or an incomplete combination.
 \end{enumerate}

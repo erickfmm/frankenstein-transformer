@@ -8,7 +8,7 @@ Recent years have witnessed an explosion of alternative attention and sequence-m
 
 The practical consequence is a fragmented research ecosystem where experimental comparison across architectures and optimizers requires significant engineering effort. Researchers must implement and debug multiple variants from scratch, ensure consistent training pipelines, and manage complex hyperparameter spaces. This fragmentation hampers reproducibility, slows scientific progress, and increases the barrier to entry for new researchers.
 
-This work addresses these challenges through a unified, configuration-driven experimentation toolkit available at \url{https://github.com/erickfmm/frankestein-transformer} that provides:
+This work addresses these challenges through a unified, configuration-driven experimentation toolkit available at \url{https://github.com/erickfmm/frankenstein-transformer} that provides:
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Schema-First Design}: A strict, validated configuration contract that enforces reproducibility while supporting thirty-five sequence mixer variants across six families and twenty-three optimizer families.
     \item \textbf{Architecture Agnostic Training}: Common training infrastructure supporting dense attention baselines (standard, sigmoid), recurrent alternatives (RetNet, Mamba, ODE-style blocks), adaptive depth routing (Mixture-of-Depths) \citep{zhu2026mixtureofdepthsattention}, conditional memory blocks (Engram) \citep{cheng2026conditionalmemoryscalablelookup}, sparse attention patterns (Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA), and gated mechanisms (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax).
@@ -20,7 +20,7 @@ This work addresses these challenges through a unified, configuration-driven exp
 
 The project command surface is:
 \begin{center}
-\texttt{frankestein-transformer}
+\texttt{frankenstein-transformer}
 \end{center}
 with subcommands for encoder and decoder workflows:
 \texttt{train}, \texttt{deploy}, \texttt{quantize}, \texttt{infer}, \texttt{sbert-train}, \texttt{sbert-infer}, \texttt{transformers-export}, \texttt{bitnet-gguf}, \texttt{web-server}.

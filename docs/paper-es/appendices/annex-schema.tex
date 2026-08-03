@@ -1,7 +1,7 @@
 \section{Estructura del Esquema de Configuración}
 \label{sec:annex-schema}
 
-El conjunto de herramientas Frankestein Transformer impone un esquema de configuración YAML estricto con \texttt{additionalProperties: false} en todos los niveles. El esquema se define en \texttt{src/schema.yaml}, que referencia sub-esquemas modulares en \texttt{src/schema/}. Cada campo configurable debe declararse en el esquema; las claves no reconocidas se rechazan en tiempo de validación. Este anexo documenta la estructura completa del esquema, incluyendo todos los campos, sus tipos, restricciones y reglas de validación entre componentes.
+El conjunto de herramientas Frankenstein Transformer impone un esquema de configuración YAML estricto con \texttt{additionalProperties: false} en todos los niveles. El esquema se define en \texttt{src/schema.yaml}, que referencia sub-esquemas modulares en \texttt{src/schema/}. Cada campo configurable debe declararse en el esquema; las claves no reconocidas se rechazan en tiempo de validación. Este anexo documenta la estructura completa del esquema, incluyendo todos los campos, sus tipos, restricciones y reglas de validación entre componentes.
 
 \subsection{Estructura de Nivel Superior}
 
@@ -10,7 +10,7 @@ El objeto raíz del esquema tiene cinco propiedades de nivel superior. Todas son
 \begin{itemize}[nosep]
     \item \texttt{base\_model} (string) --- Identificador de modelo HuggingFace o ruta local para preentrenamiento continuo o ajuste fino SBERT. Cuando se establece, \texttt{model\_class} y \texttt{model} no son obligatorios (la arquitectura se infiere del checkpoint).
     \item \texttt{tokenizer} (object) --- Configuración del tokenizador con campos \texttt{name\_or\_path} (string), \texttt{use\_fast} (bool) y \texttt{trust\_remote\_code} (bool). Obligatorio cuando se usa \texttt{base\_model} con la tarea \texttt{mlm}.
-    \item \texttt{model\_class} (enum) --- Variante de arquitectura del modelo: \texttt{frankenstein} (codificador de arquitectura mixta) o \texttt{frankesteindecoder} (decodificador causal autorregresivo). Obligatorio cuando \texttt{base\_model} no está establecido.
+    \item \texttt{model\_class} (enum) --- Variante de arquitectura del modelo: \texttt{frankenstein} (codificador de arquitectura mixta) o \texttt{frankensteindecoder} (decodificador causal autorregresivo). Obligatorio cuando \texttt{base\_model} no está establecido.
     \item \texttt{model} (object) --- Parámetros de arquitectura del modelo (ver \S\ref{subsec:model-config}). Obligatorio cuando \texttt{base\_model} no está establecido.
     \item \texttt{training} (object, \textbf{obligatorio}) --- Configuración de entrenamiento (ver \S\ref{subsec:training-config}).
 \end{itemize}
@@ -413,6 +413,6 @@ El esquema impone las siguientes reglas de validación entre componentes, implem
     \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}.
     \item \texttt{bitnet\_routers=true} requiere \texttt{use\_bitnet=true}. La bandera no tiene efecto en caso contrario.
     \item \texttt{fasa\_attn} y \texttt{sparge\_attn} son tipos de capa solo para evaluación. Lanzan \texttt{RuntimeError} si se usan durante el entrenamiento. No deben aparecer en \texttt{model.dims.layer\_pattern} para ejecuciones de entrenamiento.
-    \item \texttt{model\_class: frankesteindecoder} fuerza \texttt{model.dims.mode: decoder} en tiempo de ejecución. Establecer \texttt{model.dims.mode: encoder} con esta clase se sobrescribe.
+    \item \texttt{model\_class: frankensteindecoder} fuerza \texttt{model.dims.mode: decoder} en tiempo de ejecución. Establecer \texttt{model.dims.mode: encoder} con esta clase se sobrescribe.
     \item O bien \texttt{base\_model} debe estar presente, o bien tanto \texttt{model\_class} como \texttt{model} deben estar presentes. El esquema rechaza configuraciones que no proporcionen ninguno o una combinación incompleta.
 \end{enumerate}

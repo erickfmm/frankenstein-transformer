@@ -5,7 +5,7 @@
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="Erick F. Merino M. Este trabajo no está afiliado erickfmm@gmail.com" />
-  <title>Frankestein Transformer: Informe Técnico (Español)</title>
+  <title>Frankenstein Transformer: Informe Técnico (Español)</title>
   <style>
     html {
       line-height: 1.5;
@@ -170,7 +170,7 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Frankestein Transformer: Informe Técnico
+<h1 class="title">Frankenstein Transformer: Informe Técnico
 (Español)</h1>
 <p class="author">Erick F. Merino M.<br />
 Este trabajo no está afiliado<br />
@@ -195,9 +195,9 @@ arquitectónicos y algorítmicos, el ecosistema de investigación permanece
 fragmentado: comparar mezcladores de secuencia y optimizadores bajo
 condiciones de entrenamiento consistentes requiere un esfuerzo de
 ingeniería sustancial, lo que dificulta la reproducibilidad y ralentiza
-el progreso científico. En este trabajo proponemos Frankestein
+el progreso científico. En este trabajo proponemos Frankenstein
 Transformer, un conjunto de herramientas CLI basado en configuración
-(<code>frankestein-transformer</code>) que unifica la definición, el
+(<code>frankenstein-transformer</code>) que unifica la definición, el
 entrenamiento y el despliegue de modelos transformer mediante un esquema
 YAML estricto. El conjunto de herramientas soporta treinta y cinco
 variantes de mezcladores de secuencia en seis familias (densa,
@@ -268,8 +268,8 @@ de entrada para nuevos investigadores.</p>
 <p>Este trabajo aborda estos desafíos mediante un conjunto de
 herramientas de experimentación unificado y basado en configuración,
 disponible en <a
-href="https://github.com/erickfmm/frankestein-transformer"
-class="uri">https://github.com/erickfmm/frankestein-transformer</a>, que
+href="https://github.com/erickfmm/frankenstein-transformer"
+class="uri">https://github.com/erickfmm/frankenstein-transformer</a>, que
 proporciona:</p>
 <ol>
 <li><p><strong>Diseño Basado en Esquemas</strong>: Un contrato de
@@ -309,7 +309,7 @@ compatibles.</p></li>
 </ol>
 <p>La superficie de comandos del proyecto es:</p>
 <div class="center">
-<p><code>frankestein-transformer</code></p>
+<p><code>frankenstein-transformer</code></p>
 </div>
 <p>con subcomandos para flujos de trabajo de codificador y
 decodificador: <code>train</code>, <code>deploy</code>,
@@ -484,7 +484,7 @@ depuración flexible y prototipado rápido de arquitecturas novedosas. La
 abstracción <code>torch.nn.Module</code>, el entrenamiento automático
 con precisión mixta mediante <code>torch.cuda.amp</code> y el compilador
 JIT <code>torch.compile</code> forman la columna vertebral de la mayoría
-de las implementaciones contemporáneas de transformers. Frankestein
+de las implementaciones contemporáneas de transformers. Frankenstein
 Transformer está construido completamente sobre PyTorch, aprovechando su
 sistema de módulos para definiciones de arquitectura componibles.</p>
 <p><strong>TensorFlow</strong> <span class="citation"
@@ -586,7 +586,7 @@ arquitecturas novedosas de mezcladores de secuencia, comparar diversos
 algoritmos de optimización bajo condiciones controladas o explorar la
 interacción entre elecciones arquitectónicas y dinámicas de
 entrenamiento.</p>
-<p><strong>Frankestein Transformer</strong> llena este vacío
+<p><strong>Frankenstein Transformer</strong> llena este vacío
 proporcionando un sistema de configuración basado en esquemas diseñado
 específicamente para la experimentación arquitectónica. Sus
 diferenciadores clave incluyen:</p>
@@ -619,7 +619,7 @@ línea, validación en tiempo real y generación de comandos CLI.</p></li>
 </ul>
 <p>Al desacoplar la definición de arquitectura de la infraestructura de
 entrenamiento mediante un contrato de configuración validado,
-Frankestein Transformer permite la comparación sistemática de familias
+Frankenstein Transformer permite la comparación sistemática de familias
 de mezcladores de secuencia y estrategias de optimización bajo
 condiciones de entrenamiento idénticas—una capacidad no proporcionada
 por ninguna herramienta existente en el ecosistema.</p>
@@ -657,7 +657,7 @@ lenguaje enmascarado (MLM).</p></li>
 para escenarios de entrenamiento a menor escala. Proporciona una
 sobrecarga de parámetros reducida e iteración más rápida para
 experimentación y creación de prototipos.</p></li>
-<li><p><strong>frankesteindecoder</strong>: Decoder causal
+<li><p><strong>frankensteindecoder</strong>: Decoder causal
 autorregresivo para generación de siguiente token estilo LLM. Permite el
 enmascaramiento de atención causal para tareas de generación secuencial
 de texto. Cuando se selecciona esta clase, en tiempo de ejecución se
@@ -677,7 +677,7 @@ aleatoriamente basándose en el contexto completo.</p></li>
 cada token solo puede atender a tokens anteriores en la secuencia.
 Requerido para tareas autorregresivas (AR) de predicción del siguiente
 token, como modelado de lenguaje y generación de texto. Cuando
-<code>model_class=’frankesteindecoder’</code>, el sistema fuerza
+<code>model_class=’frankensteindecoder’</code>, el sistema fuerza
 automáticamente <code>mode=’decoder’</code> en tiempo de
 ejecución.</p></li>
 </ul>
@@ -781,7 +781,7 @@ estilo LLM siguiendo la metodología GPT. El modelo aprende dependencias
 secuenciales con atención causal donde cada token solo puede atender a
 tokens precedentes.</p></li>
 <li><p><strong>Clase de Modelo</strong>: Típicamente usa
-<code>model_class=’frankesteindecoder’</code> para arquitecturas de
+<code>model_class=’frankensteindecoder’</code> para arquitecturas de
 decoder autorregresivo.</p></li>
 </ul>
 <p>Este soporte de tareas dual permite la experimentación unificada
@@ -1777,7 +1777,7 @@ modelos recurrentes, cuantización) abordan estos desafíos, y este kit de
 herramientas te permite explorarlas todas.</p></li>
 </ul>
 <h1 id="sec:annex-schema">Estructura del Esquema de Configuración</h1>
-<p>El conjunto de herramientas Frankestein Transformer impone un esquema
+<p>El conjunto de herramientas Frankenstein Transformer impone un esquema
 de configuración YAML estricto con
 <code>additionalProperties: false</code> en todos los niveles. El
 esquema se define en <code>src/schema.yaml</code>, que referencia
@@ -1803,7 +1803,7 @@ usa <code>base_model</code> con la tarea <code>mlm</code>.</p></li>
 <li><p><code>model_class</code> (enum) — Variante de arquitectura del
 modelo: <code>frankenstein</code> (codificador de arquitectura mixta),
 <code>mini</code> (codificador simplificado) o
-<code>frankesteindecoder</code> (decodificador causal autorregresivo).
+<code>frankensteindecoder</code> (decodificador causal autorregresivo).
 Obligatorio cuando <code>base_model</code> no está establecido.</p></li>
 <li><p><code>model</code> (object) — Parámetros de arquitectura del
 modelo (ver §<a href="#subsec:model-config" data-reference-type="ref"
@@ -3260,7 +3260,7 @@ contrario.</p></li>
 capa solo para evaluación. Lanzan <code>RuntimeError</code> si se usan
 durante el entrenamiento. No deben aparecer en
 <code>layer_pattern</code> para ejecuciones de entrenamiento.</p></li>
-<li><p><code>model_class: frankesteindecoder</code> fuerza
+<li><p><code>model_class: frankensteindecoder</code> fuerza
 <code>mode: decoder</code> en tiempo de ejecución. Establecer
 <code>mode: encoder</code> con esta clase se sobrescribe.</p></li>
 <li><p>O bien <code>base_model</code> debe estar presente, o bien tanto
@@ -3270,7 +3270,7 @@ combinación incompleta.</p></li>
 </ol>
 <h1 id="sec:annex-summary-tables">Tablas de Resumen Completas</h1>
 <p>Este anexo proporciona una referencia completa de todos los
-componentes implementados en el código base de Frankestein Transformer:
+componentes implementados en el código base de Frankenstein Transformer:
 35 mezcladores de secuencia en seis familias, 23 optimizadores, 5
 variantes de normalización, 43 funciones de activación y 4 métodos de
 embedding. Cada tabla es autocontenida y referencia la bibliografía.</p>

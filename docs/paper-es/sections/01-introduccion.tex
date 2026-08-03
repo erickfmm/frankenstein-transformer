@@ -8,7 +8,7 @@ Los últimos años han sido testigos de una explosión de mecanismos alternativo
 
 La consecuencia práctica es un ecosistema de investigación fragmentado donde la comparación experimental entre arquitecturas y optimizadores requiere un esfuerzo de ingeniería significativo. Los investigadores deben implementar y depurar múltiples variantes desde cero, garantizar tuberías de entrenamiento consistentes y gestionar espacios de hiperparámetros complejos. Esta fragmentación dificulta la reproducibilidad, ralentiza el progreso científico y aumenta la barrera de entrada para nuevos investigadores.
 
-Este trabajo aborda estos desafíos mediante un conjunto de herramientas de experimentación unificado y basado en configuración, disponible en \url{https://github.com/erickfmm/frankestein-transformer}, que proporciona:
+Este trabajo aborda estos desafíos mediante un conjunto de herramientas de experimentación unificado y basado en configuración, disponible en \url{https://github.com/erickfmm/frankenstein-transformer}, que proporciona:
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Diseño Basado en Esquemas}: Un contrato de configuración estricto y validado que garantiza la reproducibilidad mientras admite treinta y cinco variantes de mezcladores de secuencia en seis familias y veintitrés familias de optimizadores.
     \item \textbf{Entrenamiento Agnóstico a la Arquitectura}: Infraestructura de entrenamiento común que soporta líneas base de atención densa (estándar, sigmoide), alternativas recurrentes (RetNet, Mamba, bloques tipo EDO), enrutamiento adaptativo de profundidad (Mixture-of-Depths) \citep{zhu2026mixtureofdepthsattention}, bloques de memoria condicional (Engram) \citep{cheng2026conditionalmemoryscalablelookup}, patrones de atención dispersa (Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA) y mecanismos con compuerta (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax).
@@ -20,7 +20,7 @@ Este trabajo aborda estos desafíos mediante un conjunto de herramientas de expe
 
 La superficie de comandos del proyecto es:
 \begin{center}
-\texttt{frankestein-transformer}
+\texttt{frankenstein-transformer}
 \end{center}
 con subcomandos para flujos de trabajo de codificador y decodificador:
 \texttt{train}, \texttt{deploy}, \texttt{quantize}, \texttt{infer}, \texttt{sbert-train}, \texttt{sbert-infer}, \texttt{transformers-export}, \texttt{bitnet-gguf}, \texttt{web-server}.

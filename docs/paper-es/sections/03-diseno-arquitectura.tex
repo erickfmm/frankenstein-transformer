@@ -17,14 +17,14 @@ El contrato autoritativo es \texttt{configs/schema.yaml}. Este impone tres objet
 El campo \texttt{model\_class} determina la variante arquitectónica instanciada por el pipeline de entrenamiento. Se soportan dos opciones:
 \begin{itemize}[leftmargin=*]
     \item \textbf{frankenstein}: Modelos encoder de arquitectura mixta que soportan diversos mecanismos de atención (estándar, sigmoide, retentiva, espacio de estados, dispersa y mezcladores con compuerta) con MoE (Mezcla de Expertos) y características avanzadas. Optimizado para entrenamiento bidireccional tipo encoder con objetivos de modelado de lenguaje enmascarado (MLM).
-    \item \textbf{frankesteindecoder}: Decoder causal autorregresivo para generación de siguiente token estilo LLM. Permite el enmascaramiento de atención causal para tareas de generación secuencial de texto. Cuando se selecciona esta clase, en tiempo de ejecución se fuerza \texttt{mode='decoder'}.
+    \item \textbf{frankensteindecoder}: Decoder causal autorregresivo para generación de siguiente token estilo LLM. Permite el enmascaramiento de atención causal para tareas de generación secuencial de texto. Cuando se selecciona esta clase, en tiempo de ejecución se fuerza \texttt{mode='decoder'}.
 \end{itemize}
 
 \paragraph{Selección de Modo de Entrenamiento.}
 El campo \texttt{model.mode} controla el comportamiento de enmascaramiento de atención en todo el modelo:
 \begin{itemize}[leftmargin=*]
     \item \textbf{encoder}: Utiliza atención bidireccional donde todos los tokens atienden a todos los demás tokens en la secuencia. Adecuado para tareas de preentrenamiento de modelado de lenguaje enmascarado (MLM) donde el modelo aprende a predecir tokens enmascarados aleatoriamente basándose en el contexto completo.
-    \item \textbf{decoder}: Utiliza enmascaramiento causal donde cada token solo puede atender a tokens anteriores en la secuencia. Requerido para tareas autorregresivas (AR) de predicción del siguiente token, como modelado de lenguaje y generación de texto. Cuando \texttt{model\_class='frankesteindecoder'}, el sistema fuerza automáticamente \texttt{mode='decoder'} en tiempo de ejecución.
+    \item \textbf{decoder}: Utiliza enmascaramiento causal donde cada token solo puede atender a tokens anteriores en la secuencia. Requerido para tareas autorregresivas (AR) de predicción del siguiente token, como modelado de lenguaje y generación de texto. Cuando \texttt{model\_class='frankensteindecoder'}, el sistema fuerza automáticamente \texttt{mode='decoder'} en tiempo de ejecución.
 \end{itemize}
 
 Este soporte de arquitectura dual permite al sistema manejar tanto preentrenamiento tipo encoder (MLM en contextos bidireccionales) como generación tipo decoder (predicción causal autorregresiva) a través de una interfaz de configuración unificada.
@@ -113,7 +113,7 @@ El campo \texttt{training.task} determina el objetivo de entrenamiento, trabajan
     \item \textbf{Modo}: Requiere \texttt{mode='decoder'} para enmascaramiento causal.
     \item \textbf{Objetivo}: Entrenar al modelo para predecir el siguiente token en la secuencia dados solo los tokens anteriores.
     \item \textbf{Caso de Uso}: Generación de lenguaje y tareas estilo LLM siguiendo la metodología GPT. El modelo aprende dependencias secuenciales con atención causal donde cada token solo puede atender a tokens precedentes.
-    \item \textbf{Clase de Modelo}: Típicamente usa \texttt{model\_class='frankesteindecoder'} para arquitecturas de decoder autorregresivo.
+    \item \textbf{Clase de Modelo}: Típicamente usa \texttt{model\_class='frankensteindecoder'} para arquitecturas de decoder autorregresivo.
 \end{itemize}
 
 Este soporte de tareas dual permite la experimentación unificada tanto en preentrenamiento tipo encoder (MLM para comprensión bidireccional) como en generación tipo decoder (AR para producción secuencial de texto) dentro del mismo código base.

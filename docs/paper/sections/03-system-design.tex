@@ -17,14 +17,14 @@ The authoritative contract is \texttt{configs/schema.yaml}. It enforces three to
 The \texttt{model\_class} field determines the architectural variant instantiated by the training pipeline. Two options are supported:
 \begin{itemize}[leftmargin=*]
     \item \textbf{frankenstein}: Mixed-architecture encoder models supporting diverse attention mechanisms (standard, sigmoid, retentive, state-space, sparse, and gated mixers) with MoE (Mixture of Experts) and advanced features. Optimized for bidirectional encoder-style training with masked language modeling (MLM) objectives.
-    \item \textbf{frankesteindecoder}: Autoregressive causal decoder for LLM-style next-token generation. Enables causal attention masking for sequential text generation tasks. When this class is selected, runtime enforces \texttt{mode='decoder'}. 
+    \item \textbf{frankensteindecoder}: Autoregressive causal decoder for LLM-style next-token generation. Enables causal attention masking for sequential text generation tasks. When this class is selected, runtime enforces \texttt{mode='decoder'}. 
 \end{itemize}
 
 \paragraph{Training Mode Selection.}
 The \texttt{model.mode} field controls attention masking behavior across the model:
 \begin{itemize}[leftmargin=*]
     \item \textbf{encoder}: Uses bidirectional attention where all tokens attend to all other tokens in the sequence. Suitable for masked language modeling (MLM) pre-training tasks where the model learns to predict randomly masked tokens based on full context.
-    \item \textbf{decoder}: Uses causal masking where each token can only attend to previous tokens in the sequence. Required for autoregressive (AR) next-token prediction tasks such as language modeling and text generation. When \texttt{model\_class='frankesteindecoder'}, the system automatically forces \texttt{mode='decoder'} at runtime.
+    \item \textbf{decoder}: Uses causal masking where each token can only attend to previous tokens in the sequence. Required for autoregressive (AR) next-token prediction tasks such as language modeling and text generation. When \texttt{model\_class='frankensteindecoder'}, the system automatically forces \texttt{mode='decoder'} at runtime.
 \end{itemize}
 
 This dual architecture support enables the system to handle both encoder-style pre-training (MLM on bidirectional contexts) and decoder-style generation (causal autoregressive prediction) through a unified configuration interface.
@@ -113,7 +113,7 @@ The \texttt{training.task} field determines the training objective, working in c
     \item \textbf{Mode}: Requires \texttt{mode='decoder'} for causal masking.
     \item \textbf{Objective}: Train model to predict next token in sequence given all previous tokens only.
     \item \textbf{Use Case}: Language generation and LLM-style tasks following GPT methodology. Model learns sequential dependencies with causal attention where each token can only attend to preceding tokens.
-    \item \textbf{Model Class}: Typically uses \texttt{model\_class='frankesteindecoder'} for autoregressive decoder architectures.
+    \item \textbf{Model Class}: Typically uses \texttt{model\_class='frankensteindecoder'} for autoregressive decoder architectures.
 \end{itemize}
 
 This dual task support enables unified experimentation across both encoder-style pre-training (MLM for bidirectional understanding) and decoder-style generation (AR for sequential text production) within the same codebase.
