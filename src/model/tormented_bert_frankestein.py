@@ -77,6 +77,7 @@ from .activation_function import (
     get_activation,
     make_gated_ffn,
 )
+from .mhc import ManifoldHyperConnections
 from .attention.engram import EngramLayer
 from .attention.grouped_query_attention import GroupedQueryAttention
 from .attention.gated import (
@@ -390,6 +391,19 @@ class UltraConfig:
     engram_kernel_size: int = 4
     engram_seed: int = 42
 
+    # ---- mHC: Manifold-Constrained Hyper-Connections (arXiv:2512.24880) ----
+    # Expands the residual stream to width ``n * hidden_size`` and constrains
+    # the stream-mixing matrix ``H[res]`` to the Birkhoff polytope (doubly
+    # stochastic) via Sinkhorn-Knopp, restoring the identity-mapping property.
+    use_mhc: bool = False
+    mhc_expansion_rate: int = 4
+    mhc_sinkhorn_iters: int = 20
+    mhc_gating_init: float = 0.01
+    mhc_checkpoint: bool = False
+    # Keep ``φ_l`` full-precision under BitNet (avoids ternary-quantisation
+    # noise on the small mHC coefficients). Defaults to True.
+    mhc_full_prec_under_bitnet: bool = True
+
     num_kv_heads: int = 1
 
     # ---- MLA (arXiv:2506.09342) ----
@@ -523,6 +537,14 @@ class UltraConfig:
         if not 0.0 <= float(self.flashnorm_partial_ratio) <= 1.0:
             raise ValueError("flashnorm_partial_ratio must be in the range [0, 1]")
 
+        # ---- Validate mHC (Manifold-Constrained Hyper-Connections) ----
+        if int(self.mhc_expansion_rate) < 1:
+            raise ValueError("mhc_expansion_rate must be >= 1")
+        if int(self.mhc_sinkhorn_iters) < 1:
+            raise ValueError("mhc_sinkhorn_iters must be >= 1")
+        if float(self.mhc_gating_init) <= 0.0:
+            raise ValueError("mhc_gating_init must be > 0")
+
         # ---- Validate FFN activation ----
         ffn_act = str(self.ffn_activation).lower()
         if ffn_act not in ALL_ACTIVATIONS:
@@ -589,9 +611,16 @@ class HybridLayer(nn.Module):
         """
         super().__init__()
         self.layer_type = layer_type
+        self.use_mhc = bool(getattr(config, "use_mhc", False))
+        self.use_mixture_of_depths = bool(getattr(config, "use_mixture_of_depths", False))
+        if self.use_mhc and self.use_mixture_of_depths:
+            raise ValueError(
+                "mHC (use_mhc) and Mixture-of-Depths (use_mixture_of_depths) "
+                "are mutually exclusive: MoD token routing operates on a single "
+                "C-dimensional stream, which conflicts with the n-stream residual."
+            )
         self.norm1 = get_norm(config)
         self.use_moe = bool(config.use_moe)
-        self.use_mixture_of_depths = bool(getattr(config, "use_mixture_of_depths", False))
         self.mixture_of_depths_capacity_ratio = float(
             getattr(config, "mixture_of_depths_capacity_ratio", 1.0)
         )
@@ -724,6 +753,29 @@ class HybridLayer(nn.Module):
             router_cls(config.hidden_size, 1, bias=False) if self.use_mixture_of_depths else None
         )
 
+        # mHC: one module per layer function (attention, then FFN). The n-stream
+        # residual is shared and read/written by both sub-functions.
+        if self.use_mhc:
+            self.mhc_attn = ManifoldHyperConnections(
+                hidden_size=config.hidden_size,
+                expansion_rate=config.mhc_expansion_rate,
+                sinkhorn_iters=config.mhc_sinkhorn_iters,
+                gating_init=config.mhc_gating_init,
+                use_bitnet=config.use_bitnet,
+                full_prec_under_bitnet=config.mhc_full_prec_under_bitnet,
+            )
+            self.mhc_ffn = ManifoldHyperConnections(
+                hidden_size=config.hidden_size,
+                expansion_rate=config.mhc_expansion_rate,
+                sinkhorn_iters=config.mhc_sinkhorn_iters,
+                gating_init=config.mhc_gating_init,
+                use_bitnet=config.use_bitnet,
+                full_prec_under_bitnet=config.mhc_full_prec_under_bitnet,
+            )
+        else:
+            self.mhc_attn = None
+            self.mhc_ffn = None
+
     def _forward_dense(
         self,
         x,
@@ -745,6 +797,16 @@ class HybridLayer(nn.Module):
             ValueError: If the layer is training-free and called in training
                 mode.
         """
+        # ---- mHC path: the stream is (B, S, n, C) across the whole layer.
+        # Attention and FFN each act as a layer function on the C-dim pre-
+        # projection, writing back onto the shared n-stream residual.
+        if self.use_mhc:
+            return self._forward_dense_mhc(
+                x,
+                logical_layer_idx=logical_layer_idx,
+                input_ids=input_ids,
+            )
+
         residual = x
         x = self.norm1(x)
 
@@ -791,6 +853,78 @@ class HybridLayer(nn.Module):
 
         x = residual + self.ffn(x)
         return x
+
+    def _forward_dense_mhc(
+        self,
+        x,
+        logical_layer_idx: Optional[int] = None,
+        input_ids: Optional[torch.Tensor] = None,
+    ):
+        """Run the attention + FFN path over an n-stream mHC residual.
+
+        The input ``x`` is the ``(B, S, n, C)`` n-stream residual. The
+        attention mixer and FFN each act as a layer function ``F`` on the
+        C-dimensional pre-projection ``Fpre = H[pre] @ x``, writing their
+        output back onto the shared stream via ``H[post]`` / ``H[res]``.
+
+        Args:
+            x: Input stream of shape ``(B, S, n, C)``.
+            logical_layer_idx: Global logical layer index (0-based across
+                loops). Passed to mixers that need positional awareness.
+            input_ids: Original token IDs, required by Engram layers.
+
+        Returns:
+            Updated stream of shape ``(B, S, n, C)``.
+
+        Raises:
+            ValueError: If the layer is training-free and called in training
+                mode.
+        """
+        if self.training and self.layer_type in self.TRAINING_FREE_LAYERS:
+            raise ValueError(
+                f"Layer '{self.layer_type}' is training-free and only supported in eval/inference mode."
+            )
+
+        # Attention sub-function.
+        fpre = self.mhc_attn.fpre(x)
+        attn_in = self.norm1(fpre)
+        if self.layer_type == "mamba":
+            attn_out = self.mixer(attn_in)
+        elif self.layer_type in {"ode", "retnet"}:
+            attn_out = self.mixer(attn_in)
+        elif self.layer_type == "engram_attn":
+            attn_out = self.mixer(
+                attn_in,
+                input_ids=input_ids,
+                logical_layer_idx=logical_layer_idx,
+            )
+        else:
+            attn_out = self.mixer(attn_in, logical_layer_idx=logical_layer_idx)
+        x = self.mhc_attn.recombine(x, attn_out)
+
+        # FFN sub-function.
+        fpre = self.mhc_ffn.fpre(x)
+        ffn_in = self.norm2(fpre)
+        if self.use_moe:
+            logits = self.router(ffn_in)
+            weights, indices = torch.topk(F.softmax(logits, dim=-1), self.top_k, dim=-1)
+            batch_size, seq_len, dim = ffn_in.shape
+            flat_x = ffn_in.view(-1, dim)
+            out = torch.zeros_like(flat_x)
+            for k in range(self.top_k):
+                expert_indices = indices[:, :, k].flatten()
+                expert_weights = weights[:, :, k].flatten().unsqueeze(1)
+                for i, expert in enumerate(self.experts):
+                    mask = expert_indices == i
+                    if mask.any():
+                        selected_x = flat_x[mask]
+                        expert_out = expert(selected_x)
+                        out[mask] += expert_out * expert_weights[mask]
+            ffn_out = out.view(batch_size, seq_len, dim)
+        else:
+            ffn_out = self.ffn(ffn_in)
+
+        return self.mhc_ffn.recombine(x, ffn_out)
 
     def _mixture_of_depths_capacity(self, seq_len: int) -> int:
         """Compute the token capacity for Mixture-of-Depths routing.
@@ -944,6 +1078,15 @@ class TormentedBertFrankenstein(nn.Module):
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         self.head = proj_cls(config.hidden_size, config.vocab_size)
 
+        # mHC stream expansion / collapse. The embedding is C-dimensional; the
+        # n-stream residual lives at (B, S, n, C). We expand the single stream
+        # into ``n`` copies on entry and collapse back to ``C`` before the head.
+        self.use_mhc = bool(getattr(config, "use_mhc", False))
+        if self.use_mhc:
+            n = int(config.mhc_expansion_rate)
+            self.mhc_in_proj = nn.Linear(config.hidden_size, n * config.hidden_size)
+            self.mhc_out_proj = nn.Linear(n * config.hidden_size, config.hidden_size)
+
     def forward(self, input_ids):
         """Run the full looped-depth encoder forward pass.
 
@@ -961,18 +1104,38 @@ class TormentedBertFrankenstein(nn.Module):
         x = self.emb(input_ids)
         x = self.dropout(x)
 
+        if self.use_mhc:
+            n = int(self.config.mhc_expansion_rate)
+            bsz, seq_len, dim = x.shape
+            # Expand the C-dim stream to (B, S, n, C).
+            x = self.mhc_in_proj(x).view(bsz, seq_len, n, dim)
+
         logical_layer_idx = 0
         mixture_of_depths_aux_losses = []
         mixture_of_depths_selected_fractions = []
+        mhc_checkpoint = bool(getattr(self.config, "mhc_checkpoint", False))
         for _ in range(self.config.num_loops):
             for layer in self.layers:
-                x = layer(x, logical_layer_idx=logical_layer_idx, input_ids=input_ids)
+                if mhc_checkpoint and layer.use_mhc:
+                    x = torch.utils.checkpoint.checkpoint(
+                        layer,
+                        x,
+                        logical_layer_idx,
+                        input_ids,
+                        use_reentrant=False,
+                    )
+                else:
+                    x = layer(x, logical_layer_idx=logical_layer_idx, input_ids=input_ids)
                 if layer.use_mixture_of_depths and layer.last_mixture_of_depths_aux_loss is not None:
                     mixture_of_depths_aux_losses.append(layer.last_mixture_of_depths_aux_loss)
                     mixture_of_depths_selected_fractions.append(
                         layer.last_mixture_of_depths_selected_fraction
                     )
                 logical_layer_idx += 1
+
+        if self.use_mhc:
+            bsz, seq_len, n, dim = x.shape
+            x = self.mhc_out_proj(x.reshape(bsz, seq_len, n * dim))
 
         x = self.final_norm(x)
         if mixture_of_depths_aux_losses:

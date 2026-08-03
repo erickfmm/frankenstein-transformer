@@ -320,6 +320,23 @@ The `model` block is organized into hierarchical sub-objects: `dims`, `norm`,
 - `model.attention.sparda.topk_blocks`: blocks selected per GQA group (default 16).
 - `model.attention.sparda.forecast_dim`: Forecast projection dim (default 64).
 
+### Manifold-Constrained Hyper-Connections (model.mhc)
+
+`model.mhc` configures mHC (arXiv:2512.24880), an opt-in replacement for the
+standard residual connection that expands the residual stream width by a factor
+`n` and constrains the stream-mixing matrix `H[res]` to the Birkhoff polytope
+(doubly stochastic) via Sinkhorn-Knopp. See `docs/specs/mhc.md`.
+
+- `model.mhc.enabled`: enable mHC (`use_mhc`). Default `false`.
+- `model.mhc.expansion_rate`: stream expansion factor `n` (`mhc_expansion_rate`). Default `4`.
+- `model.mhc.sinkhorn_iters`: Sinkhorn-Knopp normalisation rounds (`mhc_sinkhorn_iters`). Default `20`.
+- `model.mhc.gating_init`: initial value of the gating scalars `α` (`mhc_gating_init`). Default `0.01`.
+- `model.mhc.checkpoint`: gradient checkpointing on mHC layers (`mhc_checkpoint`). Default `false`.
+- `model.mhc.full_prec_under_bitnet`: keep `φ_l` full-precision under BitNet (`mhc_full_prec_under_bitnet`). Default `true`.
+
+Example: `configs/examples/es_arch_mhc_adamw.yaml`. ⚠️ mHC is incompatible with
+`use_mixture_of_depths`.
+
 ## Decoder Examples (Famous Architecture-Inspired)
 
 Autoregressive decoder examples are available in `configs/examples/`:

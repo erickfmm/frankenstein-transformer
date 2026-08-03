@@ -126,7 +126,7 @@ def _is_nested_shape(model_data: Dict[str, Any]) -> bool:
     ``dims``, ``norm``, ``embedding`` (as a dict), or ``attention`` (as a
     dict) and are passed through unchanged.
     """
-    for key in ("dims", "norm", "embedding", "attention"):
+    for key in ("dims", "norm", "embedding", "attention", "mhc"):
         if key in model_data and isinstance(model_data[key], dict):
             return True
     return False
@@ -192,7 +192,7 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
 
     # Pass through the staying-flat keys (use_moe, use_bitnet, ffn_*, ...).
     # We do this by copying everything that is NOT a known grouping key.
-    grouping_keys = {"dims", "norm", "embedding", "attention"}
+    grouping_keys = {"dims", "norm", "embedding", "attention", "mhc"}
     for key, value in model_data.items():
         if key not in grouping_keys:
             out[key] = value
@@ -245,5 +245,21 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
     attn = model_data.get("attention")
     if isinstance(attn, dict):
         _flatten_attention(attn, out)
+
+    # mhc.* — Manifold-Constrained Hyper-Connections (arXiv:2512.24880).
+    mhc = model_data.get("mhc")
+    if isinstance(mhc, dict):
+        if "enabled" in mhc:
+            out["use_mhc"] = mhc["enabled"]
+        if "expansion_rate" in mhc:
+            out["mhc_expansion_rate"] = mhc["expansion_rate"]
+        if "sinkhorn_iters" in mhc:
+            out["mhc_sinkhorn_iters"] = mhc["sinkhorn_iters"]
+        if "gating_init" in mhc:
+            out["mhc_gating_init"] = mhc["gating_init"]
+        if "checkpoint" in mhc:
+            out["mhc_checkpoint"] = mhc["checkpoint"]
+        if "full_prec_under_bitnet" in mhc:
+            out["mhc_full_prec_under_bitnet"] = mhc["full_prec_under_bitnet"]
 
     return out

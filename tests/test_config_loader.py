@@ -347,6 +347,50 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
         self.assertEqual(cfg.model_config.norm_type, "flash_norm")
         self.assertAlmostEqual(cfg.model_config.flashnorm_partial_ratio, 0.5)
 
+    def test_mhc_hierarchical_schema(self):
+        # Hierarchical schema: model.mhc.{enabled, expansion_rate, ...}.
+        path = self._cfg_path("""
+            model:
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                retention_heads: 6
+                dropout: 0.0
+                layer_pattern: [standard_attn]
+                mode: encoder
+              norm:
+                type: layer_norm
+              use_bitnet: true
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+              ffn_hidden_size: 96
+              ffn_activation: gelu
+              mhc:
+                enabled: true
+                expansion_rate: 4
+                sinkhorn_iters: 25
+                gating_init: 0.02
+                checkpoint: true
+                full_prec_under_bitnet: false
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+                parameters: {}
+        """)
+        cfg = load_training_config(path)
+        self.assertTrue(cfg.model_config.use_mhc)
+        self.assertEqual(cfg.model_config.mhc_expansion_rate, 4)
+        self.assertEqual(cfg.model_config.mhc_sinkhorn_iters, 25)
+        self.assertAlmostEqual(cfg.model_config.mhc_gating_init, 0.02)
+        self.assertTrue(cfg.model_config.mhc_checkpoint)
+        self.assertFalse(cfg.model_config.mhc_full_prec_under_bitnet)
+
+
 
 @unittest.skipUnless(_IMPORTS_OK, "torch and training deps required")
 class ListConfigPathsTests(unittest.TestCase):

@@ -75,6 +75,8 @@ properties:
         $ref: "_model/_attention_sparse.yaml#/properties/sparda"
       engram:
         $ref: "_model/_attention_engram.yaml#/properties/engram"
+  mhc:
+    $ref: "_model/_mhc.yaml"
   # Flat keys (MoE, BitNet, Mixture-of-Depths, FFN, ODE) stay at model.* top level.
   num_experts:
     $ref: "_model/_model_flat.yaml#/properties/num_experts"

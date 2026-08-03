@@ -9,6 +9,7 @@ Specifications
    activations
    cli-reference
    deployment
+   mhc
    optimizers
    sbert-workflows
    schema-reference

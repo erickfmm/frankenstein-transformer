@@ -165,6 +165,22 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
         y = model(x)
         self.assertEqual(y.shape, (2, 8, 100))
 
+    def test_mhc_forward(self):
+        model = self._model(use_mhc=True, mhc_expansion_rate=2)
+        x = torch.randint(0, 100, (2, 8))
+        y = model(x)
+        self.assertEqual(y.shape, (2, 8, 100))
+        y.sum().backward()
+
+    def test_mhc_decoder_forward(self):
+        cfg = FrankensteinDecoder.build_decoder_config(vocab_size=100, hidden_size=48, num_layers=1, num_loops=1)
+        cfg.use_mhc = True
+        cfg.mhc_expansion_rate = 2
+        model = FrankensteinDecoder(cfg)
+        x = torch.randint(0, 100, (2, 8))
+        y = model(x)
+        self.assertEqual(y.shape, (2, 8, 100))
+
     def test_factorized_embedding_forward(self):
         model = self._model(
             use_factorized_embedding=True,

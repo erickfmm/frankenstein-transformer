@@ -1,0 +1,142 @@
+type: object
+additionalProperties: false
+title: "Manifold-Constrained Hyper-Connections (mHC)"
+title_es: "Hyper-Connexiones Restringidas por Variedad (mHC)"
+description: |-
+  Configuration for Manifold-Constrained Hyper-Connections (mHC,
+  arXiv:2512.24880). mHC expands the residual stream width by a factor
+  `expansion_rate` (the residual stream becomes `n × hidden_size`) and
+  constrains the stream-mixing matrix `H[res]` to the Birkhoff polytope
+  (the set of doubly stochastic matrices) via the Sinkhorn-Knopp
+  projection. This restores the identity-mapping property lost by
+  unconstrained Hyper-Connections, stabilising training at scale.
+
+  **Examples explained:**
+  - `enabled: true` with the paper default `expansion_rate: 4`: an
+    n=4 stream residual, matching DeepSeek's experimental setup. Increases
+    activation memory ~4× (mitigate with `checkpoint: true`).
+  - `enabled: true` with `expansion_rate: 2`: a lighter variant with less
+    memory/compute overhead while still benefiting from the constrained
+    residual mixing.
+  - `expansion_rate: 1` degenerates to the exact identity mapping.
+
+  ⚠️ mHC is incompatible with `use_mixture_of_depths` (MoD token routing
+  operates on a single C-dimensional stream, conflicting with the n-stream
+  residual).
+description_es: |-
+  Configuración para Hyper-Connexiones Restringidas por Variedad (mHC,
+  arXiv:2512.24880). mHC expande el ancho del flujo residual por un factor
+  `expansion_rate` (el flujo residual pasa a ser `n × hidden_size`) y
+  restringe la matriz de mezcla de flujo `H[res]` al politopo de Birkhoff
+  (el conjunto de matrices doblemente estocásticas) mediante la proyección
+  Sinkhorn-Knopp. Esto restaura la propiedad de mapeo de identidad que
+  pierden las Hyper-Connexions sin restricción, estabilizando el
+  entrenamiento a escala.
+
+  **Ejemplos explicados:**
+  - `enabled: true` con el valor por defecto del paper `expansion_rate: 4`:
+    un flujo residual de n=4, coincidiendo con la configuración experimental
+    de DeepSeek. Aumenta la memoria de activaciones ~4× (mitigar con
+    `checkpoint: true`).
+  - `enabled: true` con `expansion_rate: 2`: una variante más ligera con
+    menos sobrecarga de memoria/cómputo y aun así el beneficio de la mezcla
+    residual restringida.
+  - `expansion_rate: 1` degenera al mapeo de identidad exacto.
+
+  ⚠️ mHC es incompatible con `use_mixture_of_depths` (el enrutamiento MoD de
+  tokens opera sobre un flujo C-dimensional único, en conflicto con el flujo
+  residual de n streams).
+properties:
+  enabled:
+    type: boolean
+    title: "Enable mHC"
+    title_es: "Habilitar mHC"
+    description: |
+      When true, replaces the standard residual connection with the
+      manifold-constrained n-stream residual. Defaults to false (standard
+      residual connection).
+    description_es: |
+      Cuando es true, reemplaza la conexión residual estándar por el flujo
+      residual de n streams restringido por variedad. Por defecto es false
+      (conexión residual estándar).
+    default: false
+    examples: [true, false]
+  expansion_rate:
+    type: integer
+    minimum: 1
+    title: "Expansion Rate (n)"
+    title_es: "Tasa de Expansión (n)"
+    description: |
+      Factor by which the residual stream width is expanded. The residual
+      stream becomes `n × hidden_size` while layer internals stay at
+      `hidden_size`. `1` recovers the identity mapping. The paper uses `4`.
+    description_es: |
+      Factor por el que se expande el ancho del flujo residual. El flujo
+      residual pasa a ser `n × hidden_size` mientras los internos de la capa
+      permanecen en `hidden_size`. `1` recupera el mapeo de identidad. El
+      paper usa `4`.
+    default: 4
+    examples: [2, 4]
+  sinkhorn_iters:
+    type: integer
+    minimum: 1
+    title: "Sinkhorn-Knopp Iterations"
+    title_es: "Iteraciones Sinkhorn-Knopp"
+    description: |
+      Number of row/column normalisation rounds in the Sinkhorn-Knopp
+      projection that constrains `H[res]` to be doubly stochastic. More
+      iterations give a more accurate projection at higher cost. The paper
+      uses `20`.
+    description_es: |
+      Número de rondas de normalización fila/columna en la proyección
+      Sinkhorn-Knopp que restringe `H[res]` a ser doblemente estocástica.
+      Más iteraciones dan una proyección más precisa a mayor costo. El paper
+      usa `20`.
+    default: 20
+    examples: [20]
+  gating_init:
+    type: number
+    exclusiveMinimum: 0
+    title: "Gating Factor Init"
+    title_es: "Inicialización del Factor de Compuerta"
+    description: |
+      Initial value of the learnable gating scalars `α` applied to the mHC
+      coefficient computations. Small values stabilise early training. The
+      paper uses `0.01`.
+    description_es: |
+      Valor inicial de los escalares de compuerta aprendibles `α` aplicados
+      a los cálculos de coeficientes mHC. Valores pequeños estabilizan el
+      entrenamiento temprano. El paper usa `0.01`.
+    default: 0.01
+    examples: [0.01]
+  checkpoint:
+    type: boolean
+    title: "Gradient Checkpointing"
+    title_es: "Gradient Checkpointing"
+    description: |
+      When true, uses gradient checkpointing on the mHC layer blocks to trade
+      compute for memory, mitigating the ~`n`× activation-memory increase of
+      the n-stream residual.
+    description_es: |
+      Cuando es true, usa gradient checkpointing en los bloques de capa mHC
+      para intercambiar cómputo por memoria, mitigando el aumento ~`n`× de
+      memoria de activaciones del flujo residual de n streams.
+    default: false
+    examples: [false, true]
+  full_prec_under_bitnet:
+    type: boolean
+    title: "Full Precision Under BitNet"
+    title_es: "Precisión Completa Bajo BitNet"
+    description: |
+      When true (default), the mHC coefficient projection `φ_l` is kept as a
+      full-precision `nn.Linear` even when `use_bitnet` is true, avoiding
+      ternary-quantisation noise on the small mHC coefficients. When false
+      (and `use_bitnet` is true), `φ_l` uses `BitLinear`.
+    description_es: |
+      Cuando es true (por defecto), la proyección de coeficientes mHC `φ_l`
+      se mantiene como `nn.Linear` de precisión completa incluso cuando
+      `use_bitnet` es true, evitando ruido de cuantización ternaria en los
+      pequeños coeficientes mHC. Cuando es false (y `use_bitnet` es true),
+      `φ_l` usa `BitLinear`.
+    default: true
+    examples: [true, false]

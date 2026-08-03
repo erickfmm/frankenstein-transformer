@@ -876,12 +876,15 @@ class TitanTrainer:
         norm_params = []
         embed_params = []
         other_params = []
+        mhc_params = []
         
         for name, param in self.model.named_parameters():
             if not param.requires_grad:
                 continue
                 
-            if ('titan_attn' in name.lower() or 'attention' in name.lower()
+            if 'mhc' in name.lower() or 'manifold' in name.lower():
+                mhc_params.append(param)
+            elif ('titan_attn' in name.lower() or 'attention' in name.lower()
                     or 'ode' in name.lower() or 'retention' in name.lower()
                     or 'retnet' in name.lower() or 'mamba' in name.lower()):
                 titan_attn_params.append(param)
@@ -900,6 +903,14 @@ class TitanTrainer:
                 'betas': (0.9, 0.95),
                 'eps': 1e-8,
                 'name': 'embeddings'
+            },
+            {
+                'params': mhc_params,
+                'lr': 3e-6,
+                'weight_decay': 0.01,
+                'betas': (0.9, 0.95),
+                'eps': 1e-8,
+                'name': 'other'
             },
             {
                 'params': norm_params,
