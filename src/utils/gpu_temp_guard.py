@@ -427,7 +427,7 @@ class GPUTemperatureGuard:
 # ---------------------------------------------------------------------------
 # Supervisor
 # ---------------------------------------------------------------------------
-SUPERVISOR_CHILD_ENV_VAR = "FRANKESTEIN_SUPERVISOR_CHILD"
+SUPERVISOR_CHILD_ENV_VAR = "FRANKENSTEIN_SUPERVISOR_CHILD"
 CHECKPOINT_DONE_SENTINEL = ".supervisor_checkpoint_done"
 RESUME_AUTO = "auto"
 

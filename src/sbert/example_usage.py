@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Example usage of SBERT fine-tuned TORMENTED-BERT model.
+Example usage of SBERT fine-tuned Frankenstein model.
 
 This script demonstrates:
 1. Loading a fine-tuned SBERT model
@@ -25,7 +25,7 @@ def example_basic_similarity():
     print("=" * 80)
     
     # Initialize model (replace with your model path)
-    model_path = "./output/sbert_tormented_v2"
+    model_path = "./output/sbert_frankenstein_v2"
     inference = SBERTInference(model_path=model_path, batch_size=32)
     
     # Example sentence pairs
@@ -58,7 +58,7 @@ def example_batch_encoding():
     print("EXAMPLE 2: Batch Encoding")
     print("=" * 80)
     
-    model_path = "./output/sbert_tormented_v2"
+    model_path = "./output/sbert_frankenstein_v2"
     inference = SBERTInference(model_path=model_path)
     
     sentences = [
@@ -82,7 +82,7 @@ def example_semantic_search():
     print("EXAMPLE 3: Semantic Search")
     print("=" * 80)
     
-    model_path = "./output/sbert_tormented_v2"
+    model_path = "./output/sbert_frankenstein_v2"
     inference = SBERTInference(model_path=model_path)
     
     # Define a corpus
@@ -119,7 +119,7 @@ def example_batch_comparison():
     print("EXAMPLE 4: Batch Comparison")
     print("=" * 80)
     
-    model_path = "./output/sbert_tormented_v2"
+    model_path = "./output/sbert_frankenstein_v2"
     inference = SBERTInference(model_path=model_path)
     
     sentences1 = [
@@ -152,7 +152,7 @@ def example_clustering():
     print("EXAMPLE 5: Sentence Clustering")
     print("=" * 80)
     
-    model_path = "./output/sbert_tormented_v2"
+    model_path = "./output/sbert_frankenstein_v2"
     inference = SBERTInference(model_path=model_path)
     
     sentences = [
@@ -198,7 +198,7 @@ def example_save_load_embeddings():
     print("EXAMPLE 6: Save and Load Embeddings")
     print("=" * 80)
     
-    model_path = "./output/sbert_tormented_v2"
+    model_path = "./output/sbert_frankenstein_v2"
     inference = SBERTInference(model_path=model_path)
     
     sentences = [
@@ -240,7 +240,7 @@ def main():
     parser.add_argument(
         "--model_path",
         type=str,
-        default="./output/sbert_tormented_v2",
+        default="./output/sbert_frankenstein_v2",
         help="Path to fine-tuned SBERT model"
     )
     parser.add_argument(
@@ -254,7 +254,7 @@ def main():
     args = parser.parse_args()
     
     print("\n" + "=" * 80)
-    print("SBERT TORMENTED-BERT-Frankenstein Examples")
+    print("SBERT Frankenstein Transformer Examples")
     print("=" * 80)
     print(f"\nModel path: {args.model_path}")
     print(f"Example: {args.example}")

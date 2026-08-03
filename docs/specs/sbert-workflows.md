@@ -119,36 +119,36 @@ else:  # encode
 
 ```bash
 # Train SBERT from a pretrained base model
-frankestein-transformer sbert-train \
+frankenstein-transformer sbert-train \
   --base-model answerdotai/ModernBERT-base \
   --dataset_name erickfmm/agentlans__multilingual-sentences__paired_10_sts \
   --pooling_mode mean --epochs 4 --batch_size 16
 
-# Train SBERT from a frankestein checkpoint
-frankestein-transformer sbert-train \
+# Train SBERT from a frankenstein checkpoint
+frankenstein-transformer sbert-train \
   --pretrained checkpoints/model.pt \
   --hidden_size 768 --num_layers 12 \
   --pooling_mode cls
 
 # Pairwise similarity
-frankestein-transformer sbert-infer \
+frankenstein-transformer sbert-infer \
   --model_path ./output/sbert --mode similarity \
   --sentence1 "Machine learning is fascinating" \
   --sentence2 "AI research is exciting"
 
 # Semantic search
-frankestein-transformer sbert-infer \
+frankenstein-transformer sbert-infer \
   --model_path ./output/sbert --mode search \
   --query "transformer architecture" \
   --corpus_file papers.txt --top_k 10
 
 # Clustering
-frankestein-transformer sbert-infer \
+frankenstein-transformer sbert-infer \
   --model_path ./output/sbert --mode cluster \
   --sentences_file reviews.txt --n_clusters 5
 
 # Embedding export
-frankestein-transformer sbert-infer \
+frankenstein-transformer sbert-infer \
   --model_path ./output/sbert --mode encode \
   --input_file documents.txt --output_file embeddings.npy
 ```

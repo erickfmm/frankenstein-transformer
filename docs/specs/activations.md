@@ -51,7 +51,7 @@ Mirrored in `src/schema/_model.yaml` (`ffn_activation.enum`) and
 ## `ffn_activation_config` Keys
 
 All optional; ignored for stateless activations. Enforced by
-`UltraConfig.__post_init__` and the JSON-Schema (`additionalProperties: false`).
+`FrankensteinModelConfig.__post_init__` and the JSON-Schema (`additionalProperties: false`).
 
 | Key | Type | Default | Applies to |
 |---|---|---|---|
@@ -106,7 +106,7 @@ built with the same projection class (BitLinear under BitNet).
 | `src/model/activation_function/exponential.py` | ELU family |
 | `src/model/activation_function/learnable.py` | RAF, SwishTrainable, Maxout |
 | `src/model/activation_function/glu.py` | `GatedFFN`, `make_gated_ffn` |
-| `src/model/tormented_bert_frankestein.py` | `UltraConfig.ffn_activation[_config]`, `HybridLayer` FFN wiring, `_validate_ffn_activation_config` |
+| `src/model/frankenstein_model.py` | `FrankensteinModelConfig.ffn_activation[_config]`, `HybridLayer` FFN wiring, `_validate_ffn_activation_config` |
 | `src/schema/_model.yaml` | `ffn_activation` enum + `ffn_activation_config` object |
 | `tests/test_activation_functions.py` | 45 tests: shape/gradient/range/correctness/factory/validation |
 | `configs/examples/activation_*.yaml` | Example presets (raf, swiglu, mish) |

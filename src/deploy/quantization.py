@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BitNet b1.58 quantization and compression utilities for TORMENTED-BERT.
+"""BitNet b1.58 quantization and compression utilities for Frankenstein.
 
 Provides faithful ternary weight packing (``{-1, 0, 1}`` at ~1.58 bits per
 weight), INT8 activation quantization, model size estimation, and fast

@@ -6,7 +6,7 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.tormented_bert_frankestein import UltraConfig
+    from src.model.frankenstein_model import FrankensteinModelConfig
     from src.model.attention.gated import (
         GatedLinearAttention,
         DeltaNetAttention,
@@ -42,7 +42,7 @@ def _cfg(**overrides):
         mode="encoder",
     )
     base.update(overrides)
-    return UltraConfig(**base)
+    return FrankensteinModelConfig(**base)
 
 
 BSZ, SEQ, DIM = 2, 8, 48

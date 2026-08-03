@@ -1,4 +1,4 @@
-Frankestein Transformer
+Frankenstein Transformer
 ========================
 
 .. mdinclude:: ../../README.md

@@ -6,7 +6,7 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.tormented_bert_frankestein import HybridLayer, UltraConfig
+    from src.model.frankenstein_model import HybridLayer, FrankensteinModelConfig
 
 
 def _cfg(layer_pattern=None, **overrides):
@@ -32,7 +32,7 @@ def _cfg(layer_pattern=None, **overrides):
         mode="encoder",
     )
     base.update(overrides)
-    return UltraConfig(**base)
+    return FrankensteinModelConfig(**base)
 
 
 BSZ, SEQ, DIM = 2, 8, 48

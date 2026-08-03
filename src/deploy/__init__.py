@@ -1,5 +1,5 @@
 """
-TORMENTED-BERT v2 Deployment Package
+Frankenstein Transformer Deployment Package
 BitNet quantization and inference pipeline for production deployment.
 """
 
@@ -14,7 +14,7 @@ from .quantization import (
 
 from .deploy import ModelDeployer
 
-from .inference import TormentedBertInference
+from .inference import FrankensteinInference
 
 __version__ = "2.0.0"
 __all__ = [
@@ -25,5 +25,5 @@ __all__ = [
     'load_quantized_checkpoint',
     'estimate_model_size',
     'ModelDeployer',
-    'TormentedBertInference',
+    'FrankensteinInference',
 ]

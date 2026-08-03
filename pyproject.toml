@@ -1,5 +1,5 @@
 [project]
-name = "transformer_encoder_frankestein"
+name = "transformer_encoder_frankenstein"
 version = "0.1.0"
 description = "Config-driven training library and CLI for end-to-end NLP workflows"
 readme = "README.md"
@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.scripts]
-frankestein-transformer = "src.cli:main"
+frankenstein-transformer = "src.cli:main"
 
 [project.optional-dependencies]
 train = [

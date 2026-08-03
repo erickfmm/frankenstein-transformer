@@ -324,13 +324,13 @@ properties:
     title_es: "Modo Transformer"
     description: |
       Controls attention masking. `encoder` = bidirectional attention. `decoder` = causal masking
-      for autoregressive next-token prediction. When `model_class=frankesteindecoder`, runtime forces `decoder`.
+      for autoregressive next-token prediction. When `model_class=frankensteindecoder`, runtime forces `decoder`.
 
       **Impact:** `encoder` allows each token to attend to all others (BERT-style). `decoder` only
       allows attending to previous tokens (GPT-style). Changing modes fundamentally changes the task.
     description_es: |
       Controla el enmascaramiento de atención. `encoder` = atención bidireccional. `decoder` = máscara
-      causal para predicción autorregresiva de siguiente token. Con `model_class=frankesteindecoder`,
+      causal para predicción autorregresiva de siguiente token. Con `model_class=frankensteindecoder`,
       se fuerza `decoder` en ejecución.
 
       **Impacto:** `encoder` permite que cada token atienda a todos los demás (tipo BERT). `decoder` solo

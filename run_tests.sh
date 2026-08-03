@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_tests.sh — Run the full Frankestein Transformer test suite.
+# run_tests.sh — Run the full Frankenstein Transformer test suite.
 #
 # Usage:
 #   ./run_tests.sh                 # run all tests

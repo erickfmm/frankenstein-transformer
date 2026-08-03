@@ -20,7 +20,7 @@ GROUP_NAMES: Tuple[str, ...] = (
 """Canonical parameter group taxonomy used by all optimizers.
 
 Each group name corresponds to a distinct architectural component of the
-TormentedBERT model. The factory routes per-group hyperparameters (lr, wd,
+Frankenstein model. The factory routes per-group hyperparameters (lr, wd,
 betas, eps) by matching these names against prefixed keys in the training
 configuration.
 

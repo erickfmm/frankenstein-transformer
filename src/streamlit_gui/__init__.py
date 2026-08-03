@@ -1,4 +1,4 @@
-"""Streamlit GUI package for transformer-encoder-frankestein."""
+"""Streamlit GUI package for transformer-encoder-frankenstein."""
 
 from .app import main as app_main
 

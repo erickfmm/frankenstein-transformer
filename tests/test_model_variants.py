@@ -1,4 +1,4 @@
-"""Unit tests for FrankensteinDecoder and TormentedBertFrankenstein."""
+"""Unit tests for FrankensteinDecoder and FrankensteinTransformer."""
 import unittest
 from importlib.util import find_spec
 
@@ -6,10 +6,10 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.tormented_bert_frankestein import (
-        TormentedBertFrankenstein,
+    from src.model.frankenstein_model import (
+        FrankensteinTransformer,
         FrankensteinDecoder,
-        UltraConfig,
+        FrankensteinModelConfig,
     )
 
 
@@ -85,9 +85,9 @@ class FrankensteinDecoderTests(unittest.TestCase):
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
-class TormentedBertFrankensteinTests(unittest.TestCase):
+class FrankensteinTransformerTests(unittest.TestCase):
     def _model(self, layer_pattern=None, **kw):
-        cfg = UltraConfig(
+        cfg = FrankensteinModelConfig(
             vocab_size=100,
             hidden_size=48,
             num_layers=len(layer_pattern or ["standard_attn"]),
@@ -108,7 +108,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
             use_hope=True,
             **kw,
         )
-        return TormentedBertFrankenstein(cfg)
+        return FrankensteinTransformer(cfg)
 
     def test_flat_embedding_forward(self):
         model = self._model(use_factorized_embedding=False)
@@ -143,7 +143,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
         self.assertEqual(y.shape, (2, 8, 100))
 
     def test_multi_loop(self):
-        cfg = UltraConfig(
+        cfg = FrankensteinModelConfig(
             vocab_size=100,
             hidden_size=48,
             num_layers=2,
@@ -162,7 +162,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
             ffn_hidden_size=96,
             ffn_activation="gelu",
         )
-        model = TormentedBertFrankenstein(cfg)
+        model = FrankensteinTransformer(cfg)
         x = torch.randint(0, 100, (1, 5))
         y = model(x)
         self.assertEqual(y.shape, (1, 5, 100))
@@ -198,7 +198,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
         self.assertEqual(y.shape, (1, 4, 100))
 
     def test_flash_norm_default_partial_ratio(self):
-        cfg = UltraConfig(
+        cfg = FrankensteinModelConfig(
             vocab_size=100,
             hidden_size=48,
             num_layers=1,
@@ -222,7 +222,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
 
     def test_flashnorm_partial_ratio_validation(self):
         # 0.0 is valid (full RMS).
-        cfg = UltraConfig(
+        cfg = FrankensteinModelConfig(
             vocab_size=100,
             hidden_size=48,
             num_layers=1,
@@ -244,7 +244,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
         )
         self.assertAlmostEqual(cfg.flashnorm_partial_ratio, 0.0)
         # 1.0 is valid (upper bound).
-        UltraConfig(
+        FrankensteinModelConfig(
             vocab_size=100,
             hidden_size=48,
             num_layers=1,
@@ -266,7 +266,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
         )
         # Negative is invalid.
         with self.assertRaises(ValueError):
-            UltraConfig(
+            FrankensteinModelConfig(
                 vocab_size=100,
                 hidden_size=48,
                 num_layers=1,
@@ -288,7 +288,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
             )
         # > 1.0 is invalid.
         with self.assertRaises(ValueError):
-            UltraConfig(
+            FrankensteinModelConfig(
                 vocab_size=100,
                 hidden_size=48,
                 num_layers=1,
@@ -310,7 +310,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
             )
 
     def test_prms_norm_default_ratio(self):
-        cfg = UltraConfig(
+        cfg = FrankensteinModelConfig(
             vocab_size=100,
             hidden_size=48,
             num_layers=1,
@@ -333,7 +333,7 @@ class TormentedBertFrankensteinTests(unittest.TestCase):
 
     def test_prms_partial_ratio_validation(self):
         with self.assertRaises(ValueError):
-            UltraConfig(
+            FrankensteinModelConfig(
                 vocab_size=100,
                 hidden_size=48,
                 num_layers=1,

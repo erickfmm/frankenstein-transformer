@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../.."))
 
-project = "Frankestein Transformer"
+project = "Frankenstein Transformer"
 copyright = "2026, Erick F. Merino M."
 author = "Erick F. Merino M."
 release = "0.1.0"

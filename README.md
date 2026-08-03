@@ -1,10 +1,10 @@
-# Frankestein Transformer
+# Frankenstein Transformer
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)](https://github.com/erickfmm/frankestein-transformer/actions)
-[![Docs](https://img.shields.io/badge/docs-readthedocs-blue.svg)](https://frankestein-transformer.readthedocs.io/en/latest/)
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)](https://github.com/erickfmm/frankenstein-transformer/actions)
+[![Docs](https://img.shields.io/badge/docs-readthedocs-blue.svg)](https://frankenstein-transformer.readthedocs.io/en/latest/)
 
 Config-driven transformer experimentation toolkit with 33+ mixer architectures and 23 optimizer families.
 
@@ -12,11 +12,11 @@ Config-driven transformer experimentation toolkit with 33+ mixer architectures a
 
 | Method | Command |
 |--------|---------|
-| **uv** (recommended) | `git clone https://github.com/erickfmm/frankestein-transformer.git && cd frankestein-transformer && uv venv && source .venv/bin/activate && uv pip install -e ".[train]"` |
+| **uv** (recommended) | `git clone https://github.com/erickfmm/frankenstein-transformer.git && cd frankenstein-transformer && uv venv && source .venv/bin/activate && uv pip install -e ".[train]"` |
 | **pip** | `python -m venv .venv && source .venv/bin/activate && pip install -e ".[train]"` |
-| **conda** | `conda create -n frankestein python=3.9 && conda activate frankestein && pip install -e ".[train]"` |
+| **conda** | `conda create -n frankenstein python=3.9 && conda activate frankenstein && pip install -e ".[train]"` |
 
-Verify: `frankestein-transformer --help`
+Verify: `frankenstein-transformer --help`
 
 ## Feature Matrix
 
@@ -24,7 +24,7 @@ Verify: `frankestein-transformer --help`
 |---------|-------|
 | Sequence mixer architectures | 33 across 5 categories (Dense, Recurrent, Sparse, Gated, Latent) |
 | Optimizer families | 23 across 6 categories |
-| Model classes | `frankenstein`, `frankesteindecoder` |
+| Model classes | `frankenstein`, `frankensteindecoder` |
 | Training modes | Encoder (MLM) / Decoder (autoregressive) |
 | Normalization types | `layer_norm`, `dynamic_tanh`, `derf` |
 | CLI subcommands | 8 |
@@ -37,7 +37,7 @@ Verify: `frankestein-transformer --help`
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
 | `frankenstein` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 33 mixer types |
-| `frankesteindecoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
+| `frankensteindecoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 
 See [configs/README.md](configs/README.md) for preset details and [docs/specs/](docs/specs/) for architecture deep-dives.
 
@@ -45,14 +45,14 @@ See [configs/README.md](configs/README.md) for preset details and [docs/specs/](
 
 | Subcommand | Purpose | Example |
 |------------|---------|---------|
-| `train` | Run schema-validated training | `frankestein-transformer train --config-name frankenstein --device auto` |
-| `deploy` | Export checkpoint to deployment artifacts | `frankestein-transformer deploy --checkpoint ckpt.pt --output deployed/ --format quantized` |
-| `quantize` | Shortcut for quantized deployment | `frankestein-transformer quantize --checkpoint ckpt.pt --output deployed_q/ --validate` |
-| `infer` | Batch/interactive/benchmark inference | `frankestein-transformer infer --model deployed/ --text "hello" --device auto` |
-| `sbert-train` | Train sentence embedding model | `frankestein-transformer sbert-train --output_dir ./sbert_out --batch_size 16 --epochs 4` |
-| `sbert-infer` | SBERT similarity/search/cluster/encode | `frankestein-transformer sbert-infer --model_path ./sbert_out --mode similarity --sentence1 "a" --sentence2 "b"` |
-| `transformers-export` | Export to HuggingFace Transformers format | `frankestein-transformer transformers-export --config-name frankenstein --output ./hf_export/` |
-| `web-server` | Launch Streamlit config builder UI | `frankestein-transformer web-server` |
+| `train` | Run schema-validated training | `frankenstein-transformer train --config-name frankenstein --device auto` |
+| `deploy` | Export checkpoint to deployment artifacts | `frankenstein-transformer deploy --checkpoint ckpt.pt --output deployed/ --format quantized` |
+| `quantize` | Shortcut for quantized deployment | `frankenstein-transformer quantize --checkpoint ckpt.pt --output deployed_q/ --validate` |
+| `infer` | Batch/interactive/benchmark inference | `frankenstein-transformer infer --model deployed/ --text "hello" --device auto` |
+| `sbert-train` | Train sentence embedding model | `frankenstein-transformer sbert-train --output_dir ./sbert_out --batch_size 16 --epochs 4` |
+| `sbert-infer` | SBERT similarity/search/cluster/encode | `frankenstein-transformer sbert-infer --model_path ./sbert_out --mode similarity --sentence1 "a" --sentence2 "b"` |
+| `transformers-export` | Export to HuggingFace Transformers format | `frankenstein-transformer transformers-export --config-name frankenstein --output ./hf_export/` |
+| `web-server` | Launch Streamlit config builder UI | `frankenstein-transformer web-server` |
 
 All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
@@ -93,7 +93,7 @@ Parameters use prefixed keys: `<optimizer_class>-<group>_<param>` (e.g. `adamw-l
 | [docs/paper.pdf](docs/paper.pdf) | Technical report (English) |
 | [docs/paper-es.pdf](docs/paper-es.pdf) | Technical report (Spanish) |
 | [docs/specs/](docs/specs/) | Architecture and feature specifications |
-| [frankestein-transformer.readthedocs.io](https://frankestein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specs, API, papers, bibliography) |
+| [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specs, API, papers, bibliography) |
 | [docs/transformers_compatibility.md](docs/transformers_compatibility.md) | HuggingFace export compatibility guide |
 
 ## Installation
@@ -101,8 +101,8 @@ Parameters use prefixed keys: `<optimizer_class>-<group>_<param>` (e.g. `adamw-l
 ### uv (recommended)
 
 ```bash
-git clone https://github.com/erickfmm/frankestein-transformer.git
-cd frankestein-transformer
+git clone https://github.com/erickfmm/frankenstein-transformer.git
+cd frankenstein-transformer
 uv venv
 source .venv/bin/activate
 uv pip install -e ".[train]"
@@ -119,20 +119,20 @@ pip install -e ".[train]"
 ### conda
 
 ```bash
-conda create -n frankestein python=3.9
-conda activate frankestein
+conda create -n frankenstein python=3.9
+conda activate frankenstein
 pip install -e ".[train]"
 ```
 
 Verify installation:
 
 ```bash
-frankestein-transformer --help
+frankenstein-transformer --help
 ```
 
 ## Quick Training Example
 
-Minimal YAML config (`my_config.yaml`) — only the 5 required model fields plus task; everything else uses UltraConfig/TrainingConfig defaults:
+Minimal YAML config (`my_config.yaml`) — only the 5 required model fields plus task; everything else uses FrankensteinModelConfig/TrainingConfig defaults:
 
 ```yaml
 model_class: frankenstein
@@ -185,18 +185,18 @@ training:
   scheduler_total_steps: 1000
 ```
 
-Unspecified model fields fall back to UltraConfig defaults (`num_loops=2`, `dropout=0.1`, `norm_type=dynamic_tanh`, `use_moe=true`, `ffn_activation=silu`, etc.). Unspecified training fields fall back to TrainingConfig defaults (`scheduler_type=cosine`, `grad_clip_max_norm=5.0`, `gpu_temp_guard_enabled=true`, etc.). Override only what you need to change.
+Unspecified model fields fall back to FrankensteinModelConfig defaults (`num_loops=2`, `dropout=0.1`, `norm_type=dynamic_tanh`, `use_moe=true`, `ffn_activation=silu`, etc.). Unspecified training fields fall back to TrainingConfig defaults (`scheduler_type=cosine`, `grad_clip_max_norm=5.0`, `gpu_temp_guard_enabled=true`, etc.). Override only what you need to change.
 
 Run:
 
 ```bash
-frankestein-transformer train --config my_config.yaml --device auto
+frankenstein-transformer train --config my_config.yaml --device auto
 ```
 
 List available named presets:
 
 ```bash
-frankestein-transformer train --list-configs
+frankenstein-transformer train --list-configs
 ```
 
 ## License

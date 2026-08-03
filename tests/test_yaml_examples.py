@@ -5,7 +5,7 @@ they are schema-valid and produce a well-formed LoadedTrainingConfig.
 
 No torch is required: load_training_config only needs PyYAML and the
 pure-Python dataclass layer.  The skipUnless guard is kept for safety
-since UltraConfig lives inside the torch-dependent model package.
+since FrankensteinModelConfig lives inside the torch-dependent model package.
 """
 import os
 import unittest
@@ -167,7 +167,7 @@ class YamlExamplesContentTests(unittest.TestCase):
         self.assertFalse(cfg.model_config.bitnet_routers)
         self.assertFalse(cfg.model_config.use_bitnet_conv)
         self.assertEqual(cfg.model_config.mode, "decoder")
-        self.assertEqual(cfg.model_class, "frankesteindecoder")
+        self.assertEqual(cfg.model_class, "frankensteindecoder")
 
 
 if __name__ == "__main__":

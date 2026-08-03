@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SBERT inference engine for TORMENTED-BERT-Frankenstein.
+"""SBERT inference engine for Frankenstein Transformer.
 
 Provides :class:`SBERTInference` for computing sentence embeddings,
 similarity scores, semantic search, clustering, and embedding

@@ -10,8 +10,8 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 
 | Section | Required | Description |
 |---|---|---|
-| `model_class` | No (optional when `base_model` set) | Architecture variant: `frankenstein`, `frankesteindecoder` |
-| `model` | No (optional when `base_model` set) | UltraConfig model parameters |
+| `model_class` | No (optional when `base_model` set) | Architecture variant: `frankenstein`, `frankensteindecoder` |
+| `model` | No (optional when `base_model` set) | FrankensteinModelConfig model parameters |
 | `training` | **Yes** | Training hyperparameters and runtime configuration |
 | `base_model` | No | HuggingFace model identifier for continual pretraining |
 | `tokenizer` | No | Tokenizer config when `base_model` is used |
@@ -153,5 +153,5 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 3. **`fasa_attn` and `sparge_attn`** are eval-only blocks. Training with either raises a runtime error.
 4. **Optimizer parameters** use prefixed keys: `<optimizer_class>-<group>_<param>`.
 5. **`training.task`** is required (`mlm` or `sbert`). Legacy top-level optimizer keys are not accepted.
-6. **`model_class: frankesteindecoder`** forces `mode: decoder` at runtime.
+6. **`model_class: frankensteindecoder`** forces `mode: decoder` at runtime.
 7. **`layer_pattern` length must equal `num_layers`**.

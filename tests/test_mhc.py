@@ -11,10 +11,10 @@ if TORCH_AVAILABLE:
         SinkhornKnoppFunction,
     )
     from src.model.attention.common import BitLinear
-    from src.model.tormented_bert_frankestein import (
+    from src.model.frankenstein_model import (
         HybridLayer,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
 
 
@@ -115,18 +115,18 @@ class MhcModelTests(unittest.TestCase):
             mhc_full_prec_under_bitnet=True,
         )
         base.update(overrides)
-        return UltraConfig(**base)
+        return FrankensteinModelConfig(**base)
 
     def test_model_output_shape(self):
         cfg = self._cfg()
-        model = TormentedBertFrankenstein(cfg)
+        model = FrankensteinTransformer(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         self.assertEqual(out.shape, (2, 8, 128))
 
     def test_gradient_flows_through_sinkhorn(self):
         cfg = self._cfg()
-        model = TormentedBertFrankenstein(cfg)
+        model = FrankensteinTransformer(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         out.sum().backward()
@@ -136,7 +136,7 @@ class MhcModelTests(unittest.TestCase):
 
     def test_checkpoint_forward_backward(self):
         cfg = self._cfg(mhc_checkpoint=True)
-        model = TormentedBertFrankenstein(cfg)
+        model = FrankensteinTransformer(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         out.sum().backward()
@@ -144,7 +144,7 @@ class MhcModelTests(unittest.TestCase):
 
     def test_moe_supported_with_mhc(self):
         cfg = self._cfg(use_moe=True, num_experts=2, top_k_experts=1)
-        model = TormentedBertFrankenstein(cfg)
+        model = FrankensteinTransformer(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         out.sum().backward()
@@ -157,7 +157,7 @@ class MhcModelTests(unittest.TestCase):
 
     def test_stream_expansion_modules_present(self):
         cfg = self._cfg()
-        model = TormentedBertFrankenstein(cfg)
+        model = FrankensteinTransformer(cfg)
         self.assertIsNotNone(model.mhc_in_proj)
         self.assertIsNotNone(model.mhc_out_proj)
 
@@ -165,7 +165,7 @@ class MhcModelTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class MhcHybridLayerTests(unittest.TestCase):
     def _cfg(self):
-        return UltraConfig(
+        return FrankensteinModelConfig(
             vocab_size=64,
             hidden_size=48,
             num_layers=1,

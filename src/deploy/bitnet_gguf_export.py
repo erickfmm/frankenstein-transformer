@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Best-effort GGUF exporter for BitNet b1.58 (1.58-bit) TORMENTED-BERT models.
+"""Best-effort GGUF exporter for BitNet b1.58 (1.58-bit) Frankenstein models.
 
 Targets `Microsoft/BitNet <https://github.com/microsoft/BitNet>`_ (bitnet.cpp),
 which is built on top of llama.cpp and consumes the **GGUF** format with the
@@ -383,21 +383,21 @@ def export_bitnet_gguf(
     writer.write_header(len(packed))
 
     # Metadata
-    writer.write_kv_string("general.architecture", "frankestein")
-    writer.write_kv_string("general.name", "frankestein-bitnet")
+    writer.write_kv_string("general.architecture", "frankenstein")
+    writer.write_kv_string("general.name", "frankenstein-bitnet")
     writer.write_kv_uint32(
-        "frankestein.hidden_size", int(model_config.get("hidden_size", 0))
+        "frankenstein.hidden_size", int(model_config.get("hidden_size", 0))
     )
     writer.write_kv_uint32(
-        "frankestein.block_count", int(model_config.get("num_layers", 0))
+        "frankenstein.block_count", int(model_config.get("num_layers", 0))
     )
     writer.write_kv_uint32(
-        "frankestein.attention.head_count", int(model_config.get("num_heads", 0))
+        "frankenstein.attention.head_count", int(model_config.get("num_heads", 0))
     )
     vocab_size = int(model_config.get("vocab_size", 0))
-    writer.write_kv_uint32("frankestein.vocab_size", vocab_size)
+    writer.write_kv_uint32("frankenstein.vocab_size", vocab_size)
     writer.write_kv_string(
-        "frankestein.context_length",
+        "frankenstein.context_length",
         str(int(model_config.get("max_position_embeddings", 512))),
     )
     writer.write_kv_string(
@@ -430,20 +430,20 @@ def export_bitnet_gguf(
     # start of the data section, per the GGUF convention).
     final = _GGUFWriter()
     final.write_header(len(packed))
-    final.write_kv_string("general.architecture", "frankestein")
-    final.write_kv_string("general.name", "frankestein-bitnet")
+    final.write_kv_string("general.architecture", "frankenstein")
+    final.write_kv_string("general.name", "frankenstein-bitnet")
     final.write_kv_uint32(
-        "frankestein.hidden_size", int(model_config.get("hidden_size", 0))
+        "frankenstein.hidden_size", int(model_config.get("hidden_size", 0))
     )
     final.write_kv_uint32(
-        "frankestein.block_count", int(model_config.get("num_layers", 0))
+        "frankenstein.block_count", int(model_config.get("num_layers", 0))
     )
     final.write_kv_uint32(
-        "frankestein.attention.head_count", int(model_config.get("num_heads", 0))
+        "frankenstein.attention.head_count", int(model_config.get("num_heads", 0))
     )
-    final.write_kv_uint32("frankestein.vocab_size", vocab_size)
+    final.write_kv_uint32("frankenstein.vocab_size", vocab_size)
     final.write_kv_string(
-        "frankestein.context_length",
+        "frankenstein.context_length",
         str(int(model_config.get("max_position_embeddings", 512))),
     )
     final.write_kv_string(

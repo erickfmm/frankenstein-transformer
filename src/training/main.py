@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Training pipeline entry point for TORMENTED-BERT-Frankenstein.
+"""Training pipeline entry point for Frankenstein Transformer.
 
 Orchestrates the full training workflow: YAML config loading, model
 construction (custom Frankenstein or HuggingFace base model), tokenizer
@@ -26,10 +26,10 @@ try:
     from .streaming_mlm_dataset import StreamingMLMDataset
     from .trainer import TitanTrainer, TrainingConfig
     from .config_loader import LoadedTrainingConfig, load_training_config, list_config_paths
-    from ..model.tormented_bert_frankestein import (
+    from ..model.frankenstein_model import (
         FrankensteinDecoder,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 except ImportError:
@@ -37,10 +37,10 @@ except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
     from training.config_loader import LoadedTrainingConfig, load_training_config, list_config_paths
-    from model.tormented_bert_frankestein import (
+    from model.frankenstein_model import (
         FrankensteinDecoder,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
@@ -114,11 +114,11 @@ def _load_base_model_and_tokenizer(
     return model, tokenizer
 
 
-def _load_legacy_tormented_model(loaded: LoadedTrainingConfig) -> Tuple[torch.nn.Module, SpanishSPMTokenizer, UltraConfig]:
-    """Load a custom TormentedBert model with SentencePiece tokenizer.
+def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> Tuple[torch.nn.Module, SpanishSPMTokenizer, FrankensteinModelConfig]:
+    """Load a custom Frankenstein model with SentencePiece tokenizer.
 
     Trains or loads an SPM tokenizer, then constructs the model based on
-    ``model_class`` (``"frankesteindecoder"``, or default
+    ``model_class`` (``"frankensteindecoder"``, or default
     ``"frankenstein"``).
 
     Args:
@@ -158,7 +158,7 @@ def _load_legacy_tormented_model(loaded: LoadedTrainingConfig) -> Tuple[torch.nn
     logging.info("Tokenizer model path: %s", tokenizer.model_path)
 
     logging.info("\n" + "=" * 60)
-    logging.info("Step 2: Creating TORMENTED-BERT-Frankenstein model")
+    logging.info("Step 2: Creating Frankenstein Transformer model")
     logging.info("=" * 60)
 
     stable_layer_pattern = [
@@ -172,11 +172,11 @@ def _load_legacy_tormented_model(loaded: LoadedTrainingConfig) -> Tuple[torch.nn
     if not config.layer_pattern:
         config.layer_pattern = stable_layer_pattern
 
-    if loaded.model_class == "frankesteindecoder":
+    if loaded.model_class == "frankensteindecoder":
         config.mode = "decoder"
         model = FrankensteinDecoder(config)
     else:
-        model = TormentedBertFrankenstein(config)
+        model = FrankensteinTransformer(config)
 
     logging.info("Model Config:")
     logging.info("  - Model Class: %s", loaded.model_class)
@@ -824,7 +824,7 @@ def _run_sbert_task(
 
 # ==================== MAIN EXECUTION ====================
 def main(argv=None):
-    """Main training pipeline for TORMENTED-BERT-Frankenstein and base-model finetuning."""
+    """Main training pipeline for Frankenstein Transformer and base-model finetuning."""
     parser = argparse.ArgumentParser(description="Train models from YAML configs")
     parser.add_argument("--config", type=str, default=None, help="Path to YAML config file")
     parser.add_argument(
@@ -837,7 +837,7 @@ def main(argv=None):
     parser.add_argument("--batch-size", type=int, default=None, help="Override batch size from YAML")
     parser.add_argument(
         "--model-mode",
-        choices=["frankenstein", "frankesteindecoder"],
+        choices=["frankenstein", "frankensteindecoder"],
         default=None,
         help="Deprecated: use --config-name instead",
     )
@@ -959,7 +959,7 @@ def main(argv=None):
     if (
         bool(training_config.gpu_temp_guard_enabled)
         and str(resolved_device).startswith("cuda")
-        and os.environ.get("FRANKESTEIN_SUPERVISOR_CHILD") != "1"
+        and os.environ.get("FRANKENSTEIN_SUPERVISOR_CHILD") != "1"
     ):
         return _run_under_supervisor(args, training_config, resolved_device, config_path, loaded.task)
 
@@ -974,7 +974,7 @@ def main(argv=None):
         model_descriptor = loaded.base_model
         runtime_config = getattr(model, "config", None)
     else:
-        model, tokenizer, runtime_config = _load_legacy_tormented_model(loaded)
+        model, tokenizer, runtime_config = _load_legacy_frankenstein_model(loaded)
         model_descriptor = loaded.model_class or "frankenstein"
 
     total_params = sum(p.numel() for p in model.parameters())

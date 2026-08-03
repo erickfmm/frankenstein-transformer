@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""High-performance inference engine for deployed TORMENTED-BERT models.
+"""High-performance inference engine for deployed Frankenstein models.
 
-Provides :class:`TormentedBertInference` for loading quantized or standard
+Provides :class:`FrankensteinInference` for loading quantized or standard
 deployment artifacts and running MLM predictions, masked token prediction,
 batch inference, and performance benchmarking.
 """
@@ -15,10 +15,10 @@ from typing import List, Optional, Union
 import time
 
 try:
-    from ..model.tormented_bert_frankestein import (
+    from ..model.frankenstein_model import (
         FrankensteinDecoder,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
     from .quantization import load_quantized_checkpoint
     from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
@@ -26,10 +26,10 @@ try:
     from ..model.attention.common import BitLinear
     from ..utils.config_flatten import flatten_model_dict
 except ImportError:
-    from model.tormented_bert_frankestein import (
+    from model.frankenstein_model import (
         FrankensteinDecoder,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
     from deploy.quantization import load_quantized_checkpoint
     from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
@@ -44,8 +44,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class TormentedBertInference:
-    """Optimized inference engine for TORMENTED-BERT deployed models.
+class FrankensteinInference:
+    """Optimized inference engine for Frankenstein deployed models.
 
     Loads deployment artifacts (config, quantized or standard weights,
     optional tokenizer) and provides methods for single/batch prediction,
@@ -55,8 +55,8 @@ class TormentedBertInference:
         model_dir: Path to the deployment directory.
         device: Resolved PyTorch device string.
         use_half_precision: Whether FP16 inference is enabled (CUDA only).
-        config: Loaded :class:`UltraConfig`.
-        model: Loaded :class:`TormentedBertFrankenstein` in eval mode.
+        config: Loaded :class:`FrankensteinModelConfig`.
+        model: Loaded :class:`FrankensteinTransformer` in eval mode.
         tokenizer: Optional :class:`SpanishSPMTokenizer` instance.
     """
 
@@ -94,28 +94,28 @@ class TormentedBertInference:
         
         logger.info("✅ Inference engine ready")
     
-    def _load_config(self) -> UltraConfig:
+    def _load_config(self) -> FrankensteinModelConfig:
         """Load model configuration."""
         config_path = self.model_dir / "config.json"
         
         if not config_path.exists():
             logger.warning("Config file not found, using default")
-            return UltraConfig()
+            return FrankensteinModelConfig()
         
         with open(config_path) as f:
             config_dict = json.load(f)
         
-        config = UltraConfig(**flatten_model_dict(config_dict))
+        config = FrankensteinModelConfig(**flatten_model_dict(config_dict))
         logger.info(f"Config loaded: {config.hidden_size}D, {config.num_layers} layers")
         return config
     
-    def _load_model(self) -> TormentedBertFrankenstein:
+    def _load_model(self) -> FrankensteinTransformer:
         """Load and prepare model for inference."""
         # Initialize model (decoder when configured)
         if isinstance(self.config.mode, str) and self.config.mode == "decoder":
             model = FrankensteinDecoder(self.config)
         else:
-            model = TormentedBertFrankenstein(self.config)
+            model = FrankensteinTransformer(self.config)
         
         # Find model file
         model_files = list(self.model_dir.glob("model*.pt"))
@@ -354,10 +354,10 @@ class TormentedBertInference:
             logger.info(f"  Peak GPU memory: {memory_mb:.2f}MB")
 
 
-def interactive_mode(engine: TormentedBertInference):
+def interactive_mode(engine: FrankensteinInference):
     """Interactive inference mode."""
     print("\n" + "="*60)
-    print("TORMENTED-BERT Interactive Inference")
+    print("Frankenstein Interactive Inference")
     print("="*60)
     print("\nCommands:")
     print("  - Enter text to get predictions")
@@ -408,7 +408,7 @@ def interactive_mode(engine: TormentedBertInference):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description='TORMENTED-BERT Inference Engine'
+        description='Frankenstein Inference Engine'
     )
     parser.add_argument(
         '--model',
@@ -460,7 +460,7 @@ def main(argv=None):
     logger.info(f"Inference device requested='{args.device}', resolved='{resolved_device}'")
     
     # Initialize engine
-    engine = TormentedBertInference(
+    engine = FrankensteinInference(
         args.model,
         device=resolved_device,
         use_half_precision=args.fp16

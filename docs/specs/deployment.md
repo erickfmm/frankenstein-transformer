@@ -39,7 +39,7 @@ automatically honours the schema flags:
 
 | Schema flag | Default | What it controls |
 |---|---|---|
-| `use_bitnet` | `true` (UltraConfig) / `false` (example) | Q/K/V/O, FFN up/down, embeddings `proj`, LM head, and all recurrent-state **gates** (alpha/beta/forget/erase/write/merge/gk) → `BitLinear` |
+| `use_bitnet` | `true` (FrankensteinModelConfig) / `false` (example) | Q/K/V/O, FFN up/down, embeddings `proj`, LM head, and all recurrent-state **gates** (alpha/beta/forget/erase/write/merge/gk) → `BitLinear` |
 | `bitnet_routers` | `false` | When `true`, also quantizes routing/scoring: MoE router, MoD router, sparse block-index/forecast, top-k score nets. Default `false` keeps them full-precision for routing stability |
 | `use_bitnet_conv` | `false` | When `true` (and `use_embedding_conv`), replaces the embedding `Conv1d` with `BitConv1d`. Off by default; the conv runs over the reduced embedding stream where ternary noise can be costly |
 
@@ -120,8 +120,8 @@ The `quantize` subcommand is a convenience wrapper that calls `deploy` with `--f
 
 ```bash
 # These are equivalent:
-frankestein-transformer quantize --checkpoint model.pt --output ./out
-frankestein-transformer deploy --checkpoint model.pt --output ./out --format quantized
+frankenstein-transformer quantize --checkpoint model.pt --output ./out
+frankenstein-transformer deploy --checkpoint model.pt --output ./out --format quantized
 ```
 
 ## Validation
@@ -162,7 +162,7 @@ When `use_bitnet: true`, the export additionally:
    (routing/scoring projections remain full-precision — the recommended
    default for routing stability).
 
-The generated `modeling_frankestein.py` rebuilds `BitLinear`/`BitConv1d` from
+The generated `modeling_frankenstein.py` rebuilds `BitLinear`/`BitConv1d` from
 source and applies runtime quantization via STE on load, so the exported
 model is loadable with `trust_remote_code=True` and produces ternary-aware
 forward passes. Encoder (MLM) and decoder (causal) variants are both
@@ -189,10 +189,10 @@ to the Llama-style tensor naming. Any other `layer_pattern` (e.g.
 
 ```bash
 # Compatibility check (returns is_compatible + reason)
-frankestein-transformer bitnet-gguf --yaml cfg.yaml --output out.gguf --check
+frankenstein-transformer bitnet-gguf --yaml cfg.yaml --output out.gguf --check
 
 # Export a standard_attn-only BitNet model to i2_s GGUF
-frankestein-transformer bitnet-gguf --model ckpt.pt --yaml cfg.yaml --output out.gguf
+frankenstein-transformer bitnet-gguf --model ckpt.pt --yaml cfg.yaml --output out.gguf
 ```
 
 The writer is a self-contained GGUF v3 emitter (no dependency on the

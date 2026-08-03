@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""SBERT fine-tuning for TORMENTED-BERT-Frankenstein.
+"""SBERT fine-tuning for Frankenstein Transformer.
 
-Fine-tunes a TormentedBert model (or any HuggingFace base model) on
+Fine-tunes a Frankenstein model (or any HuggingFace base model) on
 Spanish sentence similarity using cosine similarity loss and Siamese
 training. Supports paired-similarity, triplets, and QA dataset formats
 with balanced resampling and score standardization.
@@ -39,12 +39,12 @@ from tqdm import tqdm as tqdm_progress
 import numpy as np
 
 try:
-    from ..model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from ..model.frankenstein_model import FrankensteinTransformer, FrankensteinModelConfig
     from ..model.optimizer.factory import OPTIMIZER_REGISTRY
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..utils.gpu_temp_guard import GPUTemperatureGuard
 except ImportError:
-    from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from model.frankenstein_model import FrankensteinTransformer, FrankensteinModelConfig
     from model.optimizer.factory import OPTIMIZER_REGISTRY
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from utils.gpu_temp_guard import GPUTemperatureGuard
@@ -109,11 +109,11 @@ def _format_score_for_log(score: Any) -> str:
     return str(score)
 
 
-class TormentedBertSentenceTransformer:
-    """Wrapper to adapt TormentedBert for Sentence-BERT training.
+class FrankensteinSentenceTransformer:
+    """Wrapper to adapt Frankenstein for Sentence-BERT training.
 
     Builds a :class:`SentenceTransformer` model by wrapping a
-    :class:`TormentedBertFrankenstein` (or any HuggingFace base model)
+    :class:`FrankensteinTransformer` (or any HuggingFace base model)
     with a pooling layer and L2 normalization. Supports loading from
     pretrained checkpoints or initializing from scratch.
 
@@ -122,14 +122,14 @@ class TormentedBertSentenceTransformer:
         pooling_mode: Pooling strategy (``"mean"``, ``"cls"``, ``"max"``).
         trust_remote_code: Whether to allow remote code for HF models.
         device: Resolved PyTorch device string.
-        base_model: The underlying TormentedBert model (or ``None`` for HF).
-        config: :class:`UltraConfig` for the model.
+        base_model: The underlying Frankenstein model (or ``None`` for HF).
+        config: :class:`FrankensteinModelConfig` for the model.
         model: The constructed :class:`SentenceTransformer` instance.
     """
 
     def __init__(
         self,
-        model_config: Optional[UltraConfig] = None,
+        model_config: Optional[FrankensteinModelConfig] = None,
         pretrained_path: Optional[str] = None,
         base_model_name_or_path: Optional[str] = None,
         max_seq_length: int = 512,
@@ -140,8 +140,8 @@ class TormentedBertSentenceTransformer:
         """Initialize the SBERT model wrapper.
 
         Args:
-            model_config: :class:`UltraConfig` for training from scratch.
-            pretrained_path: Path to a pretrained TormentedBert checkpoint.
+            model_config: :class:`FrankensteinModelConfig` for training from scratch.
+            pretrained_path: Path to a pretrained Frankenstein checkpoint.
             base_model_name_or_path: HuggingFace model ID or path for
                 base-model SBERT fine-tuning.
             max_seq_length: Maximum sequence length.
@@ -174,7 +174,7 @@ class TormentedBertSentenceTransformer:
             else:
                 config = model_config or self._get_default_config()
             
-            self.base_model = TormentedBertFrankenstein(config)
+            self.base_model = FrankensteinTransformer(config)
             
             # Load weights (handle potential key mismatches)
             if 'model_state_dict' in checkpoint:
@@ -186,16 +186,16 @@ class TormentedBertSentenceTransformer:
         else:
             logger.info("Initializing model from scratch")
             config = model_config or self._get_default_config()
-            self.base_model = TormentedBertFrankenstein(config)
+            self.base_model = FrankensteinTransformer(config)
 
         self.base_model.to(self.device)
         
         self.config = config
         self.model = self._build_sentence_transformer()
     
-    def _get_default_config(self) -> UltraConfig:
+    def _get_default_config(self) -> FrankensteinModelConfig:
         """Get default config optimized for P40 24GB"""
-        return UltraConfig(
+        return FrankensteinModelConfig(
             vocab_size=50000,
             hidden_size=768,        # Reduced for SBERT training
             num_layers=12,
@@ -210,16 +210,16 @@ class TormentedBertSentenceTransformer:
         """Build SentenceTransformer model with custom base"""
         
         # Create a custom transformer model wrapper
-        class TormentedBertWrapper(torch.nn.Module):
-            def __init__(self, tormented_model, hidden_size):
+        class FrankensteinWrapper(torch.nn.Module):
+            def __init__(self, frankenstein_model, hidden_size):
                 super().__init__()
-                self.tormented_model = tormented_model
+                self.frankenstein_model = frankenstein_model
                 self.config_keys = ['max_seq_length']
                 self.max_seq_length = 512
                 
                 # Remove language modeling head if exists
-                if hasattr(self.tormented_model, 'head'):
-                    self.tormented_model.head = torch.nn.Identity()
+                if hasattr(self.frankenstein_model, 'head'):
+                    self.frankenstein_model.head = torch.nn.Identity()
             
             def forward(self, features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
                 """Forward pass compatible with sentence-transformers"""
@@ -227,8 +227,8 @@ class TormentedBertSentenceTransformer:
                 attention_mask = features.get('attention_mask', None)
                 
                 # Get embeddings from base model
-                # TormentedBert returns [batch, seq, hidden]
-                output = self.tormented_model(input_ids)
+                # Frankenstein returns [batch, seq, hidden]
+                output = self.frankenstein_model(input_ids)
                 
                 # Apply attention mask if provided
                 if attention_mask is not None:
@@ -240,7 +240,7 @@ class TormentedBertSentenceTransformer:
                 return features
         
         # Create wrapper
-        word_embedding_model = TormentedBertWrapper(
+        word_embedding_model = FrankensteinWrapper(
             self.base_model,
             self.config.hidden_size
         )
@@ -334,7 +334,7 @@ class SBERTTrainer:
     def __init__(
         self,
         model: SentenceTransformer,
-        output_dir: str = "./output/sbert_tormented_v2",
+        output_dir: str = "./output/sbert_frankenstein_v2",
         batch_size: int = 16,
         gradient_accumulation_steps: int = 1,
         max_grad_norm: float = 1.0,
@@ -418,7 +418,7 @@ class SBERTTrainer:
         self._switch_on_thermal = bool(switch_on_thermal)
         self._last_guard_temp_c: Optional[float] = None
         self._checkpoint_request_pending = False
-        self._is_supervisor_child = os.environ.get("FRANKESTEIN_SUPERVISOR_CHILD") == "1"
+        self._is_supervisor_child = os.environ.get("FRANKENSTEIN_SUPERVISOR_CHILD") == "1"
         self.global_step = 0
         self.csv_log_path = str(csv_log_path)
         self.csv_rotate_on_schema_change = bool(csv_rotate_on_schema_change)
@@ -727,7 +727,7 @@ class SBERTTrainer:
         try:
             import signal as _signal
             _signal.signal(_signal.SIGUSR1, self._on_supervisor_sigusr1)
-            logger.info("Supervisor SIGUSR1 handler installed (FRANKESTEIN_SUPERVISOR_CHILD=1)")
+            logger.info("Supervisor SIGUSR1 handler installed (FRANKENSTEIN_SUPERVISOR_CHILD=1)")
         except (ValueError, OSError) as exc:
             logger.warning("Could not install SIGUSR1 supervisor handler: %s", exc)
 
@@ -1466,10 +1466,10 @@ def main(argv=None):
     """Main training script"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Train SBERT on TormentedBert")
+    parser = argparse.ArgumentParser(description="Train SBERT on Frankenstein")
     parser.add_argument("--base-model", type=str, default=None, help="HF model id/path for base-model SBERT finetuning")
     parser.add_argument("--pretrained", type=str, help="Path to pretrained checkpoint")
-    parser.add_argument("--output_dir", type=str, default="./output/sbert_tormented_v2")
+    parser.add_argument("--output_dir", type=str, default="./output/sbert_frankenstein_v2")
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -1646,7 +1646,7 @@ def main(argv=None):
     
     # Setup
     logger.info("=" * 80)
-    logger.info("SBERT Training on TORMENTED-BERT-Frankenstein v2")
+    logger.info("SBERT Training on Frankenstein Transformer v2")
     logger.info("=" * 80)
 
     if args.base_model and args.pretrained:
@@ -1654,7 +1654,7 @@ def main(argv=None):
     
     # Create model
     if args.base_model:
-        model_wrapper = TormentedBertSentenceTransformer(
+        model_wrapper = FrankensteinSentenceTransformer(
             base_model_name_or_path=args.base_model,
             max_seq_length=args.max_seq_length,
             pooling_mode=args.pooling_mode,
@@ -1662,14 +1662,14 @@ def main(argv=None):
             device=resolved_device,
         )
     elif args.pretrained:
-        model_wrapper = TormentedBertSentenceTransformer(
+        model_wrapper = FrankensteinSentenceTransformer(
             pretrained_path=args.pretrained,
             max_seq_length=args.max_seq_length,
             pooling_mode=args.pooling_mode,
             device=resolved_device,
         )
     else:
-        config = UltraConfig(
+        config = FrankensteinModelConfig(
             vocab_size=50000,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
@@ -1677,7 +1677,7 @@ def main(argv=None):
             ode_steps=1,
             use_bitnet=True
         )
-        model_wrapper = TormentedBertSentenceTransformer(
+        model_wrapper = FrankensteinSentenceTransformer(
             model_config=config,
             max_seq_length=args.max_seq_length,
             pooling_mode=args.pooling_mode,

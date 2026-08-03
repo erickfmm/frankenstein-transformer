@@ -3,7 +3,7 @@
 This document describes the compatibility rules for the CLI command:
 
 ```bash
-frankestein-transformer transformers-export --model <checkpoint.pt> --yaml <train.yaml> --output <output_dir>
+frankenstein-transformer transformers-export --model <checkpoint.pt> --yaml <train.yaml> --output <output_dir>
 ```
 
 ## Integrated `--transformers-export` flag
@@ -28,8 +28,8 @@ When compatible, the command creates:
 
 - `config.json` (Transformers config with `auto_map`)
 - `pytorch_model.bin` (weights)
-- `configuration_frankestein.py` (custom `PretrainedConfig`)
-- `modeling_frankestein.py` (custom `PreTrainedModel` wrappers)
+- `configuration_frankenstein.py` (custom `PretrainedConfig`)
+- `modeling_frankenstein.py` (custom `PreTrainedModel` wrappers)
 - `model/` (Frankenstein architecture source copied from `src/model/`)
 - `__init__.py`
 - `compatibility_report.json`
@@ -41,8 +41,8 @@ When compatible, the command creates:
 
 | Input setting | Compatible | Notes |
 |---|---|---|
-| `training.task: mlm` | ✅ | Exported as `FrankesteinForMaskedLM` unless decoder mode is active. |
-| `model_class: frankesteindecoder` or `model.mode: decoder` | ✅ | Exported as `FrankesteinForCausalLM`. |
+| `training.task: mlm` | ✅ | Exported as `FrankensteinForMaskedLM` unless decoder mode is active. |
+| `model_class: frankensteindecoder` or `model.mode: decoder` | ✅ | Exported as `FrankensteinForCausalLM`. |
 | `training.task: sbert` | ❌ | Not exported by this command (SBERT wrapper is not an AutoModel LM head). |
 | `base_model` set in YAML | ❌ | Command does not export base-model fine-tune configs for this custom architecture wrapper. |
 

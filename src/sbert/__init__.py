@@ -1,17 +1,17 @@
 """
-SBERT v2 Module for TORMENTED-BERT-Frankenstein
+SBERT v2 Module for Frankenstein Transformer
 
 This module provides fine-tuning and inference capabilities for
-Sentence-BERT models based on TORMENTED-BERT v2 architecture.
+Sentence-BERT models based on Frankenstein v2 architecture.
 """
 
 from .inference_sbert import SBERTInference, SimilarityResult
-from .train_sbert import TormentedBertSentenceTransformer, SBERTTrainer
+from .train_sbert import FrankensteinSentenceTransformer, SBERTTrainer
 
 __all__ = [
     'SBERTInference',
     'SimilarityResult',
-    'TormentedBertSentenceTransformer',
+    'FrankensteinSentenceTransformer',
     'SBERTTrainer'
 ]
 

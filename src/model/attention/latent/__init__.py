@@ -45,7 +45,7 @@ generalising Grouped-Query Attention (GQA) along complementary axes:
 
 All modules follow the project attention-mixer interface:
 ``forward(x: torch.Tensor, logical_layer_idx: Optional[int] = None) ->
-torch.Tensor`` and accept an :class:`UltraConfig`-like ``config`` object
+torch.Tensor`` and accept an :class:`FrankensteinModelConfig`-like ``config`` object
 with ``hidden_size``, ``num_heads``, ``dropout``, ``use_bitnet`` and
 ``mode`` attributes. BitNet ternary weights are honoured through
 :class:`~src.model.attention.common.BitLinear`.

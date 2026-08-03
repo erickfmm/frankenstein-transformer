@@ -1,6 +1,6 @@
-"""CLI entrypoint for frankestein-transformer.
+"""CLI entrypoint for frankenstein-transformer.
 
-Provides the ``frankestein-transformer`` command with subcommands for
+Provides the ``frankenstein-transformer`` command with subcommands for
 training, deployment, quantization, inference, SBERT training/inference,
 HuggingFace Transformers export, and a Streamlit web server for
 configuration building.
@@ -418,7 +418,7 @@ def build_parser() -> argparse.ArgumentParser:
         ``sbert-infer``, ``transformers-export``, and ``web-server``.
     """
     parser = argparse.ArgumentParser(
-        prog="frankestein-transformer",
+        prog="frankenstein-transformer",
         description="Configurable training library and CLI for Transformer Encoder Frankenstein",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -430,7 +430,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--batch-size", type=int, default=None)
     train_parser.add_argument(
         "--model-mode",
-        choices=["frankenstein", "frankesteindecoder"],
+        choices=["frankenstein", "frankensteindecoder"],
         default=None,
     )
     train_parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
@@ -487,7 +487,7 @@ def build_parser() -> argparse.ArgumentParser:
     sbert_train_parser = subparsers.add_parser("sbert-train", help="Train SBERT model")
     sbert_train_parser.add_argument("--base-model", type=str, default=None)
     sbert_train_parser.add_argument("--pretrained", type=str, default=None)
-    sbert_train_parser.add_argument("--output_dir", type=str, default="./output/sbert_tormented_v2")
+    sbert_train_parser.add_argument("--output_dir", type=str, default="./output/sbert_frankenstein_v2")
     sbert_train_parser.add_argument(
         "--dataset_name",
         type=str,

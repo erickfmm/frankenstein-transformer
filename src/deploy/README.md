@@ -1,6 +1,6 @@
-# TORMENTED-BERT v2 Deployment Pipeline
+# Frankenstein Transformer Deployment Pipeline
 
-Production-ready deployment system for TORMENTED-BERT-Frankenstein with BitNet quantization and optimized inference.
+Production-ready deployment system for Frankenstein Transformer with BitNet quantization and optimized inference.
 
 ## Features
 
@@ -12,7 +12,7 @@ Production-ready deployment system for TORMENTED-BERT-Frankenstein with BitNet q
 
 ## Architecture Overview
 
-TORMENTED-BERT combines multiple SOTA 2026 architectures:
+Frankenstein combines multiple SOTA 2026 architectures:
 - **BitNet b1.58**: Ternary weights for extreme compression
 - **Neural ODE Attention**: Continuous depth dynamics
 - **RetNet**: Multi-scale retention mechanisms
@@ -116,10 +116,10 @@ Or in interactive mode, just type `benchmark`.
 
 ```python
 from deploy.v2 import ModelDeployer
-from model.v2.tormented_bert_frankestein import UltraConfig
+from model.v2.frankenstein_model import FrankensteinModelConfig
 
 # Initialize deployer
-config = UltraConfig(
+config = FrankensteinModelConfig(
     hidden_size=2048,
     num_layers=12,
     vocab_size=50000
@@ -142,10 +142,10 @@ deployer.validate_deployment("deployed_model/")
 ### Inference
 
 ```python
-from deploy.v2 import TormentedBertInference
+from deploy.v2 import FrankensteinInference
 
 # Initialize inference engine
-engine = TormentedBertInference(
+engine = FrankensteinInference(
     model_dir="deployed_model/",
     device="cuda",
     use_half_precision=True
@@ -193,7 +193,7 @@ metadata = load_quantized_checkpoint(
 
 ## Model Size Examples
 
-For a typical TORMENTED-BERT configuration:
+For a typical Frankenstein configuration:
 
 | Format | Size | Compression |
 |--------|------|-------------|
@@ -261,7 +261,7 @@ Para despliegues con menos VRAM, considera usar `configs/mini.yaml` (basado en l
 ### Masked Language Modeling
 
 ```python
-engine = TormentedBertInference("deployed_model/")
+engine = FrankensteinInference("deployed_model/")
 
 text = "El [MASK] es muy importante"
 predictions = engine.predict_masked(text)
@@ -325,11 +325,11 @@ Where $f$ is the attention-based ODE function.
 If you use this deployment pipeline, please cite:
 
 ```bibtex
-@software{tormented_bert_deploy_2026,
-  title={TORMENTED-BERT Deployment Pipeline with BitNet Quantization},
+@software{frankenstein_deploy_2026,
+  title={Frankenstein Deployment Pipeline with BitNet Quantization},
   author={Your Name},
   year={2026},
-  url={https://github.com/yourusername/transformer-encoder-frankestein}
+  url={https://github.com/yourusername/transformer-encoder-frankenstein}
 }
 ```
 

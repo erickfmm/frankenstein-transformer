@@ -1,4 +1,4 @@
-model_class: frankesteindecoder
+model_class: frankensteindecoder
 model:
   dims:
     vocab_size: 200064

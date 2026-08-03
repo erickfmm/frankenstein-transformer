@@ -56,12 +56,12 @@ New module `src/model/mhc.py`:
 - `ManifoldHyperConnections(nn.Module)` — holds `φ_l` (`proj`), `b_l` (`bias`)
   and the three gating scalars; exposes `fpre`, `recombine` and `mappings`.
 
-Wiring in `src/model/tormented_bert_frankestein.py`:
+Wiring in `src/model/frankenstein_model.py`:
 
 - `HybridLayer` gains `mhc_attn` and `mhc_ffn` (one module per layer function).
   `_forward_dense_mhc` runs attention then FFN as layer functions over the
   shared `(B, S, n, C)` stream.
-- `TormentedBertFrankenstein` expands the `C`-dim embedding to `(B, S, n, C)`
+- `FrankensteinTransformer` expands the `C`-dim embedding to `(B, S, n, C)`
   via `mhc_in_proj` and collapses back via `mhc_out_proj` before the head.
 - `mhc_checkpoint` optionally applies gradient checkpointing per layer to
   mitigate the ~`n`× activation-memory increase of the n-stream residual.

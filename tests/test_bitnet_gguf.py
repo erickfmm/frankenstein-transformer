@@ -15,10 +15,10 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 if TORCH_AVAILABLE:
     import numpy as np
     import torch
-    from src.model.tormented_bert_frankestein import (
+    from src.model.frankenstein_model import (
         FrankensteinDecoder,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
     from src.deploy.bitnet_gguf_export import (
         GGUF_MAGIC,
@@ -53,13 +53,13 @@ class TestBitNetGGUFExport(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp()
 
     def _make_checkpoint(self, mode="encoder"):
-        cfg = UltraConfig(
+        cfg = FrankensteinModelConfig(
             vocab_size=64, hidden_size=64, num_layers=2, num_heads=4,
             use_bitnet=True, use_moe=False, ffn_hidden_size=128,
             layer_pattern=["standard_attn"], mode=mode,
         )
         model = (FrankensteinDecoder(cfg) if mode == "decoder"
-                 else TormentedBertFrankenstein(cfg))
+                 else FrankensteinTransformer(cfg))
         path = os.path.join(self.tmpdir, "c.pt")
         torch.save({"model_state_dict": model.state_dict()}, path)
         return path

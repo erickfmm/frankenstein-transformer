@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ============================================================================
 # build_docs.sh — Build Sphinx ReadTheDocs-style HTML documentation
-# for Frankestein Transformer
+# for Frankenstein Transformer
 # ============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

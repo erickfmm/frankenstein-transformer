@@ -16,7 +16,7 @@ if TORCH_AVAILABLE:
         check_yaml_export_compatibility,
         export_transformers_model,
     )
-    from src.model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from src.model.frankenstein_model import FrankensteinTransformer, FrankensteinModelConfig
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -28,7 +28,7 @@ class TransformersExportTests(unittest.TestCase):
             train_yaml = tmp_path / "train.yaml"
             out_dir = tmp_path / "out"
 
-            model_cfg = UltraConfig(
+            model_cfg = FrankensteinModelConfig(
                 vocab_size=32,
                 hidden_size=16,
                 num_layers=1,
@@ -46,7 +46,7 @@ class TransformersExportTests(unittest.TestCase):
                 ffn_hidden_size=32,
                 mode="encoder",
             )
-            model = TormentedBertFrankenstein(model_cfg)
+            model = FrankensteinTransformer(model_cfg)
 
             torch.save(
                 {
@@ -115,14 +115,14 @@ class TransformersExportTests(unittest.TestCase):
             self.assertEqual(result["status"], "ok")
             self.assertTrue((out_dir / "config.json").exists())
             self.assertTrue((out_dir / "pytorch_model.bin").exists())
-            self.assertTrue((out_dir / "configuration_frankestein.py").exists())
-            self.assertTrue((out_dir / "modeling_frankestein.py").exists())
+            self.assertTrue((out_dir / "configuration_frankenstein.py").exists())
+            self.assertTrue((out_dir / "modeling_frankenstein.py").exists())
             self.assertTrue((out_dir / "compatibility_report.json").exists())
-            self.assertTrue((out_dir / "model" / "tormented_bert_frankestein.py").exists())
+            self.assertTrue((out_dir / "model" / "frankenstein_model.py").exists())
 
             config_data = json.loads((out_dir / "config.json").read_text(encoding="utf-8"))
-            self.assertEqual(config_data["model_type"], "frankestein")
-            self.assertEqual(config_data["architectures"], ["FrankesteinForMaskedLM"])
+            self.assertEqual(config_data["model_type"], "frankenstein")
+            self.assertEqual(config_data["architectures"], ["FrankensteinForMaskedLM"])
 
     def test_sbert_config_is_reported_as_incompatible(self):
         with tempfile.TemporaryDirectory() as tmp:

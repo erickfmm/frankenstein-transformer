@@ -15,7 +15,7 @@ if TORCH_AVAILABLE:
     import torch
     import torch.nn as nn
     from src.model.attention.common import BitLinear, weight_quant
-    from src.model.tormented_bert_frankestein import UltraConfig, TormentedBertFrankenstein
+    from src.model.frankenstein_model import FrankensteinModelConfig, FrankensteinTransformer
     from src.deploy.quantization import (
         BitNetQuantizer,
         bake_bitnet_weights,
@@ -25,7 +25,7 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(bitnet_routers=False):
-    return UltraConfig(
+    return FrankensteinModelConfig(
         vocab_size=64,
         hidden_size=64,
         num_layers=4,
@@ -49,7 +49,7 @@ class TestBitNetQuantization(unittest.TestCase):
 
     def test_ternary_round_trip_is_bit_exact(self):
         """dequant(quantize(master)) == weight_quant(master), bit-exact."""
-        m = TormentedBertFrankenstein(_cfg())
+        m = FrankensteinTransformer(_cfg())
         m.eval()
         name = "layers.0.mixer.q_proj.weight"
         master = dict(m.named_parameters())[name].detach().clone()
@@ -59,18 +59,18 @@ class TestBitNetQuantization(unittest.TestCase):
         st = q.quantize_model_weights(m)
         self.assertIn(name, st["quantized_tensors"])
 
-        m2 = TormentedBertFrankenstein(_cfg())
+        m2 = FrankensteinTransformer(_cfg())
         q.dequantize_model_weights(st, m2)
         deq = dict(m2.named_parameters())[name].detach()
         self.assertTrue(torch.allclose(deq, expected, atol=0.0))
 
     def test_dequant_values_in_ternary_set(self):
         """Every dequantized BitLinear value is in {-scale, 0, +scale}."""
-        m = TormentedBertFrankenstein(_cfg())
+        m = FrankensteinTransformer(_cfg())
         m.eval()
         q = BitNetQuantizer()
         st = q.quantize_model_weights(m)
-        m2 = TormentedBertFrankenstein(_cfg())
+        m2 = FrankensteinTransformer(_cfg())
         q.dequantize_model_weights(st, m2)
         for name in st["quantized_tensors"]:
             w = dict(m2.named_parameters())[name].detach()
@@ -80,12 +80,12 @@ class TestBitNetQuantization(unittest.TestCase):
 
     def test_float_parameters_preserved(self):
         """Full-precision router weights survive a round-trip unchanged."""
-        m = TormentedBertFrankenstein(_cfg(bitnet_routers=False))
+        m = FrankensteinTransformer(_cfg(bitnet_routers=False))
         m.eval()
         ref = m.layers[0].router.weight.detach().clone()
         q = BitNetQuantizer()
         st = q.quantize_model_weights(m)
-        m2 = TormentedBertFrankenstein(_cfg(bitnet_routers=False))
+        m2 = FrankensteinTransformer(_cfg(bitnet_routers=False))
         q.dequantize_model_weights(st, m2)
         self.assertTrue(torch.allclose(m2.layers[0].router.weight, ref, atol=1e-6))
 
@@ -93,7 +93,7 @@ class TestBitNetQuantization(unittest.TestCase):
         """A model with use_bitnet=False has zero ternary tensors."""
         cfg = _cfg()
         cfg.use_bitnet = False
-        m = TormentedBertFrankenstein(cfg)
+        m = FrankensteinTransformer(cfg)
         q = BitNetQuantizer()
         st = q.quantize_model_weights(m)
         self.assertEqual(st["quantized_tensors"], [])
@@ -101,7 +101,7 @@ class TestBitNetQuantization(unittest.TestCase):
 
     def test_bake_matches_one_weight_quant(self):
         """bake_bitnet_weights reproduces a single weight_quant application."""
-        m = TormentedBertFrankenstein(_cfg())
+        m = FrankensteinTransformer(_cfg())
         m.eval()
         name = "layers.0.mixer.q_proj.weight"
         master = dict(m.named_parameters())[name].detach().clone()
@@ -114,7 +114,7 @@ class TestBitNetQuantization(unittest.TestCase):
 
     def test_bake_is_idempotent(self):
         """Baking an already-baked (ternary) weight is a no-op."""
-        m = TormentedBertFrankenstein(_cfg())
+        m = FrankensteinTransformer(_cfg())
         m.eval()
         bake_bitnet_weights(m)
         w_after = m.layers[0].mixer.q_proj.weight.detach().clone()
@@ -125,12 +125,12 @@ class TestBitNetQuantization(unittest.TestCase):
 
     def test_save_load_checkpoint_after_bake(self):
         """save -> load reproduces baked ternary weights bit-exactly."""
-        m = TormentedBertFrankenstein(_cfg())
+        m = FrankensteinTransformer(_cfg())
         m.eval()
         bake_bitnet_weights(m)
         path = os.path.join(self.tmpdir, "m.pt")
         save_quantized_checkpoint(m, path)
-        m2 = TormentedBertFrankenstein(_cfg())
+        m2 = FrankensteinTransformer(_cfg())
         load_quantized_checkpoint(path, m2)
         self.assertTrue(torch.allclose(
             m2.layers[0].mixer.q_proj.weight,

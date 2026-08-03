@@ -1,4 +1,4 @@
-"""Training loop with stability controls for TORMENTED-BERT-Frankenstein.
+"""Training loop with stability controls for Frankenstein Transformer.
 
 Provides :class:`TitanTrainer`, a production-grade training loop with
 gradient clipping, NaN detection and retry, rolling/best checkpointing,
@@ -161,7 +161,7 @@ class TrainingConfig:
 
 # ==================== TITAN TRAINER ====================
 class TitanTrainer:
-    """Advanced trainer for TORMENTED-BERT-Frankenstein with stability controls.
+    """Advanced trainer for Frankenstein Transformer with stability controls.
 
     Implements a production-grade training loop with gradient accumulation,
     automatic mixed precision (AMP), gradient clipping, NaN detection with
@@ -171,7 +171,7 @@ class TitanTrainer:
 
     Attributes:
         model: The PyTorch model being trained.
-        config: Model configuration (:class:`UltraConfig` or HF config).
+        config: Model configuration (:class:`FrankensteinModelConfig` or HF config).
         training_config: :class:`TrainingConfig` with stability parameters.
         device: Resolved PyTorch device string.
         optimizer: Configured optimizer with per-component parameter groups.
@@ -191,7 +191,7 @@ class TitanTrainer:
 
         Args:
             model: PyTorch model to train.
-            config: Model configuration object (e.g. :class:`UltraConfig`).
+            config: Model configuration object (e.g. :class:`FrankensteinModelConfig`).
             training_config: :class:`TrainingConfig` with stability and
                 checkpointing parameters. Uses defaults if ``None``.
             device: Target device string. Defaults to CUDA if available,
@@ -263,7 +263,7 @@ class TitanTrainer:
         # Supervisor integration: when this process is a supervisor child, the
         # supervisor sends SIGUSR1 to request an immediate rolling-checkpoint
         # flush before SIGKILL. The training loop checks the flag each step.
-        self._is_supervisor_child = os.environ.get("FRANKESTEIN_SUPERVISOR_CHILD") == "1"
+        self._is_supervisor_child = os.environ.get("FRANKENSTEIN_SUPERVISOR_CHILD") == "1"
         self._checkpoint_request_pending = False
         self._checkpoint_dir = "checkpoints"
         if self._is_supervisor_child and self._is_main_thread():
@@ -306,7 +306,7 @@ class TitanTrainer:
         """
         try:
             signal.signal(signal.SIGUSR1, self._on_supervisor_sigusr1)
-            logging.info("Supervisor SIGUSR1 handler installed (FRANKESTEIN_SUPERVISOR_CHILD=1)")
+            logging.info("Supervisor SIGUSR1 handler installed (FRANKENSTEIN_SUPERVISOR_CHILD=1)")
         except (ValueError, OSError) as exc:
             logging.warning("Could not install SIGUSR1 supervisor handler: %s", exc)
 

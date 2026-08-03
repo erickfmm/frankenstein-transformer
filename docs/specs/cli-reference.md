@@ -5,7 +5,7 @@
 ## Entrypoint
 
 ```
-frankestein-transformer <subcommand> [flags]
+frankenstein-transformer <subcommand> [flags]
 ```
 
 ## Subcommand Overview
@@ -41,7 +41,7 @@ All subcommands that involve model computation accept `--device`:
 | `--config-name` | string | `frankenstein` | Named preset from `configs/` directory |
 | `--list-configs` | flag | — | List available config presets and exit |
 | `--batch-size` | int | — | Override config batch size |
-| `--model-mode` | choice | — | Override model class: `frankenstein`, `frankesteindecoder` |
+| `--model-mode` | choice | — | Override model class: `frankenstein`, `frankensteindecoder` |
 | `--device` | choice | `auto` | `auto`, `cpu`, `cuda`, `mps` |
 | `--gpu-temp-guard` / `--no-gpu-temp-guard` | flag | — | Enable/disable GPU thermal guard |
 | `--gpu-temp-pause-threshold-c` | float | — | Temperature to pause training (°C) |
@@ -55,16 +55,16 @@ All subcommands that involve model computation accept `--device`:
 
 ```bash
 # Train with default frankenstein preset
-frankestein-transformer train
+frankenstein-transformer train
 
 # Train with custom config
-frankestein-transformer train --config my_experiment.yaml
+frankenstein-transformer train --config my_experiment.yaml
 
 # Train with GPU thermal guard
-frankestein-transformer train --config-name frankenstein --gpu-temp-guard --gpu-temp-pause-threshold-c 80
+frankenstein-transformer train --config-name frankenstein --gpu-temp-guard --gpu-temp-pause-threshold-c 80
 
 # List available presets
-frankestein-transformer train --list-configs
+frankenstein-transformer train --list-configs
 ```
 
 ## `deploy` — Deployment Artifact Creation
@@ -83,8 +83,8 @@ frankestein-transformer train --list-configs
 ### Examples
 
 ```bash
-frankestein-transformer deploy --checkpoint checkpoints/model.pt --output ./deployed
-frankestein-transformer deploy --checkpoint checkpoints/model.pt --output ./deployed --format standard --validate
+frankenstein-transformer deploy --checkpoint checkpoints/model.pt --output ./deployed
+frankenstein-transformer deploy --checkpoint checkpoints/model.pt --output ./deployed --format standard --validate
 ```
 
 ## `quantize` — Quantized Export
@@ -102,7 +102,7 @@ frankestein-transformer deploy --checkpoint checkpoints/model.pt --output ./depl
 ### Examples
 
 ```bash
-frankestein-transformer quantize --checkpoint checkpoints/model.pt --output ./quantized --validate
+frankenstein-transformer quantize --checkpoint checkpoints/model.pt --output ./quantized --validate
 ```
 
 ## `infer` — Model Inference
@@ -122,13 +122,13 @@ frankestein-transformer quantize --checkpoint checkpoints/model.pt --output ./qu
 
 ```bash
 # Single text inference
-frankestein-transformer infer --model ./deployed --text "Hello world"
+frankenstein-transformer infer --model ./deployed --text "Hello world"
 
 # Batch file inference
-frankestein-transformer infer --model ./deployed --input texts.txt --output results.json
+frankenstein-transformer infer --model ./deployed --input texts.txt --output results.json
 
 # Benchmark
-frankestein-transformer infer --model ./deployed --benchmark --fp16
+frankenstein-transformer infer --model ./deployed --benchmark --fp16
 ```
 
 ## `sbert-train` — SBERT Training
@@ -137,7 +137,7 @@ frankestein-transformer infer --model ./deployed --benchmark --fp16
 |---|---|---|---|
 | `--base-model` | string | — | HuggingFace model identifier |
 | `--pretrained` | string | — | Path to pretrained checkpoint |
-| `--output_dir` | string | `./output/sbert_tormented_v2` | Output directory |
+| `--output_dir` | string | `./output/sbert_frankenstein_v2` | Output directory |
 | `--dataset_name` | string | `erickfmm/agentlans__multilingual-sentences__paired_10_sts` | HuggingFace dataset |
 | `--batch_size` | int | `16` | Training batch size |
 | `--epochs` | int | `4` | Training epochs |
@@ -160,8 +160,8 @@ frankestein-transformer infer --model ./deployed --benchmark --fp16
 ### Examples
 
 ```bash
-frankestein-transformer sbert-train --base-model answerdotai/ModernBERT-base
-frankestein-transformer sbert-train --pretrained checkpoints/model.pt --pooling_mode cls
+frankenstein-transformer sbert-train --base-model answerdotai/ModernBERT-base
+frankenstein-transformer sbert-train --pretrained checkpoints/model.pt --pooling_mode cls
 ```
 
 ## `sbert-infer` — SBERT Inference
@@ -186,16 +186,16 @@ frankestein-transformer sbert-train --pretrained checkpoints/model.pt --pooling_
 
 ```bash
 # Pairwise similarity
-frankestein-transformer sbert-infer --model_path ./output/sbert --mode similarity --sentence1 "Hello" --sentence2 "Hi"
+frankenstein-transformer sbert-infer --model_path ./output/sbert --mode similarity --sentence1 "Hello" --sentence2 "Hi"
 
 # Corpus search
-frankestein-transformer sbert-infer --model_path ./output/sbert --mode search --query "machine learning" --corpus_file docs.txt --top_k 10
+frankenstein-transformer sbert-infer --model_path ./output/sbert --mode search --query "machine learning" --corpus_file docs.txt --top_k 10
 
 # Clustering
-frankestein-transformer sbert-infer --model_path ./output/sbert --mode cluster --sentences_file texts.txt --n_clusters 8
+frankenstein-transformer sbert-infer --model_path ./output/sbert --mode cluster --sentences_file texts.txt --n_clusters 8
 
 # Encode and export
-frankestein-transformer sbert-infer --model_path ./output/sbert --mode encode --input_file texts.txt --output_file embeddings.npy
+frankenstein-transformer sbert-infer --model_path ./output/sbert --mode encode --input_file texts.txt --output_file embeddings.npy
 ```
 
 ## `web-server` — Streamlit Configuration Builder
@@ -210,8 +210,8 @@ frankestein-transformer sbert-infer --model_path ./output/sbert --mode encode --
 ### Examples
 
 ```bash
-frankestein-transformer web-server
-frankestein-transformer web-server --server-port 8080 --server-headless
+frankenstein-transformer web-server
+frankenstein-transformer web-server --server-port 8080 --server-headless
 ```
 
 ## `transformers-export` — HuggingFace Export
@@ -225,7 +225,7 @@ frankestein-transformer web-server --server-port 8080 --server-headless
 ### Examples
 
 ```bash
-frankestein-transformer transformers-export --model checkpoints/model.pt --yaml config.yaml --output ./hf-export
+frankenstein-transformer transformers-export --model checkpoints/model.pt --yaml config.yaml --output ./hf-export
 ```
 
 ## GPU Thermal Guard Flags

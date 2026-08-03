@@ -2,7 +2,7 @@
 
 Converts the hierarchical ``model:`` YAML block (introduced in the schema
 refactor) into the flat keyword-argument shape expected by the
-:class:`UltraConfig` dataclass, which remains the internal flat
+:class:`FrankensteinModelConfig` dataclass, which remains the internal flat
 representation used throughout the model, attention, deploy and export
 code paths.
 
@@ -169,7 +169,7 @@ def _flatten_titan(titan: Dict[str, Any], out: Dict[str, Any]) -> None:
 
 
 def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert a (possibly nested) ``model:`` block to flat UltraConfig kwargs.
+    """Convert a (possibly nested) ``model:`` block to flat FrankensteinModelConfig kwargs.
 
     Args:
         model_data: The ``model:`` mapping from a YAML config or a
@@ -178,7 +178,7 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
             or a legacy flat shape.
 
     Returns:
-        A flat dictionary suitable for ``UltraConfig(**result)``. If the
+        A flat dictionary suitable for ``FrankensteinModelConfig(**result)``. If the
         input is already flat, it is returned as-is (shallow copy).
     """
     if not isinstance(model_data, dict):

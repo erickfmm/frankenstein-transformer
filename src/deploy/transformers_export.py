@@ -1,8 +1,8 @@
 """Export Frankenstein checkpoints to HuggingFace Transformers format.
 
 Generates a self-contained directory with ``config.json``,
-``pytorch_model.bin``, custom ``configuration_frankestein.py`` and
-``modeling_frankestein.py`` wrappers, and the model source tree, enabling
+``pytorch_model.bin``, custom ``configuration_frankenstein.py`` and
+``modeling_frankenstein.py`` wrappers, and the model source tree, enabling
 loading via ``AutoModelForMaskedLM`` or ``AutoModelForCausalLM`` with
 ``trust_remote_code=True``.
 """
@@ -36,35 +36,35 @@ from typing import Any, Dict
 
 from transformers import PretrainedConfig
 
-from .model.tormented_bert_frankestein import UltraConfig
+from .model.frankenstein_model import FrankensteinModelConfig
 
 
-_ULTRA_KEYS = {field.name for field in fields(UltraConfig)}
+_MODEL_KEYS = {field.name for field in fields(FrankensteinModelConfig)}
 
 
-class FrankesteinConfig(PretrainedConfig):
-    model_type = "frankestein"
+class FrankensteinConfig(PretrainedConfig):
+    model_type = "frankenstein"
 
     def __init__(
         self,
         model_class: str = "frankenstein",
         task: str = "mlm",
-        ultra_config: Dict[str, Any] | None = None,
+        frankenstein_config: Dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        ultra = dict(ultra_config or {})
+        model_cfg = dict(frankenstein_config or {})
         passthrough: Dict[str, Any] = {}
         for key, value in kwargs.items():
-            if key in _ULTRA_KEYS and key not in ultra:
-                ultra[key] = value
+            if key in _MODEL_KEYS and key not in model_cfg:
+                model_cfg[key] = value
             else:
                 passthrough[key] = value
 
         self.model_class = model_class
         self.task = task
-        self.ultra_config = ultra
+        self.frankenstein_config = model_cfg
 
-        for key, value in ultra.items():
+        for key, value in model_cfg.items():
             setattr(self, key, value)
 
         super().__init__(**passthrough)
@@ -73,8 +73,8 @@ class FrankesteinConfig(PretrainedConfig):
         payload = super().to_dict()
         payload["model_class"] = self.model_class
         payload["task"] = self.task
-        payload["ultra_config"] = dict(self.ultra_config)
-        payload.update(self.ultra_config)
+        payload["frankenstein_config"] = dict(self.frankenstein_config)
+        payload.update(self.frankenstein_config)
         return payload
 """
 
@@ -90,43 +90,43 @@ from torch import nn
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutput, MaskedLMOutput
 
-from .configuration_frankestein import FrankesteinConfig
-from .model.tormented_bert_frankestein import (
+from .configuration_frankenstein import FrankensteinConfig
+from .model.frankenstein_model import (
     FrankensteinDecoder,
-    TormentedBertFrankenstein,
-    UltraConfig,
+    FrankensteinTransformer,
+    FrankensteinModelConfig,
 )
 
 
-_ULTRA_KEYS = {field.name for field in fields(UltraConfig)}
+_MODEL_KEYS = {field.name for field in fields(FrankensteinModelConfig)}
 
 
-def _to_ultra_config(config: FrankesteinConfig) -> UltraConfig:
-    source = dict(getattr(config, "ultra_config", {}) or {})
-    for key in _ULTRA_KEYS:
+def _to_model_config(config: FrankensteinConfig) -> FrankensteinModelConfig:
+    source = dict(getattr(config, "frankenstein_config", {}) or {})
+    for key in _MODEL_KEYS:
         if key not in source and hasattr(config, key):
             source[key] = getattr(config, key)
-    return UltraConfig(**source)
+    return FrankensteinModelConfig(**source)
 
 
-def _build_core_model(config: FrankesteinConfig) -> nn.Module:
-    ultra = _to_ultra_config(config)
+def _build_core_model(config: FrankensteinConfig) -> nn.Module:
+    model_cfg = _to_model_config(config)
     model_class = str(getattr(config, "model_class", "frankenstein")).lower()
-    if model_class == "frankesteindecoder":
-        if ultra.mode != "decoder":
-            ultra.mode = "decoder"
-        return FrankensteinDecoder(ultra)
-    return TormentedBertFrankenstein(ultra)
+    if model_class == "frankensteindecoder":
+        if model_cfg.mode != "decoder":
+            model_cfg.mode = "decoder"
+        return FrankensteinDecoder(model_cfg)
+    return FrankensteinTransformer(model_cfg)
 
 
-class FrankesteinPreTrainedModel(PreTrainedModel):
-    config_class = FrankesteinConfig
+class FrankensteinPreTrainedModel(PreTrainedModel):
+    config_class = FrankensteinConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = False
 
 
-class FrankesteinForMaskedLM(FrankesteinPreTrainedModel):
-    def __init__(self, config: FrankesteinConfig) -> None:
+class FrankensteinForMaskedLM(FrankensteinPreTrainedModel):
+    def __init__(self, config: FrankensteinConfig) -> None:
         super().__init__(config)
         self.model = _build_core_model(config)
         self.post_init()
@@ -159,8 +159,8 @@ class FrankesteinForMaskedLM(FrankesteinPreTrainedModel):
         return MaskedLMOutput(loss=loss, logits=logits)
 
 
-class FrankesteinForCausalLM(FrankesteinPreTrainedModel):
-    def __init__(self, config: FrankesteinConfig) -> None:
+class FrankensteinForCausalLM(FrankensteinPreTrainedModel):
+    def __init__(self, config: FrankensteinConfig) -> None:
         super().__init__(config)
         self.model = _build_core_model(config)
         self.post_init()
@@ -196,13 +196,13 @@ class FrankesteinForCausalLM(FrankesteinPreTrainedModel):
 """
 
 
-_INIT_FILE = """from .configuration_frankestein import FrankesteinConfig
-from .modeling_frankestein import FrankesteinForCausalLM, FrankesteinForMaskedLM
+_INIT_FILE = """from .configuration_frankenstein import FrankensteinConfig
+from .modeling_frankenstein import FrankensteinForCausalLM, FrankensteinForMaskedLM
 
 __all__ = [
-    "FrankesteinConfig",
-    "FrankesteinForMaskedLM",
-    "FrankesteinForCausalLM",
+    "FrankensteinConfig",
+    "FrankensteinForMaskedLM",
+    "FrankensteinForCausalLM",
 ]
 """
 
@@ -252,21 +252,21 @@ def _bake_state_dict(
     Returns:
         Tuple of ``(baked_state_dict, num_baked_layers)``.
     """
-    from src.model.tormented_bert_frankestein import (
+    from src.model.frankenstein_model import (
         FrankensteinDecoder,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
     from src.utils.config_flatten import flatten_model_dict
 
-    ultra = UltraConfig(**flatten_model_dict(model_config))
+    model_cfg = FrankensteinModelConfig(**flatten_model_dict(model_config))
     mc = str(model_class).lower()
-    if mc == "frankesteindecoder" or ultra.mode == "decoder":
-        if ultra.mode != "decoder":
-            ultra.mode = "decoder"
-        model = FrankensteinDecoder(ultra)
+    if mc == "frankensteindecoder" or model_cfg.mode == "decoder":
+        if model_cfg.mode != "decoder":
+            model_cfg.mode = "decoder"
+        model = FrankensteinDecoder(model_cfg)
     else:
-        model = TormentedBertFrankenstein(ultra)
+        model = FrankensteinTransformer(model_cfg)
 
     model.load_state_dict(state_dict, strict=False)
     model.eval()
@@ -355,15 +355,15 @@ def _build_transformers_config(
     modeling_class: str,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = dict(model_config)
-    payload["model_type"] = "frankestein"
+    payload["model_type"] = "frankenstein"
     payload["architectures"] = [modeling_class]
     payload["model_class"] = model_class
     payload["task"] = task
-    payload["ultra_config"] = dict(model_config)
+    payload["frankenstein_config"] = dict(model_config)
     payload["auto_map"] = {
-        "AutoConfig": "configuration_frankestein.FrankesteinConfig",
-        "AutoModelForMaskedLM": "modeling_frankestein.FrankesteinForMaskedLM",
-        "AutoModelForCausalLM": "modeling_frankestein.FrankesteinForCausalLM",
+        "AutoConfig": "configuration_frankenstein.FrankensteinConfig",
+        "AutoModelForMaskedLM": "modeling_frankenstein.FrankensteinForMaskedLM",
+        "AutoModelForCausalLM": "modeling_frankenstein.FrankensteinForCausalLM",
     }
     if bool(model_config.get("use_bitnet", False)):
         payload["quantization_config"] = {
@@ -468,7 +468,7 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
         raise ValueError("Unable to infer model config from YAML `model` section or checkpoint `config`")
 
     model_class = str(yaml_data.get("model_class") or "frankenstein").strip().lower()
-    if model_class == "frankesteindecoder":
+    if model_class == "frankensteindecoder":
         model_config["mode"] = "decoder"
 
     training_block = yaml_data.get("training", {}) or {}
@@ -490,9 +490,9 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
         }
 
     modeling_class = (
-        "FrankesteinForCausalLM"
-        if model_config.get("mode") == "decoder" or model_class == "frankesteindecoder"
-        else "FrankesteinForMaskedLM"
+        "FrankensteinForCausalLM"
+        if model_config.get("mode") == "decoder" or model_class == "frankensteindecoder"
+        else "FrankensteinForMaskedLM"
     )
     hf_config = _build_transformers_config(
         model_config=model_config,
@@ -530,8 +530,8 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
     model_src = _repo_root() / "src" / "model"
     shutil.copytree(model_src, output_path / "model", dirs_exist_ok=True)
 
-    (output_path / "configuration_frankestein.py").write_text(_CONFIGURATION_FILE, encoding="utf-8")
-    (output_path / "modeling_frankestein.py").write_text(_MODELING_FILE, encoding="utf-8")
+    (output_path / "configuration_frankenstein.py").write_text(_CONFIGURATION_FILE, encoding="utf-8")
+    (output_path / "modeling_frankenstein.py").write_text(_MODELING_FILE, encoding="utf-8")
     (output_path / "__init__.py").write_text(_INIT_FILE, encoding="utf-8")
     (output_path / "compatibility_report.json").write_text(
         json.dumps(compatibility, indent=2),

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Model deployment pipeline for TORMENTED-BERT-Frankenstein.
+"""Model deployment pipeline for Frankenstein Transformer.
 
 Converts trained checkpoints to optimized, quantized deployable artifacts.
 Supports both BitNet-quantized and standard FP32 deployment formats, with
@@ -14,10 +14,10 @@ import json
 from typing import Optional
 
 try:
-    from ..model.tormented_bert_frankestein import (
+    from ..model.frankenstein_model import (
         FrankensteinDecoder,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
     from .quantization import (
         bake_bitnet_weights,
@@ -29,10 +29,10 @@ try:
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..utils.config_flatten import flatten_model_dict
 except ImportError:
-    from model.tormented_bert_frankestein import (
+    from model.frankenstein_model import (
         FrankensteinDecoder,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
     from deploy.quantization import (
         bake_bitnet_weights,
@@ -59,12 +59,12 @@ class ModelDeployer:
     with config JSON and deployment metadata.
 
     Attributes:
-        config: :class:`UltraConfig` for the model.
+        config: :class:`FrankensteinModelConfig` for the model.
         device: PyTorch device for deployment conversion.
-        model: The loaded :class:`TormentedBertFrankenstein` instance.
+        model: The loaded :class:`FrankensteinTransformer` instance.
     """
 
-    def __init__(self, config: UltraConfig, device: str = "cpu"):
+    def __init__(self, config: FrankensteinModelConfig, device: str = "cpu"):
         """Initialize the deployer.
 
         Args:
@@ -76,7 +76,7 @@ class ModelDeployer:
         self.model = None
 
     @staticmethod
-    def _build_model(config: UltraConfig) -> "TormentedBertFrankenstein":
+    def _build_model(config: FrankensteinModelConfig) -> "FrankensteinTransformer":
         """Instantiate the model variant for the configured ``mode``.
 
         Args:
@@ -84,11 +84,11 @@ class ModelDeployer:
 
         Returns:
             A ``FrankensteinDecoder`` when ``mode == "decoder"``, else a
-            plain :class:`TormentedBertFrankenstein`.
+            plain :class:`FrankensteinTransformer`.
         """
         if getattr(config, "mode", "encoder") == "decoder":
             return FrankensteinDecoder(config)
-        return TormentedBertFrankenstein(config)
+        return FrankensteinTransformer(config)
 
     def load_training_checkpoint(self, checkpoint_path: str) -> None:
         """
@@ -116,7 +116,7 @@ class ModelDeployer:
         if isinstance(self.config.mode, str) and self.config.mode == "decoder":
             self.model = FrankensteinDecoder(self.config)
         else:
-            self.model = TormentedBertFrankenstein(self.config)
+            self.model = FrankensteinTransformer(self.config)
         self.model.to(self.device)
         
         # Load state dict. Decoder/Mini wrap a backbone; checkpoints may store
@@ -267,13 +267,13 @@ class ModelDeployer:
                 config_dict = json.load(f)
             
             # Create config object
-            config = UltraConfig(**flatten_model_dict(config_dict))
+            config = FrankensteinModelConfig(**flatten_model_dict(config_dict))
             
             # Initialize model (decoder when configured)
             if isinstance(config.mode, str) and config.mode == "decoder":
                 model = FrankensteinDecoder(config)
             else:
-                model = TormentedBertFrankenstein(config)
+                model = FrankensteinTransformer(config)
             model.to(self.device)
             
             # Load weights
@@ -310,7 +310,7 @@ class ModelDeployer:
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description='Deploy TORMENTED-BERT model for production'
+        description='Deploy Frankenstein model for production'
     )
     parser.add_argument(
         '--checkpoint',
@@ -357,10 +357,10 @@ def main(argv=None):
     if args.config:
         with open(args.config) as f:
             config_dict = json.load(f)
-        config = UltraConfig(**flatten_model_dict(config_dict))
+        config = FrankensteinModelConfig(**flatten_model_dict(config_dict))
     else:
         # Use default config
-        config = UltraConfig()
+        config = FrankensteinModelConfig()
     
     # Create deployer
     deployer = ModelDeployer(config, device=resolved_device)

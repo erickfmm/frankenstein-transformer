@@ -1,6 +1,6 @@
-from .tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+from .frankenstein_model import FrankensteinTransformer, FrankensteinModelConfig
 
 __all__ = [
-    "TormentedBertFrankenstein",
-    "UltraConfig",
+    "FrankensteinTransformer",
+    "FrankensteinModelConfig",
 ]

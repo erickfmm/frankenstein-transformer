@@ -5,7 +5,7 @@ Mirrors the structure of ``tests/test_common_modules.py`` (norm tests). Covers:
   * the ``get_activation`` factory dispatch (incl. backward-compat silu/gelu)
   * the Rational Activation Function (RAF) variants and init presets
   * the GatedFFN (SwiGLU/GEGLU/ReGLU) shapes and gradients
-  * UltraConfig validation of ``ffn_activation`` / ``ffn_activation_config``
+  * FrankensteinModelConfig validation of ``ffn_activation`` / ``ffn_activation_config``
 """
 import math
 import unittest
@@ -28,11 +28,11 @@ if TORCH_AVAILABLE:
         make_gated_ffn,
     )
     from src.model.activation_function.learnable import _APPROX_FUNCTIONS
-    from src.model.tormented_bert_frankestein import UltraConfig
+    from src.model.frankenstein_model import FrankensteinModelConfig
 
 
 def _cfg(ffn_activation="silu", hidden_size=8, ffn_hidden_size=16, **acfg):
-    cfg = UltraConfig(
+    cfg = FrankensteinModelConfig(
         vocab_size=64,
         hidden_size=hidden_size,
         ffn_hidden_size=ffn_hidden_size,
@@ -313,8 +313,8 @@ class FactoryDispatchTests(unittest.TestCase):
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
-class UltraConfigValidationTests(unittest.TestCase):
-    """UltraConfig.__post_init__ enforces activation constraints."""
+class FrankensteinModelConfigValidationTests(unittest.TestCase):
+    """FrankensteinModelConfig.__post_init__ enforces activation constraints."""
 
     def test_default_silu(self):
         cfg = _cfg()
@@ -322,7 +322,7 @@ class UltraConfigValidationTests(unittest.TestCase):
 
     def test_unknown_activation_rejected(self):
         with self.assertRaises(ValueError):
-            UltraConfig(
+            FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard_attn"], ffn_activation="bogus",
@@ -334,7 +334,7 @@ class UltraConfigValidationTests(unittest.TestCase):
 
     def test_config_must_be_dict(self):
         with self.assertRaises(ValueError):
-            UltraConfig(
+            FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard_attn"], ffn_activation="raf",
@@ -343,7 +343,7 @@ class UltraConfigValidationTests(unittest.TestCase):
 
     def test_unknown_config_key_rejected(self):
         with self.assertRaises(ValueError):
-            UltraConfig(
+            FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard_attn"], ffn_activation="raf",
@@ -352,7 +352,7 @@ class UltraConfigValidationTests(unittest.TestCase):
 
     def test_bad_raf_version_rejected(self):
         with self.assertRaises(ValueError):
-            UltraConfig(
+            FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard_attn"], ffn_activation="raf",
@@ -361,7 +361,7 @@ class UltraConfigValidationTests(unittest.TestCase):
 
     def test_bad_raf_degrees_rejected(self):
         with self.assertRaises(ValueError):
-            UltraConfig(
+            FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard_attn"], ffn_activation="raf",

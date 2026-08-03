@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from ..attention.common import BitConv1d, BitLinear
 
 if TYPE_CHECKING:
-    from ..tormented_bert_frankestein import UltraConfig
+    from ..frankenstein_model import FrankensteinModelConfig
 
 
 class FactorizedEmbedding(nn.Module):
@@ -31,8 +31,8 @@ class FactorizedEmbedding(nn.Module):
             ``hidden_size``.
     """
 
-    def __init__(self, config: "UltraConfig"):
-        """Initialize factorized embedding from an UltraConfig.
+    def __init__(self, config: "FrankensteinModelConfig"):
+        """Initialize factorized embedding from a FrankensteinModelConfig.
 
         Args:
             config: Model configuration. Reads ``factorized_embedding_dim``,

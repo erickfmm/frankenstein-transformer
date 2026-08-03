@@ -27,12 +27,12 @@ from src.model.attention import (
     StandardAttention,
     TitanAttention,
 )
-from src.model.tormented_bert_frankestein import HybridLayer, TormentedBertFrankenstein, UltraConfig
+from src.model.frankenstein_model import HybridLayer, FrankensteinTransformer, FrankensteinModelConfig
 
 
 class AttentionRefactorTests(unittest.TestCase):
     def _build_config(self, layer_pattern):
-        return UltraConfig(
+        return FrankensteinModelConfig(
             vocab_size=100,
             hidden_size=48,
             num_layers=1,
@@ -61,8 +61,8 @@ class AttentionRefactorTests(unittest.TestCase):
         )
 
     def test_import_smoke(self):
-        self.assertTrue(callable(TormentedBertFrankenstein))
-        self.assertTrue(callable(UltraConfig))
+        self.assertTrue(callable(FrankensteinTransformer))
+        self.assertTrue(callable(FrankensteinModelConfig))
         self.assertTrue(callable(EngramLayer))
         self.assertTrue(callable(TitanAttention))
         self.assertTrue(callable(StandardAttention))
@@ -90,7 +90,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_default_forward_compat(self):
         config = self._build_config(["titan_attn", "standard_attn"])
         config.num_layers = 2
-        model = TormentedBertFrankenstein(config)
+        model = FrankensteinTransformer(config)
         x = torch.randint(0, config.vocab_size, (2, 8))
         y = model(x)
         self.assertEqual(y.shape, (2, 8, config.vocab_size))
@@ -104,14 +104,14 @@ class AttentionRefactorTests(unittest.TestCase):
 
     def test_positional_encoding_override(self):
         base = self._build_config(["titan_attn"])
-        cfg_hope = UltraConfig(**{**base.__dict__, "positional_encoding": "hope"})
-        cfg_rope = UltraConfig(**{**base.__dict__, "positional_encoding": "rope"})
+        cfg_hope = FrankensteinModelConfig(**{**base.__dict__, "positional_encoding": "hope"})
+        cfg_rope = FrankensteinModelConfig(**{**base.__dict__, "positional_encoding": "rope"})
         self.assertIsInstance(TitanAttention(cfg_hope).pos_encoder, HoPE)
         self.assertIsInstance(TitanAttention(cfg_rope).pos_encoder, RoPE)
 
     def test_invalid_positional_encoding_raises(self):
         with self.assertRaisesRegex(ValueError, "positional_encoding"):
-            UltraConfig(**{**self._build_config(["titan_attn"]).__dict__, "positional_encoding": "invalid"})
+            FrankensteinModelConfig(**{**self._build_config(["titan_attn"]).__dict__, "positional_encoding": "invalid"})
 
     def test_layer_type_coverage_trainable(self):
         layer_types = [
@@ -139,7 +139,7 @@ class AttentionRefactorTests(unittest.TestCase):
         ]
         for layer_type in layer_types:
             config = self._build_config([layer_type])
-            model = TormentedBertFrankenstein(config)
+            model = FrankensteinTransformer(config)
             x = torch.randint(0, config.vocab_size, (1, 6))
             y = model(x)
             self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
@@ -147,7 +147,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_training_free_sparse_layers_eval_only(self):
         for layer_type in ["fasa_attn", "sparge_attn"]:
             config = self._build_config([layer_type])
-            model = TormentedBertFrankenstein(config)
+            model = FrankensteinTransformer(config)
             model.eval()
             x = torch.randint(0, config.vocab_size, (1, 6))
             with torch.no_grad():
@@ -157,7 +157,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_training_free_sparse_layers_raise_in_train_mode(self):
         for layer_type in ["fasa_attn", "sparge_attn"]:
             config = self._build_config([layer_type])
-            model = TormentedBertFrankenstein(config)
+            model = FrankensteinTransformer(config)
             model.train()
             x = torch.randint(0, config.vocab_size, (1, 6))
             with self.assertRaisesRegex(ValueError, "training-free"):
@@ -165,7 +165,7 @@ class AttentionRefactorTests(unittest.TestCase):
 
     def test_invalid_mixture_of_depths_capacity_ratio_raises(self):
         with self.assertRaisesRegex(ValueError, "mixture_of_depths_capacity_ratio"):
-            UltraConfig(
+            FrankensteinModelConfig(
                 **{
                     **self._build_config(["standard_attn"]).__dict__,
                     "use_mixture_of_depths": True,
@@ -201,7 +201,7 @@ class AttentionRefactorTests(unittest.TestCase):
         config.use_mixture_of_depths = True
         config.mixture_of_depths_capacity_ratio = 0.5
         config.mixture_of_depths_router_aux_loss_weight = 0.25
-        model = TormentedBertFrankenstein(config)
+        model = FrankensteinTransformer(config)
         x = torch.randint(0, config.vocab_size, (2, 6))
         y = model(x)
         self.assertEqual(y.shape, (2, 6, config.vocab_size))

@@ -14,15 +14,15 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 if TORCH_AVAILABLE:
     import torch.nn as nn
     from src.model.attention.common import BitConv1d, BitLinear
-    from src.model.tormented_bert_frankestein import (
+    from src.model.frankenstein_model import (
         FrankensteinDecoder,
-        TormentedBertFrankenstein,
-        UltraConfig,
+        FrankensteinTransformer,
+        FrankensteinModelConfig,
     )
 
 
 def _make(bitnet_routers: bool, mode: str = "encoder"):
-    return UltraConfig(
+    return FrankensteinModelConfig(
         vocab_size=64,
         hidden_size=64,
         num_layers=8,
@@ -74,7 +74,7 @@ class TestBitNetCoverage(unittest.TestCase):
         cfg = _make(bitnet_routers, mode=mode)
         if model_cls is FrankensteinDecoder:
             return cfg, FrankensteinDecoder(cfg)
-        return cfg, TormentedBertFrankenstein(cfg)
+        return cfg, FrankensteinTransformer(cfg)
 
     def _gate_names(self, model):
         gates = {
@@ -116,7 +116,7 @@ class TestBitNetCoverage(unittest.TestCase):
                 self.assertEqual(isinstance(mod, BitLinear), expect_bitlinear, msg)
 
     def test_gates_are_bitlinear_when_use_bitnet_true(self):
-        for model_cls in (TormentedBertFrankenstein, FrankensteinDecoder):
+        for model_cls in (FrankensteinTransformer, FrankensteinDecoder):
             with self.subTest(model=model_cls.__name__):
                 _, model = self._build(False, model_cls)
                 gates = self._gate_names(model)
@@ -127,7 +127,7 @@ class TestBitNetCoverage(unittest.TestCase):
                 )
 
     def test_routers_float_when_bitnet_routers_false(self):
-        _, model = self._build(False, TormentedBertFrankenstein)
+        _, model = self._build(False, FrankensteinTransformer)
         routers = self._router_names(model)
         self.assertGreater(len(routers), 0)
         for mod in routers:
@@ -138,7 +138,7 @@ class TestBitNetCoverage(unittest.TestCase):
                 )
 
     def test_routers_bitlinear_when_bitnet_routers_true(self):
-        _, model = self._build(True, TormentedBertFrankenstein)
+        _, model = self._build(True, FrankensteinTransformer)
         routers = self._router_names(model)
         self.assertGreater(len(routers), 0)
         for mod in routers:
@@ -149,7 +149,7 @@ class TestBitNetCoverage(unittest.TestCase):
                 )
 
     def test_no_plain_linear_when_bitnet_routers_true(self):
-        _, model = self._build(True, TormentedBertFrankenstein)
+        _, model = self._build(True, FrankensteinTransformer)
         plain = [
             m for m in model.modules()
             if isinstance(m, nn.Linear) and not isinstance(m, BitLinear)
@@ -163,7 +163,7 @@ class TestBitNetCoverage(unittest.TestCase):
         from src.model.embeddings.factorized_embedding import FactorizedEmbedding
 
         def make(use_bitnet_conv):
-            cfg = UltraConfig(
+            cfg = FrankensteinModelConfig(
                 vocab_size=64, hidden_size=64, num_layers=1, num_heads=4,
                 num_experts=2, top_k_experts=1, dropout=0.0,
                 use_bitnet=True, use_bitnet_conv=use_bitnet_conv,
@@ -184,7 +184,7 @@ class TestBitNetCoverage(unittest.TestCase):
         """use_bitnet_conv has no effect when use_bitnet is False."""
         from src.model.embeddings.factorized_embedding import FactorizedEmbedding
 
-        cfg = UltraConfig(
+        cfg = FrankensteinModelConfig(
             vocab_size=64, hidden_size=64, num_layers=1, num_heads=4,
             num_experts=2, top_k_experts=1, dropout=0.0,
             use_bitnet=False, use_bitnet_conv=True,

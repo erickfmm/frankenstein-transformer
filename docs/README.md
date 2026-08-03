@@ -1,6 +1,6 @@
 # Toolkit Reference
 
-This document describes the project as a configurable library and CLI toolchain. It is rendered in Read the Docs under **Toolkit Reference**; the full hosted documentation (specs, API autodoc, bibliography, technical reports) lives at <https://frankestein-transformer.readthedocs.io>.
+This document describes the project as a configurable library and CLI toolchain. It is rendered in Read the Docs under **Toolkit Reference**; the full hosted documentation (specs, API autodoc, bibliography, technical reports) lives at <https://frankenstein-transformer.readthedocs.io>.
 
 ## Building the documentation locally
 
@@ -45,7 +45,7 @@ Each main file only contains the preamble, front matter, and `\input` links to t
 The entrypoint is:
 
 ```bash
-frankestein-transformer
+frankenstein-transformer
 ```
 
 Subcommands:
@@ -71,9 +71,9 @@ Common execution device choice:
 Usage patterns:
 
 ```bash
-frankestein-transformer train --config-name frankenstein --device auto
-frankestein-transformer train --config path/to/config.yaml --device auto
-frankestein-transformer train --list-configs
+frankenstein-transformer train --config-name frankenstein --device auto
+frankenstein-transformer train --config path/to/config.yaml --device auto
+frankenstein-transformer train --list-configs
 ```
 
 Key train flags:
@@ -82,7 +82,7 @@ Key train flags:
 - `--config-name` — name of a preset under `configs/` (without extension)
 - `--list-configs` — list available named presets
 - `--batch-size` — override the config's training batch size
-- `--model-mode` (`frankenstein|frankesteindecoder`)
+- `--model-mode` (`frankenstein|frankensteindecoder`)
 - `--device`
 - `--gpu-temp-guard` / `--no-gpu-temp-guard`
 - `--gpu-temp-pause-threshold-c`
@@ -105,7 +105,7 @@ Top-level required keys:
 Allowed values:
 
 - `frankenstein` — full-featured mixed-architecture encoder (17+ mixers, MoE, advanced normalization); best for MLM pre-training
-- `frankesteindecoder` — autoregressive causal decoder for LLM-style next-token generation; **forces `mode: decoder`** at runtime
+- `frankensteindecoder` — autoregressive causal decoder for LLM-style next-token generation; **forces `mode: decoder`** at runtime
 
 ### 3.2 `model` section
 
@@ -150,7 +150,7 @@ Parameter keys must use the prefix for the selected optimizer class, e.g. `adamw
 Deploy a checkpoint to artifacts:
 
 ```bash
-frankestein-transformer deploy \
+frankenstein-transformer deploy \
   --checkpoint path/to/checkpoint.pt \
   --output deployed_model \
   --format quantized \
@@ -170,13 +170,13 @@ Deploy flags:
 Quantize shortcut:
 
 ```bash
-frankestein-transformer quantize --checkpoint ckpt.pt --output deployed_model_quantized --validate
+frankenstein-transformer quantize --checkpoint ckpt.pt --output deployed_model_quantized --validate
 ```
 
 ### 4.1 Hugging Face Transformers export
 
 ```bash
-frankestein-transformer transformers-export --model deployed_model --yaml configs/frankenstein.yaml --output hf_model
+frankenstein-transformer transformers-export --model deployed_model --yaml configs/frankenstein.yaml --output hf_model
 ```
 
 Flags: `--model` (required), `--yaml` (required), `--output` (required).
@@ -184,10 +184,10 @@ Flags: `--model` (required), `--yaml` (required), `--output` (required).
 ### 4.2 BitNet GGUF export
 
 ```bash
-frankestein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/mini.yaml --output model.gguf
+frankenstein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/mini.yaml --output model.gguf
 # Compatibility check only:
-frankestein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf
-frankestein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf --check --check
+frankenstein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf
+frankenstein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf --check --check
 ```
 
 Flags: `--model` (required), `--yaml` (required), `--output` (required), `--check`.
@@ -195,7 +195,7 @@ Flags: `--model` (required), `--yaml` (required), `--output` (required), `--chec
 ## 5. Inference Command
 
 ```bash
-frankestein-transformer infer --model deployed_model --text "hola" --device auto
+frankenstein-transformer infer --model deployed_model --text "hola" --device auto
 ```
 
 Infer flags:
@@ -214,7 +214,7 @@ Infer flags:
 ### 6.1 `sbert-train`
 
 ```bash
-frankestein-transformer sbert-train --output_dir ./output/sbert_model --batch_size 16 --epochs 4 --device auto
+frankenstein-transformer sbert-train --output_dir ./output/sbert_model --batch_size 16 --epochs 4 --device auto
 ```
 
 Flags: `--pretrained`, `--output_dir`, `--batch_size`, `--epochs`, `--learning_rate`, `--max_train_samples`, `--max_eval_samples`, `--hidden_size`, `--num_layers`, `--pooling_mode` (`mean|cls|max`), `--no_amp`, `--no_resample`, `--resample_std`, `--device`.
@@ -222,7 +222,7 @@ Flags: `--pretrained`, `--output_dir`, `--batch_size`, `--epochs`, `--learning_r
 ### 6.2 `sbert-infer`
 
 ```bash
-frankestein-transformer sbert-infer --model_path ./output/sbert_model --mode similarity --sentence1 "a" --sentence2 "b"
+frankenstein-transformer sbert-infer --model_path ./output/sbert_model --mode similarity --sentence1 "a" --sentence2 "b"
 ```
 
 Flags: `--model_path` (required), `--mode` (`similarity|search|cluster|encode`) (required), `--sentence1`, `--sentence2`, `--query`, `--corpus_file`, `--top_k`, `--sentences_file`, `--n_clusters`, `--input_file`, `--output_file`, `--batch_size`, `--device`.
@@ -232,15 +232,15 @@ Flags: `--model_path` (required), `--mode` (`similarity|search|cluster|encode`) 
 Run the schema-driven YAML builder:
 
 ```bash
-frankestein-transformer web-server
-frankestein-transformer web-server --server-port 8501 --server-address 0.0.0.0 --server-headless
+frankenstein-transformer web-server
+frankenstein-transformer web-server --server-port 8501 --server-address 0.0.0.0 --server-headless
 ```
 
 Flags: `--server-port` (default 8501), `--server-address` (default `localhost`), `--server-headless`, `--development-mode`.
 
 ## 8. Recommended Workflow
 
-1. Select or create a YAML config that validates against `src/schema.yaml`. Named presets live in `configs/` (`frankenstein`, `frankesteindecoder`, `standard`, `tinybert`, `embbert`, …); optimizer × architecture combos live in `configs/examples/`.
+1. Select or create a YAML config that validates against `src/schema.yaml`. Named presets live in `configs/` (`frankenstein`, `frankensteindecoder`, `standard`, `tinybert`, `embbert`, …); optimizer × architecture combos live in `configs/examples/`.
 2. Run `train`.
 3. Export with `deploy` or `quantize`; optionally `transformers-export` to a Hugging Face folder or `bitnet-gguf` to a GGUF file.
 4. Run `infer` for runtime validation and benchmark.

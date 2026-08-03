@@ -5,7 +5,7 @@ This document provides a curated set of **31 schema-compliant YAML presets** for
 
 - **25 MLM presets** for continual pretraining (`training.task: mlm`) with full optimizer coverage.
 - **5 SBERT presets** for sentence embedding finetuning (`training.task: sbert`).
-- **4 decoder presets** (`model_class: frankesteindecoder`) for autoregressive causal language models.
+- **4 decoder presets** (`model_class: frankensteindecoder`) for autoregressive causal language models.
 - Coverage includes Spanish-first checkpoints, multilingual fallback models, multiple optimizers, all supported norm types, and all attention block families (legacy, gated, sparse).
 
 All examples are tuned around practical stability on **NVIDIA Tesla P40 (24GB VRAM)**.

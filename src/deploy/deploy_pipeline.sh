@@ -1,10 +1,10 @@
 #!/bin/bash
-# Quick deployment script for TORMENTED-BERT v2
+# Quick deployment script for Frankenstein Transformer
 
 set -e
 
 echo "=========================================="
-echo "TORMENTED-BERT v2 Deployment Quick Start"
+echo "Frankenstein Transformer Deployment Quick Start"
 echo "=========================================="
 
 # Check if checkpoint path provided

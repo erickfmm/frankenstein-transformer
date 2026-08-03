@@ -6,7 +6,7 @@ This directory contains YAML presets. Each file describes the model (`model`) an
 
 - `frankenstein.yaml`
 - `mini.yaml`
-- `frankesteindecoder.yaml`
+- `frankensteindecoder.yaml`
 - `standard.yaml`
 - `standard_hope.yaml`
 - `tinybert.yaml`
@@ -18,9 +18,9 @@ This directory contains YAML presets. Each file describes the model (`model`) an
 ## General Structure
 
 ```yaml
-# Option A: train custom Tormented model
-model_class: frankenstein|frankesteindecoder
-model: # UltraConfig
+# Option A: train custom Frankenstein model
+model_class: frankenstein|frankensteindecoder
+model: # FrankensteinModelConfig
   ...
 
 # Option B: continual pretraining/finetuning from any HF/local base model
@@ -191,8 +191,8 @@ Examples:
 ## Available Fields (Detailed)
 
 ### model_class
-- `frankenstein` or `frankesteindecoder`.
-- `frankesteindecoder` builds the autoregressive causal decoder variant (`FrankensteinDecoder`).
+- `frankenstein` or `frankensteindecoder`.
+- `frankensteindecoder` builds the autoregressive causal decoder variant (`FrankensteinDecoder`).
 - Ignored when `base_model` is set.
 
 ### base_model
@@ -203,7 +203,7 @@ Examples:
 - Required for `training.task: mlm` when `base_model` is set.
 - Uses `AutoTokenizer` via `tokenizer.name_or_path`.
 
-### model (UltraConfig)
+### model (FrankensteinModelConfig)
 
 The `model` block is organized into hierarchical sub-objects: `dims`, `norm`,
 `embedding`, `attention`, plus flat top-level keys for cross-cutting features
@@ -234,7 +234,7 @@ The `model` block is organized into hierarchical sub-objects: `dims`, `norm`,
   - `cca_attn` — Compressed Convolutional Attention, attention in compressed latent + convs (arXiv:2510.04476).
   - `ccgqa_attn` — Compressed Convolutional Grouped Query Attention, CCA + decoupled GQA in latent (arXiv:2510.04476).
 - Training-free policy: `sparge_attn` and `fasa_attn` are eval-only; training mode raises an explicit runtime error.
-- `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankesteindecoder`, which forces decoder).
+- `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankensteindecoder`, which forces decoder).
 
 #### model.norm
 
@@ -348,8 +348,8 @@ Autoregressive decoder examples are available in `configs/examples/`:
 You can also run the named decoder preset directly:
 
 ```yaml
-model_class: frankesteindecoder
-# file: configs/frankesteindecoder.yaml
+model_class: frankensteindecoder
+# file: configs/frankensteindecoder.yaml
 ```
 
 ### training (TrainingConfig + runtime)

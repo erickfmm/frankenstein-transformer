@@ -15,11 +15,11 @@ import yaml
 
 try:
     from .trainer import TrainingConfig
-    from ..model.tormented_bert_frankestein import UltraConfig
+    from ..model.frankenstein_model import FrankensteinModelConfig
     from ..utils.config_flatten import flatten_model_dict
 except ImportError:
     from training.trainer import TrainingConfig
-    from model.tormented_bert_frankestein import UltraConfig
+    from model.frankenstein_model import FrankensteinModelConfig
     from utils.config_flatten import flatten_model_dict
 
 
@@ -33,7 +33,7 @@ _BITNET_BOOL_KEYS = ("use_bitnet", "bitnet_routers")
 def _validate_ffn_activation(model_data: Dict[str, Any]) -> None:
     """Validate FFN activation fields when present in the model block.
 
-    Lightweight pre-check that complements :class:`UltraConfig` validation
+    Lightweight pre-check that complements :class:`FrankensteinModelConfig` validation
     and the JSON-Schema ``enum``. Ensures ``ffn_activation`` is a string and
     ``ffn_activation_config`` is a mapping when provided.
 
@@ -90,8 +90,8 @@ class LoadedTrainingConfig:
     Attributes:
         task: Training task identifier (``"mlm"`` or ``"sbert"``).
         model_class: Model class name (``"frankenstein"``,
-            ``"frankesteindecoder"``, or ``"base_model"``).
-        model_config: :class:`UltraConfig` for custom models, or ``None``
+            ``"frankensteindecoder"``, or ``"base_model"``).
+        model_config: :class:`FrankensteinModelConfig` for custom models, or ``None``
             when ``base_model`` is used.
         base_model: HuggingFace model identifier/path when using a
             pre-trained base model, or ``None``.
@@ -104,7 +104,7 @@ class LoadedTrainingConfig:
 
     task: str
     model_class: Optional[str]
-    model_config: Optional[UltraConfig]
+    model_config: Optional[FrankensteinModelConfig]
     base_model: Optional[str]
     tokenizer_config: Dict[str, Any]
     training_config: TrainingConfig
@@ -116,7 +116,7 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
 
     Parses the YAML, validates required sections (``model``, ``training``,
     ``tokenizer``), resolves the training task, and constructs
-    :class:`UltraConfig` and :class:`TrainingConfig` objects.
+    :class:`FrankensteinModelConfig` and :class:`TrainingConfig` objects.
 
     Args:
         path: Filesystem path to the YAML configuration file.
@@ -143,10 +143,10 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     if model_class is not None:
         model_class = str(model_class).strip().lower()
 
-    valid_model_classes = {"frankenstein", "frankesteindecoder"}
+    valid_model_classes = {"frankenstein", "frankensteindecoder"}
     if model_class is not None and model_class not in valid_model_classes:
         raise ValueError(
-            "model_class must be one of: frankenstein, frankesteindecoder"
+            "model_class must be one of: frankenstein, frankensteindecoder"
         )
 
     model_data = data.get("model", {}) or {}
@@ -159,14 +159,14 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     if task not in {"mlm", "sbert"}:
         raise ValueError("training.task is required and must be one of: mlm, sbert")
 
-    model_config: Optional[UltraConfig] = None
+    model_config: Optional[FrankensteinModelConfig] = None
     if not base_model:
         if not model_data:
             raise ValueError("model is required when base_model is not provided")
         model_data = flatten_model_dict(model_data)
         _validate_bitnet_flags(model_data)
         _validate_ffn_activation(model_data)
-        model_config = UltraConfig(**model_data)
+        model_config = FrankensteinModelConfig(**model_data)
         if not model_class:
             model_class = "frankenstein"
     else:

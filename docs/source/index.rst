@@ -1,9 +1,9 @@
-Frankestein Transformer
+Frankenstein Transformer
 ========================
 
 Configuration-driven transformer experimentation toolkit with 35+ sequence mixer architectures and 23 optimizer families, strict schema-based configuration, quantized BitNet deployment, and SBERT sentence-embedding training.
 
-Full hosted documentation is at https://frankestein-transformer.readthedocs.io.
+Full hosted documentation is at https://frankenstein-transformer.readthedocs.io.
 
 .. toctree::
    :maxdepth: 3

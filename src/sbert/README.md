@@ -1,10 +1,10 @@
-# SBERT Fine-tuning for TORMENTED-BERT-Frankenstein v2
+# SBERT Fine-tuning for Frankenstein Transformer v2
 
-This directory contains scripts for fine-tuning and using Sentence-BERT (SBERT) models based on the TORMENTED-BERT-Frankenstein architecture.
+This directory contains scripts for fine-tuning and using Sentence-BERT (SBERT) models based on the Frankenstein Transformer architecture.
 
 ## Overview
 
-SBERT is a modification of BERT that uses siamese and triplet network structures to derive semantically meaningful sentence embeddings. These scripts adapt the TORMENTED-BERT v2 model for sentence similarity tasks using the Spanish multilingual sentences dataset.
+SBERT is a modification of BERT that uses siamese and triplet network structures to derive semantically meaningful sentence embeddings. These scripts adapt the Frankenstein Transformer model for sentence similarity tasks using the Spanish multilingual sentences dataset.
 
 ### Dataset
 
@@ -35,7 +35,7 @@ pip install scikit-learn
 ### Dependencies from Project
 
 The scripts depend on:
-- `src/model/v2/tormented_bert_frankestein.py` - Base model
+- `src/model/v2/frankenstein_model.py` - Base model
 - `src/tokenizer/spm_spa_redpajama35.py` - Tokenizer (optional)
 
 ## Training
@@ -46,14 +46,14 @@ Train from scratch with default configuration:
 
 ```bash
 python train_sbert.py \
-    --output_dir ./output/sbert_tormented_v2 \
+    --output_dir ./output/sbert_frankenstein_v2 \
     --batch_size 16 \
     --epochs 4
 ```
 
 ### Training from Pretrained Checkpoint
 
-Fine-tune from a pretrained TORMENTED-BERT checkpoint:
+Fine-tune from a pretrained Frankenstein checkpoint:
 
 ```bash
 python train_sbert.py \
@@ -86,7 +86,7 @@ python train_sbert.py \
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--pretrained` | None | Path to pretrained checkpoint |
-| `--output_dir` | `./output/sbert_tormented_v2` | Output directory |
+| `--output_dir` | `./output/sbert_frankenstein_v2` | Output directory |
 | `--batch_size` | 16 | Training batch size |
 | `--epochs` | 4 | Number of training epochs |
 | `--learning_rate` | 2e-5 | Learning rate |
@@ -120,7 +120,7 @@ Compare two sentences:
 
 ```bash
 python inference_sbert.py \
-    --model_path ./output/sbert_tormented_v2 \
+    --model_path ./output/sbert_frankenstein_v2 \
     --mode similarity \
     --sentence1 "El gato está en la casa" \
     --sentence2 "Un felino se encuentra en el hogar"
@@ -132,7 +132,7 @@ Find most similar sentences in a corpus:
 
 ```bash
 python inference_sbert.py \
-    --model_path ./output/sbert_tormented_v2 \
+    --model_path ./output/sbert_frankenstein_v2 \
     --mode search \
     --query "Machine learning en español" \
     --corpus_file ./data/corpus.txt \
@@ -147,7 +147,7 @@ Cluster sentences by semantic similarity:
 
 ```bash
 python inference_sbert.py \
-    --model_path ./output/sbert_tormented_v2 \
+    --model_path ./output/sbert_frankenstein_v2 \
     --mode cluster \
     --sentences_file ./data/sentences.txt \
     --n_clusters 5
@@ -159,7 +159,7 @@ Encode sentences and save embeddings for later use:
 
 ```bash
 python inference_sbert.py \
-    --model_path ./output/sbert_tormented_v2 \
+    --model_path ./output/sbert_frankenstein_v2 \
     --mode encode \
     --input_file ./data/sentences.txt \
     --output_file ./data/embeddings.npz
@@ -174,7 +174,7 @@ from inference_sbert import SBERTInference
 
 # Initialize
 inference = SBERTInference(
-    model_path="./output/sbert_tormented_v2",
+    model_path="./output/sbert_frankenstein_v2",
     device="cuda",  # or "cpu"
     batch_size=32
 )
@@ -242,7 +242,7 @@ The model uses **Cosine Similarity Loss**, which trains the model to predict the
 
 ### Base Model Features
 
-TORMENTED-BERT-Frankenstein includes:
+Frankenstein Transformer includes:
 - **BitNet b1.58**: Ternary weight quantization for memory efficiency
 - **Hybrid Architecture**: RetNet, Neural ODE, Mamba, and Attention layers
 - **Dynamic Tanh Normalization**: Improved training stability
@@ -330,7 +330,7 @@ Expected performance on the validation set:
 pip install sentence-transformers datasets scipy scikit-learn
 
 # Make sure project root is in PYTHONPATH
-export PYTHONPATH="${PYTHONPATH}:/path/to/transformer-encoder-frankestein"
+export PYTHONPATH="${PYTHONPATH}:/path/to/transformer-encoder-frankenstein"
 ```
 
 ## Advanced Usage
@@ -345,12 +345,12 @@ To train on a different dataset:
 
 ### Custom Model Configuration
 
-Create custom UltraConfig:
+Create custom FrankensteinModelConfig:
 
 ```python
-from model.v2.tormented_bert_frankestein import UltraConfig
+from model.v2.frankenstein_model import FrankensteinModelConfig
 
-config = UltraConfig(
+config = FrankensteinModelConfig(
     vocab_size=50000,
     hidden_size=1024,
     num_layers=16,
@@ -379,7 +379,7 @@ The fine-tuned model is fully compatible with the sentence-transformers library:
 ```python
 from sentence_transformers import SentenceTransformer
 
-model = SentenceTransformer('./output/sbert_tormented_v2')
+model = SentenceTransformer('./output/sbert_frankenstein_v2')
 embeddings = model.encode(["My sentence"])
 ```
 
@@ -388,11 +388,11 @@ embeddings = model.encode(["My sentence"])
 If you use this implementation, please cite:
 
 ```bibtex
-@misc{tormented-bert-sbert-2026,
-  title={SBERT Fine-tuning for TORMENTED-BERT-Frankenstein},
+@misc{frankenstein-sbert-2026,
+  title={SBERT Fine-tuning for Frankenstein Transformer},
   author={Your Name},
   year={2026},
-  howpublished={\\url{https://github.com/yourusername/transformer-encoder-frankestein}}
+  howpublished={\\url{https://github.com/yourusername/transformer-encoder-frankenstein}}
 }
 ```
 
@@ -404,4 +404,4 @@ See the main project LICENSE file.
 
 1. Reimers, N., & Gurevych, I. (2019). Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks. EMNLP 2019.
 2. Dataset: [erickfmm/agentlans__multilingual-sentences__paired_10_sts](https://huggingface.co/datasets/erickfmm/agentlans__multilingual-sentences__paired_10_sts)
-3. Base Model: TORMENTED-BERT-Frankenstein v2
+3. Base Model: Frankenstein Transformer v2

@@ -1,6 +1,6 @@
 type: object
 description: |-
-  UltraConfig model parameters. All architectural hyperparameters that define the model's
+  FrankensteinModelConfig model parameters. All architectural hyperparameters that define the model's
   structure, capacity, and behavior. Required when building a model from scratch (i.e., when
   `base_model` is not set). Organized into hierarchical sub-objects: `dims` (core dimensions
   and layer pattern), `norm` (normalization), `embedding` (factorized embeddings and conv),
@@ -12,7 +12,7 @@ description: |-
   - Memory-efficient: `embedding.factorized.enabled=true, embedding.factorized.dim=128, use_moe=false` — reduces embedding params ~4.5× for large vocabularies.
   - Experimental hybrid: `dims.layer_pattern: [retnet, titan_attn, mamba, standard_attn, ode]` — mixes recurrent, attention, state-space, and continuous-depth layers for diverse representation learning.
 description_es: |-
-  Parámetros UltraConfig del modelo. Todos los hiperparámetros arquitectónicos que definen
+  Parámetros FrankensteinModelConfig del modelo. Todos los hiperparámetros arquitectónicos que definen
   la estructura, capacidad y comportamiento del modelo. Obligatorio al construir un modelo desde
   cero (cuando `base_model` no está configurado). Organizado en sub-objetos jerárquicos: `dims`
   (dimensiones núcleo y patrón de capas), `norm` (normalización), `embedding` (embeddings

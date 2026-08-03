@@ -13,20 +13,20 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+from model.frankenstein_model import FrankensteinTransformer, FrankensteinModelConfig
 from deploy.quantization import save_quantized_checkpoint, estimate_model_size
 from deploy.deploy import ModelDeployer
-from deploy.inference import TormentedBertInference
+from deploy.inference import FrankensteinInference
 
 
 def main():
     print("="*70)
-    print("TORMENTED-BERT v2: Complete Deployment Pipeline Example")
+    print("Frankenstein Transformer: Complete Deployment Pipeline Example")
     print("="*70)
     
     # Step 1: Create a model (normally you'd load a trained one)
     print("\n[1/5] Creating model...")
-    config = UltraConfig(
+    config = FrankensteinModelConfig(
         vocab_size=10000,  # Smaller for demo
         hidden_size=768,   # Smaller for demo
         num_layers=4,      # Fewer layers for demo
@@ -34,7 +34,7 @@ def main():
         ode_steps=2
     )
     
-    model = TormentedBertFrankenstein(config)
+    model = FrankensteinTransformer(config)
     total_params = sum(p.numel() for p in model.parameters())
     print(f"✓ Model created: {total_params / 1e6:.2f}M parameters")
     
@@ -73,7 +73,7 @@ def main():
     
     # Step 5: Test inference
     print("\n[5/5] Testing inference...")
-    engine = TormentedBertInference(
+    engine = FrankensteinInference(
         str(output_dir),
         device='cpu'  # Use CPU for demo (change to 'cuda' if available)
     )

@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""TORMENTED-BERT-Frankenstein: The Ultimate Hybrid Transformer (SOTA 2026).
-
-**TORMENTED** = **T**ernary **O**DE **R**etention **M**amba **E**xperts **N**eural **T**anh **E**ncoder **D**epth.
+"""Frankenstein Transformer: hybrid mixed-architecture Transformer encoder/decoder.
 
 This module implements a mixed-architecture Transformer encoder/decoder that
 integrates 20+ attention mixer families, Mixture-of-Experts (MoE) FFN routing,
@@ -11,9 +9,9 @@ conditional memory layers.
 
 Core components:
 
-* :class:`UltraConfig` — single-source-of-truth dataclass for all model
+* :class:`FrankensteinModelConfig` — single-source-of-truth dataclass for all model
   hyperparameters.
-* :class:`TormentedBertFrankenstein` — full hybrid encoder with looped depth,
+* :class:`FrankensteinTransformer` — full hybrid encoder with looped depth,
   MoE, BitNet, factorized embeddings, and Mixture-of-Depths.
 * :class:`FrankensteinDecoder` — autoregressive causal decoder for LLM-style
   text generation.
@@ -191,7 +189,7 @@ def _validate_ffn_activation_config(activation: str, cfg: Dict[str, Any]) -> Non
 
 
 @dataclass
-class UltraConfig:
+class FrankensteinModelConfig:
     """Single-source-of-truth configuration for all Frankenstein model variants.
 
     Every hyperparameter lives here. The schema is validated in
@@ -319,7 +317,7 @@ class UltraConfig:
             ``use_embedding_conv`` is True. Default: 3.
         mode: Model mode. ``"encoder"`` for bidirectional (MLM) or
             ``"decoder"`` for autoregressive causal generation. The
-            ``model_class=frankesteindecoder`` preset forces ``mode=decoder``
+            ``model_class=frankensteindecoder`` preset forces ``mode=decoder``
             at runtime. Default: ``"encoder"``.
         engram_max_ngram_size: Highest N-gram order for Engram memory layers
             (range 2..max). Default: 3.
@@ -600,7 +598,7 @@ class HybridLayer(nn.Module):
         """Initialize a hybrid layer for the given mixer type.
 
         Args:
-            config: :class:`UltraConfig` instance with model hyperparameters.
+            config: :class:`FrankensteinModelConfig` instance with model hyperparameters.
             layer_type: String identifying the attention mixer. Must be one
                 of the keys in the internal mixer registry or ``"mamba"``.
 
@@ -1003,8 +1001,8 @@ class HybridLayer(nn.Module):
         return torch.scatter(x, dim=1, index=gather_index, src=updated_tokens)
 
 
-class TormentedBertFrankenstein(nn.Module):
-    """TORMENTED-BERT-Frankenstein: Hybrid mixed-architecture Transformer encoder.
+class FrankensteinTransformer(nn.Module):
+    """Frankenstein Transformer: Hybrid mixed-architecture Transformer encoder.
 
     This is the flagship model. It stacks ``num_layers`` :class:`HybridLayer`
     blocks, each configured by ``layer_pattern``, and repeats the entire
@@ -1033,7 +1031,7 @@ class TormentedBertFrankenstein(nn.Module):
       mixers.
 
     Attributes:
-        config: The :class:`UltraConfig` used to build the model.
+        config: The :class:`FrankensteinModelConfig` used to build the model.
         emb: Token embedding layer (:class:`FactorizedEmbedding` or
             ``nn.Embedding``).
         dropout: Embedding dropout layer.
@@ -1048,10 +1046,10 @@ class TormentedBertFrankenstein(nn.Module):
     """
 
     def __init__(self, config):
-        """Build the Frankenstein encoder from an UltraConfig.
+        """Build the Frankenstein encoder from a FrankensteinModelConfig.
 
         Args:
-            config: :class:`UltraConfig` instance with all model
+            config: :class:`FrankensteinModelConfig` instance with all model
                 hyperparameters.
         """
         super().__init__()
@@ -1158,18 +1156,18 @@ class TormentedBertFrankenstein(nn.Module):
 class FrankensteinDecoder(nn.Module):
     """Autoregressive causal decoder variant for LLM-style text generation.
 
-    Wraps a :class:`TormentedBertFrankenstein` backbone with ``mode='decoder'``
+    Wraps a :class:`FrankensteinTransformer` backbone with ``mode='decoder'``
     so every attention layer applies causal (autoregressive) masking. Supports
     the same hybrid architecture features as the encoder: 17+ mixer families,
     MoE, BitNet, factorized embeddings, looped depth, Mixture-of-Depths, and
     Engram memory.
 
-    The ``model_class=frankesteindecoder`` preset forces ``mode=decoder`` at
+    The ``model_class=frankensteindecoder`` preset forces ``mode=decoder`` at
     runtime, overriding any user-provided mode.
 
     Attributes:
-        config: The :class:`UltraConfig` (built from preset or user-provided).
-        backbone: The underlying :class:`TormentedBertFrankenstein` model.
+        config: The :class:`FrankensteinModelConfig` (built from preset or user-provided).
+        backbone: The underlying :class:`FrankensteinTransformer` model.
         last_auxiliary_losses: Mirrored from the backbone after each forward
             pass.
         last_mixture_of_depths_stats: Mirrored from the backbone after each
@@ -1184,7 +1182,7 @@ class FrankensteinDecoder(nn.Module):
         num_loops: int = 1,
         use_bitnet: bool = True,
         layer_pattern: Optional[List[str]] = None,
-    ) -> UltraConfig:
+    ) -> FrankensteinModelConfig:
         """Build the default decoder preset configuration.
 
         Args:
@@ -1198,7 +1196,7 @@ class FrankensteinDecoder(nn.Module):
                 to ``["titan_attn", "retnet", "titan_attn", "mamba"] * 3``.
 
         Returns:
-            A pre-configured :class:`UltraConfig` with ``mode='decoder'``.
+            A pre-configured :class:`FrankensteinModelConfig` with ``mode='decoder'``.
         """
         if layer_pattern is None:
             layer_pattern = [
@@ -1207,7 +1205,7 @@ class FrankensteinDecoder(nn.Module):
                 "titan_attn",
                 "mamba",
             ] * 3
-        return UltraConfig(
+        return FrankensteinModelConfig(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
@@ -1226,11 +1224,11 @@ class FrankensteinDecoder(nn.Module):
             mode="decoder",
         )
 
-    def __init__(self, config: Optional[UltraConfig] = None):
+    def __init__(self, config: Optional[FrankensteinModelConfig] = None):
         """Initialize the decoder model.
 
         Args:
-            config: Optional :class:`UltraConfig`. If None, the default
+            config: Optional :class:`FrankensteinModelConfig`. If None, the default
                 decoder preset is used. ``mode`` is forced to ``"decoder"``
                 if not already set.
         """
@@ -1242,7 +1240,7 @@ class FrankensteinDecoder(nn.Module):
         if self.config.mode != "decoder":
             self.config.mode = "decoder"
 
-        self.backbone = TormentedBertFrankenstein(self.config)
+        self.backbone = FrankensteinTransformer(self.config)
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         """Forward pass through the decoder backbone (causal masking).
@@ -1302,7 +1300,7 @@ class FrankensteinDecoder(nn.Module):
 
 # ==================== PRUEBA DE ESTRES ====================
 if __name__ == "__main__":
-    config = UltraConfig(
+    config = FrankensteinModelConfig(
         hidden_size=1536,
         num_layers=16,
         num_loops=2,
@@ -1311,8 +1309,8 @@ if __name__ == "__main__":
     )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print("\n⚡ TORMENTED-BERT-Frankenstein INITIALIZING ⚡")
-    model = TormentedBertFrankenstein(config).to(device)
+    print("\n⚡ Frankenstein Transformer INITIALIZING ⚡")
+    model = FrankensteinTransformer(config).to(device)
 
     params = sum(p.numel() for p in model.parameters())
     print(f"Model Params: {params / 1e6:.2f}M")
