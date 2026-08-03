@@ -10,7 +10,7 @@ The root schema object has five top-level properties. All are optional except \t
 \begin{itemize}[nosep]
     \item \texttt{base\_model} (string) --- HuggingFace model identifier or local path for continual pretraining or SBERT fine-tuning. When set, \texttt{model\_class} and \texttt{model} are not required (the architecture is inferred from the checkpoint).
     \item \texttt{tokenizer} (object) --- Tokenizer configuration with fields \texttt{name\_or\_path} (string), \texttt{use\_fast} (bool), and \texttt{trust\_remote\_code} (bool). Required when using \texttt{base\_model} with the \texttt{mlm} task.
-    \item \texttt{model\_class} (enum) --- Model architecture variant: \texttt{frankenstein} (mixed-architecture encoder), \texttt{mini} (simplified encoder), or \texttt{frankesteindecoder} (autoregressive causal decoder). Required when \texttt{base\_model} is not set.
+    \item \texttt{model\_class} (enum) --- Model architecture variant: \texttt{frankenstein} (mixed-architecture encoder) or \texttt{frankesteindecoder} (autoregressive causal decoder). Required when \texttt{base\_model} is not set.
     \item \texttt{model} (object) --- Model architecture parameters (see \S\ref{subsec:model-config}). Required when \texttt{base\_model} is not set.
     \item \texttt{training} (object, \textbf{required}) --- Training configuration (see \S\ref{subsec:training-config}).
 \end{itemize}

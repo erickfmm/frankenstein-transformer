@@ -370,7 +370,7 @@ config = UltraConfig(
 
 ### Mini Preset
 
-El preset `TormentedBertMini` también es compatible con SBERT cuando necesitas un backbone más ligero.
+El preset `configs/mini.yaml` (basado en la clase `frankenstein`) también es compatible con SBERT cuando necesitas un backbone más ligero.
 
 ### Integration with Sentence-Transformers Ecosystem
 

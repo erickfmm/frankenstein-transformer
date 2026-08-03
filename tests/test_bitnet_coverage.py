@@ -4,7 +4,7 @@ Verifies that when ``use_bitnet=True`` all recurrent-state gate projections
 (alpha/beta/forget/erase/write/merge/gk) become ``BitLinear`` instances, while
 routing/scoring projections (MoE router, MoD router, sparse block-index,
 forecast, top-k score nets) only become ``BitLinear`` when ``bitnet_routers``
-is true. Covers encoder, decoder and mini variants across all mixer families.
+is true. Covers encoder and decoder variants across all mixer families.
 """
 import unittest
 from importlib.util import find_spec
@@ -17,7 +17,6 @@ if TORCH_AVAILABLE:
     from src.model.tormented_bert_frankestein import (
         FrankensteinDecoder,
         TormentedBertFrankenstein,
-        TormentedBertMini,
         UltraConfig,
     )
 
@@ -75,8 +74,6 @@ class TestBitNetCoverage(unittest.TestCase):
         cfg = _make(bitnet_routers, mode=mode)
         if model_cls is FrankensteinDecoder:
             return cfg, FrankensteinDecoder(cfg)
-        if model_cls is TormentedBertMini:
-            return cfg, TormentedBertMini(cfg)
         return cfg, TormentedBertFrankenstein(cfg)
 
     def _gate_names(self, model):
@@ -119,8 +116,7 @@ class TestBitNetCoverage(unittest.TestCase):
                 self.assertEqual(isinstance(mod, BitLinear), expect_bitlinear, msg)
 
     def test_gates_are_bitlinear_when_use_bitnet_true(self):
-        for model_cls in (TormentedBertFrankenstein, FrankensteinDecoder,
-                          TormentedBertMini):
+        for model_cls in (TormentedBertFrankenstein, FrankensteinDecoder):
             with self.subTest(model=model_cls.__name__):
                 _, model = self._build(False, model_cls)
                 gates = self._gate_names(model)

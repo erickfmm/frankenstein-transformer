@@ -19,7 +19,7 @@ This directory contains YAML presets. Each file describes the model (`model`) an
 
 ```yaml
 # Option A: train custom Tormented model
-model_class: frankenstein|mini|frankesteindecoder
+model_class: frankenstein|frankesteindecoder
 model: # UltraConfig
   ...
 
@@ -191,7 +191,7 @@ Examples:
 ## Available Fields (Detailed)
 
 ### model_class
-- `frankenstein`, `mini`, or `frankesteindecoder`.
+- `frankenstein` or `frankesteindecoder`.
 - `frankesteindecoder` builds the autoregressive causal decoder variant (`FrankensteinDecoder`).
 - Ignored when `base_model` is set.
 

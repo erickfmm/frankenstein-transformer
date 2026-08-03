@@ -14,10 +14,9 @@ The authoritative contract is \texttt{configs/schema.yaml}. It enforces three to
 \end{itemize}
 
 \paragraph{Model Class Selection.}
-The \texttt{model\_class} field determines the architectural variant instantiated by the training pipeline. Three options are supported:
+The \texttt{model\_class} field determines the architectural variant instantiated by the training pipeline. Two options are supported:
 \begin{itemize}[leftmargin=*]
     \item \textbf{frankenstein}: Mixed-architecture encoder models supporting diverse attention mechanisms (standard, sigmoid, retentive, state-space, sparse, and gated mixers) with MoE (Mixture of Experts) and advanced features. Optimized for bidirectional encoder-style training with masked language modeling (MLM) objectives.
-    \item \textbf{mini}: Simplified encoder variant designed for smaller-scale training scenarios. Provides reduced parameter overhead and faster iteration for experimentation and prototyping.
     \item \textbf{frankesteindecoder}: Autoregressive causal decoder for LLM-style next-token generation. Enables causal attention masking for sequential text generation tasks. When this class is selected, runtime enforces \texttt{mode='decoder'}. 
 \end{itemize}
 

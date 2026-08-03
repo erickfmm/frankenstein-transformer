@@ -15,8 +15,6 @@ Core components:
   hyperparameters.
 * :class:`TormentedBertFrankenstein` — full hybrid encoder with looped depth,
   MoE, BitNet, factorized embeddings, and Mixture-of-Depths.
-* :class:`TormentedBertMini` — simplified encoder variant preset for
-  constrained GPU training.
 * :class:`FrankensteinDecoder` — autoregressive causal decoder for LLM-style
   text generation.
 * :class:`HybridLayer` — per-layer dispatcher that routes to the configured
@@ -1155,101 +1153,6 @@ class TormentedBertFrankenstein(nn.Module):
             self.last_auxiliary_losses = {}
             self.last_mixture_of_depths_stats = {}
         return self.head(x)
-
-
-class TormentedBertMini(nn.Module):
-    """Simplified encoder variant preset for stable training on constrained GPUs.
-
-    Wraps a :class:`TormentedBertFrankenstein` backbone with a compact preset
-    configuration: ``hidden_size=384``, ``num_layers=6``, ``num_loops=2``,
-    ``num_heads=6``, ``num_experts=4``, ``norm_type="derf"``,
-    ``use_factorized_embedding=True``, and a stable layer pattern of
-    ``["retnet", "titan_attn", "retnet", "mamba", "titan_attn", "ode"]``.
-
-    Factorized embeddings are forced on even if the provided config disables
-    them.
-
-    Attributes:
-        config: The :class:`UltraConfig` (built from preset or user-provided).
-        backbone: The underlying :class:`TormentedBertFrankenstein` model.
-        last_auxiliary_losses: Mirrored from the backbone after each forward
-            pass.
-        last_mixture_of_depths_stats: Mirrored from the backbone after each
-            forward pass.
-    """
-
-    @staticmethod
-    def build_mini_config(vocab_size: int = 50_000, use_bitnet: bool = True) -> UltraConfig:
-        """Build the default Mini preset configuration.
-
-        Args:
-            vocab_size: Vocabulary size. Default: 50000.
-            use_bitnet: Whether to use BitNet ternary quantization.
-                Default: True.
-
-        Returns:
-            A pre-configured :class:`UltraConfig` with compact dimensions.
-        """
-        stable_layer_pattern = [
-            "retnet",
-            "titan_attn",
-            "retnet",
-            "mamba",
-            "titan_attn",
-            "ode",
-        ]
-        return UltraConfig(
-            vocab_size=vocab_size,
-            hidden_size=384,
-            num_layers=6,
-            num_loops=2,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=4,
-            top_k_experts=2,
-            dropout=0.1,
-            ode_solver="rk4",
-            ode_steps=2,
-            use_bitnet=use_bitnet,
-            norm_type="derf",
-            layer_pattern=stable_layer_pattern,
-            use_factorized_embedding=True,
-            factorized_embedding_dim=128,
-            use_embedding_conv=True,
-        )
-
-    def __init__(self, config: Optional[UltraConfig] = None):
-        """Initialize the Mini model.
-
-        Args:
-            config: Optional :class:`UltraConfig`. If None, the default Mini
-                preset is used. Factorized embeddings are forced on.
-        """
-        super().__init__()
-        self.config = config or self.build_mini_config()
-        self.last_auxiliary_losses = {}
-        self.last_mixture_of_depths_stats = {}
-
-        if self.config.use_factorized_embedding is False:
-            self.config.use_factorized_embedding = True
-
-        self.backbone = TormentedBertFrankenstein(self.config)
-
-    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
-        """Forward pass through the Mini backbone.
-
-        Args:
-            input_ids: Integer token indices of shape ``(B, S)``.
-
-        Returns:
-            Logits tensor of shape ``(B, S, vocab_size)``.
-        """
-        output = self.backbone(input_ids)
-        self.last_auxiliary_losses = dict(getattr(self.backbone, "last_auxiliary_losses", {}))
-        self.last_mixture_of_depths_stats = dict(
-            getattr(self.backbone, "last_mixture_of_depths_stats", {})
-        )
-        return output
 
 
 class FrankensteinDecoder(nn.Module):

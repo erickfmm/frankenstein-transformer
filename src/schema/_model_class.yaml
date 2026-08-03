@@ -4,28 +4,22 @@ title_es: "Clase de Modelo"
 description: |-
   Model architecture variant to instantiate. Determines which model implementation class is used.
   - `frankenstein`: mixed-architecture encoder with various attention mechanisms (standard, sigmoid, retentive, state-space, sparse, and gated mixers), MoE (Mixture of Experts), and advanced features. Optimized for bidirectional encoder-style training with masked language modeling (MLM).
-  - `mini`: simplified encoder variant for smaller-scale training, rapid prototyping, and experimentation.
   - `frankesteindecoder`: autoregressive causal decoder for LLM-style next-token generation. **Automatically forces `mode: decoder`** at runtime. Enables causal masking for text generation tasks.
 
   **Examples explained:**
   - `frankenstein`: Use when you need a full-featured encoder with mixed attention mechanisms, MoE, and advanced normalization. Best for MLM pre-training with large datasets where architectural flexibility matters. Supports all 17 mixer types in `layer_pattern`.
-  - `mini`: Use for quick experiments, small-scale training, and prototyping. Reduced parameters mean faster iteration. Ideal when compute budget is limited or when validating new ideas before scaling.
   - `frankesteindecoder`: Use for autoregressive text generation tasks (GPT-style). The system forces `mode=decoder` automatically. Supports causal attention where each token only attends to previous tokens.
 description_es: |-
   Variante de arquitectura del modelo a instanciar. Determina qué clase de implementación se usa.
   - `frankenstein`: encoder de arquitectura mixta con varios mecanismos de atención (estándar, sigmoide, retentiva, espacio de estados, dispersa y con compuertas), MoE (Mixture of Experts) y características avanzadas. Optimizado para entrenamiento bidireccional estilo encoder con masked language modeling (MLM).
-  - `mini`: variante de encoder simplificada para entrenamiento a pequeña escala, prototipado rápido y experimentación.
   - `frankesteindecoder`: decoder causal autorregresivo para generación de siguiente token estilo LLM. **Fuerza automáticamente `mode: decoder`** en tiempo de ejecución. Habilita enmascaramiento causal para tareas de generación de texto.
 
   **Ejemplos explicados:**
   - `frankenstein`: Usar cuando se necesita un encoder completo con mecanismos de atención mixtos, MoE y normalización avanzada. Ideal para preentrenamiento MLM con datasets grandes donde importa la flexibilidad arquitectónica. Soporta los 17 tipos de mixer en `layer_pattern`.
-  - `mini`: Usar para experimentos rápidos, entrenamiento a pequeña escala y prototipado. Menos parámetros permiten iteración más rápida. Ideal con presupuesto de cómputo limitado o al validar nuevas ideas.
   - `frankesteindecoder`: Usar para tareas de generación de texto autorregresivas (tipo GPT). El sistema fuerza `mode=decoder` automáticamente. Soporta atención causal donde cada token solo atiende a tokens previos.
 enum:
   - frankenstein
-  - mini
   - frankesteindecoder
 examples:
   - frankenstein
-  - mini
   - frankesteindecoder

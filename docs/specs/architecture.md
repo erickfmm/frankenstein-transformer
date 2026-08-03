@@ -26,14 +26,13 @@ Configuration flows through validation, partitions into model/training/optimizer
 | Class | Type | Description |
 |---|---|---|
 | `frankenstein` | Mixed-architecture encoder | Full-featured encoder with all 19 mixer types, MoE, advanced normalization. Optimized for bidirectional MLM. |
-| `mini` | Simplified encoder | Reduced parameter overhead for rapid prototyping and small-scale experimentation. |
 | `frankesteindecoder` | Autoregressive causal decoder | LLM-style next-token generation. **Runtime forces `mode='decoder'`**. Enables causal attention masking. |
 
 ## Training Modes
 
 | Mode | Attention Masking | Task | Model Class Compatibility |
 |---|---|---|---|
-| `encoder` | Bidirectional (all tokens attend to all) | MLM (masked language modeling) | `frankenstein`, `mini` |
+| `encoder` | Bidirectional (all tokens attend to all) | MLM (masked language modeling) | `frankenstein` |
 | `decoder` | Causal (token attends only to previous) | AR (autoregressive next-token) | `frankesteindecoder` (forced), `frankenstein` |
 
 When `model_class='frankesteindecoder'`, the system automatically forces `mode='decoder'` at runtime.

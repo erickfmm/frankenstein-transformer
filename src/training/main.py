@@ -29,7 +29,6 @@ try:
     from ..model.tormented_bert_frankestein import (
         FrankensteinDecoder,
         TormentedBertFrankenstein,
-        TormentedBertMini,
         UltraConfig,
     )
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
@@ -41,7 +40,6 @@ except ImportError:
     from model.tormented_bert_frankestein import (
         FrankensteinDecoder,
         TormentedBertFrankenstein,
-        TormentedBertMini,
         UltraConfig,
     )
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
@@ -120,7 +118,7 @@ def _load_legacy_tormented_model(loaded: LoadedTrainingConfig) -> Tuple[torch.nn
     """Load a custom TormentedBert model with SentencePiece tokenizer.
 
     Trains or loads an SPM tokenizer, then constructs the model based on
-    ``model_class`` (``"mini"``, ``"frankesteindecoder"``, or default
+    ``model_class`` (``"frankesteindecoder"``, or default
     ``"frankenstein"``).
 
     Args:
@@ -174,9 +172,7 @@ def _load_legacy_tormented_model(loaded: LoadedTrainingConfig) -> Tuple[torch.nn
     if not config.layer_pattern:
         config.layer_pattern = stable_layer_pattern
 
-    if loaded.model_class == "mini":
-        model = TormentedBertMini(config)
-    elif loaded.model_class == "frankesteindecoder":
+    if loaded.model_class == "frankesteindecoder":
         config.mode = "decoder"
         model = FrankensteinDecoder(config)
     else:
@@ -834,14 +830,14 @@ def main(argv=None):
     parser.add_argument(
         "--config-name",
         type=str,
-        default=os.environ.get("CONFIG_NAME", "mini"),
+        default=os.environ.get("CONFIG_NAME", "frankenstein"),
         help="Config name under configs (without extension)",
     )
     parser.add_argument("--list-configs", action="store_true", help="List available configs and exit")
     parser.add_argument("--batch-size", type=int, default=None, help="Override batch size from YAML")
     parser.add_argument(
         "--model-mode",
-        choices=["frankenstein", "mini", "frankesteindecoder"],
+        choices=["frankenstein", "frankesteindecoder"],
         default=None,
         help="Deprecated: use --config-name instead",
     )

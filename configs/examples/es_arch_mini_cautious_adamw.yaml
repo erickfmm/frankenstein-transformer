@@ -1,4 +1,4 @@
-model_class: mini
+model_class: frankenstein
 model:
   dims:
     vocab_size: 50000

@@ -14,7 +14,7 @@ class TrainCliGpuTempFlagTests(unittest.TestCase):
                 [
                     "train",
                     "--config-name",
-                    "mini",
+                    "frankenstein",
                     "--device",
                     "cuda",
                     "--gpu-temp-guard",
@@ -54,7 +54,7 @@ class TrainCliGpuTempFlagTests(unittest.TestCase):
         fake_training_main_module = SimpleNamespace(main=mocked_train_main)
         with patch.dict("sys.modules", {"src.training.main": fake_training_main_module}):
             exit_code = cli.main(
-                ["train", "--config-name", "mini", "--resume-from-checkpoint", "auto"]
+                ["train", "--config-name", "frankenstein", "--resume-from-checkpoint", "auto"]
             )
         self.assertEqual(exit_code, 0)
         forwarded_argv = mocked_train_main.call_args[0][0]
@@ -67,7 +67,7 @@ class TrainCliGpuTempFlagTests(unittest.TestCase):
         fake_training_main_module = SimpleNamespace(main=mocked_train_main)
         with patch.dict("sys.modules", {"src.training.main": fake_training_main_module}):
             exit_code = cli.main(
-                ["train", "--config-name", "mini", "--gpu-temp-checkpoint-grace-seconds", "45"]
+                ["train", "--config-name", "frankenstein", "--gpu-temp-checkpoint-grace-seconds", "45"]
             )
         self.assertEqual(exit_code, 0)
         forwarded_argv = mocked_train_main.call_args[0][0]

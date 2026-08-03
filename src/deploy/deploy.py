@@ -17,7 +17,6 @@ try:
     from ..model.tormented_bert_frankestein import (
         FrankensteinDecoder,
         TormentedBertFrankenstein,
-        TormentedBertMini,
         UltraConfig,
     )
     from .quantization import (
@@ -33,7 +32,6 @@ except ImportError:
     from model.tormented_bert_frankestein import (
         FrankensteinDecoder,
         TormentedBertFrankenstein,
-        TormentedBertMini,
         UltraConfig,
     )
     from deploy.quantization import (
@@ -114,7 +112,7 @@ class ModelDeployer:
                     setattr(self.config, key, value)
             logger.info("Loaded config from checkpoint")
         
-        # Initialize model (decoder/mini when configured)
+        # Initialize model (decoder when configured)
         if isinstance(self.config.mode, str) and self.config.mode == "decoder":
             self.model = FrankensteinDecoder(self.config)
         else:
@@ -271,7 +269,7 @@ class ModelDeployer:
             # Create config object
             config = UltraConfig(**flatten_model_dict(config_dict))
             
-            # Initialize model (decoder/mini when configured)
+            # Initialize model (decoder when configured)
             if isinstance(config.mode, str) and config.mode == "decoder":
                 model = FrankensteinDecoder(config)
             else:

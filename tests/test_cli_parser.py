@@ -66,7 +66,7 @@ class BuildParserStructureTests(unittest.TestCase):
         self.assertAlmostEqual(args.gpu_temp_poll_interval_seconds, 15.0)
 
     def test_train_model_mode_choices(self):
-        for mode in ("frankenstein", "mini", "frankesteindecoder"):
+        for mode in ("frankenstein", "frankesteindecoder"):
             args = self.parser.parse_args(["train", "--model-mode", mode])
             self.assertEqual(args.model_mode, mode)
 

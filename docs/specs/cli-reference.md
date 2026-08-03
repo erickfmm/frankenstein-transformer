@@ -38,10 +38,10 @@ All subcommands that involve model computation accept `--device`:
 | Flag | Type | Default | Description |
 |---|---|---|---|
 | `--config` | string | — | Path to custom YAML config file |
-| `--config-name` | string | `mini` | Named preset from `configs/` directory |
+| `--config-name` | string | `frankenstein` | Named preset from `configs/` directory |
 | `--list-configs` | flag | — | List available config presets and exit |
 | `--batch-size` | int | — | Override config batch size |
-| `--model-mode` | choice | — | Override model class: `frankenstein`, `mini`, `frankesteindecoder` |
+| `--model-mode` | choice | — | Override model class: `frankenstein`, `frankesteindecoder` |
 | `--device` | choice | `auto` | `auto`, `cpu`, `cuda`, `mps` |
 | `--gpu-temp-guard` / `--no-gpu-temp-guard` | flag | — | Enable/disable GPU thermal guard |
 | `--gpu-temp-pause-threshold-c` | float | — | Temperature to pause training (°C) |
@@ -54,7 +54,7 @@ All subcommands that involve model computation accept `--device`:
 ### Examples
 
 ```bash
-# Train with default mini preset
+# Train with default frankenstein preset
 frankestein-transformer train
 
 # Train with custom config

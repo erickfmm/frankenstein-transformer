@@ -1,7 +1,6 @@
-from .tormented_bert_frankestein import TormentedBertFrankenstein, TormentedBertMini, UltraConfig
+from .tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 
 __all__ = [
     "TormentedBertFrankenstein",
-    "TormentedBertMini",
     "UltraConfig",
 ]

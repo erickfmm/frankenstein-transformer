@@ -146,7 +146,7 @@ cli_main([
 | `es_arch_standard_sigmoid_adopt.yaml` | mlm | custom `frankenstein` | `adopt` | `layer_norm` | `[standard_attn, sigmoid_attn]` | medium | `p40_safe` |
 | `es_arch_moe_titan_ademamix.yaml` | mlm | custom `frankenstein` MoE | `ademamix` | `layer_norm` | `[titan_attn, retnet]` | high | `p40_experimental` |
 | `es_arch_bitnet_factorized_mars_adamw.yaml` | mlm | custom `frankenstein` BitNet+factorized | `mars_adamw` | `derf` | `[retnet, standard_attn]` | medium | `p40_safe` |
-| `es_arch_mini_cautious_adamw.yaml` | mlm | custom `mini` | `cautious_adamw` | `layer_norm` | `[retnet, titan_attn, mamba, ode, standard_attn, sigmoid_attn]` | low-medium | `p40_safe` |
+| `es_arch_mini_cautious_adamw.yaml` | mlm | custom `frankenstein` | `cautious_adamw` | `layer_norm` | `[retnet, titan_attn, mamba, ode, standard_attn, sigmoid_attn]` | low-medium | `p40_safe` |
 | `es_arch_gla_deltanet_lion.yaml` | mlm | custom `frankenstein` gated | `lion` | `layer_norm` | `[gla_attn, deltanet_attn]` | medium | `p40_safe` |
 | `es_arch_hgrn2_fox_gated_softmax_adamw.yaml` | mlm | custom `frankenstein` gated | `adamw` | `dynamic_tanh` | `[hgrn2_attn, fox_attn, gated_softmax_attn]` | medium | `p40_safe` |
 | `es_arch_all_gated_muon.yaml` | mlm | custom `frankenstein` all-gated BitNet | `muon` | `derf` | all 6 gated types | high | `p40_experimental` |

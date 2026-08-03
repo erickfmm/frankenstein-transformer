@@ -71,7 +71,7 @@ Common execution device choice:
 Usage patterns:
 
 ```bash
-frankestein-transformer train --config-name mini --device auto
+frankestein-transformer train --config-name frankenstein --device auto
 frankestein-transformer train --config path/to/config.yaml --device auto
 frankestein-transformer train --list-configs
 ```
@@ -82,7 +82,7 @@ Key train flags:
 - `--config-name` — name of a preset under `configs/` (without extension)
 - `--list-configs` — list available named presets
 - `--batch-size` — override the config's training batch size
-- `--model-mode` (`frankenstein|mini|frankesteindecoder`)
+- `--model-mode` (`frankenstein|frankesteindecoder`)
 - `--device`
 - `--gpu-temp-guard` / `--no-gpu-temp-guard`
 - `--gpu-temp-pause-threshold-c`
@@ -105,7 +105,6 @@ Top-level required keys:
 Allowed values:
 
 - `frankenstein` — full-featured mixed-architecture encoder (17+ mixers, MoE, advanced normalization); best for MLM pre-training
-- `mini` — simplified encoder for rapid prototyping and small-scale training
 - `frankesteindecoder` — autoregressive causal decoder for LLM-style next-token generation; **forces `mode: decoder`** at runtime
 
 ### 3.2 `model` section
@@ -177,7 +176,7 @@ frankestein-transformer quantize --checkpoint ckpt.pt --output deployed_model_qu
 ### 4.1 Hugging Face Transformers export
 
 ```bash
-frankestein-transformer transformers-export --model deployed_model --yaml configs/mini.yaml --output hf_model
+frankestein-transformer transformers-export --model deployed_model --yaml configs/frankenstein.yaml --output hf_model
 ```
 
 Flags: `--model` (required), `--yaml` (required), `--output` (required).
@@ -187,7 +186,8 @@ Flags: `--model` (required), `--yaml` (required), `--output` (required).
 ```bash
 frankestein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/mini.yaml --output model.gguf
 # Compatibility check only:
-frankestein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/mini.yaml --output model.gguf --check
+frankestein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf
+frankestein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf --check --check
 ```
 
 Flags: `--model` (required), `--yaml` (required), `--output` (required), `--check`.
@@ -240,7 +240,7 @@ Flags: `--server-port` (default 8501), `--server-address` (default `localhost`),
 
 ## 8. Recommended Workflow
 
-1. Select or create a YAML config that validates against `src/schema.yaml`. Named presets live in `configs/` (`mini`, `frankenstein`, `frankesteindecoder`, `standard`, `tinybert`, `embbert`, …); optimizer × architecture combos live in `configs/examples/`.
+1. Select or create a YAML config that validates against `src/schema.yaml`. Named presets live in `configs/` (`frankenstein`, `frankesteindecoder`, `standard`, `tinybert`, `embbert`, …); optimizer × architecture combos live in `configs/examples/`.
 2. Run `train`.
 3. Export with `deploy` or `quantize`; optionally `transformers-export` to a Hugging Face folder or `bitnet-gguf` to a GGUF file.
 4. Run `infer` for runtime validation and benchmark.

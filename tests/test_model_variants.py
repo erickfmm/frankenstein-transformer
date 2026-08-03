@@ -1,4 +1,4 @@
-"""Unit tests for TormentedBertMini and FrankensteinDecoder."""
+"""Unit tests for FrankensteinDecoder and TormentedBertFrankenstein."""
 import unittest
 from importlib.util import find_spec
 
@@ -8,58 +8,9 @@ if TORCH_AVAILABLE:
     import torch
     from src.model.tormented_bert_frankestein import (
         TormentedBertFrankenstein,
-        TormentedBertMini,
         FrankensteinDecoder,
         UltraConfig,
     )
-
-
-def _mini_config(**overrides):
-    cfg = TormentedBertMini.build_mini_config(vocab_size=200, use_bitnet=False)
-    for k, v in overrides.items():
-        setattr(cfg, k, v)
-    return cfg
-
-
-@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
-class TormentedBertMiniTests(unittest.TestCase):
-    def test_default_construction(self):
-        model = TormentedBertMini()
-        self.assertIsInstance(model, TormentedBertMini)
-
-    def test_forward_shape_default(self):
-        model = TormentedBertMini()
-        x = torch.randint(0, model.config.vocab_size, (2, 8))
-        y = model(x)
-        self.assertEqual(y.shape, (2, 8, model.config.vocab_size))
-
-    def test_custom_config(self):
-        cfg = _mini_config()
-        model = TormentedBertMini(cfg)
-        x = torch.randint(0, cfg.vocab_size, (1, 6))
-        y = model(x)
-        self.assertEqual(y.shape, (1, 6, cfg.vocab_size))
-
-    def test_forces_factorized_embedding_true(self):
-        cfg = _mini_config()
-        cfg.use_factorized_embedding = False
-        model = TormentedBertMini(cfg)
-        self.assertTrue(model.config.use_factorized_embedding)
-
-    def test_build_mini_config_uses_derf_norm(self):
-        cfg = TormentedBertMini.build_mini_config()
-        self.assertEqual(cfg.norm_type, "derf")
-
-    def test_build_mini_config_layer_pattern_is_stable(self):
-        cfg = TormentedBertMini.build_mini_config()
-        for lt in cfg.layer_pattern:
-            self.assertIn(lt, ["retnet", "titan_attn", "mamba", "ode"])
-
-    def test_gradient_flows(self):
-        cfg = _mini_config()
-        model = TormentedBertMini(cfg)
-        x = torch.randint(0, cfg.vocab_size, (1, 4))
-        model(x).sum().backward()
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

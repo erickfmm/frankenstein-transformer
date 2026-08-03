@@ -151,7 +151,7 @@ class YamlExamplesContentTests(unittest.TestCase):
 
     def test_mini_cautious_adamw_model_class(self):
         cfg = self._load("es_arch_mini_cautious_adamw.yaml")
-        self.assertEqual(cfg.model_class, "mini")
+        self.assertEqual(cfg.model_class, "frankenstein")
 
     def test_moe_titan_has_use_moe_true(self):
         cfg = self._load("es_arch_moe_titan_ademamix.yaml")

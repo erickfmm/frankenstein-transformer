@@ -425,12 +425,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     train_parser = subparsers.add_parser("train", help="Run main training")
     train_parser.add_argument("--config", type=str, default=None)
-    train_parser.add_argument("--config-name", type=str, default="mini")
+    train_parser.add_argument("--config-name", type=str, default="frankenstein")
     train_parser.add_argument("--list-configs", action="store_true")
     train_parser.add_argument("--batch-size", type=int, default=None)
     train_parser.add_argument(
         "--model-mode",
-        choices=["frankenstein", "mini", "frankesteindecoder"],
+        choices=["frankenstein", "frankesteindecoder"],
         default=None,
     )
     train_parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")

@@ -94,7 +94,6 @@ from .configuration_frankestein import FrankesteinConfig
 from .model.tormented_bert_frankestein import (
     FrankensteinDecoder,
     TormentedBertFrankenstein,
-    TormentedBertMini,
     UltraConfig,
 )
 
@@ -113,8 +112,6 @@ def _to_ultra_config(config: FrankesteinConfig) -> UltraConfig:
 def _build_core_model(config: FrankesteinConfig) -> nn.Module:
     ultra = _to_ultra_config(config)
     model_class = str(getattr(config, "model_class", "frankenstein")).lower()
-    if model_class == "mini":
-        return TormentedBertMini(ultra)
     if model_class == "frankesteindecoder":
         if ultra.mode != "decoder":
             ultra.mode = "decoder"
@@ -258,16 +255,13 @@ def _bake_state_dict(
     from src.model.tormented_bert_frankestein import (
         FrankensteinDecoder,
         TormentedBertFrankenstein,
-        TormentedBertMini,
         UltraConfig,
     )
     from src.utils.config_flatten import flatten_model_dict
 
     ultra = UltraConfig(**flatten_model_dict(model_config))
     mc = str(model_class).lower()
-    if mc == "mini":
-        model = TormentedBertMini(ultra)
-    elif mc == "frankesteindecoder" or ultra.mode == "decoder":
+    if mc == "frankesteindecoder" or ultra.mode == "decoder":
         if ultra.mode != "decoder":
             ultra.mode = "decoder"
         model = FrankensteinDecoder(ultra)

@@ -256,7 +256,7 @@ python deploy.py \
 
 ### Mini Preset (Ligero)
 
-Para despliegues con menos VRAM, considera usar el preset `TormentedBertMini` como base de configuración.
+Para despliegues con menos VRAM, considera usar `configs/mini.yaml` (basado en la clase `frankenstein`) como base de configuración.
 
 ### Masked Language Modeling
 

@@ -763,7 +763,7 @@ def build_cli_command(command: str, config: Dict[str, Any], output_path: str) ->
     
     if command == "train":
         cmd_parts.extend(["--config", output_path])
-        cmd_parts.extend(["--config-name", config.get("model_class", "mini")])
+        cmd_parts.extend(["--config-name", config.get("model_class", "frankenstein")])
     elif command in ["deploy", "quantize"]:
         cmd_parts.extend(["--config", output_path])
     elif command == "infer":

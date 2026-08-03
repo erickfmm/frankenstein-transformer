@@ -14,10 +14,9 @@ El contrato autoritativo es \texttt{configs/schema.yaml}. Este impone tres objet
 \end{itemize}
 
 \paragraph{Selección de Clase de Modelo.}
-El campo \texttt{model\_class} determina la variante arquitectónica instanciada por el pipeline de entrenamiento. Se soportan tres opciones:
+El campo \texttt{model\_class} determina la variante arquitectónica instanciada por el pipeline de entrenamiento. Se soportan dos opciones:
 \begin{itemize}[leftmargin=*]
     \item \textbf{frankenstein}: Modelos encoder de arquitectura mixta que soportan diversos mecanismos de atención (estándar, sigmoide, retentiva, espacio de estados, dispersa y mezcladores con compuerta) con MoE (Mezcla de Expertos) y características avanzadas. Optimizado para entrenamiento bidireccional tipo encoder con objetivos de modelado de lenguaje enmascarado (MLM).
-    \item \textbf{mini}: Variante de encoder simplificada diseñada para escenarios de entrenamiento a menor escala. Proporciona una sobrecarga de parámetros reducida e iteración más rápida para experimentación y creación de prototipos.
     \item \textbf{frankesteindecoder}: Decoder causal autorregresivo para generación de siguiente token estilo LLM. Permite el enmascaramiento de atención causal para tareas de generación secuencial de texto. Cuando se selecciona esta clase, en tiempo de ejecución se fuerza \texttt{mode='decoder'}.
 \end{itemize}
 

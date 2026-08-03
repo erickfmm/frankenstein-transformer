@@ -10,7 +10,7 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 
 | Section | Required | Description |
 |---|---|---|
-| `model_class` | No (optional when `base_model` set) | Architecture variant: `frankenstein`, `mini`, `frankesteindecoder` |
+| `model_class` | No (optional when `base_model` set) | Architecture variant: `frankenstein`, `frankesteindecoder` |
 | `model` | No (optional when `base_model` set) | UltraConfig model parameters |
 | `training` | **Yes** | Training hyperparameters and runtime configuration |
 | `base_model` | No | HuggingFace model identifier for continual pretraining |

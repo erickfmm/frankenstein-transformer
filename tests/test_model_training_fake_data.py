@@ -1,5 +1,5 @@
 """
-End-to-end mini-model training tests using synthetic (fake) data.
+End-to-end model training tests using synthetic (fake) data.
 
 These tests verify that:
   - Forward passes produce finite outputs
@@ -22,7 +22,6 @@ if TORCH_AVAILABLE:
     import torch.nn.functional as F
     from src.model.tormented_bert_frankestein import (
         TormentedBertFrankenstein,
-        TormentedBertMini,
         FrankensteinDecoder,
         UltraConfig,
     )
@@ -90,14 +89,17 @@ def _train_steps(model, n=5):
 
 
 # ---------------------------------------------------------------------------
-# TormentedBertMini  (uses legacy retnet/titan/mamba/ode pattern)
+# Frankensteiner (uses legacy retnet/titan/mamba/ode pattern)
 # ---------------------------------------------------------------------------
 
+_MINI_LEGACY_PATTERN = ["retnet", "titan_attn", "retnet", "mamba", "titan_attn", "ode"]
+
+
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
-class MiniModelTrainingTests(unittest.TestCase):
+class LegacyPatternTrainingTests(unittest.TestCase):
 
     def test_mini_model_loss_is_finite(self):
-        model = TormentedBertMini(TormentedBertMini.build_mini_config(vocab_size=VOCAB, use_bitnet=False))
+        model = TormentedBertFrankenstein(_cfg(_MINI_LEGACY_PATTERN))
         losses = _train_steps(model, n=3)
         for loss in losses:
             self.assertTrue(
@@ -106,7 +108,7 @@ class MiniModelTrainingTests(unittest.TestCase):
             )
 
     def test_mini_model_gradients_nonzero(self):
-        model = TormentedBertMini(TormentedBertMini.build_mini_config(vocab_size=VOCAB, use_bitnet=False))
+        model = TormentedBertFrankenstein(_cfg(_MINI_LEGACY_PATTERN))
         model.train()
         ids, labels = _fake_batch()
         logits = model(ids)
@@ -122,7 +124,7 @@ class MiniModelTrainingTests(unittest.TestCase):
         self.assertGreater(total_norm, 0.0)
 
     def test_mini_model_params_update(self):
-        model = TormentedBertMini(TormentedBertMini.build_mini_config(vocab_size=VOCAB, use_bitnet=False))
+        model = TormentedBertFrankenstein(_cfg(_MINI_LEGACY_PATTERN))
         before = [p.data.clone() for p in model.parameters()]
         _train_steps(model, n=2)
         changed = sum(

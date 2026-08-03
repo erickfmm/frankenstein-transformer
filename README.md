@@ -24,7 +24,7 @@ Verify: `frankestein-transformer --help`
 |---------|-------|
 | Sequence mixer architectures | 33 across 5 categories (Dense, Recurrent, Sparse, Gated, Latent) |
 | Optimizer families | 23 across 6 categories |
-| Model classes | `frankenstein`, `mini`, `frankesteindecoder` |
+| Model classes | `frankenstein`, `frankesteindecoder` |
 | Training modes | Encoder (MLM) / Decoder (autoregressive) |
 | Normalization types | `layer_norm`, `dynamic_tanh`, `derf` |
 | CLI subcommands | 8 |
@@ -37,7 +37,6 @@ Verify: `frankestein-transformer --help`
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
 | `frankenstein` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 33 mixer types |
-| `mini` | Encoder | Lightweight encoder for constrained resources; reduced hidden size and layers |
 | `frankesteindecoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 
 See [configs/README.md](configs/README.md) for preset details and [docs/specs/](docs/specs/) for architecture deep-dives.
@@ -46,13 +45,13 @@ See [configs/README.md](configs/README.md) for preset details and [docs/specs/](
 
 | Subcommand | Purpose | Example |
 |------------|---------|---------|
-| `train` | Run schema-validated training | `frankestein-transformer train --config-name mini --device auto` |
+| `train` | Run schema-validated training | `frankestein-transformer train --config-name frankenstein --device auto` |
 | `deploy` | Export checkpoint to deployment artifacts | `frankestein-transformer deploy --checkpoint ckpt.pt --output deployed/ --format quantized` |
 | `quantize` | Shortcut for quantized deployment | `frankestein-transformer quantize --checkpoint ckpt.pt --output deployed_q/ --validate` |
 | `infer` | Batch/interactive/benchmark inference | `frankestein-transformer infer --model deployed/ --text "hello" --device auto` |
 | `sbert-train` | Train sentence embedding model | `frankestein-transformer sbert-train --output_dir ./sbert_out --batch_size 16 --epochs 4` |
 | `sbert-infer` | SBERT similarity/search/cluster/encode | `frankestein-transformer sbert-infer --model_path ./sbert_out --mode similarity --sentence1 "a" --sentence2 "b"` |
-| `transformers-export` | Export to HuggingFace Transformers format | `frankestein-transformer transformers-export --config-name mini --output ./hf_export/` |
+| `transformers-export` | Export to HuggingFace Transformers format | `frankestein-transformer transformers-export --config-name frankenstein --output ./hf_export/` |
 | `web-server` | Launch Streamlit config builder UI | `frankestein-transformer web-server` |
 
 All model-executing commands accept `--device auto|cpu|cuda|mps`.
@@ -136,7 +135,7 @@ frankestein-transformer --help
 Minimal YAML config (`my_config.yaml`) — only the 5 required model fields plus task; everything else uses UltraConfig/TrainingConfig defaults:
 
 ```yaml
-model_class: mini
+model_class: frankenstein
 model:
   vocab_size: 30522
   hidden_size: 256
