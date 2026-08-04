@@ -20,11 +20,9 @@ if TORCH_AVAILABLE:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
-    from src.model.frankenstein_model import (
-        FrankensteinTransformer,
-        FrankensteinDecoder,
-        FrankensteinModelConfig,
-    )
+    from src.model.config import FrankensteinModelConfig
+    from src.model.frankenstein_decoder import FrankensteinDecoder
+    from src.model.frankenstein_encoder import FrankensteinEncoder
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -99,7 +97,7 @@ _MINI_LEGACY_PATTERN = ["retnet", "titan_attn", "retnet", "mamba", "titan_attn",
 class LegacyPatternTrainingTests(unittest.TestCase):
 
     def test_mini_model_loss_is_finite(self):
-        model = FrankensteinTransformer(_cfg(_MINI_LEGACY_PATTERN))
+        model = FrankensteinEncoder(_cfg(_MINI_LEGACY_PATTERN))
         losses = _train_steps(model, n=3)
         for loss in losses:
             self.assertTrue(
@@ -108,7 +106,7 @@ class LegacyPatternTrainingTests(unittest.TestCase):
             )
 
     def test_mini_model_gradients_nonzero(self):
-        model = FrankensteinTransformer(_cfg(_MINI_LEGACY_PATTERN))
+        model = FrankensteinEncoder(_cfg(_MINI_LEGACY_PATTERN))
         model.train()
         ids, labels = _fake_batch()
         logits = model(ids)
@@ -124,7 +122,7 @@ class LegacyPatternTrainingTests(unittest.TestCase):
         self.assertGreater(total_norm, 0.0)
 
     def test_mini_model_params_update(self):
-        model = FrankensteinTransformer(_cfg(_MINI_LEGACY_PATTERN))
+        model = FrankensteinEncoder(_cfg(_MINI_LEGACY_PATTERN))
         before = [p.data.clone() for p in model.parameters()]
         _train_steps(model, n=2)
         changed = sum(
@@ -142,7 +140,7 @@ class LegacyPatternTrainingTests(unittest.TestCase):
 class LegacyLayerTrainingTests(unittest.TestCase):
 
     def _train(self, layers, **kw):
-        model = FrankensteinTransformer(_cfg(layers, **kw))
+        model = FrankensteinEncoder(_cfg(layers, **kw))
         return _train_steps(model, n=3)
 
     def test_standard_attn_training(self):
@@ -190,7 +188,7 @@ class LegacyLayerTrainingTests(unittest.TestCase):
 class GatedLayerTrainingTests(unittest.TestCase):
 
     def _train(self, layer_type):
-        model = FrankensteinTransformer(_cfg([layer_type]))
+        model = FrankensteinEncoder(_cfg([layer_type]))
         return _train_steps(model, n=3)
 
     def test_gla_attn_training(self):
@@ -226,11 +224,11 @@ class GatedLayerTrainingTests(unittest.TestCase):
 class SparseLayerTrainingTests(unittest.TestCase):
 
     def _train(self, layer_type):
-        model = FrankensteinTransformer(_cfg([layer_type]))
+        model = FrankensteinEncoder(_cfg([layer_type]))
         return _train_steps(model, n=3)
 
     def _eval_forward(self, layer_type):
-        model = FrankensteinTransformer(_cfg([layer_type]))
+        model = FrankensteinEncoder(_cfg([layer_type]))
         model.eval()
         ids, _ = _fake_batch()
         with torch.no_grad():
@@ -259,7 +257,7 @@ class SparseLayerTrainingTests(unittest.TestCase):
 
     def test_sparge_attn_raises_in_train_mode(self):
         # sparge_attn is inference/eval-only; must raise when model.train() is active
-        model = FrankensteinTransformer(_cfg(["sparge_attn"]))
+        model = FrankensteinEncoder(_cfg(["sparge_attn"]))
         model.train()
         ids, _ = _fake_batch()
         with self.assertRaises(ValueError):
@@ -267,7 +265,7 @@ class SparseLayerTrainingTests(unittest.TestCase):
 
     def test_fasa_attn_raises_in_train_mode(self):
         # fasa_attn is inference/eval-only; must raise when model.train() is active
-        model = FrankensteinTransformer(_cfg(["fasa_attn"]))
+        model = FrankensteinEncoder(_cfg(["fasa_attn"]))
         model.train()
         ids, _ = _fake_batch()
         with self.assertRaises(ValueError):
@@ -338,21 +336,21 @@ class DecoderTrainingTests(unittest.TestCase):
 class MixedPatternTrainingTests(unittest.TestCase):
 
     def test_mixed_legacy_pattern(self):
-        model = FrankensteinTransformer(
+        model = FrankensteinEncoder(
             _cfg(["retnet", "ode", "mamba", "titan_attn", "standard_attn", "sigmoid_attn"])
         )
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_mixed_gated_legacy_pattern(self):
-        model = FrankensteinTransformer(
+        model = FrankensteinEncoder(
             _cfg(["gla_attn", "standard_attn", "deltanet_attn", "titan_attn"])
         )
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_mixed_sparse_legacy_pattern(self):
-        model = FrankensteinTransformer(
+        model = FrankensteinEncoder(
             _cfg(["sparse_transformer_attn", "standard_attn", "longformer_attn", "titan_attn"])
         )
         losses = _train_steps(model, n=3)
@@ -360,25 +358,25 @@ class MixedPatternTrainingTests(unittest.TestCase):
 
     def test_multi_loop_training(self):
         cfg = _cfg(["standard_attn", "titan_attn"], num_loops=2, num_layers=2)
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_bitnet_training(self):
         cfg = _cfg(["standard_attn"], use_bitnet=True)
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_derf_norm_training(self):
         cfg = _cfg(["standard_attn"], norm_type="derf")
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_dynamic_tanh_norm_training(self):
         cfg = _cfg(["standard_attn"], norm_type="dynamic_tanh")
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
@@ -390,13 +388,13 @@ class MixedPatternTrainingTests(unittest.TestCase):
             use_embedding_conv=True,
             embedding_conv_kernel=3,
         )
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_rope_positional_encoding_training(self):
         cfg = _cfg(["standard_attn"], positional_encoding="rope")
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 

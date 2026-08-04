@@ -1,4 +1,4 @@
-"""Unit tests for FrankensteinDecoder and FrankensteinTransformer."""
+"""Unit tests for FrankensteinDecoder and FrankensteinEncoder."""
 import unittest
 from importlib.util import find_spec
 
@@ -6,11 +6,9 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.frankenstein_model import (
-        FrankensteinTransformer,
-        FrankensteinDecoder,
-        FrankensteinModelConfig,
-    )
+    from src.model.config import FrankensteinModelConfig
+    from src.model.frankenstein_decoder import FrankensteinDecoder
+    from src.model.frankenstein_encoder import FrankensteinEncoder
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -85,7 +83,7 @@ class FrankensteinDecoderTests(unittest.TestCase):
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
-class FrankensteinTransformerTests(unittest.TestCase):
+class FrankensteinEncoderTests(unittest.TestCase):
     def _model(self, layer_pattern=None, **kw):
         cfg = FrankensteinModelConfig(
             vocab_size=100,
@@ -108,7 +106,7 @@ class FrankensteinTransformerTests(unittest.TestCase):
             use_hope=True,
             **kw,
         )
-        return FrankensteinTransformer(cfg)
+        return FrankensteinEncoder(cfg)
 
     def test_flat_embedding_forward(self):
         model = self._model(use_factorized_embedding=False)
@@ -162,7 +160,7 @@ class FrankensteinTransformerTests(unittest.TestCase):
             ffn_hidden_size=96,
             ffn_activation="gelu",
         )
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         x = torch.randint(0, 100, (1, 5))
         y = model(x)
         self.assertEqual(y.shape, (1, 5, 100))

@@ -16,7 +16,8 @@ if TORCH_AVAILABLE:
         check_yaml_export_compatibility,
         export_transformers_model,
     )
-    from src.model.frankenstein_model import FrankensteinTransformer, FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig
+    from src.model.frankenstein_encoder import FrankensteinEncoder
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -46,7 +47,7 @@ class TransformersExportTests(unittest.TestCase):
                 ffn_hidden_size=32,
                 mode="encoder",
             )
-            model = FrankensteinTransformer(model_cfg)
+            model = FrankensteinEncoder(model_cfg)
 
             torch.save(
                 {
@@ -118,7 +119,7 @@ class TransformersExportTests(unittest.TestCase):
             self.assertTrue((out_dir / "configuration_frankenstein.py").exists())
             self.assertTrue((out_dir / "modeling_frankenstein.py").exists())
             self.assertTrue((out_dir / "compatibility_report.json").exists())
-            self.assertTrue((out_dir / "model" / "frankenstein_model.py").exists())
+            self.assertTrue((out_dir / "model" / "frankenstein_encoder.py").exists())
 
             config_data = json.loads((out_dir / "config.json").read_text(encoding="utf-8"))
             self.assertEqual(config_data["model_type"], "frankenstein")

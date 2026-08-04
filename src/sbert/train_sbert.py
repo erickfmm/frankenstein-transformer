@@ -39,12 +39,14 @@ from tqdm import tqdm as tqdm_progress
 import numpy as np
 
 try:
-    from ..model.frankenstein_model import FrankensteinTransformer, FrankensteinModelConfig
+    from ..model.config import FrankensteinModelConfig
+    from ..model.frankenstein_encoder import FrankensteinEncoder
     from ..model.optimizer.factory import OPTIMIZER_REGISTRY
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..utils.gpu_temp_guard import GPUTemperatureGuard
 except ImportError:
-    from model.frankenstein_model import FrankensteinTransformer, FrankensteinModelConfig
+    from model.config import FrankensteinModelConfig
+    from model.frankenstein_encoder import FrankensteinEncoder
     from model.optimizer.factory import OPTIMIZER_REGISTRY
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from utils.gpu_temp_guard import GPUTemperatureGuard
@@ -113,7 +115,7 @@ class FrankensteinSentenceTransformer:
     """Wrapper to adapt Frankenstein for Sentence-BERT training.
 
     Builds a :class:`SentenceTransformer` model by wrapping a
-    :class:`FrankensteinTransformer` (or any HuggingFace base model)
+    :class:`FrankensteinEncoder` (or any HuggingFace base model)
     with a pooling layer and L2 normalization. Supports loading from
     pretrained checkpoints or initializing from scratch.
 
@@ -174,7 +176,7 @@ class FrankensteinSentenceTransformer:
             else:
                 config = model_config or self._get_default_config()
             
-            self.base_model = FrankensteinTransformer(config)
+            self.base_model = FrankensteinEncoder(config)
             
             # Load weights (handle potential key mismatches)
             if 'model_state_dict' in checkpoint:
@@ -186,7 +188,7 @@ class FrankensteinSentenceTransformer:
         else:
             logger.info("Initializing model from scratch")
             config = model_config or self._get_default_config()
-            self.base_model = FrankensteinTransformer(config)
+            self.base_model = FrankensteinEncoder(config)
 
         self.base_model.to(self.device)
         

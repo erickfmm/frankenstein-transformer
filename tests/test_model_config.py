@@ -5,7 +5,7 @@ from importlib.util import find_spec
 TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
-    from src.model.frankenstein_model import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig
 
 
 def _minimal_dict(**overrides):

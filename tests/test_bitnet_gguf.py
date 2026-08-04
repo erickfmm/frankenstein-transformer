@@ -15,11 +15,9 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 if TORCH_AVAILABLE:
     import numpy as np
     import torch
-    from src.model.frankenstein_model import (
-        FrankensteinDecoder,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from src.model.config import FrankensteinModelConfig
+    from src.model.frankenstein_decoder import FrankensteinDecoder
+    from src.model.frankenstein_encoder import FrankensteinEncoder
     from src.deploy.bitnet_gguf_export import (
         GGUF_MAGIC,
         GGUFExportError,
@@ -59,7 +57,7 @@ class TestBitNetGGUFExport(unittest.TestCase):
             layer_pattern=["standard_attn"], mode=mode,
         )
         model = (FrankensteinDecoder(cfg) if mode == "decoder"
-                 else FrankensteinTransformer(cfg))
+                 else FrankensteinEncoder(cfg))
         path = os.path.join(self.tmpdir, "c.pt")
         torch.save({"model_state_dict": model.state_dict()}, path)
         return path

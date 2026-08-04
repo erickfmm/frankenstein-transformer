@@ -348,7 +348,7 @@ To train on a different dataset:
 Create custom FrankensteinModelConfig:
 
 ```python
-from model.v2.frankenstein_model import FrankensteinModelConfig
+from model.config import FrankensteinModelConfig
 
 config = FrankensteinModelConfig(
     vocab_size=50000,

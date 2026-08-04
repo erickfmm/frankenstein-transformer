@@ -22,7 +22,7 @@ if TORCH_AVAILABLE:
         fold_norm_weights,
         get_norm,
     )
-    from src.model.frankenstein_model import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig
 
 
 def _cfg(norm_type="layer_norm", hidden_size=32):

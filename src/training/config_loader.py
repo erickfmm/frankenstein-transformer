@@ -15,11 +15,11 @@ import yaml
 
 try:
     from .trainer import TrainingConfig
-    from ..model.frankenstein_model import FrankensteinModelConfig
+    from ..model.config import FrankensteinModelConfig
     from ..utils.config_flatten import flatten_model_dict
 except ImportError:
     from training.trainer import TrainingConfig
-    from model.frankenstein_model import FrankensteinModelConfig
+    from model.config import FrankensteinModelConfig
     from utils.config_flatten import flatten_model_dict
 
 

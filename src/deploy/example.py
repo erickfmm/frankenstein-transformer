@@ -13,7 +13,8 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from model.frankenstein_model import FrankensteinTransformer, FrankensteinModelConfig
+from model.config import FrankensteinModelConfig
+from model.frankenstein_encoder import FrankensteinEncoder
 from deploy.quantization import save_quantized_checkpoint, estimate_model_size
 from deploy.deploy import ModelDeployer
 from deploy.inference import FrankensteinInference
@@ -34,7 +35,7 @@ def main():
         ode_steps=2
     )
     
-    model = FrankensteinTransformer(config)
+    model = FrankensteinEncoder(config)
     total_params = sum(p.numel() for p in model.parameters())
     print(f"✓ Model created: {total_params / 1e6:.2f}M parameters")
     

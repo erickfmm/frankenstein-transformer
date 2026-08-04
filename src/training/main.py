@@ -26,22 +26,18 @@ try:
     from .streaming_mlm_dataset import StreamingMLMDataset
     from .trainer import TitanTrainer, TrainingConfig
     from .config_loader import LoadedTrainingConfig, load_training_config, list_config_paths
-    from ..model.frankenstein_model import (
-        FrankensteinDecoder,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from ..model.config import FrankensteinModelConfig
+    from ..model.frankenstein_decoder import FrankensteinDecoder
+    from ..model.frankenstein_encoder import FrankensteinEncoder
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 except ImportError:
     from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
     from training.config_loader import LoadedTrainingConfig, load_training_config, list_config_paths
-    from model.frankenstein_model import (
-        FrankensteinDecoder,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from model.config import FrankensteinModelConfig
+    from model.frankenstein_decoder import FrankensteinDecoder
+    from model.frankenstein_encoder import FrankensteinEncoder
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
 
@@ -176,7 +172,7 @@ def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> Tuple[torch
         config.mode = "decoder"
         model = FrankensteinDecoder(config)
     else:
-        model = FrankensteinTransformer(config)
+        model = FrankensteinEncoder(config)
 
     logging.info("Model Config:")
     logging.info("  - Model Class: %s", loaded.model_class)

@@ -6,7 +6,8 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.frankenstein_model import HybridLayer, FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig
+    from src.model.hybrid_layer import HybridLayer
 
 
 def _cfg(layer_pattern=None, **overrides):

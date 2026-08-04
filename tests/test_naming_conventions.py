@@ -21,22 +21,20 @@ class TestRenamedClasses(unittest.TestCase):
     """The new class / module names must be importable."""
 
     def test_model_module_imports_new_names(self):
-        from src.model.frankenstein_model import (
-            FrankensteinModelConfig,
-            FrankensteinTransformer,
-            FrankensteinDecoder,
-            HybridLayer,
-        )
+        from src.model.config import FrankensteinModelConfig
+        from src.model.hybrid_layer import HybridLayer
+        from src.model.frankenstein_encoder import FrankensteinEncoder
+        from src.model.frankenstein_decoder import FrankensteinDecoder
         self.assertTrue(callable(FrankensteinModelConfig))
-        self.assertTrue(callable(FrankensteinTransformer))
+        self.assertTrue(callable(FrankensteinEncoder))
         self.assertTrue(callable(FrankensteinDecoder))
         self.assertTrue(callable(HybridLayer))
 
     def test_package_reexports(self):
         from src import model as model_pkg
-        self.assertIn("FrankensteinTransformer", model_pkg.__all__)
+        self.assertIn("FrankensteinEncoder", model_pkg.__all__)
         self.assertIn("FrankensteinModelConfig", model_pkg.__all__)
-        self.assertTrue(hasattr(model_pkg, "FrankensteinTransformer"))
+        self.assertTrue(hasattr(model_pkg, "FrankensteinEncoder"))
         self.assertTrue(hasattr(model_pkg, "FrankensteinModelConfig"))
 
     def test_sbert_class_renamed(self):
@@ -48,17 +46,12 @@ class TestRenamedClasses(unittest.TestCase):
         self.assertTrue(callable(FrankensteinInference))
 
     def test_config_class_name_string(self):
-        from src.model.frankenstein_model import FrankensteinModelConfig
+        from src.model.config import FrankensteinModelConfig
         self.assertEqual(FrankensteinModelConfig.__name__, "FrankensteinModelConfig")
 
-    def test_transformer_class_name_string(self):
+    def test_encoder_class_name_string(self):
         from src.model.frankenstein_encoder import FrankensteinEncoder
         self.assertEqual(FrankensteinEncoder.__name__, "FrankensteinEncoder")
-
-    def test_transformer_alias_points_to_encoder(self):
-        from src.model.frankenstein_model import FrankensteinTransformer
-        from src.model.frankenstein_encoder import FrankensteinEncoder
-        self.assertIs(FrankensteinTransformer, FrankensteinEncoder)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -70,13 +63,10 @@ class TestOldNamesRemoved(unittest.TestCase):
         with self.assertRaises(ModuleNotFoundError):
             importlib.import_module("src.model.tormented_bert_frankestein")
 
-    def test_no_old_class_aliases(self):
-        from src.model import frankenstein_model as mod
-        for old in ("UltraConfig", "TormentedBertFrankenstein", "TormentedBertInference"):
-            self.assertFalse(
-                hasattr(mod, old),
-                f"{old} should no longer exist in frankenstein_model",
-            )
+    def test_shim_module_removed(self):
+        import importlib
+        with self.assertRaises(ModuleNotFoundError):
+            importlib.import_module("src.model.frankenstein_model")
 
     def test_no_ultra_config_in_package(self):
         import src.model as model_pkg
@@ -149,7 +139,7 @@ class TestExportModelType(unittest.TestCase):
         self.assertIn("frankenstein_config", te._CONFIGURATION_FILE)
         self.assertNotIn("ultra_config", te._CONFIGURATION_FILE)
         self.assertNotIn("UltraConfig", te._MODELING_FILE)
-        self.assertIn("FrankensteinTransformer", te._MODELING_FILE)
+        self.assertIn("FrankensteinEncoder", te._MODELING_FILE)
         self.assertIn("FrankensteinModelConfig", te._MODELING_FILE)
         self.assertIn("_MODEL_KEYS", te._MODELING_FILE)
         self.assertNotIn("_ULTRA_KEYS", te._MODELING_FILE)

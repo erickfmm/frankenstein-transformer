@@ -14,11 +14,9 @@ import json
 from typing import Optional
 
 try:
-    from ..model.frankenstein_model import (
-        FrankensteinDecoder,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from ..model.config import FrankensteinModelConfig
+    from ..model.frankenstein_decoder import FrankensteinDecoder
+    from ..model.frankenstein_encoder import FrankensteinEncoder
     from .quantization import (
         bake_bitnet_weights,
         save_quantized_checkpoint,
@@ -29,11 +27,9 @@ try:
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..utils.config_flatten import flatten_model_dict
 except ImportError:
-    from model.frankenstein_model import (
-        FrankensteinDecoder,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from model.config import FrankensteinModelConfig
+    from model.frankenstein_decoder import FrankensteinDecoder
+    from model.frankenstein_encoder import FrankensteinEncoder
     from deploy.quantization import (
         bake_bitnet_weights,
         save_quantized_checkpoint,
@@ -61,7 +57,7 @@ class ModelDeployer:
     Attributes:
         config: :class:`FrankensteinModelConfig` for the model.
         device: PyTorch device for deployment conversion.
-        model: The loaded :class:`FrankensteinTransformer` instance.
+        model: The loaded :class:`FrankensteinEncoder` instance.
     """
 
     def __init__(self, config: FrankensteinModelConfig, device: str = "cpu"):
@@ -76,7 +72,7 @@ class ModelDeployer:
         self.model = None
 
     @staticmethod
-    def _build_model(config: FrankensteinModelConfig) -> "FrankensteinTransformer":
+    def _build_model(config: FrankensteinModelConfig) -> "FrankensteinEncoder":
         """Instantiate the model variant for the configured ``mode``.
 
         Args:
@@ -84,11 +80,11 @@ class ModelDeployer:
 
         Returns:
             A ``FrankensteinDecoder`` when ``mode == "decoder"``, else a
-            plain :class:`FrankensteinTransformer`.
+            plain :class:`FrankensteinEncoder`.
         """
         if getattr(config, "mode", "encoder") == "decoder":
             return FrankensteinDecoder(config)
-        return FrankensteinTransformer(config)
+        return FrankensteinEncoder(config)
 
     def load_training_checkpoint(self, checkpoint_path: str) -> None:
         """
@@ -116,7 +112,7 @@ class ModelDeployer:
         if isinstance(self.config.mode, str) and self.config.mode == "decoder":
             self.model = FrankensteinDecoder(self.config)
         else:
-            self.model = FrankensteinTransformer(self.config)
+            self.model = FrankensteinEncoder(self.config)
         self.model.to(self.device)
         
         # Load state dict. Decoder/Mini wrap a backbone; checkpoints may store
@@ -273,7 +269,7 @@ class ModelDeployer:
             if isinstance(config.mode, str) and config.mode == "decoder":
                 model = FrankensteinDecoder(config)
             else:
-                model = FrankensteinTransformer(config)
+                model = FrankensteinEncoder(config)
             model.to(self.device)
             
             # Load weights

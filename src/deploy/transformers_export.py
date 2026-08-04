@@ -36,7 +36,7 @@ from typing import Any, Dict
 
 from transformers import PretrainedConfig
 
-from .model.frankenstein_model import FrankensteinModelConfig
+from .model.config import FrankensteinModelConfig
 
 
 _MODEL_KEYS = {field.name for field in fields(FrankensteinModelConfig)}
@@ -91,11 +91,9 @@ from transformers import PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutput, MaskedLMOutput
 
 from .configuration_frankenstein import FrankensteinConfig
-from .model.frankenstein_model import (
-    FrankensteinDecoder,
-    FrankensteinTransformer,
-    FrankensteinModelConfig,
-)
+from .model.config import FrankensteinModelConfig
+from .model.frankenstein_decoder import FrankensteinDecoder
+from .model.frankenstein_encoder import FrankensteinEncoder
 
 
 _MODEL_KEYS = {field.name for field in fields(FrankensteinModelConfig)}
@@ -116,7 +114,7 @@ def _build_core_model(config: FrankensteinConfig) -> nn.Module:
         if model_cfg.mode != "decoder":
             model_cfg.mode = "decoder"
         return FrankensteinDecoder(model_cfg)
-    return FrankensteinTransformer(model_cfg)
+    return FrankensteinEncoder(model_cfg)
 
 
 class FrankensteinPreTrainedModel(PreTrainedModel):
@@ -252,11 +250,9 @@ def _bake_state_dict(
     Returns:
         Tuple of ``(baked_state_dict, num_baked_layers)``.
     """
-    from src.model.frankenstein_model import (
-        FrankensteinDecoder,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from src.model.config import FrankensteinModelConfig
+    from src.model.frankenstein_decoder import FrankensteinDecoder
+    from src.model.frankenstein_encoder import FrankensteinEncoder
     from src.utils.config_flatten import flatten_model_dict
 
     model_cfg = FrankensteinModelConfig(**flatten_model_dict(model_config))
@@ -266,7 +262,7 @@ def _bake_state_dict(
             model_cfg.mode = "decoder"
         model = FrankensteinDecoder(model_cfg)
     else:
-        model = FrankensteinTransformer(model_cfg)
+        model = FrankensteinEncoder(model_cfg)
 
     model.load_state_dict(state_dict, strict=False)
     model.eval()

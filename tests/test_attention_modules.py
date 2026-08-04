@@ -6,7 +6,7 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.frankenstein_model import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig
     from src.model.attention.standard import StandardAttention
     from src.model.attention.sigmoid import SigmoidAttention
     from src.model.attention.titan import TitanAttention

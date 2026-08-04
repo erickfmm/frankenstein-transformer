@@ -27,7 +27,9 @@ from src.model.attention import (
     StandardAttention,
     TitanAttention,
 )
-from src.model.frankenstein_model import HybridLayer, FrankensteinTransformer, FrankensteinModelConfig
+from src.model.config import FrankensteinModelConfig
+from src.model.hybrid_layer import HybridLayer
+from src.model.frankenstein_encoder import FrankensteinEncoder
 
 
 class AttentionRefactorTests(unittest.TestCase):
@@ -61,7 +63,7 @@ class AttentionRefactorTests(unittest.TestCase):
         )
 
     def test_import_smoke(self):
-        self.assertTrue(callable(FrankensteinTransformer))
+        self.assertTrue(callable(FrankensteinEncoder))
         self.assertTrue(callable(FrankensteinModelConfig))
         self.assertTrue(callable(EngramLayer))
         self.assertTrue(callable(TitanAttention))
@@ -90,7 +92,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_default_forward_compat(self):
         config = self._build_config(["titan_attn", "standard_attn"])
         config.num_layers = 2
-        model = FrankensteinTransformer(config)
+        model = FrankensteinEncoder(config)
         x = torch.randint(0, config.vocab_size, (2, 8))
         y = model(x)
         self.assertEqual(y.shape, (2, 8, config.vocab_size))
@@ -139,7 +141,7 @@ class AttentionRefactorTests(unittest.TestCase):
         ]
         for layer_type in layer_types:
             config = self._build_config([layer_type])
-            model = FrankensteinTransformer(config)
+            model = FrankensteinEncoder(config)
             x = torch.randint(0, config.vocab_size, (1, 6))
             y = model(x)
             self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
@@ -147,7 +149,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_training_free_sparse_layers_eval_only(self):
         for layer_type in ["fasa_attn", "sparge_attn"]:
             config = self._build_config([layer_type])
-            model = FrankensteinTransformer(config)
+            model = FrankensteinEncoder(config)
             model.eval()
             x = torch.randint(0, config.vocab_size, (1, 6))
             with torch.no_grad():
@@ -157,7 +159,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_training_free_sparse_layers_raise_in_train_mode(self):
         for layer_type in ["fasa_attn", "sparge_attn"]:
             config = self._build_config([layer_type])
-            model = FrankensteinTransformer(config)
+            model = FrankensteinEncoder(config)
             model.train()
             x = torch.randint(0, config.vocab_size, (1, 6))
             with self.assertRaisesRegex(ValueError, "training-free"):
@@ -201,7 +203,7 @@ class AttentionRefactorTests(unittest.TestCase):
         config.use_mixture_of_depths = True
         config.mixture_of_depths_capacity_ratio = 0.5
         config.mixture_of_depths_router_aux_loss_weight = 0.25
-        model = FrankensteinTransformer(config)
+        model = FrankensteinEncoder(config)
         x = torch.randint(0, config.vocab_size, (2, 6))
         y = model(x)
         self.assertEqual(y.shape, (2, 6, config.vocab_size))

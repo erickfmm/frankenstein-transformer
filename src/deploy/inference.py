@@ -15,22 +15,18 @@ from typing import List, Optional, Union
 import time
 
 try:
-    from ..model.frankenstein_model import (
-        FrankensteinDecoder,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from ..model.config import FrankensteinModelConfig
+    from ..model.frankenstein_decoder import FrankensteinDecoder
+    from ..model.frankenstein_encoder import FrankensteinEncoder
     from .quantization import load_quantized_checkpoint
     from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..model.attention.common import BitLinear
     from ..utils.config_flatten import flatten_model_dict
 except ImportError:
-    from model.frankenstein_model import (
-        FrankensteinDecoder,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from model.config import FrankensteinModelConfig
+    from model.frankenstein_decoder import FrankensteinDecoder
+    from model.frankenstein_encoder import FrankensteinEncoder
     from deploy.quantization import load_quantized_checkpoint
     from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
@@ -56,7 +52,7 @@ class FrankensteinInference:
         device: Resolved PyTorch device string.
         use_half_precision: Whether FP16 inference is enabled (CUDA only).
         config: Loaded :class:`FrankensteinModelConfig`.
-        model: Loaded :class:`FrankensteinTransformer` in eval mode.
+        model: Loaded :class:`FrankensteinEncoder` in eval mode.
         tokenizer: Optional :class:`SpanishSPMTokenizer` instance.
     """
 
@@ -109,13 +105,13 @@ class FrankensteinInference:
         logger.info(f"Config loaded: {config.hidden_size}D, {config.num_layers} layers")
         return config
     
-    def _load_model(self) -> FrankensteinTransformer:
+    def _load_model(self) -> FrankensteinEncoder:
         """Load and prepare model for inference."""
         # Initialize model (decoder when configured)
         if isinstance(self.config.mode, str) and self.config.mode == "decoder":
             model = FrankensteinDecoder(self.config)
         else:
-            model = FrankensteinTransformer(self.config)
+            model = FrankensteinEncoder(self.config)
         
         # Find model file
         model_files = list(self.model_dir.glob("model*.pt"))

@@ -7,7 +7,7 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 if TORCH_AVAILABLE:
     import torch
     from src.model.embeddings import FactorizedEmbedding
-    from src.model.frankenstein_model import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig
 
 
 def _cfg(**overrides):

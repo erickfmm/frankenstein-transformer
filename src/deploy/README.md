@@ -116,7 +116,7 @@ Or in interactive mode, just type `benchmark`.
 
 ```python
 from deploy.v2 import ModelDeployer
-from model.v2.frankenstein_model import FrankensteinModelConfig
+from model.config import FrankensteinModelConfig
 
 # Initialize deployer
 config = FrankensteinModelConfig(

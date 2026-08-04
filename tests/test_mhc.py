@@ -11,11 +11,9 @@ if TORCH_AVAILABLE:
         SinkhornKnoppFunction,
     )
     from src.model.attention.common import BitLinear
-    from src.model.frankenstein_model import (
-        HybridLayer,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from src.model.config import FrankensteinModelConfig
+    from src.model.hybrid_layer import HybridLayer
+    from src.model.frankenstein_encoder import FrankensteinEncoder
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -119,14 +117,14 @@ class MhcModelTests(unittest.TestCase):
 
     def test_model_output_shape(self):
         cfg = self._cfg()
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         self.assertEqual(out.shape, (2, 8, 128))
 
     def test_gradient_flows_through_sinkhorn(self):
         cfg = self._cfg()
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         out.sum().backward()
@@ -136,7 +134,7 @@ class MhcModelTests(unittest.TestCase):
 
     def test_checkpoint_forward_backward(self):
         cfg = self._cfg(mhc_checkpoint=True)
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         out.sum().backward()
@@ -144,7 +142,7 @@ class MhcModelTests(unittest.TestCase):
 
     def test_moe_supported_with_mhc(self):
         cfg = self._cfg(use_moe=True, num_experts=2, top_k_experts=1)
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         out.sum().backward()
@@ -157,7 +155,7 @@ class MhcModelTests(unittest.TestCase):
 
     def test_stream_expansion_modules_present(self):
         cfg = self._cfg()
-        model = FrankensteinTransformer(cfg)
+        model = FrankensteinEncoder(cfg)
         self.assertIsNotNone(model.mhc_in_proj)
         self.assertIsNotNone(model.mhc_out_proj)
 

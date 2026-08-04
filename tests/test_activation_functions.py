@@ -28,7 +28,7 @@ if TORCH_AVAILABLE:
         make_gated_ffn,
     )
     from src.model.activation_function.learnable import _APPROX_FUNCTIONS
-    from src.model.frankenstein_model import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig
 
 
 def _cfg(ffn_activation="silu", hidden_size=8, ffn_hidden_size=16, **acfg):

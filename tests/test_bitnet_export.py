@@ -15,11 +15,9 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 if TORCH_AVAILABLE:
     import json
     import torch
-    from src.model.frankenstein_model import (
-        FrankensteinDecoder,
-        FrankensteinTransformer,
-        FrankensteinModelConfig,
-    )
+    from src.model.config import FrankensteinModelConfig
+    from src.model.frankenstein_decoder import FrankensteinDecoder
+    from src.model.frankenstein_encoder import FrankensteinEncoder
     from src.deploy.transformers_export import export_transformers_model
 
 
@@ -70,7 +68,7 @@ class TestBitNetHFExport(unittest.TestCase):
         return export_transformers_model(ckpt, ypath, out), out
 
     def test_quantization_config_declared(self):
-        m = FrankensteinTransformer(_cfg())
+        m = FrankensteinEncoder(_cfg())
         ckpt = self._save_ckpt(m)
         overrides = "  use_bitnet: true\n  bitnet_routers: false"
         res, out = self._export(ckpt, _yaml_text(overrides))
@@ -85,7 +83,7 @@ class TestBitNetHFExport(unittest.TestCase):
         self.assertTrue(qc["ternary_weights"])
 
     def test_exported_weights_are_ternary(self):
-        m = FrankensteinTransformer(_cfg())
+        m = FrankensteinEncoder(_cfg())
         ckpt = self._save_ckpt(m)
         overrides = "  use_bitnet: true\n  bitnet_routers: false"
         res, out = self._export(ckpt, _yaml_text(overrides))
@@ -100,7 +98,7 @@ class TestBitNetHFExport(unittest.TestCase):
     def test_no_quantization_config_without_bitnet(self):
         cfg = _cfg()
         cfg.use_bitnet = False
-        m = FrankensteinTransformer(cfg)
+        m = FrankensteinEncoder(cfg)
         ckpt = self._save_ckpt(m)
         overrides = "  use_bitnet: false\n  bitnet_routers: false"
         res, out = self._export(ckpt, _yaml_text(overrides))
