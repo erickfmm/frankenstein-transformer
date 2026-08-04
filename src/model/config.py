@@ -1,0 +1,457 @@
+#!/usr/bin/env python3
+"""Frankenstein Transformer: model configuration dataclass.
+
+This module hosts :class:`FrankensteinModelConfig`, the single-source-of-truth
+dataclass for all model hyperparameters, along with the helper validator
+:func:`_validate_ffn_activation_config`.
+
+The configuration is validated in ``FrankensteinModelConfig.__post_init__`` and
+enforced by ``src/schema.yaml`` for YAML-based training configs.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+from .activation_function import ALL_ACTIVATIONS
+
+# Allowed keys for the nested ``ffn_activation_config`` mapping. Each entry
+# maps to the validation rule applied by ``_validate_ffn_activation_config``.
+_FFN_ACTIVATION_CONFIG_KEYS = {
+    "raf_degrees", "raf_version", "raf_approx_func", "raf_trainable",
+    "raf_input_scaling", "prelu_init", "elu_alpha", "celu_alpha",
+    "swish_beta", "leaky_relu_slope", "pelu_alpha", "mpelu_alpha",
+    "mpelu_beta", "felu_alpha", "eelu_alpha", "eelu_beta", "pdelu_alpha",
+    "preu_alpha", "preu_beta", "softexp_alpha", "maxout_pieces",
+}
+_RAF_VERSIONS = {"A", "B", "C", "D", "N"}
+_RAF_APPROX_FUNCS = {
+    "gelu", "relu", "leaky_relu", "leaky_relu_0.1", "sigmoid", "tanh",
+    "swish", "silu", "identity",
+}
+
+
+def _validate_ffn_activation_config(activation: str, cfg: Dict[str, Any]) -> None:
+    """Validate the nested ``ffn_activation_config`` mapping.
+
+    Args:
+        activation: The lower-cased ``ffn_activation`` name.
+        cfg: The nested config mapping.
+
+    Raises:
+        ValueError: If an unknown key is present, a value has the wrong type,
+            or a RAF-specific constraint (degrees, version, approx_func) is
+            violated.
+    """
+    unknown = set(cfg) - _FFN_ACTIVATION_CONFIG_KEYS
+    if unknown:
+        raise ValueError(
+            f"Unknown ffn_activation_config keys: {sorted(unknown)}. "
+            f"Allowed: {sorted(_FFN_ACTIVATION_CONFIG_KEYS)}"
+        )
+    # Type checks for the boolean keys.
+    for bk in ("raf_trainable", "raf_input_scaling"):
+        if bk in cfg and not isinstance(cfg[bk], bool):
+            raise ValueError(f"ffn_activation_config.{bk} must be a boolean")
+    # Float keys.
+    for fk in (
+        "prelu_init", "elu_alpha", "celu_alpha", "swish_beta", "leaky_relu_slope",
+        "pelu_alpha", "mpelu_alpha", "mpelu_beta", "felu_alpha", "eelu_alpha",
+        "eelu_beta", "pdelu_alpha", "preu_alpha", "preu_beta", "softexp_alpha",
+    ):
+        if fk in cfg and not isinstance(cfg[fk], (int, float)):
+            raise ValueError(f"ffn_activation_config.{fk} must be a number")
+    if "maxout_pieces" in cfg:
+        if not isinstance(cfg["maxout_pieces"], int) or cfg["maxout_pieces"] < 1:
+            raise ValueError("ffn_activation_config.maxout_pieces must be an int >= 1")
+    # RAF degrees.
+    if "raf_degrees" in cfg:
+        d = cfg["raf_degrees"]
+        if (
+            not isinstance(d, (list, tuple))
+            or len(d) != 2
+            or not all(isinstance(v, int) and v >= 1 for v in d)
+        ):
+            raise ValueError(
+                "ffn_activation_config.raf_degrees must be a [m, n] pair of ints >= 1"
+            )
+    if "raf_version" in cfg and cfg["raf_version"] not in _RAF_VERSIONS:
+        raise ValueError(
+            f"ffn_activation_config.raf_version must be one of "
+            f"{sorted(_RAF_VERSIONS)}, got {cfg['raf_version']!r}"
+        )
+    if "raf_approx_func" in cfg and cfg["raf_approx_func"] not in _RAF_APPROX_FUNCS:
+        raise ValueError(
+            f"ffn_activation_config.raf_approx_func must be one of "
+            f"{sorted(_RAF_APPROX_FUNCS)}, got {cfg['raf_approx_func']!r}"
+        )
+
+
+@dataclass
+class FrankensteinModelConfig:
+    """Single-source-of-truth configuration for all Frankenstein model variants.
+
+    Every hyperparameter lives here. The schema is validated in
+    ``__post_init__`` and enforced by ``configs/schema.yaml`` for YAML-based
+    training configs.
+
+    Attributes:
+        vocab_size: Vocabulary size for token embeddings. Default: 50000.
+        hidden_size: Dimensionality of hidden states throughout the model.
+            Must be divisible by ``num_heads``. Default: 2048.
+        num_layers: Number of physical :class:`HybridLayer` blocks in the
+            stack. Default: 12.
+        num_loops: Number of times the layer stack is repeated (looped depth).
+            Logical depth = ``num_layers * num_loops``. Default: 2.
+        layer_pattern: Ordered list of mixer types assigned to each physical
+            layer. The pattern is cycled modulo its length when
+            ``num_layers`` exceeds the pattern length. Supported values:
+            ``"ode"``, ``"retnet"``, ``"retnet_attn"``, ``"titan_attn"``,
+            ``"standard_attn"``, ``"sigmoid_attn"``, ``"mamba"``,
+            ``"sparse_transformer_attn"``, ``"longformer_attn"``,
+            ``"bigbird_attn"``, ``"sparsek_attn"``, ``"nsa_attn"``,
+            ``"sparge_attn"``, ``"fasa_attn"``, ``"gla_attn"``,
+            ``"deltanet_attn"``, ``"gated_deltanet_attn"``,
+            ``"gated_deltanet2_attn"``,
+            ``"hgrn2_attn"``, ``"fox_attn"``, ``"gated_softmax_attn"``,
+            ``"kda_attn"``,
+            ``"engram_attn"``, ``"gqa_attn"``,
+            ``"mla_attn"``, ``"gqla_attn"``, ``"mlra_attn"``,
+            ``"tucker_attn"``, ``"iha_attn"``, ``"gta_attn"``,
+            ``"mtla_attn"``, ``"cca_attn"``, ``"ccgqa_attn"``,
+            ``"msa_attn"``, ``"sparda_attn"``.
+            Default: ``["retnet", "ode", "mamba", "titan_attn"] * 3``.
+        ode_solver: ODE solver for ``ode`` mixer layers. One of ``"rk4"``
+            (Runge-Kutta 4th order) or ``"euler"``. Default: ``"rk4"``.
+        ode_steps: Number of ODE integration steps per ``ode`` layer.
+            Default: 2.
+        retention_heads: Number of retention heads for ``retnet`` /
+            ``retnet_attn`` layers. Default: 8.
+        num_heads: Number of attention heads for standard / sparse / gated
+            attention mixers. Default: 16.
+        num_experts: Total number of FFN experts when ``use_moe`` is True.
+            Default: 8.
+        top_k_experts: Number of experts activated per token in MoE routing.
+            Default: 2.
+        dropout: Dropout probability applied after embeddings and within
+            attention layers. Default: 0.1.
+        use_bitnet: If True, replace all primary and gate ``nn.Linear``
+            layers with :class:`BitLinear` (ternary weight quantization,
+            BitNet b1.58). Routing/scoring projections are governed
+            separately by ``bitnet_routers``. Default: True.
+        bitnet_routers: If True (and ``use_bitnet`` is True), also quantize
+            routing/scoring projections (MoE router, Mixture-of-Depths
+            router, sparse block-index/forecast, top-k score nets) to
+            :class:`BitLinear`. Default ``False`` keeps them full-precision
+            for routing stability. Default: False.
+        use_bitnet_conv: If True (and ``use_bitnet`` is True), replace the
+            factorized-embedding Conv1d pre-projection with
+            :class:`BitConv1d` (ternary weights). Default ``False`` keeps
+            the Conv1d full-precision; the convolution operates over the
+            reduced embedding stream where ternary quantization can be noisy.
+            No effect when ``use_bitnet`` is False or the embedding conv is
+            disabled. Default: False.
+        norm_type: Normalization layer type. One of ``"layer_norm"``,
+            ``"dynamic_tanh"`` (DyT), ``"derf"`` (Dynamic Erf),
+            ``"rms_norm"`` (RMSNorm), ``"prms_norm"`` (partial RMSNorm),
+            or ``"flash_norm"`` (FlashNorm — weightless RMSNorm; the
+            per-dim scale ``g`` is dropped per Prop. 1 of arXiv:2407.09577
+            and is meant to be absorbed by the subsequent linear layer).
+            Default: ``"dynamic_tanh"``.
+        prms_partial_ratio: Fraction of hidden dimensions used for RMS
+            estimation when ``norm_type="prms_norm"``. The paper default is
+            6.25%. Must be in ``(0, 1]``. Ignored for other ``norm_type``
+            values. Default: ``0.0625``.
+        flashnorm_partial_ratio: Fraction of hidden dimensions used for
+            RMS estimation when ``norm_type="flash_norm"``. ``0.0``
+            (default) uses the full RMS — standard FlashNorm. Values in
+            ``(0, 1]`` activate the partial-RMS variant (composing the
+            pRMSNorm trick with Prop. 1 of FlashNorm). Must be in
+            ``[0, 1]``. Ignored for other ``norm_type`` values.
+            Default: ``0.0``.
+        use_factorized_embedding: If True, use :class:`FactorizedEmbedding`
+            with reduced embedding dimension + projection. Default: False.
+        factorized_embedding_dim: Embedding dimension when factorization is
+            enabled. Default: 128.
+        use_embedding_conv: If True, apply a Conv1d over the factorized
+            embedding stream before projection. Default: True.
+        hope_base: Base frequency for HoPE (Hybrid Positional Encoding).
+            Default: 10000.0.
+        hope_damping: Damping factor for HoPE high-frequency components.
+            Default: 0.01.
+        rope_base: Base frequency for RoPE (Rotary Position Embedding).
+            Default: 10000.0.
+        rope_scaling: Scaling factor applied to RoPE frequencies.
+            Default: 1.0.
+        use_hope: Legacy toggle for HoPE. Automatically aligned with
+            ``positional_encoding`` in ``__post_init__``. Default: True.
+        positional_encoding: Explicit positional encoding scheme. One of
+            ``"hope"`` or ``"rope"``. If None, inferred from ``use_hope``.
+            Default: None.
+        use_moe: If True, replace the dense FFN with a Mixture-of-Experts
+            FFN block. Default: True.
+        use_mixture_of_depths: If True, apply per-layer token routing where
+            only the top-capacity tokens are updated; remaining tokens are
+            passed through unchanged. Default: False.
+        mixture_of_depths_capacity_ratio: Fraction of tokens selected per
+            layer when Mixture-of-Depths is active. Must be in (0, 1].
+            Default: 0.5.
+        mixture_of_depths_router_aux_loss_weight: Weight for the auxiliary
+            load-balancing loss in Mixture-of-Depths routing. Must be >= 0.
+            Default: 0.0.
+        ffn_hidden_size: Hidden size of the FFN intermediate layer. If None,
+            defaults to ``hidden_size * 2``. Default: None.
+        ffn_activation: FFN activation function. One of the elementwise
+            activations (e.g. ``"silu"`` (default, SiLU / Swish), ``"gelu"``,
+            ``"relu"``, ``"mish"``, ``"prelu"``, ``"raf"`` (Rational Activation
+            Function, learnable), ...) or a gated FFN variant
+            (``"swiglu"``, ``"geglu"``, ``"reglu"``). See
+            ``src/model/activation_function/factory.py`` for the full enum.
+        ffn_activation_config: Optional nested mapping of learnable-activation
+            parameters (e.g. ``raf_degrees``, ``raf_version``,
+            ``raf_approx_func``, ``raf_trainable``, ``raf_input_scaling``,
+            ``prelu_init``, ``elu_alpha``, ``swish_beta``). Ignored for
+            stateless activations. Default: ``None``.
+        embedding_conv_kernel: Kernel size for the embedding Conv1d when
+            ``use_embedding_conv`` is True. Default: 3.
+        mode: Model mode. ``"encoder"`` for bidirectional (MLM) or
+            ``"decoder"`` for autoregressive causal generation. The
+            ``model_class=frankensteindecoder`` preset forces ``mode=decoder``
+            at runtime. Default: ``"encoder"``.
+        engram_max_ngram_size: Highest N-gram order for Engram memory layers
+            (range 2..max). Default: 3.
+        engram_n_heads_per_ngram: Number of hash heads per N-gram order in
+            Engram layers. Default: 4.
+        engram_embed_dim_per_head: Embedding dimension per Engram hash head.
+            Default: 32.
+        engram_kernel_size: ShortConv kernel width for Engram layers.
+            Default: 4.
+        engram_seed: RNG seed for Engram hash multipliers. Default: 42.
+
+    Raises:
+        ValueError: If ``positional_encoding`` is not ``"hope"`` or
+            ``"rope"``.
+        ValueError: If ``mode`` is not ``"encoder"`` or ``"decoder"``.
+        ValueError: If ``mixture_of_depths_capacity_ratio`` is not in (0, 1].
+        ValueError: If ``mixture_of_depths_router_aux_loss_weight`` is < 0.
+    """
+
+    vocab_size: int = 50000
+    hidden_size: int = 2048
+    num_layers: int = 12
+    num_loops: int = 2
+
+    layer_pattern: List[str] = field(default_factory=lambda: ["retnet", "ode", "mamba", "titan_attn"] * 3)
+
+    ode_solver: str = "rk4"
+    ode_steps: int = 2
+
+    retention_heads: int = 8
+
+    num_heads: int = 16
+    num_experts: int = 8
+    top_k_experts: int = 2
+    dropout: float = 0.1
+
+    use_bitnet: bool = True
+    bitnet_routers: bool = False
+    use_bitnet_conv: bool = False
+    norm_type: str = "dynamic_tanh"
+    prms_partial_ratio: float = 0.0625
+    flashnorm_partial_ratio: float = 0.0
+    use_factorized_embedding: bool = False
+    factorized_embedding_dim: int = 128
+    use_embedding_conv: bool = True
+
+    hope_base: float = 10_000.0
+    hope_damping: float = 0.01
+    rope_base: float = 10_000.0
+    rope_scaling: float = 1.0
+
+    use_hope: bool = True
+    positional_encoding: Optional[str] = None
+    use_moe: bool = True
+    use_mixture_of_depths: bool = False
+    mixture_of_depths_capacity_ratio: float = 0.5
+    mixture_of_depths_router_aux_loss_weight: float = 0.0
+    ffn_hidden_size: Optional[int] = None
+    ffn_activation: str = "silu"
+    ffn_activation_config: Optional[Dict[str, Any]] = None
+    embedding_conv_kernel: int = 3
+    mode: str = "encoder"
+
+    engram_max_ngram_size: int = 3
+    engram_n_heads_per_ngram: int = 4
+    engram_embed_dim_per_head: int = 32
+    engram_kernel_size: int = 4
+    engram_seed: int = 42
+
+    # ---- mHC: Manifold-Constrained Hyper-Connections (arXiv:2512.24880) ----
+    # Expands the residual stream to width ``n * hidden_size`` and constrains
+    # the stream-mixing matrix ``H[res]`` to the Birkhoff polytope (doubly
+    # stochastic) via Sinkhorn-Knopp, restoring the identity-mapping property.
+    use_mhc: bool = False
+    mhc_expansion_rate: int = 4
+    mhc_sinkhorn_iters: int = 20
+    mhc_gating_init: float = 0.01
+    mhc_checkpoint: bool = False
+    # Keep ``φ_l`` full-precision under BitNet (avoids ternary-quantisation
+    # noise on the small mHC coefficients). Defaults to True.
+    mhc_full_prec_under_bitnet: bool = True
+
+    num_kv_heads: int = 1
+
+    # ---- MLA (arXiv:2506.09342) ----
+    mla_latent_rank: Optional[int] = None
+
+    # ---- GQLA (arXiv:2605.15250) ----
+    gqla_latent_rank: Optional[int] = None
+    gqla_num_groups: Optional[int] = None
+    gqla_decode_path: str = "gqa"
+
+    # ---- MLRA (arXiv:2603.02188) ----
+    mlra_latent_rank: Optional[int] = None
+    mlra_num_latent_heads: int = 4
+
+    # ---- Tucker Attention (arXiv:2603.30033) ----
+    tucker_query_rank: Optional[int] = None
+    tucker_key_rank: Optional[int] = None
+    tucker_value_rank: Optional[int] = None
+
+    # ---- IHA (arXiv:2602.21371) ----
+    iha_num_pseudo_heads: Optional[int] = None
+
+    # ---- GTA (arXiv:2506.17286) ----
+    gta_num_shared_groups: Optional[int] = None
+    gta_value_latent_rank: Optional[int] = None
+
+    # ---- MTLA (arXiv:2505.13544) ----
+    mtla_latent_rank: Optional[int] = None
+    mtla_merge_factor: int = 2
+    mtla_stride: Optional[int] = None
+
+    # ---- CCA / CCGQA (arXiv:2510.04476) ----
+    cca_latent_rank: Optional[int] = None
+    cca_num_conv_layers: int = 2
+    cca_conv_kernel_seq: int = 4
+    cca_conv_kernel_ch: int = 3
+    cca_qk_mean: bool = True
+    cca_value_shift: bool = True
+
+    ccgqa_query_latent_rank: Optional[int] = None
+    ccgqa_kv_latent_rank: Optional[int] = None
+    ccgqa_num_kv_heads: Optional[int] = None
+    ccgqa_num_conv_layers: int = 2
+    ccgqa_conv_kernel_seq: int = 4
+    ccgqa_conv_kernel_ch: int = 3
+    ccgqa_qk_mean: bool = True
+    ccgqa_value_shift: bool = True
+
+    # ---- MSA / MiniMax Sparse Attention (arXiv:2606.13392) ----
+    msa_block_size: int = 128
+    msa_topk_blocks: int = 16
+    msa_index_dim: int = 64
+    msa_kl_loss_weight: float = 0.0
+
+    # ---- SparDA (arXiv:2606.04511) ----
+    sparda_block_size: int = 128
+    sparda_topk_blocks: int = 16
+    sparda_forecast_dim: int = 64
+
+    def __post_init__(self):
+        """Validate and derive dependent configuration fields after dataclass init.
+
+        Derives ``ffn_hidden_size``, ``positional_encoding``, and aligns the
+        legacy ``use_hope`` flag. Validates ``mode``, ``positional_encoding``,
+        and Mixture-of-Depths parameter ranges.
+
+        Raises:
+            ValueError: If any field fails validation constraints.
+        """
+        if self.ffn_hidden_size is None:
+            self.ffn_hidden_size = self.hidden_size * 2
+
+        # ---- Resolve latent-family ranks that default to hidden_size // 2 ----
+        half = max(1, self.hidden_size // 2)
+        if self.mla_latent_rank is None:
+            self.mla_latent_rank = half
+        if self.gqla_latent_rank is None:
+            self.gqla_latent_rank = half
+        if self.gqla_num_groups is None:
+            self.gqla_num_groups = max(1, self.num_heads // 4)
+        if self.mlra_latent_rank is None:
+            self.mlra_latent_rank = half
+        if self.tucker_query_rank is None:
+            self.tucker_query_rank = self.hidden_size
+        if self.tucker_key_rank is None:
+            self.tucker_key_rank = half
+        if self.tucker_value_rank is None:
+            self.tucker_value_rank = half
+        if self.iha_num_pseudo_heads is None:
+            self.iha_num_pseudo_heads = self.num_heads
+        if self.gta_num_shared_groups is None:
+            self.gta_num_shared_groups = max(1, self.num_heads // 4)
+        if self.gta_value_latent_rank is None:
+            self.gta_value_latent_rank = half
+        if self.mtla_latent_rank is None:
+            self.mtla_latent_rank = half
+        if self.mtla_stride is None:
+            self.mtla_stride = self.mtla_merge_factor
+
+        # ---- Resolve CCA / CCGQA defaults ----
+        if self.cca_latent_rank is None:
+            self.cca_latent_rank = max(1, self.hidden_size // 4)
+        if self.ccgqa_query_latent_rank is None:
+            self.ccgqa_query_latent_rank = half
+        if self.ccgqa_kv_latent_rank is None:
+            self.ccgqa_kv_latent_rank = max(1, self.hidden_size // 8)
+        if self.ccgqa_num_kv_heads is None:
+            self.ccgqa_num_kv_heads = max(1, self.num_heads // 4)
+
+        if self.positional_encoding is None:
+            self.positional_encoding = "hope" if bool(self.use_hope) else "rope"
+        else:
+            self.positional_encoding = str(self.positional_encoding).lower()
+            if self.positional_encoding not in {"hope", "rope"}:
+                raise ValueError("positional_encoding must be one of {'hope', 'rope'}")
+
+        self.use_hope = self.positional_encoding == "hope"
+
+        if self.mode not in {"encoder", "decoder"}:
+            raise ValueError("mode must be one of {'encoder', 'decoder'}")
+
+        if not 0.0 < float(self.mixture_of_depths_capacity_ratio) <= 1.0:
+            raise ValueError("mixture_of_depths_capacity_ratio must be in the range (0, 1]")
+
+        if float(self.mixture_of_depths_router_aux_loss_weight) < 0.0:
+            raise ValueError("mixture_of_depths_router_aux_loss_weight must be >= 0")
+
+        if not 0.0 < float(self.prms_partial_ratio) <= 1.0:
+            raise ValueError("prms_partial_ratio must be in the range (0, 1]")
+
+        if not 0.0 <= float(self.flashnorm_partial_ratio) <= 1.0:
+            raise ValueError("flashnorm_partial_ratio must be in the range [0, 1]")
+
+        # ---- Validate mHC (Manifold-Constrained Hyper-Connections) ----
+        if int(self.mhc_expansion_rate) < 1:
+            raise ValueError("mhc_expansion_rate must be >= 1")
+        if int(self.mhc_sinkhorn_iters) < 1:
+            raise ValueError("mhc_sinkhorn_iters must be >= 1")
+        if float(self.mhc_gating_init) <= 0.0:
+            raise ValueError("mhc_gating_init must be > 0")
+
+        # ---- Validate FFN activation ----
+        ffn_act = str(self.ffn_activation).lower()
+        if ffn_act not in ALL_ACTIVATIONS:
+            raise ValueError(
+                f"ffn_activation must be one of {sorted(ALL_ACTIVATIONS)}, "
+                f"got {self.ffn_activation!r}"
+            )
+        self.ffn_activation = ffn_act
+        if self.ffn_activation_config is not None:
+            if not isinstance(self.ffn_activation_config, dict):
+                raise ValueError(
+                    "ffn_activation_config must be a mapping (dict) when provided"
+                )
+            _validate_ffn_activation_config(self.ffn_activation, self.ffn_activation_config)

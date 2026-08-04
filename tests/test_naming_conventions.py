@@ -52,8 +52,13 @@ class TestRenamedClasses(unittest.TestCase):
         self.assertEqual(FrankensteinModelConfig.__name__, "FrankensteinModelConfig")
 
     def test_transformer_class_name_string(self):
+        from src.model.frankenstein_encoder import FrankensteinEncoder
+        self.assertEqual(FrankensteinEncoder.__name__, "FrankensteinEncoder")
+
+    def test_transformer_alias_points_to_encoder(self):
         from src.model.frankenstein_model import FrankensteinTransformer
-        self.assertEqual(FrankensteinTransformer.__name__, "FrankensteinTransformer")
+        from src.model.frankenstein_encoder import FrankensteinEncoder
+        self.assertIs(FrankensteinTransformer, FrankensteinEncoder)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

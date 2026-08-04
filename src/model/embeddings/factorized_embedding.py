@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from ..attention.common import BitConv1d, BitLinear
 
 if TYPE_CHECKING:
-    from ..frankenstein_model import FrankensteinModelConfig
+    from ..config import FrankensteinModelConfig
 
 
 class FactorizedEmbedding(nn.Module):
