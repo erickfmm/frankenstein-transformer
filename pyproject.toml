@@ -3,42 +3,48 @@ name = "transformer_encoder_frankenstein"
 version = "0.1.0"
 description = "Config-driven training library and CLI for end-to-end NLP workflows"
 readme = "README.md"
-requires-python = ">=3.9, <3.13"  # Changed: Avoid Python 3.13 for now
+requires-python = ">=3.9, <3.13"  # CI matrix: 3.10/3.11/3.12; conda env: 3.9
 
+# Default CUDA index — Tesla P40 / driver 12.4 compatible (cu118).
+# Users with newer drivers should pass the matching extra (`.[cu126]`/`.[cu128]`)
+# which overrides this default through its own index.
 [[tool.uv.index]]
 name = "pytorch-cu118"
 url = "https://download.pytorch.org/whl/cu118"
-default = true   # optional: set this index as the default for all packages
+default = true
 
 dependencies = [
-    "torch==2.6.0+cu118",  # Changed to 2.6 because security issues
-    "sentence-transformers>=3.0.0",
-    "sentencepiece>=0.1.99",
-    "sacremoses>=0.0.53",
-    "datasets>=2.14.0",
-    "transformers>=4.40.0",
-    "accelerate>=0.30.0",
+    "torch==2.6.0+cu118",                        # cu118 is the only install tested on the dev box (P40 / driver 12.4)
+    "transformers>=4.45.0,<5.0.0",              # 4.45+ for current SBERT/ModernBERT examples
+    "sentence-transformers>=3.3.0",             # pulled in by sbert-train/sbert-infer; 3.3 unlocks ModernBERT
+    "sentencepiece>=0.2.0",                     # optional Spanish tokenizer (spm_spa_redpajama35)
+    "datasets>=3.0.0",                          # HuggingFace streaming dataset for MLM + SBERT
     "tqdm>=4.66.0",
-    "numpy>=1.24.0",
-    "pandas>=2.0.0",
-    "psutil>=5.9.0",
+    "numpy>=1.26.0,<3.0",                       # last 1.x series (still Py 3.9 friendly); transformers caps it
+    "psutil>=5.9.0",                            # optional — startup disk-usage log in training main
     "PyYAML>=6.0.1",
-    "streamlit"
+    "streamlit>=1.39.0",                        # web-server subcommand
 ]
 
 [project.scripts]
 frankenstein-transformer = "src.cli:main"
 
 [project.optional-dependencies]
-train = [
-    "wandb>=0.15.0",
-    "tensorboard>=2.14.0",
-]
-cuda = [
-    "torch==2.6.0+cu118",  # CUDA 11.8 variant
-]
+# For a CPU-only install (CI uses this):    pip install -e ".[cpu]"
 cpu = [
-    "torch==2.6.0+cpu",  # CPU-only variant
+    "torch==2.7.0+cpu",
+]
+# For a CUDA 11.8 install (default, P40 OK): pip install -e ".[cu118]"
+cu118 = [
+    "torch==2.6.0+cu118",
+]
+# For CUDA 12.6 (driver >= 560):              pip install -e ".[cu126]"
+cu126 = [
+    "torch==2.7.0+cu126",
+]
+# For CUDA 12.8 (driver >= 570):              pip install -e ".[cu128]"
+cu128 = [
+    "torch==2.7.0+cu128",
 ]
 
 [build-system]
@@ -47,5 +53,3 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
-
-

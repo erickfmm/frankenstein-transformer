@@ -32,7 +32,7 @@ jobs:
       # CUDA device is present.
       - name: Install CPU-only torch
         run: |
-          pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
+          pip install torch==2.7.0+cpu --index-url https://download.pytorch.org/whl/cpu
 
       # Install all non-torch requirements from requirements.txt (CPU variant).
       # Strip the --extra-index-url directive and the torch line so that the

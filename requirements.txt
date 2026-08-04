@@ -1,23 +1,18 @@
 # Core dependencies for Spanish MoE-BERT
 # Python version: >=3.9, <3.13
+# Unused legacy deps removed: accelerate, sacremoses, pandas, wandb, tensorboard (audit 2026-08).
 
-# Use the PyTorch CUDA 11.8 index for torch
+# PyTorch CUDA 11.8 index — Tesla P40 / driver 12.4 compatible.
+# For driver >= 560 use: pip install -e ".[cu126]";  >= 570 use: ".[cu128]";  no GPU use: ".[cpu]"
 --extra-index-url https://download.pytorch.org/whl/cu118
 
 torch==2.6.0+cu118
-transformers>=4.40.0
-accelerate>=0.30.0
-sentence-transformers>=3.0.0
-sentencepiece>=0.1.99
-sacremoses>=0.0.53
-datasets>=2.14.0
+transformers>=4.45.0,<5.0.0
+sentence-transformers>=3.3.0
+sentencepiece>=0.2.0
+datasets>=3.0.0
 tqdm>=4.66.0
-numpy>=1.24.0
-pandas>=2.0.0
+numpy>=1.26.0,<3.0
 psutil>=5.9.0
 PyYAML>=6.0.1
-
-# Optional: training extras (uncomment if needed)
-wandb>=0.15.0
-tensorboard>=2.14.0
-streamlit
+streamlit>=1.39.0
