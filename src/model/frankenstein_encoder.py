@@ -5,6 +5,12 @@ This module hosts :class:`FrankensteinEncoder`, the flagship encoder model.
 It stacks ``num_layers`` :class:`HybridLayer` blocks, each configured by
 ``layer_pattern``, and repeats the entire stack ``num_loops`` times (looped
 depth). The logical depth is ``num_layers * num_loops``.
+
+The encoder additionally owns the cross-layer residual state used by the
+Attention Residuals variants (``full_attn``, ``block_attn``). For those
+strategies each :class:`HybridLayer` produces a layer output that is then
+aggregated by an externally-managed :class:`ResidualBase` module before
+the next layer consumes the resulting stream.
 """
 
 from __future__ import annotations
@@ -17,6 +23,7 @@ from .hybrid_layer import HybridLayer
 from .attention.common import BitLinear
 from .norm import get_norm
 from .embeddings import FactorizedEmbedding
+from .residuals import ResidualBase, build_residual
 
 
 class FrankensteinEncoder(nn.Module):
@@ -43,8 +50,16 @@ class FrankensteinEncoder(nn.Module):
     * **Mixture-of-Depths**: per-layer token routing where only the
       top-capacity tokens are updated; auxiliary load-balancing loss is
       accumulated and exposed via ``last_auxiliary_losses``.
-    * **Normalization**: ``layer_norm``, ``dynamic_tanh`` (DyT), or
-      ``derf`` (Dynamic Erf).
+    * **Residual connections** (this module wires the
+      :class:`ResidualBase` strategy):
+        - ``standard`` (default): fixed unit-weight sum.
+        - ``none`` (experimental): no skip connection.
+        - ``full_attn``: depth-wise softmax attention over all previous
+          layer outputs (arXiv:2603.15031).
+        - ``block_attn``: block-wise attention over ``N`` block
+          representations + intra-block partial sum.
+    * **Normalization**: ``layer_norm``, ``dynamic_tanh`` (DyT),
+      ``derf``, ``rms_norm``, ``prms_norm``, or ``flash_norm``.
     * **Positional encoding**: RoPE or HoPE, applied inside attention
       mixers.
 
@@ -56,6 +71,9 @@ class FrankensteinEncoder(nn.Module):
         layers: ModuleList of ``num_layers`` :class:`HybridLayer` blocks.
         final_norm: Final normalization before the output head.
         head: Output projection to vocabulary logits (Linear or BitLinear).
+        residual: :class:`ResidualBase` module owning the cross-layer
+            residual state. Stateless for ``standard`` / ``none``;
+            stateful for AttnRes variants.
         last_auxiliary_losses: Dict of auxiliary losses from the most recent
             forward pass (e.g. ``"mixture_of_depths_router_loss"``).
         last_mixture_of_depths_stats: Dict of MoD statistics from the most
@@ -92,6 +110,10 @@ class FrankensteinEncoder(nn.Module):
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         self.head = proj_cls(config.hidden_size, config.vocab_size)
 
+        # ---- Residual-connection module (AttnRes / standard) ----
+        # Built unconditionally so the encoder can dispatch on
+        # ``self.residual.is_attn_res`` without checking config flags.
+        self.residual: ResidualBase = build_residual(config)
         # mHC stream expansion / collapse. The embedding is C-dimensional; the
         # n-stream residual lives at (B, S, n, C). We expand the single stream
         # into ``n`` copies on entry and collapse back to ``C`` before the head.
@@ -124,6 +146,13 @@ class FrankensteinEncoder(nn.Module):
             # Expand the C-dim stream to (B, S, n, C).
             x = self.mhc_in_proj(x).view(bsz, seq_len, n, dim)
 
+        # ---- Residual state init for AttnRes variants ----
+        logical_depth = int(self.config.num_layers) * int(self.config.num_loops)
+        self.residual.register_state(num_layers=logical_depth)
+        self.residual.reset_state()
+        if self.residual.is_attn_res:
+            self.residual.set_embedding(x)
+
         logical_layer_idx = 0
         mixture_of_depths_aux_losses = []
         mixture_of_depths_selected_fractions = []
@@ -140,12 +169,21 @@ class FrankensteinEncoder(nn.Module):
                     )
                 else:
                     x = layer(x, logical_layer_idx=logical_layer_idx, input_ids=input_ids)
+                # For AttnRes variants, the depth-wise attention is the
+                # post-layer residual update. The layer has already applied
+                # its internal residual merge (``standard`` semantics);
+                # we now overwrite ``x`` with the attended aggregation over
+                # all previous layer outputs / block sums.
+                if self.residual.is_attn_res:
+                    x = self.residual(logical_layer_idx, x)
                 if layer.use_mixture_of_depths and layer.last_mixture_of_depths_aux_loss is not None:
                     mixture_of_depths_aux_losses.append(layer.last_mixture_of_depths_aux_loss)
                     mixture_of_depths_selected_fractions.append(
                         layer.last_mixture_of_depths_selected_fraction
                     )
                 logical_layer_idx += 1
+
+        x = self.residual.finalize(x)
 
         if self.use_mhc:
             bsz, seq_len, n, dim = x.shape

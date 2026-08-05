@@ -1,0 +1,80 @@
+model_class: frankenstein
+model:
+  dims:
+    vocab_size: 50000
+    hidden_size: 512
+    num_layers: 6
+    num_loops: 1
+    num_heads: 8
+    retention_heads: 8
+    dropout: 0.1
+    layer_pattern:
+    - standard_attn
+    - retnet
+    - mamba
+    mode: encoder
+  num_experts: 4
+  top_k_experts: 2
+  norm:
+    type: layer_norm
+  use_bitnet: true
+  bitnet_routers: false
+  use_bitnet_conv: false
+  embedding:
+    factorized:
+      enabled: true
+      dim: 128
+    conv:
+      enabled: false
+      kernel: 3
+  use_moe: true
+  ffn_hidden_size: 1024
+  ffn_activation: silu
+  residuals:
+    type: full_attn
+    full_attn:
+      init_query_zero: true
+      use_rmsnorm_keys: true
+    mhc_stream_mode: independent
+    gradient_checkpoint: false
+  attention:
+    titan:
+      positional_encoding: rope
+      rope:
+        base: 10000.0
+        scaling: 1.0
+      use_hope: false
+training:
+  task: mlm
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 512
+  mlm_probability: 0.15
+  max_samples: 1000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: ./temp_data/full_attn_res_cache
+  use_amp: false
+  gradient_accumulation_steps: 4
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-5
+      adamw-lr_norms: 5e-5
+      adamw-lr_attention: 3e-4
+      adamw-lr_other: 2e-4
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_attention: [0.9, 0.95]
+      adamw-betas_other: [0.9, 0.95]
+      adamw-eps_attention: 1e-8
+      adamw-eps_other: 1e-8
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  grad_clip_max_norm: 5.0
+  checkpoint_every_n_steps: 500
+  max_rolling_checkpoints: 3
+  csv_log_path: training_metrics_full_attn_res.csv

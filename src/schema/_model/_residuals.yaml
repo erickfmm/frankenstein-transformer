@@ -1,0 +1,335 @@
+type: object
+additionalProperties: false
+title: "Residual Connections (AttnRes / standard)"
+title_es: "Conexiones Residuales (AttnRes / estándar)"
+description: |-
+  Configuration for the residual-connection strategy used between
+  consecutive layers. Implements the four variants discussed in the
+  Attention Residuals paper (arXiv:2603.15031) plus the classical
+  standard residual.
+
+  **Mathematical framing.** Let ``h_l ∈ R^d`` denote the hidden state
+  entering layer ``l``, and ``f_l(h_l)`` the output of the layer's
+  mixer + FFN. The residual updates ``h_l → h_{l+1}`` according to
+  the chosen strategy:
+
+  1. ``"standard"`` (default): ``h_{l+1} = h_l + f_l(h_l)`` — fixed
+     unit-weight sum. Backwards-compatible with all pre-AttnRes
+     checkpoints. Stateless, no extra parameters.
+
+  2. ``"none"`` (experimental): ``h_{l+1} = f_l(h_l)`` — drops the
+     skip connection entirely. Useful as an ablation probe but
+     unstable for deep stacks. Stateless, no extra parameters.
+
+  3. ``"full_attn"`` (Full AttnRes, paper §3.1):
+     ``h_{l+1} = Σ_{i=0}^{l} α_{i→l} · v_i`` where ``v_0 = h_1``
+     (token embedding) and ``v_{i≥1} = f_i(h_i)``. The attention
+     weights are ``α_{i→l} = softmax_i(w_l^T · RMSNorm(v_i))`` with
+     a learned per-layer pseudo-query ``w_l ∈ R^d``. Adds
+     ``num_layers · hidden_size`` parameters (one ``w_l`` per layer).
+
+  4. ``"block_attn"`` (Block AttnRes, paper §3.2): partitions the
+     ``L`` logical layers into ``N`` blocks. Within a block, layer
+     outputs accumulate as a standard partial sum. Across blocks,
+     attention is applied over the ``N`` block representations + the
+     running partial sum. ``N`` interpolates between Full AttnRes
+     (``N = L``) and standard residuals (``N = 1``); the paper's
+     empirical sweet spot is ``N ≈ 8``.
+
+  **Integration with mHC (Manifold-Constrained Hyper-Connections).**
+  AttnRes variants can be combined with mHC. The ``mhc_stream_mode``
+  field selects whether attention is applied per stream
+  (``"independent"``, ``n`` parallel attentions) or jointly over the
+  flattened ``nC`` projection (``"joint"``).
+
+  **Mixture-of-Depths (MoD) compatibility.** MoD operates on token
+  routing within a layer and is orthogonal to the residual choice.
+  AttnRes variants can be combined with MoD; only the tokens selected
+  by MoD contribute to the layer-output buffer / partial sum.
+
+  **Reference:** Sun et al., "Attention Residuals", arXiv:2603.15031.
+  The standard residual is from He et al. (2015), "Deep Residual
+  Learning for Image Recognition", arXiv:1512.03385.
+description_es: |-
+  Configuración de la estrategia de conexión residual entre capas
+  consecutivas. Implementa las cuatro variantes discutidas en el
+  paper de Attention Residuals (arXiv:2603.15031) más la conexión
+  residual estándar clásica.
+
+  **Planteamiento matemático.** Sea ``h_l ∈ R^d`` el estado oculto
+  que entra en la capa ``l`` y ``f_l(h_l)`` la salida del mixer +
+  FFN de la capa. El residual actualiza ``h_l → h_{l+1}`` según la
+  estrategia elegida:
+
+  1. ``"standard"`` (por defecto): ``h_{l+1} = h_l + f_l(h_l)`` —
+     suma de peso unitario fijo. Compatible con todos los
+     checkpoints pre-AttnRes. Sin estado, sin parámetros extra.
+
+  2. ``"none"`` (experimental): ``h_{l+1} = f_l(h_l)`` — elimina la
+     conexión skip por completo. Útil como sonda de ablación pero
+     inestable para arquitecturas profundas. Sin estado, sin
+     parámetros extra.
+
+  3. ``"full_attn"`` (Full AttnRes, paper §3.1):
+     ``h_{l+1} = Σ_{i=0}^{l} α_{i→l} · v_i`` donde ``v_0 = h_1``
+     (embedding de tokens) y ``v_{i≥1} = f_i(h_i)``. Los pesos de
+     atención son ``α_{i→l} = softmax_i(w_l^T · RMSNorm(v_i))`` con
+     un pseudo-query aprendido por capa ``w_l ∈ R^d``. Añade
+     ``num_layers · hidden_size`` parámetros (un ``w_l`` por capa).
+
+  4. ``"block_attn"`` (Block AttnRes, paper §3.2): particiona las
+     ``L`` capas lógicas en ``N`` bloques. Dentro de un bloque, las
+     salidas de capa se acumulan como suma parcial estándar. A
+     través de los bloques, se aplica atención sobre las ``N``
+     representaciones de bloque + la suma parcial en curso. ``N``
+     interpola entre Full AttnRes (``N = L``) y residuales estándar
+     (``N = 1``); el sweet spot empírico del paper es ``N ≈ 8``.
+
+  **Integración con mHC (Manifold-Constrained Hyper-Connections).**
+  Las variantes AttnRes pueden combinarse con mHC. El campo
+  ``mhc_stream_mode`` selecciona si la atención se aplica por stream
+  (``"independent"``, ``n`` atenciones en paralelo) o conjuntamente
+  sobre la proyección aplanada ``nC`` (``"joint"``).
+
+  **Compatibilidad con Mixture-of-Depths (MoD).** MoD opera sobre
+  enrutamiento de tokens dentro de una capa y es ortogonal a la
+  elección residual. Las variantes AttnRes pueden combinarse con MoD;
+  solo los tokens seleccionados por MoD contribuyen al buffer de
+  salidas / suma parcial de capa.
+
+  **Referencia:** Sun et al., "Attention Residuals", arXiv:2603.15031.
+  El residual estándar proviene de He et al. (2015), "Deep Residual
+  Learning for Image Recognition", arXiv:1512.03385.
+properties:
+  type:
+    type: string
+    title: "Residual Type"
+    title_es: "Tipo de Residual"
+    description: |
+      Selects the residual-connection strategy applied between
+      consecutive transformer layers. See the module-level description
+      for the mathematical formulation of each option.
+
+      **Impact:** The default `standard` is the original Transformer
+      residual and is the safest choice. `full_attn` and `block_attn`
+      add depth-wise softmax attention and yield better quality at the
+      cost of additional memory/compute (one learned query vector per
+      layer + a buffer of layer outputs). `none` is experimental and
+      should only be used as an ablation probe.
+    description_es: |
+      Selecciona la estrategia de conexión residual aplicada entre
+      capas transformer consecutivas. Ver la descripción del módulo
+      para la formulación matemática de cada opción.
+
+      **Impacto:** El `standard` por defecto es el residual Transformer
+      original y es la opción más segura. `full_attn` y `block_attn`
+      añaden atención softmax sobre la profundidad y producen mejor
+      calidad a costa de memoria/cómputo extra (un vector de query
+      aprendido por capa + un buffer de salidas de capa). `none` es
+      experimental y debe usarse solo como sonda de ablación.
+    enum: [standard, none, full_attn, block_attn]
+    default: standard
+    examples: [standard, full_attn, block_attn]
+  full_attn:
+    type: object
+    additionalProperties: false
+    title: "Full Attention Residuals"
+    title_es: "Residuales de Atención Completa"
+    description: |
+      Hyper-parameters for the `full_attn` residual type. Ignored for
+      all other `type` values.
+    description_es: |
+      Hiperparámetros para el tipo de residual `full_attn`. Se ignoran
+      para todos los demás valores de `type`.
+    properties:
+      init_query_zero:
+        type: boolean
+        title: "Zero-Init Query Vectors"
+        title_es: "Inicialización a Cero de los Vectores de Query"
+        description: |
+          If `true`, initialise every per-layer query vector ``w_l``
+          to zero. The paper (§5) shows this is critical: at init the
+          softmax is uniform so AttnRes degenerates to an equal-weight
+          average of all previous outputs, matching the standard
+          residual and avoiding training volatility. If `false`, the
+          queries are random-initialised (rarely useful).
+        description_es: |
+          Si es `true`, inicializa cada vector de query por capa
+          ``w_l`` a cero. El paper (§5) muestra que esto es crítico:
+          al inicio, el softmax es uniforme, por lo que AttnRes
+          degenera a un promedio equiponderado de todas las salidas
+          previas, igualando el residual estándar y evitando
+          volatilidad de entrenamiento. Si es `false`, los queries se
+          inicializan aleatoriamente (rara vez útil).
+        default: true
+        examples: [true]
+      use_rmsnorm_keys:
+        type: boolean
+        title: "RMSNorm on Keys"
+        title_es: "RMSNorm en las Keys"
+        description: |
+          If `true` (paper §3.1 default), apply RMSNorm to the source
+          vectors ``v_i`` before the dot product with ``w_l``. This
+          prevents layers with naturally large magnitudes from
+          dominating the softmax. Ablations in §5.3 show a measurable
+          degradation without RMSNorm.
+        description_es: |
+          Si es `true` (paper §3.1 por defecto), aplica RMSNorm a los
+          vectores fuente ``v_i`` antes del producto punto con ``w_l``.
+          Esto evita que capas con magnitudes naturalmente grandes
+          dominen el softmax. Las ablaciones en §5.3 muestran una
+          degradación medible sin RMSNorm.
+        default: true
+        examples: [true]
+  block_attn:
+    type: object
+    additionalProperties: false
+    title: "Block Attention Residuals"
+    title_es: "Residuales de Atención por Bloques"
+    description: |
+      Hyper-parameters for the `block_attn` residual type. Ignored for
+      all other `type` values.
+    description_es: |
+      Hiperparámetros para el tipo de residual `block_attn`. Se
+      ignoran para todos los demás valores de `type`.
+    properties:
+      num_blocks:
+        type: integer
+        title: "Number of Block Representations (N)"
+        title_es: "Número de Representaciones de Bloque (N)"
+        description: |
+          Number of block representations ``N`` stored across the
+          forward pass. The trade-off is:
+
+          - ``N = L`` (one block per layer): reduces to Full AttnRes.
+            Maximum cross-layer history, maximum memory.
+          - ``N ≈ 8`` (paper sweet spot): recovers most of Full
+            AttnRes's gain at constant memory ``O(Nd)`` per token.
+          - ``N = 1``: standard residual with the embedding isolated
+            as ``b_0``.
+
+          Smaller ``N`` reduces memory and inter-block communication
+          cost (paper §4) at a modest quality cost. Larger ``N`` is
+          more expressive but more expensive.
+
+          Must satisfy ``N ≤ num_layers × num_loops`` (the total
+          logical depth).
+        description_es: |
+          Número de representaciones de bloque ``N`` almacenadas
+          durante el forward. El trade-off es:
+
+          - ``N = L`` (un bloque por capa): reduce a Full AttnRes.
+            Máximo historial cross-layer, máxima memoria.
+          - ``N ≈ 8`` (sweet spot del paper): recupera la mayor parte
+            de la ganancia de Full AttnRes con memoria constante
+            ``O(Nd)`` por token.
+          - ``N = 1``: residual estándar con el embedding aislado
+            como ``b_0``.
+
+          Menor ``N`` reduce memoria y costo de comunicación inter-
+          bloque (paper §4) a un costo modesto de calidad. Mayor
+          ``N`` es más expresivo pero más caro.
+
+          Debe satisfacer ``N ≤ num_layers × num_loops`` (la
+          profundidad lógica total).
+        minimum: 1
+        default: 8
+        examples: [8]
+      init_query_zero:
+        type: boolean
+        title: "Zero-Init Query Vectors"
+        title_es: "Inicialización a Cero de los Vectores de Query"
+        description: |
+          If `true` (paper default), initialise every per-layer query
+          ``w_l`` to zero so the initial attention is uniform. Same
+          rationale as in `full_attn.init_query_zero`.
+        description_es: |
+          Si es `true` (paper por defecto), inicializa cada query por
+          capa ``w_l`` a cero, de modo que la atención inicial sea
+          uniforme. Misma justificación que en
+          `full_attn.init_query_zero`.
+        default: true
+        examples: [true]
+      use_rmsnorm_keys:
+        type: boolean
+        title: "RMSNorm on Keys"
+        title_es: "RMSNorm en las Keys"
+        description: |
+          If `true` (paper default), apply RMSNorm to the source block
+          representations before the dot product. Especially
+          important for Block AttnRes because block sums grow with
+          block depth — without RMSNorm, later blocks dominate the
+          softmax.
+        description_es: |
+          Si es `true` (paper por defecto), aplica RMSNorm a las
+          representaciones de bloque fuente antes del producto punto.
+          Especialmente importante para Block AttnRes porque las sumas
+          de bloque crecen con la profundidad del bloque — sin
+          RMSNorm, los bloques posteriores dominan el softmax.
+        default: true
+        examples: [true]
+  mhc_stream_mode:
+    type: string
+    title: "AttnRes × mHC Stream Mode"
+    title_es: "Modo de Stream AttnRes × mHC"
+    description: |
+      How the depth-wise attention interacts with mHC's ``n``-stream
+      residual. Only relevant when both `residuals.type` is
+      `full_attn` or `block_attn` AND `model.mhc.enabled` is `true`.
+
+      - `"independent"`: apply depth-wise attention **per stream**.
+        Each of the ``n`` streams maintains its own attention weights
+        over the previous layer outputs. Matches the paper's framing
+        where each stream is a parallel "view" of the residual.
+        Parameter count: ``n × num_layers × hidden_size`` query
+        vectors (the AttnRes module broadcasts over streams).
+
+      - `"joint"`: apply a single depth-wise attention over the
+        flattened ``n × hidden_size`` projection of each source.
+        Treats all streams as one fat residual. More expressive but
+        also more parameter-hungry and slower to train.
+    description_es: |
+      Cómo interactúa la atención sobre la profundidad con el
+      residual de ``n`` streams de mHC. Solo relevante cuando
+      `residuals.type` es `full_attn` o `block_attn` Y
+      `model.mhc.enabled` es `true`.
+
+      - `"independent"`: aplica atención sobre la profundidad **por
+        stream**. Cada uno de los ``n`` streams mantiene sus
+        propios pesos de atención sobre las salidas de capa
+        previas. Coincide con el encuadre del paper donde cada
+        stream es una "vista" paralela del residual. Número de
+        parámetros: ``n × num_layers × hidden_size`` vectores de
+        query (el módulo AttnRes hace broadcast sobre los streams).
+
+      - `"joint"`: aplica una única atención sobre la proyección
+        aplanada ``n × hidden_size`` de cada fuente. Trata todos
+        los streams como un único residual grueso. Más expresivo
+        pero también más hambriento de parámetros y más lento de
+        entrenar.
+    enum: [independent, joint]
+    default: independent
+    examples: [independent]
+  gradient_checkpoint:
+    type: boolean
+    title: "Gradient Checkpointing"
+    title_es: "Gradient Checkpointing"
+    description: |
+      If `true`, wrap the AttnRes attention computation in
+      `torch.utils.checkpoint.checkpoint` to trade memory for one
+      extra forward pass during backpropagation. Useful for very
+      deep models where storing all layer outputs (Full AttnRes) or
+      the full per-block history (Block AttnRes) is too expensive.
+
+      No effect when `residuals.type` is `standard` or `none`.
+    description_es: |
+      Si es `true`, envuelve el cómputo de atención de AttnRes en
+      `torch.utils.checkpoint.checkpoint` para intercambiar memoria
+      por un forward pass extra durante la retropropagación. Útil
+      para modelos muy profundos donde almacenar todas las salidas
+      de capa (Full AttnRes) o el historial completo por bloque
+      (Block AttnRes) es demasiado caro.
+
+      Sin efecto cuando `residuals.type` es `standard` o `none`.
+    default: false
+    examples: [false]

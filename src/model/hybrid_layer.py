@@ -140,6 +140,19 @@ class HybridLayer(nn.Module):
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         router_cls = BitLinear if (config.use_bitnet and getattr(config, "bitnet_routers", False)) else nn.Linear
 
+        # Residual-connection strategy (arXiv:2603.15031). Decides whether
+        # to add the layer output to the residual (standard / none / AttnRes
+        # managed externally by the encoder).
+        self.residual_type = str(getattr(config, "residual_type", "standard")).lower()
+        if self.residual_type not in {"standard", "none", "full_attn", "block_attn"}:
+            raise ValueError(
+                f"Unknown residual_type {self.residual_type!r}; expected one of "
+                "'standard', 'none', 'full_attn', 'block_attn'."
+            )
+        # AttnRes variants are handled by an external ResidualBase module
+        # injected by FrankensteinEncoder — the layer itself never touches
+        # the residual sum (the encoder passes the attended ``x`` in).
+
         mixer_registry = {
             "ode": ODEAttentionBlock,
             "retnet": MultiScaleRetention,
@@ -330,7 +343,15 @@ class HybridLayer(nn.Module):
         else:
             x = self.mixer(x, logical_layer_idx=logical_layer_idx)
 
-        x = residual + x
+        # Residual merge: standard adds the input, none drops it,
+        # AttnRes variants receive the attended ``x`` from the encoder
+        # (the encoder has already applied depth-wise attention via
+        # the ResidualBase module).
+        if self.residual_type == "none":
+            # x is already the layer output; do not add the residual back.
+            pass
+        else:
+            x = residual + x
 
         residual = x
         x = self.norm2(x)
@@ -354,10 +375,16 @@ class HybridLayer(nn.Module):
                         expert_out = expert(selected_x)
                         out[mask] += expert_out * expert_weights[mask]
 
-            x = residual + out.view(batch_size, seq_len, dim)
+            if self.residual_type == "none":
+                x = out.view(batch_size, seq_len, dim)
+            else:
+                x = residual + out.view(batch_size, seq_len, dim)
             return x
 
-        x = residual + self.ffn(x)
+        if self.residual_type == "none":
+            x = self.ffn(x)
+        else:
+            x = residual + self.ffn(x)
         return x
 
     def _forward_dense_mhc(

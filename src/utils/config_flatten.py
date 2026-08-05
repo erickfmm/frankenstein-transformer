@@ -123,10 +123,11 @@ def _is_nested_shape(model_data: Dict[str, Any]) -> bool:
 
     Returns True if any of the top-level grouping keys is present.
     Legacy flat dicts (e.g. old checkpoint config.json) do not contain
-    ``dims``, ``norm``, ``embedding`` (as a dict), or ``attention`` (as a
-    dict) and are passed through unchanged.
+    ``dims``, ``norm``, ``embedding`` (as a dict), ``attention`` (as a
+    dict), ``mhc`` (as a dict) or ``residuals`` (as a dict) and are
+    passed through unchanged.
     """
-    for key in ("dims", "norm", "embedding", "attention", "mhc"):
+    for key in ("dims", "norm", "embedding", "attention", "mhc", "residuals"):
         if key in model_data and isinstance(model_data[key], dict):
             return True
     return False
@@ -192,7 +193,7 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
 
     # Pass through the staying-flat keys (use_moe, use_bitnet, ffn_*, ...).
     # We do this by copying everything that is NOT a known grouping key.
-    grouping_keys = {"dims", "norm", "embedding", "attention", "mhc"}
+    grouping_keys = {"dims", "norm", "embedding", "attention", "mhc", "residuals"}
     for key, value in model_data.items():
         if key not in grouping_keys:
             out[key] = value
@@ -261,5 +262,29 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
             out["mhc_checkpoint"] = mhc["checkpoint"]
         if "full_prec_under_bitnet" in mhc:
             out["mhc_full_prec_under_bitnet"] = mhc["full_prec_under_bitnet"]
+
+    # residuals.* — Attention Residuals (AttnRes, arXiv:2603.15031).
+    residuals = model_data.get("residuals")
+    if isinstance(residuals, dict):
+        if "type" in residuals:
+            out["residual_type"] = residuals["type"]
+        full_attn = residuals.get("full_attn")
+        if isinstance(full_attn, dict):
+            if "init_query_zero" in full_attn:
+                out["full_attn_init_query_zero"] = full_attn["init_query_zero"]
+            if "use_rmsnorm_keys" in full_attn:
+                out["full_attn_use_rmsnorm_keys"] = full_attn["use_rmsnorm_keys"]
+        block_attn = residuals.get("block_attn")
+        if isinstance(block_attn, dict):
+            if "num_blocks" in block_attn:
+                out["block_attn_num_blocks"] = block_attn["num_blocks"]
+            if "init_query_zero" in block_attn:
+                out["block_attn_init_query_zero"] = block_attn["init_query_zero"]
+            if "use_rmsnorm_keys" in block_attn:
+                out["block_attn_use_rmsnorm_keys"] = block_attn["use_rmsnorm_keys"]
+        if "mhc_stream_mode" in residuals:
+            out["attnres_mhc_stream_mode"] = residuals["mhc_stream_mode"]
+        if "gradient_checkpoint" in residuals:
+            out["attnres_gradient_checkpoint"] = residuals["gradient_checkpoint"]
 
     return out

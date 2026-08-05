@@ -300,6 +300,34 @@ class FrankensteinModelConfig:
     # noise on the small mHC coefficients). Defaults to True.
     mhc_full_prec_under_bitnet: bool = True
 
+    # ---- Attention Residuals (AttnRes, arXiv:2603.15031) ----
+    # Depth-wise softmax attention replaces the fixed residual coefficient of 1.
+    # ``residual_type`` selects the strategy:
+    #   - "standard": h_l = h_{l-1} + f_l(h_{l-1})  [default, backwards-compatible]
+    #   - "none": h_l = f_l(h_{l-1})                 [experimental ablation]
+    #   - "full_attn": softmax attention over all previous layer outputs.
+    #   - "block_attn": softmax attention over N block representations + partial sum.
+    # AttnRes variants add O(num_layers * hidden_size) parameters (one query
+    # vector per layer) and may be combined with mHC via ``attnres_mhc_stream_mode``.
+    residual_type: str = "standard"
+    # Full AttnRes: zero-init query vectors so initial attention is uniform.
+    full_attn_init_query_zero: bool = True
+    # Full AttnRes: RMSNorm on keys prevents large-magnitude layers dominating.
+    full_attn_use_rmsnorm_keys: bool = True
+    # Block AttnRes: zero-init query vectors (paper §3.2 recommendation).
+    block_attn_init_query_zero: bool = True
+    # Block AttnRes: RMSNorm on keys (paper §3.2 recommendation).
+    block_attn_use_rmsnorm_keys: bool = True
+    # Block AttnRes: number of block representations N (paper sweet spot ≈ 8).
+    block_attn_num_blocks: int = 8
+    # AttnRes: how to combine with mHC's n-stream residual:
+    #   - "independent": per-stream depth-wise attention (n parallel attentions).
+    #   - "joint":       single attention over the flattened nC projection.
+    attnres_mhc_stream_mode: str = "independent"
+    # AttnRes: wrap the attention computation in gradient checkpointing to save
+    # memory at the cost of one extra forward pass during backprop.
+    attnres_gradient_checkpoint: bool = False
+
     num_kv_heads: int = 1
 
     # ---- MLA (arXiv:2506.09342) ----
@@ -440,6 +468,29 @@ class FrankensteinModelConfig:
             raise ValueError("mhc_sinkhorn_iters must be >= 1")
         if float(self.mhc_gating_init) <= 0.0:
             raise ValueError("mhc_gating_init must be > 0")
+
+        # ---- Validate Attention Residuals (arXiv:2603.15031) ----
+        valid_residual_types = {"standard", "none", "full_attn", "block_attn"}
+        rt = str(self.residual_type).lower()
+        if rt not in valid_residual_types:
+            raise ValueError(
+                f"residual_type must be one of {sorted(valid_residual_types)}, "
+                f"got {self.residual_type!r}"
+            )
+        self.residual_type = rt
+        if int(self.block_attn_num_blocks) < 1:
+            raise ValueError("block_attn_num_blocks must be >= 1")
+        max_blocks = int(self.num_layers) * int(self.num_loops)
+        if rt == "block_attn" and int(self.block_attn_num_blocks) > max_blocks:
+            raise ValueError(
+                f"block_attn_num_blocks ({self.block_attn_num_blocks}) cannot "
+                f"exceed total logical depth ({max_blocks})"
+            )
+        if self.attnres_mhc_stream_mode not in {"independent", "joint"}:
+            raise ValueError(
+                "attnres_mhc_stream_mode must be 'independent' or 'joint', "
+                f"got {self.attnres_mhc_stream_mode!r}"
+            )
 
         # ---- Validate FFN activation ----
         ffn_act = str(self.ffn_activation).lower()
