@@ -1,0 +1,278 @@
+\section{Residuales de Atención (AttnRes)}
+\label{sec:annex-attnres}
+
+Este anexo documenta la integración de los \emph{Residuales de Atención}
+(AttnRes) \citep{sun_attnres_2026}, una generalización de la conexión
+residual que reemplaza la suma residual de coeficiente unitario fijo
+por \emph{atención softmax aprendida sobre la profundidad}. El cuerpo
+principal delega a este anexo la formulación matemática, las cuatro
+estrategias disponibles (estándar, sin residual, Full AttnRes, Block
+AttnRes), el cableado de implementación, la integración con mHC y
+Mixture-of-Depths, y los resultados reportados. Las claves de
+bibliografía citadas aquí se resuelven contra
+\texttt{docs/bibliography/}.
+
+\subsection{Motivación: De una Suma Fija a Atención sobre la Profundidad}
+
+La conexión residual estándar \citep{he_deep_2016} propaga señales a
+través de la profundidad sin modificar: con $x_l \in \mathbb{R}^{C}$ y
+una función de capa $F$,
+\[
+x_{l+1} = x_l + F(x_l, W_l),
+\]
+de modo que, recursivamente,
+$x_L = x_l + \sum_{i=l}^{L-1} F(x_i, W_i)$. El término identidad $x_l$
+(el \emph{mapeo de identidad}) permite que la información fluya de
+capas superficiales a profundas sin cambios, lo que He
+et~al.~\citep{he_deep_2016} identificaron como clave para el
+entrenamiento estable de redes muy profundas. Las redes Highway
+\citep{srivastava_highway_2015} generalizan esto con compuertas
+elemento-a-elemento aprendidas $\mathbf{g}_l \in [0, 1]^{C}$,
+\[
+x_{l+1} = (1 - \mathbf{g}_l) \odot x_l + \mathbf{g}_l \odot F(x_l, W_l),
+\]
+que interpolan entre la ruta de identidad y la ruta de transformación
+con pesos dependientes de la entrada.
+
+Los \emph{Residuales de Atención} \citep{sun_attnres_2026} dan el
+siguiente paso: en lugar de ponderar un único estado comprimido $x_l$,
+la capa $l$ \emph{atiende} sobre todas las salidas de capas anteriores.
+Sea $v_0 = h_1$ (el embedding de tokens) y $v_i = F(x_i, W_i)$ para
+$i \ge 1$. AttnRes computa, para cada capa $l$,
+\[
+q_l = w_l, \qquad
+k_i = \mathrm{RMSNorm}(v_i), \qquad
+\alpha_{i \to l} = \mathrm{softmax}_i(q_l^{\top} k_i), \qquad
+x_{l+1} = \sum_{i=0}^{l} \alpha_{i \to l} \, v_i,
+\]
+donde $w_l \in \mathbb{R}^{C}$ es un pseudo-query aprendido por capa,
+\emph{inicializado a cero} según el paper. Con la inicialización a cero,
+el softmax es uniforme, por lo que AttnRes degenera a un promedio
+equiponderado de todas las salidas previas --- igualando el residual
+estándar en el paso cero y evitando volatilidad de entrenamiento.
+RMSNorm sobre las keys evita que las capas con magnitudes
+naturalmente grandes dominen el softmax (ablación en el paper:
+\S~5.3).
+
+\subsection{Cuatro Estrategias}
+
+El campo de esquema \texttt{model.residuals.type} selecciona una de las
+cuatro estrategias, cada una implementada como un módulo separado bajo
+\texttt{src/model/residuals/}.
+
+\subsubsection{Residual Estándar (\texttt{"standard"})}
+
+La estrategia por defecto, retrocompatible:
+\[
+x_{l+1} = x_l + F(x_l, W_l).
+\]
+Sin estado, sin parámetros extra, sin cómputo extra. Implementada como
+un pass-through no-op en \texttt{StandardResidual} que delega el merge
+a \texttt{HybridLayer}.
+
+\subsubsection{Sin Residual (\texttt{"none"}, experimental)}
+
+Elimina la conexión skip por completo:
+\[
+x_{l+1} = F(x_l, W_l).
+\]
+Sin estado, sin parámetros extra. Útil solo como sonda de ablación; el
+término identidad es crítico para arquitecturas profundas (paper
+\S~2.1) y el entrenamiento suele ser inestable sin él. Implementado
+como \texttt{NoResidual}.
+
+\subsubsection{Residuales de Atención Completa (\texttt{"full\_attn"}, paper \S~3.1)}
+
+Cada capa atiende sobre \emph{todas} las salidas de capas anteriores:
+\[
+x_{l+1} = \sum_{i=0}^{l} \alpha_{i \to l} \, v_i, \qquad
+\alpha_{i \to l} = \mathrm{softmax}_i\!\big(w_l^{\top} \mathrm{RMSNorm}(v_i)\big).
+\]
+Añade $L \cdot C$ parámetros ($L$ = profundidad lógica =
+\texttt{num\_layers} $\times$ \texttt{num\_loops}, $C$ =
+\texttt{hidden\_size}), un vector de query por capa. La memoria y el
+cómputo crecen como $O(L \, d)$ por token; a profundidad típica
+($L < 1000$) esto es insignificante. Implementado como
+\texttt{FullAttentionResidual}; soporta
+\texttt{attnres\_gradient\_checkpoint} para envolver la atención en
+\texttt{torch.utils.checkpoint} en ejecuciones con restricciones de
+memoria.
+
+\subsubsection{Residuales de Atención por Bloques (\texttt{"block\_attn"}, paper \S~3.2)}
+
+Particiona las $L$ capas lógicas en $N$ bloques de
+$S = \lceil L / N \rceil$ capas cada uno. Dentro de un bloque las
+salidas de capa se acumulan como suma parcial estándar $b_n^i$; a
+través de los bloques la atención se aplica sobre las $N$
+representaciones de bloque completas y la suma parcial en curso.
+Para la capa $l$ en el bloque $n$,
+\[
+x_{l+1} = \sum_{m=0}^{n} \alpha_{m \to l} \, v_m, \qquad
+\alpha_{m \to l} = \mathrm{softmax}_m\!\big(w_l^{\top} \mathrm{RMSNorm}(v_m)\big),
+\]
+con $v_m = b_m$ para $m < n$ y $v_n = b_n^{i_l}$ (la suma parcial
+intra-bloque actual). $N$ interpola entre Full AttnRes ($N = L$, un
+bloque por capa) y residuales estándar ($N = 1$, el embedding aislado
+como $b_0$). El sweet spot empírico del paper es $N \approx 8$; este
+código base usa $N = 8$ por defecto y valida $N \le L$. Implementado
+como \texttt{BlockAttentionResidual}, que sigue el Algoritmo 1 del
+paper (cómputo en dos fases con fusión online-softmax).
+
+\subsection{Implementación en Frankenstein Transformer}
+
+El paquete \texttt{src/model/residuals/} aloja una clase por estrategia
+(\texttt{StandardResidual}, \texttt{NoResidual},
+\texttt{FullAttentionResidual}, \texttt{BlockAttentionResidual}) más
+un \texttt{ResidualBase} abstracto que define los hooks del ciclo de
+vida \texttt{set\_streams}, \texttt{register\_state},
+\texttt{reset\_state}, \texttt{forward} y \texttt{finalize}. La factoría
+\texttt{build\_residual(config)} en \texttt{src/model/residuals/factory.py}
+selecciona la clase correcta desde \texttt{FrankensteinModelConfig}.
+
+Cableado en \texttt{src/model/frankenstein\_encoder.py}:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{FrankensteinEncoder} posee el módulo
+        \texttt{ResidualBase} como \texttt{self.residual}; la factoría
+        se invoca una vez en \texttt{\_\_init\_\_}.
+    \item Antes del bucle de profundidad en loop, el encoder llama a
+        \texttt{reset\_state} y, para variantes AttnRes, a
+        \texttt{set\_embedding(x)} para que la atención sobre la
+        profundidad conozca la fuente $v_0 = h_1$.
+    \item Tras cada llamada a \texttt{HybridLayer}, si
+        \texttt{self.residual.is\_attn\_res} es true, el encoder aplica
+        \texttt{x = self.residual(layer\_idx, x)} para sobrescribir el
+        flujo con la agregación atendida. Para estrategias sin estado
+        (\texttt{standard}, \texttt{none}) este paso se omite y
+        \texttt{HybridLayer} continúa aplicando su propio merge
+        residual internamente.
+\end{itemize}
+
+Cableado en \texttt{src/model/hybrid\_layer.py}:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{HybridLayer} lee \texttt{residual\_type} de la
+        configuración y despacha el merge residual según corresponda.
+        Para \texttt{standard} el merge es el original
+        \texttt{x = residual + mixer(norm(x))}; para \texttt{none} el
+        skip se elimina (\texttt{x = mixer(norm(x))}); para las
+        variantes AttnRes la capa realiza el merge estándar
+        internamente porque la atención sobre la profundidad se aplica
+        externamente por el encoder.
+    \item \texttt{\_forward\_dense\_mhc} (la ruta mHC) no se ve
+        afectada porque mHC tiene su propia residual de expansión de
+        flujos; combinar AttnRes con mHC lo maneja el campo
+        \texttt{mhc\_stream\_mode} del módulo residual.
+\end{itemize}
+
+Esquema (jerárquico, con los renombres a claves planas entre
+paréntesis) y valores por defecto:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{model.residuals.type} (\texttt{residual\_type},
+        enum \texttt{[standard, none, full\_attn, block\_attn]},
+        default \texttt{standard}): selecciona la estrategia.
+    \item \texttt{model.residuals.full\_attn.init\_query\_zero}
+        (\texttt{full\_attn\_init\_query\_zero}, bool, default
+        \texttt{true}): inicializa a cero los vectores de query por
+        capa $\mathbf{w}_l$.
+    \item \texttt{model.residuals.full\_attn.use\_rmsnorm\_keys}
+        (\texttt{full\_attn\_use\_rmsnorm\_keys}, bool, default
+        \texttt{true}): aplica RMSNorm sobre las keys antes del
+        producto punto.
+    \item \texttt{model.residuals.block\_attn.num\_blocks}
+        (\texttt{block\_attn\_num\_blocks}, int $\ge 1$, default
+        $8$): número de representaciones de bloque $N$; validado
+        $N \le L$.
+    \item \texttt{model.residuals.block\_attn.init\_query\_zero}
+        (\texttt{block\_attn\_init\_query\_zero}, bool, default
+        \texttt{true}): inicializa a cero los vectores de query por
+        capa.
+    \item \texttt{model.residuals.block\_attn.use\_rmsnorm\_keys}
+        (\texttt{block\_attn\_use\_rmsnorm\_keys}, bool, default
+        \texttt{true}): RMSNorm sobre las keys.
+    \item \texttt{model.residuals.mhc\_stream\_mode}
+        (\texttt{attnres\_mhc\_stream\_mode}, enum
+        \texttt{[independent, joint]}, default \texttt{independent}):
+        cómo AttnRes interactúa con el residual de n streams de mHC.
+    \item \texttt{model.residuals.gradient\_checkpoint}
+        (\texttt{attnres\_gradient\_checkpoint}, bool, default
+        \texttt{false}): envuelve la atención AttnRes en gradient
+        checkpointing.
+\end{itemize}
+
+\subsection{Integración con mHC y Mixture-of-Depths}
+
+La estrategia residual es \emph{ortogonal} a mHC y Mixture-of-Depths
+(MoD): todas las combinaciones están soportadas. Los modos de
+interacción son:
+
+\paragraph{mHC $\times$ AttnRes (\texttt{mhc\_stream\_mode}).}
+Cuando \texttt{use\_mhc=true} y el residual es \texttt{full\_attn} o
+\texttt{block\_attn}, la atención sobre la profundidad se aplica
+\emph{por stream} (\texttt{"independent"}) o sobre la proyección
+\emph{aplanada} $nC$-dimensional (\texttt{"joint"}). El modo
+independent ejecuta $n$ atenciones en paralelo, una por stream ---
+coincidiendo con el encuadre del paper donde cada stream es una "vista"
+paralela del residual. El modo joint trata los $n$ streams como un
+único residual grueso, más expresivo pero más hambriento de parámetros.
+Las proyecciones de coeficientes de mHC ($\varphi_l$, $b_l$,
+compuertas $\alpha$) no se ven afectadas; AttnRes añade sus propios
+parámetros encima.
+
+\paragraph{Mixture-of-Depths $\times$ AttnRes.}
+MoD opera \emph{dentro} de una capa (selecciona qué tokens reciben la
+actualización completa de capa) y es ortogonal a la elección residual.
+Cuando \texttt{use\_mixture\_of\_depths=true} junto con un residual
+AttnRes, solo los tokens seleccionados por MoD contribuyen al buffer de
+salidas de capa (Full AttnRes) o a la suma parcial intra-bloque (Block
+AttnRes); el resto pasa sin cambios y se re-ensambla mediante la
+lógica existente de MoD. MoD es mutuamente excluyente con mHC (se
+lanza un \texttt{ValueError} en \texttt{HybridLayer.\-\_\-init\_\_} si
+ambos están habilitados); las combinaciones correspondientes son
+$(\text{no\_mHC}, \text{MoD}, \text{AttnRes})$,
+$(\text{mHC}, \text{no\_MoD}, \text{AttnRes})$, o
+$(\text{mHC}, \text{no\_MoD}, \text{no\_AttnRes})$.
+
+\subsection{Resultados Reportados}
+
+El paper \citep{sun_attnres_2026} valida AttnRes mediante leyes de
+escalado, ablaciones y una extensión Kimi Linear de 48B parámetros:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Leyes de escalado}: tanto Full como Block AttnRes
+        superan consistentemente al baseline PreNorm a través de cinco
+        tamaños de modelo. A 5.6 PFLOP/s-días, Block AttnRes alcanza
+        pérdida $1.692$ versus $1.714$ del baseline --- equivalente a
+        una ventaja de cómputo de $1.25 \times$. La brecha entre Full y
+        Block AttnRes se reduce con la escala (Full $1.737$ vs.\ Block
+        $1.746$ en el modelo de 16 capas).
+    \item \textbf{Ablaciones}: la atención softmax dependiente de la
+        entrada ($1.737$) supera al mezclado escalar independiente de
+        la entrada ($1.749$) y a la atención sigmoid ($1.741$). RMSNorm
+        sobre las keys es esencial (Full $1.737$ vs.\ $1.743$ sin
+        ella; Block $1.746$ vs.\ $1.750$). La agregación multi-cabeza
+        sobre la profundidad ($\texttt{H} = 16$) perjudica a Block
+        AttnRes ($1.752$ vs.\ $1.746$), indicando que la mezcla
+        óptima es en gran medida uniforme a través de los canales. La
+        atención de ventana deslizante sobre las últimas $W = 8$ capas
+        se queda corta frente a Block AttnRes ($1.764$ vs.\ $1.746$).
+    \item \textbf{Extensión Kimi Linear}: un modelo Kimi Linear de
+        48B parámetros (3B activados) con Block AttnRes ($N \approx 9$,
+        $S = 6$) pre-entrenado sobre 1.4T tokens mejora al baseline en
+        los 14 benchmarks downstream (MMLU-Pro, GPQA-Diamond, BBH,
+        HellaSwag, TriviaQA, GSM8K, MGSM, Math, CMath, HumanEval,
+        MBPP, CMMLU, C-Eval, ARC-C). Las mayores ganancias son en
+        razonamiento multi-paso (GPQA-Diamond $+7.5$, Minerva Math
+        $+3.6$) y generación de código (HumanEval $+3.1$). El análisis
+        de la dinámica de entrenamiento muestra que AttnRes mitiga la
+        dilución PreNorm: las magnitudes del estado oculto permanecen
+        acotadas a lo largo de la profundidad y las normas del
+        gradiente se distribuyen más uniformemente entre capas.
+    \item \textbf{Sobrecosto}: el sobrecosto de entrenamiento es
+        marginal cuando no se habilita paralelismo de pipeline; con
+        paralelismo de pipeline Block AttnRes añade $<4\%$ de
+        sobrecosto end-to-end (caching cross-stage elimina
+        transferencias redundantes) y $<2\%$ de sobrecosto de latencia
+        de inferencia (cómputo en dos fases con fusión online-softmax).
+\end{itemize}
+
+Configuraciones de ejemplo: \texttt{configs/examples/full\_attn\_res\_adamw.yaml},
+\texttt{configs/examples/block\_attn\_res\_adamw.yaml},
+\texttt{configs/examples/mhc\_full\_attn\_res\_adamw.yaml}.

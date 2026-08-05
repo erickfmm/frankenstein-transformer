@@ -1,0 +1,268 @@
+\section{Attention Residuals (AttnRes)}
+\label{sec:annex-attnres}
+
+This annex documents the integration of \emph{Attention Residuals}
+(AttnRes) \citep{sun_attnres_2026}, a generalization of the residual
+connection that replaces the fixed unit-coefficient residual sum with
+\emph{learned softmax attention over depth}. The main body delegates
+to this annex for the mathematical formulation, the four available
+strategies (standard, no-residual, Full AttnRes, Block AttnRes), the
+implementation wiring, the integration with mHC and Mixture-of-Depths,
+and the reported results. The bibliography keys cited here resolve
+against \texttt{docs/bibliography/}.
+
+\subsection{Motivation: From a Fixed Sum to Depth-Wise Attention}
+
+The standard residual connection \citep{he_deep_2016} propagates signals
+across depth unmodified: with $x_l \in \mathbb{R}^{C}$ and a layer
+function $F$,
+\[
+x_{l+1} = x_l + F(x_l, W_l),
+\]
+so that, recursively,
+$x_L = x_l + \sum_{i=l}^{L-1} F(x_i, W_i)$. The identity term $x_l$
+(the \emph{identity mapping}) lets information flow from shallow to deep
+layers unchanged, which He et al.~\citep{he_deep_2016} identified as key
+to stable training of very deep networks. Highway networks
+\citep{srivastava_highway_2015} generalize this with learned element-wise
+gates $\mathbf{g}_l \in [0, 1]^{C}$,
+\[
+x_{l+1} = (1 - \mathbf{g}_l) \odot x_l + \mathbf{g}_l \odot F(x_l, W_l),
+\]
+which interpolates between the identity path and the transformation
+path with input-dependent weights.
+
+\emph{Attention Residuals} \citep{sun_attnres_2026} take the next step:
+instead of weighting a single compressed state $x_l$, layer $l$
+\emph{attends} over all earlier layer outputs. Let
+$v_0 = h_1$ (the token embedding) and $v_i = F(x_i, W_i)$ for $i \ge 1$.
+AttnRes computes, for each layer $l$,
+\[
+q_l = w_l, \qquad
+k_i = \mathrm{RMSNorm}(v_i), \qquad
+\alpha_{i \to l} = \mathrm{softmax}_i(q_l^{\top} k_i), \qquad
+x_{l+1} = \sum_{i=0}^{l} \alpha_{i \to l} \, v_i,
+\]
+where $w_l \in \mathbb{R}^{C}$ is a learned per-layer pseudo-query,
+\emph{initialized to zero} per the paper. At zero-init the softmax is
+uniform, so AttnRes degenerates to an equal-weight average of all
+previous outputs --- matching the standard residual at step zero and
+avoiding training volatility. The RMSNorm on the keys prevents layers
+with naturally large magnitudes from dominating the softmax
+(ablation in the paper: \S~5.3).
+
+\subsection{Four Strategies}
+
+The schema field \texttt{model.residuals.type} selects one of four
+strategies, each implemented as a separate module under
+\texttt{src/model/residuals/}.
+
+\subsubsection{Standard Residual (\texttt{"standard"})}
+
+The default backwards-compatible strategy:
+\[
+x_{l+1} = x_l + F(x_l, W_l).
+\]
+Stateless, no extra parameters, no extra compute. Implemented as a
+no-op pass-through in \texttt{StandardResidual} that delegates the
+merge to \texttt{HybridLayer}.
+
+\subsubsection{No Residual (\texttt{"none"}, experimental)}
+
+Drops the skip connection entirely:
+\[
+x_{l+1} = F(x_l, W_l).
+\]
+Stateless, no extra parameters. Useful only as an ablation probe; the
+identity term is critical for deep stacks (paper \S~2.1) and training is
+typically unstable without it. Implemented as \texttt{NoResidual}.
+
+\subsubsection{Full Attention Residuals (\texttt{"full\_attn"}, paper \S~3.1)}
+
+Each layer attends over \emph{all} previous layer outputs:
+\[
+x_{l+1} = \sum_{i=0}^{l} \alpha_{i \to l} \, v_i, \qquad
+\alpha_{i \to l} = \mathrm{softmax}_i\!\big(w_l^{\top} \mathrm{RMSNorm}(v_i)\big).
+\]
+Adds $L \cdot C$ parameters ($L$ = logical depth = \texttt{num\_layers}
+$\times$ \texttt{num\_loops}, $C$ = \texttt{hidden\_size}), one query
+vector per layer. Memory and compute grow as $O(L \, d)$ per token; at
+typical depth ($L < 1000$) this is negligible. Implemented as
+\texttt{FullAttentionResidual}; supports
+\texttt{attnres\_gradient\_checkpoint} to wrap the attention in
+\texttt{torch.utils.checkpoint} for memory-constrained runs.
+
+\subsubsection{Block Attention Residuals (\texttt{"block\_attn"}, paper \S~3.2)}
+
+Partitions the $L$ logical layers into $N$ blocks of
+$S = \lceil L / N \rceil$ layers each. Within a block the layer outputs
+accumulate as a standard partial sum $b_n^i$; across blocks attention
+is applied over the $N$ complete block representations and the running
+partial sum. For layer $l$ in block $n$,
+\[
+x_{l+1} = \sum_{m=0}^{n} \alpha_{m \to l} \, v_m, \qquad
+\alpha_{m \to l} = \mathrm{softmax}_m\!\big(w_l^{\top} \mathrm{RMSNorm}(v_m)\big),
+\]
+with $v_m = b_m$ for $m < n$ and $v_n = b_n^{i_l}$ (the current
+intra-block partial sum). $N$ interpolates between Full AttnRes
+($N = L$, one block per layer) and standard residuals ($N = 1$, the
+embedding isolated as $b_0$). The paper's empirical sweet spot is
+$N \approx 8$; this codebase defaults to $N = 8$ and validates that
+$N \le L$. Implemented as \texttt{BlockAttentionResidual}, which also
+follows Algorithm 1 of the paper (two-phase computation with online
+softmax merging).
+
+\subsection{Implementation in Frankenstein Transformer}
+
+The \texttt{src/model/residuals/} package hosts one class per strategy
+(\texttt{StandardResidual}, \texttt{NoResidual},
+\texttt{FullAttentionResidual}, \texttt{BlockAttentionResidual}) plus
+an abstract \texttt{ResidualBase} that defines the lifecycle hooks
+\texttt{set\_streams}, \texttt{register\_state}, \texttt{reset\_state},
+\texttt{forward}, and \texttt{finalize}. The
+\texttt{build\_residual(config)} factory in
+\texttt{src/model/residuals/factory.py} selects the right class from
+\texttt{FrankensteinModelConfig}.
+
+Wiring in \texttt{src/model/frankenstein\_encoder.py}:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{FrankensteinEncoder} owns the
+        \texttt{ResidualBase} module as \texttt{self.residual}; the
+        factory is invoked once in \texttt{\_\_init\_\_}.
+    \item Before the looped-depth loop the encoder calls
+        \texttt{reset\_state} and, for AttnRes variants,
+        \texttt{set\_embedding(x)} so the depth-wise attention knows
+        the $v_0 = h_1$ source.
+    \item After each \texttt{HybridLayer} call, if
+        \texttt{self.residual.is\_attn\_res} is true, the encoder
+        applies \texttt{x = self.residual(layer\_idx, x)} to overwrite
+        the stream with the attended aggregation. For stateless
+        strategies (\texttt{standard}, \texttt{none}) this step is
+        skipped and \texttt{HybridLayer} continues to apply its own
+        residual merge internally.
+\end{itemize}
+
+Wiring in \texttt{src/model/hybrid\_layer.py}:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{HybridLayer} reads \texttt{residual\_type} from the
+        config and dispatches the residual merge accordingly. For
+        \texttt{standard} the merge is the original
+        \texttt{x = residual + mixer(norm(x))}; for \texttt{none} the
+        skip is dropped (\texttt{x = mixer(norm(x))}); for the AttnRes
+        variants the layer performs the standard merge internally
+        because the depth-wise attention is applied externally by the
+        encoder.
+    \item \texttt{\_forward\_dense\_mhc} (the mHC path) is unaffected
+        because mHC has its own stream-expansion residual; combining
+        AttnRes with mHC is handled by the \texttt{mhc\_stream\_mode}
+        field of the residual module.
+\end{itemize}
+
+Schema (hierarchical, with the flat-key renames shown in parentheses)
+and defaults:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{model.residuals.type} (\texttt{residual\_type},
+        enum \texttt{[standard, none, full\_attn, block\_attn]},
+        default \texttt{standard}): selects the strategy.
+    \item \texttt{model.residuals.full\_attn.init\_query\_zero}
+        (\texttt{full\_attn\_init\_query\_zero}, bool, default
+        \texttt{true}): zero-init the per-layer query vectors
+        $\mathbf{w}_l$.
+    \item \texttt{model.residuals.full\_attn.use\_rmsnorm\_keys}
+        (\texttt{full\_attn\_use\_rmsnorm\_keys}, bool, default
+        \texttt{true}): apply RMSNorm on keys before the dot product.
+    \item \texttt{model.residuals.block\_attn.num\_blocks}
+        (\texttt{block\_attn\_num\_blocks}, int $\ge 1$, default
+        $8$): number of block representations $N$; validated
+        $N \le L$.
+    \item \texttt{model.residuals.block\_attn.init\_query\_zero}
+        (\texttt{block\_attn\_init\_query\_zero}, bool, default
+        \texttt{true}): zero-init the per-layer query vectors.
+    \item \texttt{model.residuals.block\_attn.use\_rmsnorm\_keys}
+        (\texttt{block\_attn\_use\_rmsnorm\_keys}, bool, default
+        \texttt{true}): RMSNorm on keys.
+    \item \texttt{model.residuals.mhc\_stream\_mode}
+        (\texttt{attnres\_mhc\_stream\_mode}, enum
+        \texttt{[independent, joint]}, default \texttt{independent}):
+        how AttnRes interacts with mHC's n-stream residual.
+    \item \texttt{model.residuals.gradient\_checkpoint}
+        (\texttt{attnres\_gradient\_checkpoint}, bool, default
+        \texttt{false}): wrap the AttnRes attention in gradient
+        checkpointing.
+\end{itemize}
+
+\subsection{Integration with mHC and Mixture-of-Depths}
+
+The residual strategy is \emph{orthogonal} to mHC and Mixture-of-Depths
+(MoD): all combinations are supported. The interaction modes are:
+
+\paragraph{mHC $\times$ AttnRes (\texttt{mhc\_stream\_mode}).}
+When \texttt{use\_mhc=true} and the residual is \texttt{full\_attn} or
+\texttt{block\_attn}, the depth-wise attention is applied either
+\emph{per stream} (\texttt{"independent"}) or over the
+\emph{flattened} $nC$-dim projection (\texttt{"joint"}). Independent
+mode runs $n$ parallel attentions, one per stream --- matching the
+paper's framing where each stream is a parallel "view" of the residual.
+Joint mode treats the $n$ streams as a single fat residual, more
+expressive but more parameter-hungry. The mHC coefficient projections
+($\varphi_l$, $b_l$, $\alpha$ gates) are unaffected; AttnRes adds its
+own parameters on top.
+
+\paragraph{Mixture-of-Depths $\times$ AttnRes.}
+MoD token routing operates \emph{within} a layer (selects which tokens
+get the full layer update) and is orthogonal to the residual choice.
+When \texttt{use\_mixture\_of\_depths=true} together with an AttnRes
+residual, only the tokens selected by MoD contribute to the layer-output
+buffer (Full AttnRes) or the intra-block partial sum (Block AttnRes);
+the rest pass through unchanged and are scattered back by MoD's
+existing logic. MoD is mutually exclusive with mHC (a
+\texttt{ValueError} is raised in \texttt{HybridLayer.\-\_\-init\_\_} if
+both are enabled); the corresponding combinations are
+$(\text{no\_mHC}, \text{MoD}, \text{AttnRes})$,
+$(\text{mHC}, \text{no\_MoD}, \text{AttnRes})$, or
+$(\text{mHC}, \text{no\_MoD}, \text{no\_AttnRes})$.
+
+\subsection{Reported Results}
+
+The paper \citep{sun_attnres_2026} validates AttnRes through scaling
+laws, ablations, and a 48B-parameter Kimi Linear extension:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Scaling laws}: both Full and Block AttnRes
+        consistently outperform the PreNorm baseline across five model
+        sizes. At 5.6 PFLOP/s-days, Block AttnRes reaches loss $1.692$
+        versus the baseline's $1.714$ --- equivalent to a
+        $1.25 \times$ compute advantage. The gap between Full and
+        Block AttnRes narrows with scale (Full $1.737$ vs.\ Block
+        $1.746$ on the 16-layer model).
+    \item \textbf{Ablations}: input-dependent softmax attention
+        ($1.737$) outperforms input-independent scalar mixing ($1.749$)
+        and sigmoid attention ($1.741$). RMSNorm on keys is essential
+        (Full $1.737$ vs.\ $1.743$ without; Block $1.746$ vs.\
+        $1.750$). Multi-head depth aggregation
+        ($\texttt{H} = 16$) hurts Block AttnRes ($1.752$ vs.\ $1.746$),
+        indicating the optimal mixture is largely uniform across
+        channels. Sliding-window attention over the last $W = 8$
+        layers falls short of Block AttnRes ($1.764$ vs.\ $1.746$).
+    \item \textbf{Kimi Linear extension}: a 48B-parameter
+        (3B activated) Kimi Linear model with Block AttnRes
+        ($N \approx 9$, $S = 6$) pre-trained on 1.4T tokens improves
+        over the baseline across all 14 downstream benchmarks
+        (MMLU-Pro, GPQA-Diamond, BBH, HellaSwag, TriviaQA, GSM8K,
+        MGSM, Math, CMath, HumanEval, MBPP, CMMLU, C-Eval, ARC-C).
+        The largest gains are on multi-step reasoning
+        (GPQA-Diamond $+7.5$, Minerva Math $+3.6$) and code generation
+        (HumanEval $+3.1$). Training-dynamics analysis shows that
+        AttnRes mitigates PreNorm dilution: hidden-state magnitudes
+        remain bounded across depth and gradient norms distribute more
+        uniformly across layers.
+    \item \textbf{Overhead}: training overhead is marginal when
+        pipeline parallelism is not enabled; with pipeline parallelism
+        Block AttnRes adds $<4\%$ end-to-end training overhead
+        (cross-stage caching eliminates redundant transfers) and
+        $<2\%$ inference latency overhead (two-phase computation with
+        online softmax merging).
+\end{itemize}
+
+Example configurations: \texttt{configs/examples/full\_attn\_res\_adamw.yaml},
+\texttt{configs/examples/block\_attn\_res\_adamw.yaml},
+\texttt{configs/examples/mhc\_full\_attn\_res\_adamw.yaml}.

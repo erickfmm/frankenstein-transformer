@@ -181,7 +181,7 @@ FlashNorm & $x_i / \sqrt{\frac{1}{d}\sum_j x_j^2 + \epsilon}$ & RMS only (weight
 
 \subsection{Residual Connections}
 
-Table~\ref{tab:all-residuals} compares the residual-connection schemes available in the codebase: the standard identity residual and the manifold-constrained n-stream residual (mHC) \citep{xie_mhc_2025}. $n$ is the stream expansion factor, $C$ the hidden dimension, $t_{\max}$ the Sinkhorn--Knopp iteration count, and $\alpha$ the gating scalars. HC (unconstrained Hyper-Connections) is listed for reference but is \emph{not} exposed in this codebase.
+Table~\ref{tab:all-residuals} compares the residual-connection schemes available in the codebase: the standard identity residual, the four Attention Residuals (AttnRes) strategies \citep{sun_attnres_2026}, and the manifold-constrained n-stream residual (mHC) \citep{xie_mhc_2025}. $L$ is the logical depth, $C$ the hidden dimension, $n$ the stream expansion factor, $t_{\max}$ the Sinkhorn--Knopp iteration count, $\alpha$ the mHC gating scalars, and $\mathbf{w}_l$ the per-layer AttnRes pseudo-query (initialized to zero). HC (unconstrained Hyper-Connections) is listed for reference but is \emph{not} exposed in this codebase.
 
 \small
 \begin{longtable}{p{2.2cm}p{4.6cm}p{3.2cm}p{3.0cm}}
@@ -197,10 +197,13 @@ Table~\ref{tab:all-residuals} compares the residual-connection schemes available
 \multicolumn{4}{r}{\textit{continued on next page}} \\
 \endfoot
 \bottomrule
-\caption{Residual-connection schemes. $x_l \in \mathbb{R}^{C}$ (standard) or $\mathbb{R}^{n \times C}$ (HC/mHC) is the stream at layer $l$, $F$ the layer function, $H^{\text{pre}}, H^{\text{post}}, H^{\text{res}}$ the learned read/write/mix mappings. mHC is controlled by the \texttt{model.mhc} schema fields; full details in Annex~9.}
+\caption{Residual-connection schemes. $x_l \in \mathbb{R}^{C}$ (standard / AttnRes / no residual) or $\mathbb{R}^{n \times C}$ (mHC) is the stream at layer $l$, $F$ the layer function, $H^{\text{pre}}, H^{\text{post}}, H^{\text{res}}$ the learned mHC mappings. AttnRes strategies are controlled by \texttt{model.residuals.type}; mHC by \texttt{model.mhc}. Full details in the mHC and AttnRes appendices.}
 \label{tab:all-residuals}
 \endlastfoot
 Standard residual & $x_{l+1} = x_l + F(x_l, W_l)$ & Identity mapping (by construction) & \citep{he_deep_2016} \\
+No residual (experimental) & $x_{l+1} = F(x_l, W_l)$ & No skip path & --- \\
+Full AttnRes & $x_{l+1} = \sum_{i=0}^{l} \mathrm{softmax}_i(\mathbf{w}_l^{\top} \mathrm{RMSNorm}(v_i))\, v_i$ & $\mathbf{w}_l$ learned, zero-init; RMSNorm on keys; $L \cdot C$ parameters & \citep{sun_attnres_2026} \\
+Block AttnRes & $x_{l+1} = \sum_{m=0}^{n} \mathrm{softmax}_m(\mathbf{w}_l^{\top} \mathrm{RMSNorm}(v_m))\, v_m$ & $\mathbf{w}_l$ learned, zero-init; RMSNorm on keys; $N$ block reps + partial sum; $L \cdot C$ parameters & \citep{sun_attnres_2026} \\
 Hyper-Connections (HC) & $x_{l+1} = H^{\text{res}}_l x_l + (H^{\text{post}}_l)^{\top} F(H^{\text{pre}}_l x_l, W_l)$ & Unconstrained & \citep{xie_mhc_2025} \\
 mHC (this codebase) & same update as HC & $H^{\text{res}}_l$ doubly stochastic via Sinkhorn--Knopp ($t_{\max} = 20$), $H^{\text{pre}} = \sigma(\cdot)$, $H^{\text{post}} = 2\sigma(\cdot)$, $\alpha$-init $0.01$ & \citep{xie_mhc_2025} \\
 \bottomrule

@@ -181,7 +181,7 @@ FlashNorm & $x_i / \sqrt{\frac{1}{d}\sum_j x_j^2 + \epsilon}$ & solo RMS (sin pe
 
 \subsection{Conexiones Residuales}
 
-La Tabla~\ref{tab:all-residuals} compara los esquemas de conexión residual disponibles en el código base: el residual de identidad estándar y el flujo residual de $n$ streams restringido por variedad (mHC) \citep{xie_mhc_2025}. $n$ es el factor de expansión del flujo, $C$ la dimensión oculta, $t_{\max}$ el número de iteraciones Sinkhorn--Knopp y $\alpha$ los escalares de compuerta. HC (Hyper-Connexions sin restricción) se lista como referencia pero \emph{no} está expuesto en este código base.
+La Tabla~\ref{tab:all-residuals} compara los esquemas de conexión residual disponibles en el código base: el residual de identidad estándar, las cuatro estrategias de Residuales de Atención (AttnRes) \citep{sun_attnres_2026} y el flujo residual de $n$ streams restringido por variedad (mHC) \citep{xie_mhc_2025}. $L$ es la profundidad lógica, $C$ la dimensión oculta, $n$ el factor de expansión del flujo, $t_{\max}$ el número de iteraciones Sinkhorn--Knopp, $\alpha$ los escalares de compuerta de mHC y $\mathbf{w}_l$ el pseudo-query por capa de AttnRes (inicializado a cero). HC (Hyper-Connexions sin restricción) se lista como referencia pero \emph{no} está expuesto en este código base.
 
 \small
 \begin{longtable}{p{2.2cm}p{4.6cm}p{3.2cm}p{3.0cm}}
@@ -194,13 +194,16 @@ La Tabla~\ref{tab:all-residuals} compara los esquemas de conexión residual disp
 \midrule
 \endhead
 \midrule
-\multicolumn{4}{r}{\textit{continúa en la página siguiente}} \\
+\multicolumn{4}{r}{\textit{continúa en la siguiente página}} \\
 \endfoot
 \bottomrule
-\caption{Esquemas de conexión residual. $x_l \in \mathbb{R}^{C}$ (estándar) o $\mathbb{R}^{n \times C}$ (HC/mHC) es el flujo en la capa $l$, $F$ la función de capa y $H^{\text{pre}}, H^{\text{post}}, H^{\text{res}}$ los mapeos aprendidos de lectura/escritura/mezcla. mHC se controla con los campos de esquema \texttt{model.mhc}; los detalles completos están en el Anexo~9.}
+\caption{Esquemas de conexión residual. $x_l \in \mathbb{R}^{C}$ (estándar / AttnRes / sin residual) o $\mathbb{R}^{n \times C}$ (mHC) es el flujo en la capa $l$, $F$ la función de capa y $H^{\text{pre}}, H^{\text{post}}, H^{\text{res}}$ los mapeos aprendidos de mHC. Las estrategias AttnRes se controlan con \texttt{model.residuals.type}; mHC con \texttt{model.mhc}. Detalles completos en los anexos de mHC y AttnRes.}
 \label{tab:all-residuals}
 \endlastfoot
 Residual estándar & $x_{l+1} = x_l + F(x_l, W_l)$ & Mapeo de identidad (por construcción) & \citep{he_deep_2016} \\
+Sin residual (experimental) & $x_{l+1} = F(x_l, W_l)$ & Sin ruta skip & --- \\
+Full AttnRes & $x_{l+1} = \sum_{i=0}^{l} \mathrm{softmax}_i(\mathbf{w}_l^{\top} \mathrm{RMSNorm}(v_i))\, v_i$ & $\mathbf{w}_l$ aprendido, init a cero; RMSNorm en keys; $L \cdot C$ parámetros & \citep{sun_attnres_2026} \\
+Block AttnRes & $x_{l+1} = \sum_{m=0}^{n} \mathrm{softmax}_m(\mathbf{w}_l^{\top} \mathrm{RMSNorm}(v_m))\, v_m$ & $\mathbf{w}_l$ aprendido, init a cero; RMSNorm en keys; $N$ reps de bloque + suma parcial; $L \cdot C$ parámetros & \citep{sun_attnres_2026} \\
 Hyper-Connexions (HC) & $x_{l+1} = H^{\text{res}}_l x_l + (H^{\text{post}}_l)^{\top} F(H^{\text{pre}}_l x_l, W_l)$ & Sin restricción & \citep{xie_mhc_2025} \\
 mHC (este código base) & misma actualización que HC & $H^{\text{res}}_l$ doblemente estocástica vía Sinkhorn--Knopp ($t_{\max} = 20$), $H^{\text{pre}} = \sigma(\cdot)$, $H^{\text{post}} = 2\sigma(\cdot)$, init $\alpha$ en $0.01$ & \citep{xie_mhc_2025} \\
 \bottomrule
