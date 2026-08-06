@@ -157,7 +157,7 @@ properties:
       reduce per-head capacity.
     examples: [12]
   dropout:
-    type: integer
+    type: number
     title: "Dropout Probability"
     title_es: "Probabilidad de Dropout"
     description: |-
