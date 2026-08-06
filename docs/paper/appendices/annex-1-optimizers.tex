@@ -584,7 +584,8 @@ The key insight: all momentum tracking occurs in the well-conditioned eigenbasis
 \end{algorithm}
 
 \paragraph{Lion (EvoLved Sign Momentum).}
-Lion achieves \textbf{minimal memory overhead} by using sign-based updates instead of full adaptive scaling:\begin{align}
+Lion achieves \textbf{minimal memory overhead} by using sign-based updates instead of full adaptive scaling:
+\begin{align}
 c_t &= \beta_1 m_t + (1-\beta_1) g_t \quad\text{(momentum input)} \\
 \theta_{t+1} &= \theta_t - \eta \left(\text{sign}(c_t) + \lambda\theta_t\right) \quad\text{(sign operator update)} \\
 m_{t+1} &= \beta_2 m_t + (1-\beta_2) g_t \quad\text{(momentum accumulation)}
@@ -609,7 +610,8 @@ All element-wise scaling operations are replaced with \texttt{sign()}, which out
 \end{algorithm}
 
 \paragraph{Sophia (Second-Order Hessian Information with Optimized Approximation).}
-Sophia uses \textbf{diagonal Hessian estimates} for curvature-aware scaling without the memory and compute cost of dense second-order methods.\begin{align}
+Sophia uses \textbf{diagonal Hessian estimates} for curvature-aware scaling without the memory and compute cost of dense second-order methods.
+\begin{align}
 m_t &= \beta_1 m_{t-1} + (1-\beta_1) g_t \quad\text{(first moment)} \\
 h_t &= \beta_2 h_{t-(k-1)} + (1-\beta_2) \hat{h}_t \quad\text{(diagonal Hessian, updated every $k$ steps)} \\
 \text{clip}(x, C) &= \min(\max(x, -C), C) \quad\text{(element-wise clipping)} \\

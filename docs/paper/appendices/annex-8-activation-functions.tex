@@ -27,19 +27,19 @@ All share monotonicity or near-monotonicity and are continuously differentiable.
 \begin{align}
   \text{Sigmoid}(x) &= \frac{1}{1+e^{-x}}
     & \text{Range: } (0,1),\;\text{monotonic, smooth}
-    & \quad \citep{lederer2021activations} \\[4pt]
+    & \quad \text{\citep{lederer2021activations}} \\[4pt]
   \text{Tanh}(x) &= \frac{e^{x}-e^{-x}}{e^{x}+e^{-x}} = 2\,\sigma(2x)-1
     & \text{Range: } (-1,1),\;\text{monotonic, smooth}
-    & \quad \citep{lederer2021activations} \\[4pt]
+    & \quad \text{\citep{lederer2021activations}} \\[4pt]
   \text{Arctan}(x) &= \arctan(x)
     & \text{Range: } (-\tfrac{\pi}{2},\tfrac{\pi}{2}),\;\text{monotonic, smooth}
-    & \quad \citep{lederer2021activations} \\[4pt]
+    & \quad \text{\citep{lederer2021activations}} \\[4pt]
   \text{Softsign}(x) &= \frac{x}{1+|x|}
     & \text{Range: } (-1,1),\;\text{smooth, once-diff.\ at 0}
-    & \quad \citep{lederer2021activations} \\[4pt]
+    & \quad \text{\citep{lederer2021activations}} \\[4pt]
   \text{Elliott}(x) &= \frac{x}{1+|x|}
     & \text{Alias of Softsign (survey ``elliottsig'' notation)}
-    & \quad \citep{lederer2021activations} \\[4pt]
+    & \quad \text{\citep{lederer2021activations}} \\[4pt]
   \text{Identity}(x) &= x
     & \text{Range: } (-\infty,\infty),\;\text{linear, }C^\infty
     & \quad \text{(internal)}
@@ -48,24 +48,24 @@ All share monotonicity or near-monotonicity and are continuously differentiable.
 \begin{align}
   \text{Softplus}(x) &= \log(1+e^{x})
     & \text{Range: } [0,\infty),\;\text{smooth, }C^\infty
-    & \quad \citep{glorot2011softplus} \\[4pt]
+    & \quad \text{\citep{glorot2011softplus}} \\[4pt]
   \text{Mish}(x) &= x\,\tanh\!\big(\text{softplus}(x)\big)
     = x\,\tanh\!\big(\log(1+e^{x})\big)
     & \text{Range: } [\approx{-0.31},\infty),\;\text{non-monotonic, smooth}
-    & \quad \citep{misra2019mish} \\[4pt]
+    & \quad \text{\citep{misra2019mish}} \\[4pt]
   \text{GELU}(x) &= x\,\Phi(x) = x\cdot\tfrac{1}{2}\Big(1+\text{erf}\!\Big(\frac{x}{\sqrt{2}}\Big)\Big)
     & \text{Range: } (\approx{-0.17},\infty),\;\text{smooth, probabilistic}
-    & \quad \citep{hendrycks2016gelu} \\[4pt]
+    & \quad \text{\citep{hendrycks2016gelu}} \\[4pt]
   \text{GELU-tanh}(x) &= \tfrac{x}{2}\Big(1+\tanh\!\Big(\sqrt{\tfrac{2}{\pi}}
     (x+0.044715\,x^{3})\Big)\Big)
     & \text{Tanh approximation of GELU (faster)}
-    & \quad \citep{hendrycks2016gelu} \\[4pt]
+    & \quad \text{\citep{hendrycks2016gelu}} \\[4pt]
   \text{ReLU}(x) &= \max(0,x)
     & \text{Range: } [0,\infty),\;\text{piecewise-linear, non-smooth at 0}
-    & \quad \citep{nair2010relu} \\[4pt]
+    & \quad \text{\citep{nair2010relu}} \\[4pt]
   \text{SiLU}(x) &= x\,\sigma(x) = \frac{x}{1+e^{-x}}
     & \text{Range: } (\approx{-0.278},\infty),\;\text{non-monotonic, smooth}
-    & \quad \citep{elfwing2018silu}
+    & \quad \text{\citep{elfwing2018silu}}
 \end{align}
 
 \noindent\textbf{SiLU} (Sigmoid Linear Unit) is the default activation
@@ -84,43 +84,43 @@ rectified-hyperbolic forms~\citep{nair2010relu,dubey2021activations}.
   \text{LeakyReLU}(x) &= \begin{cases} x & x\ge 0 \\ a\,x & x < 0 \end{cases},
     \quad a=0.01
     & \text{Range: } (-\infty,\infty)
-    & \quad \citep{maas2013leakyrelu} \\[4pt]
+    & \quad \text{\citep{maas2013leakyrelu}} \\[4pt]
   \text{ReLU6}(x) &= \min\!\big(\max(0,x),\,6\big)
     & \text{Range: } [0,6],\;\text{bounded, fixed-point friendly}
-    & \quad \citep{howard2017mobile} \\[4pt]
+    & \quad \text{\citep{howard2017mobile}} \\[4pt]
   \text{HardSwish}(x) &= x\cdot\frac{\text{ReLU6}(x+3)}{6}
     & \text{Range: } (\approx{-1.67},\infty),\;\text{cheap Swish approx.}
-    & \quad \citep{howard2019hardswish} \\[4pt]
+    & \quad \text{\citep{howard2019hardswish}} \\[4pt]
   \text{PReLU}(x) &= \max(0,x)+\mathbf{p}\odot\min(0,x)
     & \text{Learnable per-channel slope } \mathbf{p},\;\text{init 0.25}
-    & \quad \citep{he2015prelu} \\[4pt]
+    & \quad \text{\citep{he2015prelu}} \\[4pt]
   \text{AbsReLU}(x) &= \max(0,x)-\max(0,-x) = x\;\text{rectified to sign-ramp}
     & \text{Range: } (-\infty,\infty)
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{NLReLU}(x) &= \beta\,\log\!\big(1+\max(0,x)\big)
     & \text{Range: } [0,\infty),\;\beta=1.0,\;\text{logarithmic compression}
-    & \quad \citep{dubey2021activations}
+    & \quad \text{\citep{dubey2021activations}}
 \end{align}
 
 \begin{align}
   \text{BReLU}(x) &= \min\!\big(\max(0,x),\,t\big),\quad t=1.0
     & \text{Range: } [0,t],\;\text{bounded rectifier}
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{VReLU}(x) &= |x|
     & \text{Range: } [0,\infty),\;\text{symmetric rectifier}
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{Hexpo}(x) &= a\,\max(0,x)-c\,\max(0,-x),\quad a{=}c{=}1.0
     & \text{Asymmetric two-sided rectifier}
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{PenalizedTanh}(x) &= \max\!\big(0,\,\tanh(x)\big)
     & \text{Range: } [0,1),\;\text{rectified tanh, smooth near 0}
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{DisReLU}(x) &= \max(0,\,x-\delta),\quad \delta=0.0
     & \text{Right-shifted ReLU hinge}
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{LiSHT}(x) &= x\,\tanh(x)
     & \text{Range: } [0,\infty)\;\text{(magnitude), non-monotonic, smooth}
-    & \quad \citep{roy2019lisht}
+    & \quad \text{\citep{roy2019lisht}}
 \end{align}
 
 \noindent\textbf{PReLU}~\citep{he2015prelu} makes the negative slope a
@@ -139,56 +139,56 @@ Several members introduce per-channel learnable parameters.
   \text{ELU}(x) &= \begin{cases} x & x\ge 0 \\ \alpha(e^{x}-1) & x<0 \end{cases},
     \quad \alpha=1.0
     & \text{Range: } (-\alpha,\infty)
-    & \quad \citep{clevert2016elu} \\[4pt]
+    & \quad \text{\citep{clevert2016elu}} \\[4pt]
   \text{SELU}(x) &= \lambda\,\text{ELU}_{\alpha'}(x)
     & \alpha'{\approx}1.6733,\;\lambda{\approx}1.0507,
-    & \quad \citep{klambauer2017selu} \\
+    & \quad \text{\citep{klambauer2017selu}} \\
   & & \text{self-normalizing (mean 0, var 1)} & \notag \\[4pt]
   \text{CELU}(x) &= \begin{cases} x & x\ge 0 \\ \alpha(e^{x/\alpha}-1) & x<0 \end{cases},
     \quad \alpha=1.0
     & \text{Once-diff.\ at 0 for any } \alpha
-    & \quad \citep{barron2017celu} \\[4pt]
+    & \quad \text{\citep{barron2017celu}} \\[4pt]
   \text{PELU}(x) &= \begin{cases} \tfrac{\alpha}{\beta}\,x & x\ge 0 \\
     \alpha(e^{x/\beta}-1) & x<0 \end{cases}
     & \alpha,\beta\text{ learnable per-channel}
-    & \quad \citep{trottier2017pelu} \\[4pt]
+    & \quad \text{\citep{trottier2017pelu}} \\[4pt]
   \text{MPELU}(x) &= \text{ReLU}(x)+\beta\cdot\text{ELU}_{\alpha}(x)\cdot\mathbb{1}_{x<0}
     & \alpha,\beta\text{ learnable per-channel}
-    & \quad \citep{dubey2021activations}
+    & \quad \text{\citep{dubey2021activations}}
 \end{align}
 
 \begin{align}
   \text{FELU}(x) &= \begin{cases} x & x\ge 0 \\ \alpha(e^{x}-1) & x<0 \end{cases}
     & \alpha\text{ learnable, clamped to } [0,1]
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{EELU}(x) &= \beta\,\text{ReLU}(x)+\alpha(e^{x}-1)\cdot\mathbb{1}_{x<0}
     & \alpha,\beta\text{ learnable per-channel}
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{PDELU}(x) &= \begin{cases} x & x\ge 0 \\
     \alpha(e^{x/\alpha}-1)+(1-\alpha)\,x & x<0 \end{cases}
     & \alpha\text{ learnable, interpolates CELU--identity}
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{PREU}(x) &= \beta\,\text{ReLU}(x)+\alpha(e^{x}-1)\cdot\mathbb{1}_{x<0}^{\le 0}
     & \alpha,\beta\text{ learnable per-channel}
-    & \quad \citep{dubey2021activations} \\[4pt]
+    & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{SoftExp}(x) &= \begin{cases}
     \tfrac{1}{\alpha}\big(e^{\alpha x}-1\big)+\alpha & \alpha>0 \\
     x & \alpha=0 \\
     -\tfrac{1}{\alpha}\ln\!\big(1-\alpha(x+\alpha)\big) & \alpha<0
     \end{cases}
     & \alpha\text{ learnable; exp/linear/log interpolation}
-    & \quad \citep{godfrey2015softexp}
+    & \quad \text{\citep{godfrey2015softexp}}
 \end{align}
 
 \begin{align}
   \text{ELiSH}(x) &= \begin{cases} x\,\sigma(x) & x\ge 0 \\
     (e^{x}-1)\,\sigma(x) & x<0 \end{cases}
     & \text{Swish pos.\ branch, ELU-gated neg.\ branch}
-    & \quad \citep{basirat2019elish} \\[4pt]
+    & \quad \text{\citep{basirat2019elish}} \\[4pt]
   \text{HardELiSH}(x) &= \begin{cases} x\cdot\text{hard\_sigmoid}(x) & x\ge 0 \\
     (e^{x}-1)\cdot\text{hard\_sigmoid}(x) & x<0 \end{cases}
     & \text{Hard-sigmoid variant of ELiSH}
-    & \quad \citep{basirat2019elish}
+    & \quad \text{\citep{basirat2019elish}}
 \end{align}
 
 \noindent where $\text{hard\_sigmoid}(x)=\text{ReLU6}(x+3)/6$.

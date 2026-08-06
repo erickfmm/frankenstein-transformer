@@ -259,7 +259,7 @@ where $s$ is the stride and $m$ the merge window. Queries attend over merged slo
 \subsection{Architectural Comparison and Synthesis}
 
 \subsection{Compressed Convolutional Attention (CCA)}
-Compressed Convolutional Attention (CCA) \citep{figliola_cca_2025} takes a fundamentally different approach to latent attention: rather than compressing the KV-cache and then up-projecting to full width before attending (as MLA/GQLA/MLRA do), CCA down-projects queries, keys, and values into a shared latent and performs the \emph{entire} attention operation inside it. There are no Q/K/V up-projection matrices---only a single output up-projection $W̃_O$ maps the latent output back to the residual stream. This simultaneously reduces parameters, KV-cache size, \textbf{and} attention FLOPs by the compression factor $C = E/\tilde{e}$, whereas MLA only shrinks the cache.
+Compressed Convolutional Attention (CCA) \citep{figliola_cca_2025} takes a fundamentally different approach to latent attention: rather than compressing the KV-cache and then up-projecting to full width before attending (as MLA/GQLA/MLRA do), CCA down-projects queries, keys, and values into a shared latent and performs the \emph{entire} attention operation inside it. There are no Q/K/V up-projection matrices---only a single output up-projection $\tilde{W}_O$ maps the latent output back to the residual stream. This simultaneously reduces parameters, KV-cache size, \textbf{and} attention FLOPs by the compression factor $C = E/\tilde{e}$, whereas MLA only shrinks the cache.
 
 To make attention in the fully compressed latent viable, CCA introduces three innovations: (1) two causal convolutions on the packed q/k tensor (a depth-wise sequence convolution and a head-wise grouped channel convolution), (2) q-k-mean (adds the pre-convolution mean of q and k to the post-convolution values), and (3) value-shift (each head receives half its values from the current token and half from the previous token via two independent projections). After these steps, QK L2-normalisation and a learnable key temperature $\beta$ are applied, RoPE is applied \emph{directly in the latent} (no separate RoPE head needed), and standard softmax attention is computed.
 
@@ -277,12 +277,12 @@ To make attention in the fully compressed latent viable, CCA introduces three in
 \]
 \[
 \text{attn} = \texttt{softmax}\!\left(\frac{\text{RoPE}(\hat{q})\, \text{RoPE}(\hat{k})^\top}{\sqrt{d_h}}\right) \tilde{v}, \qquad
-\mathbf{Y} = W̃_O\, \text{attn}.
+\mathbf{Y} = \tilde{W}_O\, \text{attn}.
 \]
 
 \subsubsection{Algorithmic Pseudocode}
 \begin{algorithmic}[1]
-\State \textbf{Input:} hidden state $x \in \mathbb{R}^{n \times E}$, compression factor $C$, projections $\tilde{W}_Q, \tilde{W}_K, \tilde{W}_{V_1}, \tilde{W}_{V_2}, W̃_O$
+\State \textbf{Input:} hidden state $x \in \mathbb{R}^{n \times E}$, compression factor $C$, projections $\tilde{W}_Q, \tilde{W}_K, \tilde{W}_{V_1}, \tilde{W}_{V_2}, \tilde{W}_O$
 \State $\tilde{e} \gets E / C$ \Comment{latent width}
 \State $\tilde{q}_{\text{pre}} \gets \tilde{W}_Q\, x$, \quad $\tilde{k}_{\text{pre}} \gets \tilde{W}_K\, x$ \Comment{down-project to latent}
 \State $\tilde{q}_{\text{conv}} \gets \text{ConvSeq}(\tilde{q}_{\text{pre}})$, \quad $\tilde{k}_{\text{conv}} \gets \text{ConvSeq}(\tilde{k}_{\text{pre}})$ \Comment{causal depth-wise + grouped convs}
@@ -293,7 +293,7 @@ To make attention in the fully compressed latent viable, CCA introduces three in
 \State $\hat{q} \gets \tilde{q}\, \sqrt{d_h} / \|\tilde{q}\|$, \quad $\hat{k} \gets \tilde{k}\, \sqrt{d_h} / \|\tilde{k}\| \cdot e^{\beta}$ \Comment{QK-norm + temperature}
 \State $\hat{q} \gets \text{RoPE}(\hat{q})$, \quad $\hat{k} \gets \text{RoPE}(\hat{k})$ \Comment{RoPE in latent}
 \State $\text{weights} \gets \texttt{softmax}(\hat{q}\, \hat{k}^\top / \sqrt{d_h})$
-\State \textbf{Output:} $\mathbf{Y} = W̃_O\, (\text{weights} \cdot \tilde{v})$
+\State \textbf{Output:} $\mathbf{Y} = \tilde{W}_O\, (\text{weights} \cdot \tilde{v})$
 \end{algorithmic}
 
 \subsubsection{Key Characteristics}
@@ -320,7 +320,7 @@ Same pipeline as CCA, with decoupled latents:
 \]
 \[
 \text{attn} = \texttt{softmax}\!\left(\frac{\text{RoPE}(\hat{q})\, \text{RoPE}(\hat{k})^\top}{\sqrt{d_h}}\right) \tilde{v}, \qquad
-\mathbf{Y} = W̃_O\, \text{attn}.
+\mathbf{Y} = \tilde{W}_O\, \text{attn}.
 \]
 
 \subsubsection{Key Characteristics}

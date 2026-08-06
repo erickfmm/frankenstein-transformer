@@ -258,7 +258,7 @@ The \texttt{training} object controls the entire training pipeline. The only req
 \caption{Complete training configuration fields.}
 \label{tab:training-fields}
 \endlastfoot
-task & enum (mlm, sbert) (required) & Training objective. \texttt{mlm} = Masked Language Modeling; \texttt{sbert} = Sentence-BERT fine-tuning. \\
+task & enum (mlm, sbert, causal\_lm) (required) & Training objective. \texttt{mlm} = Masked Language Modeling; \texttt{sbert} = Sentence-BERT fine-tuning; \texttt{causal\_lm} = autoregressive next-token prediction (requires \texttt{model\_class='frankensteindecoder'}). \\
 num\_epochs & int $\ge 1$ & Complete passes through the training dataset (MLM only). \\
 batch\_size & int $\ge 1$ & Examples per optimizer step (before gradient accumulation). \\
 dataloader\_workers & int $\ge 0$ & Parallel worker processes for data loading. \\
@@ -275,7 +275,7 @@ join\_temp\_data\_context\_window & int $\ge 0$ & If $>0$, joins cached token ch
 join\_temp\_data\_min\_remainder\_tokens & int $\ge 0$ & Minimum content tokens in last partial joined window. \\
 use\_amp & bool & Enable FP16 mixed precision. \\
 gradient\_accumulation\_steps & int $\ge 1$ & Accumulate gradients over N mini-batches before optimizer step. \\
-optimizer & object & Optimizer configuration (see \S\ref{subsec:optimizer-config}). Required when \texttt{task=mlm}. \\
+optimizer & object & Optimizer configuration (see \S\ref{subsec:optimizer-config}). Required when \texttt{task=mlm} or \texttt{task=causal\_lm}. \\
 sbert & object & SBERT training configuration (see \S\ref{subsec:sbert-config}). Required when \texttt{task=sbert}. \\
 scheduler\_total\_steps & int $\ge 1$ & Total optimizer steps for LR schedule. \\
 scheduler\_warmup\_ratio & float [0,1] & Fraction of \texttt{scheduler\_total\_steps} for LR warmup. \\
@@ -419,7 +419,7 @@ The schema enforces the following cross-component validation rules, implemented 
     \item \texttt{model.dims.num\_kv\_heads} must divide \texttt{model.dims.num\_heads} exactly when Grouped-Query Attention is used.
     \item \texttt{vocab\_size} must match the tokenizer's vocabulary size. Mismatch causes token ID corruption and unrecoverable training failure.
     \item When \texttt{base\_model} is set, \texttt{training.task} is required. If \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} is also required.
-    \item \texttt{task: mlm} requires \texttt{training.optimizer}; \texttt{task: sbert} requires \texttt{training.sbert}.
+    \item \texttt{task: mlm} requires \texttt{training.optimizer}; \texttt{task: sbert} requires \texttt{training.sbert}; \texttt{task: causal\_lm} requires \texttt{training.optimizer} and \texttt{model\_class='frankensteindecoder'}.
     \item \texttt{bitnet\_routers=true} requires \texttt{use\_bitnet=true}. The flag has no effect otherwise.
     \item \texttt{use\_mhc=true} (mHC n-stream residual) and \texttt{use\_mixture\_of\_depths=true} are mutually exclusive. Enabling both raises a \texttt{ValueError}: MoD token routing operates on a single $C$-dimensional stream, which conflicts with the n-stream residual.
     \item \texttt{fasa\_attn} and \texttt{sparge\_attn} are evaluation-only layer types. They raise \texttt{RuntimeError} if used during training. They must not appear in \texttt{model.dims.layer\_pattern} for training runs.

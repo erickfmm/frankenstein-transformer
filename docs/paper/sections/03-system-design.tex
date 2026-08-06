@@ -108,15 +108,16 @@ The \texttt{training.task} field determines the training objective, working in c
     \item \textbf{Configuration}: Uses \texttt{mlm\_probability} parameter to control masking fraction.
 \end{itemize}
 
-\paragraph{Autoregressive (AR) Next-Token Prediction.}
+\paragraph{Causal Language Modeling (\texttt{causal\_lm}).}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Mode}: Requires \texttt{mode='decoder'} for causal masking.
-    \item \textbf{Objective}: Train model to predict next token in sequence given all previous tokens only.
+    \item \textbf{Objective}: Autoregressive next-token prediction --- each position $i$ predicts token $i+1$ given all preceding tokens only. Cross-entropy is computed over all shifted non-pad positions (no masking), in contrast to MLM which supervises only randomly masked positions.
     \item \textbf{Use Case}: Language generation and LLM-style tasks following GPT methodology. Model learns sequential dependencies with causal attention where each token can only attend to preceding tokens.
-    \item \textbf{Model Class}: Typically uses \texttt{model\_class='frankensteindecoder'} for autoregressive decoder architectures.
+    \item \textbf{Model Class}: Set \texttt{task='causal\_lm'} and \texttt{model\_class='frankensteindecoder'}; the schema and runtime require the decoder class for this task (causal masking is only provided by the decoder).
+    \item \textbf{Configuration}: Reuses \texttt{training.optimizer}; the streaming dataset stores sequences unmasked (\texttt{labels == input\_ids}) so the trainer can compute the shifted next-token loss.
 \end{itemize}
 
-This dual task support enables unified experimentation across both encoder-style pre-training (MLM for bidirectional understanding) and decoder-style generation (AR for sequential text production) within the same codebase.
+This task support enables unified experimentation across encoder-style pre-training (MLM for bidirectional understanding), decoder-style generation (\texttt{causal\_lm} for autoregressive next-token prediction), and sentence embedding (SBERT), all within the same codebase.
 
 
 \subsection{Optimizer Configuration}

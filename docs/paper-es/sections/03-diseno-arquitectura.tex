@@ -108,15 +108,16 @@ El campo \texttt{training.task} determina el objetivo de entrenamiento, trabajan
     \item \textbf{Configuración}: Utiliza el parámetro \texttt{mlm\_probability} para controlar la fracción de enmascaramiento.
 \end{itemize}
 
-\paragraph{Predicción Autorregresiva (AR) del Siguiente Token.}
+\paragraph{Modelado de Lenguaje Causal (\texttt{causal\_lm}).}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Modo}: Requiere \texttt{mode='decoder'} para enmascaramiento causal.
-    \item \textbf{Objetivo}: Entrenar al modelo para predecir el siguiente token en la secuencia dados solo los tokens anteriores.
+    \item \textbf{Objetivo}: Predicción autorregresiva del siguiente token --- cada posición $i$ predice el token $i+1$ dados solo los tokens precedentes. La cross-entropy se calcula sobre todas las posiciones desplazadas sin enmascarar (no hay enmascaramiento), a diferencia del MLM que supervisa solo posiciones enmascaradas aleatoriamente.
     \item \textbf{Caso de Uso}: Generación de lenguaje y tareas estilo LLM siguiendo la metodología GPT. El modelo aprende dependencias secuenciales con atención causal donde cada token solo puede atender a tokens precedentes.
-    \item \textbf{Clase de Modelo}: Típicamente usa \texttt{model\_class='frankensteindecoder'} para arquitecturas de decoder autorregresivo.
+    \item \textbf{Clase de Modelo}: Establecer \texttt{task='causal\_lm'} y \texttt{model\_class='frankensteindecoder'}; el esquema y el runtime requieren la clase decoder para esta tarea (el enmascaramiento causal solo lo proporciona el decoder).
+    \item \textbf{Configuración}: Reutiliza \texttt{training.optimizer}; el dataset de streaming almacena las secuencias sin enmascarar (\texttt{labels == input\_ids}) para que el trainer pueda calcular la pérdida de siguiente token desplazada.
 \end{itemize}
 
-Este soporte de tareas dual permite la experimentación unificada tanto en preentrenamiento tipo encoder (MLM para comprensión bidireccional) como en generación tipo decoder (AR para producción secuencial de texto) dentro del mismo código base.
+Este soporte de tareas permite la experimentación unificada tanto en preentrenamiento tipo encoder (MLM para comprensión bidireccional), generación tipo decoder (\texttt{causal\_lm} para predicción autorregresiva del siguiente token) como en embedding de oraciones (SBERT), dentro del mismo código base.
 
 \subsection{Configuración del Optimizador}
 El objeto \texttt{training.optimizer} selecciona entre 23 familias de optimizadores mediante \texttt{optimizer\_class} y proporciona control de hiperparámetros por grupo de parámetros a través de una convención de nombres con prefijos. El contrato completo de prefijos del optimizador y las familias soportadas se documentan en el Apéndice~\ref{sec:annex-schema}.

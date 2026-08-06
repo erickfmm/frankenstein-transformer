@@ -258,7 +258,7 @@ El objeto \texttt{training} controla todo el pipeline de entrenamiento. El únic
 \caption{Campos completos de configuración de entrenamiento.}
 \label{tab:training-fields}
 \endlastfoot
-task & enum (mlm, sbert) (obligatorio) & Objetivo de entrenamiento. \texttt{mlm} = Modelado de Lenguaje Enmascarado; \texttt{sbert} = ajuste fino Sentence-BERT. \\
+task & enum (mlm, sbert, causal\_lm) (obligatorio) & Objetivo de entrenamiento. \texttt{mlm} = Modelado de Lenguaje Enmascarado; \texttt{sbert} = ajuste fino Sentence-BERT; \texttt{causal\_lm} = predicción autorregresiva del siguiente token (requiere \texttt{model\_class='frankensteindecoder'}). \\
 num\_epochs & int $\ge 1$ & Pasadas completas por el dataset de entrenamiento (solo MLM). \\
 batch\_size & int $\ge 1$ & Ejemplos por paso del optimizador (antes de acumulación de gradientes). \\
 dataloader\_workers & int $\ge 0$ & Procesos trabajadores paralelos para carga de datos. \\
@@ -275,7 +275,7 @@ join\_temp\_data\_context\_window & int $\ge 0$ & Si $>0$, une fragmentos de tok
 join\_temp\_data\_min\_remainder\_tokens & int $\ge 0$ & Tokens de contenido mínimos en la última ventana parcial unida. \\
 use\_amp & bool & Activar precisión mixta FP16. \\
 gradient\_accumulation\_steps & int $\ge 1$ & Acumular gradientes sobre N mini-lotes antes del paso del optimizador. \\
-optimizer & object & Configuración del optimizador (ver \S\ref{subsec:optimizer-config}). Obligatorio cuando \texttt{task=mlm}. \\
+optimizer & object & Configuración del optimizador (ver \S\ref{subsec:optimizer-config}). Obligatorio cuando \texttt{task=mlm} o \texttt{task=causal\_lm}. \\
 sbert & object & Configuración de entrenamiento SBERT (ver \S\ref{subsec:sbert-config}). Obligatorio cuando \texttt{task=sbert}. \\
 scheduler\_total\_steps & int $\ge 1$ & Pasos totales del optimizador para la programación de LR. \\
 scheduler\_warmup\_ratio & float [0,1] & Fracción de \texttt{scheduler\_total\_steps} para calentamiento de LR. \\
@@ -419,7 +419,7 @@ El esquema impone las siguientes reglas de validación entre componentes, implem
     \item \texttt{model.dims.num\_kv\_heads} debe dividir \texttt{model.dims.num\_heads} exactamente cuando se usa Atención por Consultas Agrupadas.
     \item \texttt{vocab\_size} debe coincidir con el tamaño de vocabulario del tokenizador. Una discrepancia causa corrupción de IDs de token y fallo de entrenamiento irrecuperable.
     \item Cuando \texttt{base\_model} está configurado, \texttt{training.task} es obligatorio. Si \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} también es obligatorio.
-    \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}.
+    \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}; \texttt{task: causal\_lm} requiere \texttt{training.optimizer} y \texttt{model\_class='frankensteindecoder'}.
     \item \texttt{bitnet\_routers=true} requiere \texttt{use\_bitnet=true}. La bandera no tiene efecto en caso contrario.
     \item \texttt{use\_mhc=true} (flujo residual de $n$ streams mHC) y \texttt{use\_mixture\_of\_depths=true} son mutuamente excluyentes. Habilitar ambos lanza un \texttt{ValueError}: el enrutamiento MoD de tokens opera sobre un flujo $C$-dimensional único, en conflicto con el flujo residual de $n$ streams.
     \item \texttt{fasa\_attn} y \texttt{sparge\_attn} son tipos de capa solo para evaluación. Lanzan \texttt{RuntimeError} si se usan durante el entrenamiento. No deben aparecer en \texttt{model.dims.layer\_pattern} para ejecuciones de entrenamiento.

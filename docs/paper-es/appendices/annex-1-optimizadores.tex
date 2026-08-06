@@ -453,7 +453,7 @@ v_t &= \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \quad\text{(momento de segundo orden)
 
 A diferencia de los optimizadores adaptativos estándar, IDU actualiza el precondicionador solo en potencias de dos ($t = 2^k$), acumulando estadísticas de gradiente entre actualizaciones y agregándolas recursivamente. Este acumulador suave y multiescala evita el seguimiento estricto del máximo de AMSGrad mientras estabiliza demostrablemente la convergencia para cualquier $\gamma \in \mathbb{R}$. El parámetro $\gamma$ controla directamente la adaptividad: $\gamma > 1$ acelera la salida de puntos de silla (favorable para arquitecturas complejas), $\gamma = 1$ recupera el comportamiento tipo Adam, $\gamma = 0$ produce escalado tipo SGD, y $\gamma < 0$ se sesga hacia mínimos más planos (beneficioso para arquitecturas clásicas como CNNs).
 
-Anon mantiene tres buffers de estado ($m$, $v$, fixed\_lr$) con costo $O(n)$ por paso, situándolo en la misma clase de complejidad que AdamW pero con la flexibilidad adicional de adaptividad ajustable. La técnica IDU converge demostrablemente con regret $O(\sqrt{T})$ para problemas convexos y $O(\ln T / \sqrt{T})$ para entornos no convexos, igualando las garantías de los optimizadores adaptativos convencionales mientras soporta todo el rango de adaptividad de valores reales.
+Anon mantiene tres buffers de estado ($m$, $v$, $fixed\_lr$) con costo $O(n)$ por paso, situándolo en la misma clase de complejidad que AdamW pero con la flexibilidad adicional de adaptividad ajustable. La técnica IDU converge demostrablemente con regret $O(\sqrt{T})$ para problemas convexos y $O(\ln T / \sqrt{T})$ para entornos no convexos, igualando las garantías de los optimizadores adaptativos convencionales mientras soporta todo el rango de adaptividad de valores reales.
 
 \begin{algorithm}[H]
 \caption{Anon (Adaptivity Non-restricted Optimizer con IDU)}
@@ -461,7 +461,7 @@ Anon mantiene tres buffers de estado ($m$, $v$, fixed\_lr$) con costo $O(n)$ por
 \begin{algorithmic}[1]
 \Require Parámetros iniciales $\theta_0$, tasa de aprendizaje $\eta$, $\beta_1, \beta_2$, tolerancia $\epsilon$, adaptividad $\gamma \in \mathbb{R}$
 \Ensure Parámetros actualizados $\theta_T$
-\State Inicializar: $m \gets 0$, $v \gets 0$, fixed\_lr $\gets 0$, paso $t \gets 0$, contador IDU $k \gets -1$
+\State Inicializar: $m \gets 0$, $v \gets 0$, $fixed\_lr \gets 0$, paso $t \gets 0$, contador IDU $k \gets -1$
 \For{$t = 1, 2, \ldots, T$}
     \State $g_t \gets \nabla f(\theta_{t-1})$
     \State $m \gets \beta_1 m + (1-\beta_1) g_t$

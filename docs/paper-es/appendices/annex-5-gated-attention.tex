@@ -461,7 +461,7 @@ donde $\mathbf{a}$ y $\boldsymbol{\delta}$ son parámetros aprendidos por canal.
 
 \paragraph{Reducción a Gated DeltaNet}: Cuando $\boldsymbol{\alpha}_t$ colapsa a un escalar (es decir, todos los canales comparten el mismo decaimiento), KDA se reduce exactamente a Gated DeltaNet. El decaimiento canalizado es por tanto una generalización estricta que añade selectividad por canal sobre el decaimiento/escritura escalares de Gated DeltaNet.
 
-\paragraph{Entrenamiento por fragmentos}: Un algoritmo por fragmentos ad hoc usa una variante \textbf{Diagonal-Plus-Low-Rank (DPLR)} especializada de la matriz de transición para mantener la eficiencia en hardware. El producto de las transiciones por paso $(\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top)\mathbf{D}_t admite una descomposición DPLR que permite paralelismo rico en matmuls en tensor cores preservando la estructura de decaimiento canalizado.
+\paragraph{Entrenamiento por fragmentos}: Un algoritmo por fragmentos ad hoc usa una variante \textbf{Diagonal-Plus-Low-Rank (DPLR)} especializada de la matriz de transición para mantener la eficiencia en hardware. El producto de las transiciones por paso $(\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top)\mathbf{D}_t$ admite una descomposición DPLR que permite paralelismo rico en matmuls en tensor cores preservando la estructura de decaimiento canalizado.
 
 \begin{algorithm}[H]
 \caption{Avance Recurrente de Kimi Delta Attention (Forma de Referencia)}

@@ -259,7 +259,7 @@ donde $s$ es el stride y $m$ la ventana de fusión. Las consultas atienden sobre
 \subsection{Comparación y Síntesis Arquitectónica}
 
 \subsection{Atención Convolucional Comprimida (CCA)}
-La Atención Convolucional Comprimida (CCA, por sus siglas en inglés) \citep{figliola_cca_2025} adopta un enfoque fundamentalmente diferente para la atención latente: en lugar de comprimir el caché KV y luego up-proyectar al ancho completo antes de atender (como MLA/GQLA/MLRA), CCA proyecta consultas, claves y valores a un latente compartido y realiza la operación de atención \emph{completa} dentro de él. No hay matrices de up-proyección para Q/K/V --- sólo una única up-proyección de salida $W̃_O$ mapea la salida latente de vuelta al flujo residual. Esto reduce simultáneamente parámetros, caché KV, \textbf{y} FLOPs de atención por el factor de compresión $C = E/\tilde{e}$, mientras que MLA sólo reduce el caché.
+La Atención Convolucional Comprimida (CCA, por sus siglas en inglés) \citep{figliola_cca_2025} adopta un enfoque fundamentalmente diferente para la atención latente: en lugar de comprimir el caché KV y luego up-proyectar al ancho completo antes de atender (como MLA/GQLA/MLRA), CCA proyecta consultas, claves y valores a un latente compartido y realiza la operación de atención \emph{completa} dentro de él. No hay matrices de up-proyección para Q/K/V --- sólo una única up-proyección de salida $\tilde{W}_O$ mapea la salida latente de vuelta al flujo residual. Esto reduce simultáneamente parámetros, caché KV, \textbf{y} FLOPs de atención por el factor de compresión $C = E/\tilde{e}$, mientras que MLA sólo reduce el caché.
 
 Para hacer viable la atención en el latente comprimido, CCA introduce tres innovaciones: (1) dos convoluciones causales sobre el tensor empaquetado q/k (una convolución de secuencia depth-wise y una convolución agrupada de canales por cabeza), (2) q-k-mean (añade la media pre-convolución de q y k a los valores post-convolución), y (3) value-shift (cada cabeza recibe la mitad de sus valores del token actual y la mitad del token anterior mediante dos proyecciones independientes). Tras estos pasos, se aplica normalización L2 de QK y una temperatura de clave aprendible $\beta$, RoPE se aplica \emph{directamente en el latente} (sin cabeza RoPE separada), y se computa la atención softmax estándar.
 
@@ -277,7 +277,7 @@ Para hacer viable la atención en el latente comprimido, CCA introduce tres inno
 \]
 \[
 \text{atencion} = \texttt{softmax}\!\left(\frac{\text{RoPE}(\hat{q})\, \text{RoPE}(\hat{k})^\top}{\sqrt{d_h}}\right) \tilde{v}, \qquad
-\mathbf{Y} = W̃_O\, \text{atencion}.
+\mathbf{Y} = \tilde{W}_O\, \text{atencion}.
 \]
 
 \subsubsection{Características Clave}
