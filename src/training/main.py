@@ -196,14 +196,19 @@ def _build_dataloader(
     training_runtime: Dict[str, Any],
     resolved_device: str,
     cli_batch_size: Optional[int],
+    task: str = "mlm",
 ) -> Tuple[DataLoader, StreamingMLMDataset, Dict[str, Any], int]:
-    """Build the streaming MLM dataset and DataLoader.
+    """Build the streaming MLM/CLM dataset and DataLoader.
 
     Args:
         tokenizer: Tokenizer instance (SPM or HuggingFace).
         training_runtime: Runtime configuration dictionary from YAML.
         resolved_device: Resolved PyTorch device string.
         cli_batch_size: Optional CLI batch size override.
+        task: Training task identifier. ``"causal_lm"`` disables MLM masking
+            so cached sequences are stored unmasked (``labels == input_ids``)
+            for autoregressive next-token loss. Any other value keeps the
+            default BERT-style MLM masking. Default: ``"mlm"``.
 
     Returns:
         Tuple of ``(dataloader, dataset, stats, batch_size)``.
@@ -211,8 +216,13 @@ def _build_dataloader(
     Raises:
         ValueError: If ``cli_batch_size`` is <= 0.
     """
+    task = str(task or "mlm").strip().lower()
+    apply_mlm_mask = task != "causal_lm"
     logging.info("\n" + "=" * 60)
-    logging.info("Step 3: Preparing MLM dataset with resilient caching")
+    logging.info(
+        "Step 3: Preparing %s dataset with resilient caching",
+        "CLM (unmasked)" if not apply_mlm_mask else "MLM",
+    )
     logging.info("=" * 60)
 
     max_length = int(training_runtime.get("max_length", 512))
@@ -246,6 +256,7 @@ def _build_dataloader(
         stream_local_parquet=stream_local_parquet,
         join_temp_data_context_window=join_context_window,
         join_temp_data_min_remainder_tokens=join_min_remainder,
+        apply_mlm_mask=apply_mlm_mask,
     )
 
     stats = dataset.get_stats()
@@ -984,10 +995,11 @@ def main(argv=None):
         training_runtime=training_runtime,
         resolved_device=resolved_device,
         cli_batch_size=args.batch_size,
+        task=loaded.task,
     )
 
     logging.info("\n" + "=" * 60)
-    logging.info("Step 4: MLM training (%s)", model_descriptor)
+    logging.info("Step 4: %s training (%s)", loaded.task.upper(), model_descriptor)
     logging.info("=" * 60)
 
     trainer = TitanTrainer(
@@ -995,6 +1007,7 @@ def main(argv=None):
         runtime_config,
         training_config=training_config,
         device=resolved_device,
+        task=loaded.task,
     )
 
     # Resume from the latest rolling checkpoint when requested (supervisor

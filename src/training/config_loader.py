@@ -88,7 +88,8 @@ class LoadedTrainingConfig:
     """Structured result of loading and validating a training YAML config.
 
     Attributes:
-        task: Training task identifier (``"mlm"`` or ``"sbert"``).
+        task: Training task identifier (``"mlm"``, ``"sbert"``, or
+            ``"causal_lm"``).
         model_class: Model class name (``"frankenstein"``,
             ``"frankensteindecoder"``, or ``"base_model"``).
         model_config: :class:`FrankensteinModelConfig` for custom models, or ``None``
@@ -156,8 +157,8 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         raise ValueError("tokenizer must be an object when provided")
 
     task = str(training_data.get("task", "")).strip().lower()
-    if task not in {"mlm", "sbert"}:
-        raise ValueError("training.task is required and must be one of: mlm, sbert")
+    if task not in {"mlm", "sbert", "causal_lm"}:
+        raise ValueError("training.task is required and must be one of: mlm, sbert, causal_lm")
 
     model_config: Optional[FrankensteinModelConfig] = None
     if not base_model:
@@ -173,15 +174,23 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         # model/model_class are intentionally ignored when base_model is set.
         model_class = model_class or "base_model"
 
-    if base_model and task == "mlm":
+    if base_model and task in {"mlm", "causal_lm"}:
         tokenizer_name_or_path = tokenizer_config.get("name_or_path")
         if not isinstance(tokenizer_name_or_path, str) or not tokenizer_name_or_path.strip():
             raise ValueError(
-                "tokenizer.name_or_path must be provided for MLM training when base_model is set"
+                "tokenizer.name_or_path must be provided for MLM/Causal-LM training when base_model is set"
             )
 
+    # Causal-LM requires the decoder model class (causal masking). Enforce
+    # this at runtime in addition to the schema conditional rule.
+    if task == "causal_lm" and model_class != "frankensteindecoder":
+        raise ValueError(
+            "training.task=causal_lm requires model_class=frankensteindecoder "
+            "(causal/autoregressive masking is only provided by the decoder)"
+        )
+
     optimizer_data = training_data.get("optimizer")
-    if task == "mlm":
+    if task in {"mlm", "causal_lm"}:
         if not isinstance(optimizer_data, dict):
             raise ValueError(
                 "Missing required 'training.optimizer' object in config. "

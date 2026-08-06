@@ -186,7 +186,8 @@ class TitanTrainer:
 
     def __init__(self, model: torch.nn.Module, config: Optional[Any],
                  training_config: TrainingConfig = None,
-                 device: str = None): #torch.device = None):
+                 device: str = None,
+                 task: str = "mlm"): #torch.device = None):
         """Initialize the trainer.
 
         Args:
@@ -196,10 +197,16 @@ class TitanTrainer:
                 checkpointing parameters. Uses defaults if ``None``.
             device: Target device string. Defaults to CUDA if available,
                 otherwise CPU.
+            task: Training task identifier. ``"mlm"`` for masked language
+                modeling (masked-position cross-entropy), ``"causal_lm"`` for
+                autoregressive next-token prediction (shifted cross-entropy
+                over all non-pad positions). Any other value falls back to
+                the MLM loss. Default: ``"mlm"``.
         """
         self.model = model
         self.config = config
         self.training_config = training_config or TrainingConfig()
+        self.task = str(task or "mlm").strip().lower()
         self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
         self._primary_device = str(self.device)
         self._configured_use_amp = bool(self.training_config.use_amp)
@@ -1155,7 +1162,97 @@ class TitanTrainer:
                 accuracy = torch.tensor(0.0, device=logits.device)
         
         return loss, accuracy
-    
+
+    def compute_causal_lm_loss(self, input_ids, attention_mask, labels):
+        """Compute causal language modeling (next-token) loss.
+
+        Autoregressive objective: position ``i`` predicts token ``i+1``.
+        Cross-entropy is computed over **all** shifted non-pad positions
+        (no masking, unlike :meth:`compute_mlm_loss`). The model is expected
+        to apply causal attention internally (i.e. ``model_class`` is
+        ``frankensteindecoder`` / ``mode == "decoder"``).
+
+        Args:
+            input_ids: Token ID tensor of shape ``(B, S)``.
+            attention_mask: Attention mask tensor of shape ``(B, S)``.
+            labels: Label tensor of shape ``(B, S)``. For CLM this equals
+                ``input_ids`` (the dataset produces unmasked sequences).
+
+        Returns:
+            Tuple of ``(loss, accuracy)`` where ``loss`` is a scalar tensor
+            and ``accuracy`` is a scalar tensor in ``[0, 1]`` computed over
+            shifted non-pad positions.
+
+        Raises:
+            RuntimeError: If non-finite logits are detected, or if tensor
+                shapes are mismatched.
+        """
+        # Forward pass
+        logits = self._forward_mlm_logits(input_ids, attention_mask)
+        auxiliary_losses = getattr(self.model, "last_auxiliary_losses", None)
+
+        # Safety: avoid propagating non-finite logits into CE (would yield NaN loss)
+        if not torch.isfinite(logits).all():
+            bad = (~torch.isfinite(logits)).sum().item()
+            raise RuntimeError(f"Non-finite logits detected in forward pass: {bad} elements")
+
+        batch_size, seq_len, vocab_size = logits.shape
+
+        if labels.shape != input_ids.shape:
+            raise RuntimeError(f"Shape mismatch: labels {labels.shape} != input_ids {input_ids.shape}")
+        if attention_mask.shape != input_ids.shape:
+            raise RuntimeError(f"Shape mismatch: attention_mask {attention_mask.shape} != input_ids {input_ids.shape}")
+
+        # Next-token shift: logits[:, :-1] predict labels[:, 1:].
+        # Guard against length-1 sequences (nothing to predict).
+        if seq_len < 2:
+            loss = logits.new_zeros((), requires_grad=True)
+            accuracy = torch.tensor(0.0, device=logits.device)
+            if isinstance(auxiliary_losses, dict):
+                for aux_loss in auxiliary_losses.values():
+                    if torch.is_tensor(aux_loss) and aux_loss.requires_grad:
+                        if not torch.isfinite(aux_loss):
+                            raise RuntimeError("Non-finite auxiliary loss detected during forward pass")
+                        loss = loss + aux_loss
+            return loss, accuracy
+
+        shift_logits = logits[:, :-1, :].contiguous()
+        shift_labels = labels[:, 1:].contiguous()
+        shift_attn = attention_mask[:, 1:].contiguous()
+
+        # Build CE targets with -100 on padding so pads are ignored.
+        ce_labels = shift_labels.clone()
+        ce_labels[shift_attn == 0] = -100
+
+        flat_logits = shift_logits.view(-1, vocab_size).float()
+        flat_labels = ce_labels.view(-1)
+
+        valid_mask = (flat_labels != -100)
+        if valid_mask.sum().item() > 0:
+            loss = F.cross_entropy(flat_logits, flat_labels, ignore_index=-100)
+        else:
+            loss = logits.new_zeros((), requires_grad=True)
+
+        if isinstance(auxiliary_losses, dict):
+            for aux_name, aux_loss in auxiliary_losses.items():
+                if torch.is_tensor(aux_loss) and aux_loss.requires_grad:
+                    if not torch.isfinite(aux_loss):
+                        raise RuntimeError(
+                            f"Non-finite auxiliary loss detected for {aux_name} during forward pass"
+                        )
+                    loss = loss + aux_loss
+
+        # Accuracy on shifted non-pad positions
+        with torch.no_grad():
+            if valid_mask.any():
+                predictions = flat_logits.argmax(dim=-1)
+                correct = (predictions == flat_labels) & valid_mask
+                accuracy = correct.sum().float() / valid_mask.sum().float()
+            else:
+                accuracy = torch.tensor(0.0, device=logits.device)
+
+        return loss, accuracy
+
     def train_epoch(self, dataloader: DataLoader, epoch: int) -> Tuple[float, bool]:
         """
         Train for one epoch with advanced monitoring.
@@ -1202,11 +1299,18 @@ class TitanTrainer:
                 while retry_count <= self.training_config.max_nan_retries and not batch_done:
                     # Forward pass (AMP if enabled)
                     with autocast(self.device, enabled=amp_enabled, dtype=self.amp_dtype):
-                        loss, accuracy = self.compute_mlm_loss(
-                            batch['input_ids'],
-                            batch['attention_mask'],
-                            batch['labels']
-                        )
+                        if self.task == "causal_lm":
+                            loss, accuracy = self.compute_causal_lm_loss(
+                                batch['input_ids'],
+                                batch['attention_mask'],
+                                batch['labels']
+                            )
+                        else:
+                            loss, accuracy = self.compute_mlm_loss(
+                                batch['input_ids'],
+                                batch['attention_mask'],
+                                batch['labels']
+                            )
 
                         if self._check_for_nan(loss * self.gradient_accumulation_steps, batch_idx, batch):
                             repair_action = self._append_repair_action(

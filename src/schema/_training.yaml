@@ -3,14 +3,14 @@ title: Training Configuration
 title_es: Configuración de Entrenamiento
 description: 'Training hyperparameters and runtime configuration. Includes task-specific settings
 
-  (MLM/SBERT), data loading, optimization, checkpointing, logging, and hardware management.
+  (MLM/SBERT/Causal-LM), data loading, optimization, checkpointing, logging, and hardware management.
 
   Controls the entire training pipeline from data ingestion to model saving.
 
   '
 description_es: 'Hiperparámetros de entrenamiento y configuración de ejecución. Incluye configuraciones
 
-  específicas de tarea (MLM/SBERT), carga de datos, optimización, checkpointing, logging y gestión
+  específicas de tarea (MLM/SBERT/Causal-LM), carga de datos, optimización, checkpointing, logging y gestión
 
   de hardware. Controla todo el pipeline de entrenamiento desde ingesta de datos hasta guardado del modelo.
 
@@ -24,14 +24,19 @@ properties:
     title: Training Task
     title_es: Tarea de Entrenamiento
     description: "Training task type.\n- `mlm`: Masked Language Modeling — tokens are masked and predicted (BERT-style pre-training).\n  Requires `training.optimizer` configuration.\n- `sbert`: Sentence-BERT\
-      \ fine-tuning — contrastive learning on sentence pairs/triplets for\n  semantic embeddings. Requires `training.sbert` subsection.\n\n**Impact:** Defines the training objective. `mlm` is for language\
-      \ understanding;\n`sbert` is for semantic similarity and retrieval.\n"
+      \ fine-tuning — contrastive learning on sentence pairs/triplets for\n  semantic embeddings. Requires `training.sbert` subsection.\n- `causal_lm`: Causal Language Modeling — autoregressive next-token\
+      \ prediction (GPT-style pre-training).\n  Each token predicts the following token; cross-entropy loss is computed over all shifted positions\n  (no masking). Requires `model_class: frankensteindecoder`\
+      \ and `training.optimizer` configuration.\n\n**Impact:** Defines the training objective. `mlm` is for language understanding;\n`sbert` is for semantic similarity and retrieval; `causal_lm` is for\
+      \ autoregressive text generation.\n"
     description_es: "Tipo de tarea de entrenamiento.\n- `mlm`: Masked Language Modeling — los tokens se enmascaran y predicen (preentrenamiento estilo BERT).\n  Requiere configuración `training.optimizer`.\n\
-      - `sbert`: Sentence-BERT fine-tuning — aprendizaje contrastivo en pares/tripletes para\n  embeddings semánticos. Requiere subsección `training.sbert`.\n\n**Impacto:** Define el objetivo de entrenamiento.\
-      \ `mlm` es para comprensión de lenguaje;\n`sbert` is for semantic similarity and retrieval.\n"
+      - `sbert`: Sentence-BERT fine-tuning — aprendizaje contrastivo en pares/tripletes para\n  embeddings semánticos. Requiere subsección `training.sbert`.\n- `causal_lm`: Causal Language Modeling — predicción\
+      \ autorregresiva de siguiente token (preentrenamiento estilo GPT).\n  Cada token predice el siguiente; la pérdida de cross-entropy se calcula sobre todas las posiciones desplazadas\n  (sin enmascaramiento).\
+      \ Requiere `model_class: frankensteindecoder` y configuración `training.optimizer`.\n\n**Impacto:** Define el objetivo de entrenamiento. `mlm` es para comprensión de lenguaje;\n`sbert` es para similitud\
+      \ semántica y recuperación; `causal_lm` es para generación de texto autorregresiva.\n"
     enum:
     - mlm
     - sbert
+    - causal_lm
     examples:
     - mlm
   num_epochs:

@@ -27,6 +27,21 @@
         required:
         - sbert
 - if:
+    properties:
+      training:
+        properties:
+          task:
+            const: causal_lm
+  then:
+    properties:
+      training:
+        required:
+        - optimizer
+      model_class:
+        const: frankensteindecoder
+    required:
+    - model_class
+- if:
     required:
     - base_model
   then:

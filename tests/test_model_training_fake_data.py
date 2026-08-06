@@ -399,5 +399,64 @@ class MixedPatternTrainingTests(unittest.TestCase):
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
 
+# ---------------------------------------------------------------------------
+# TitanTrainer.compute_causal_lm_loss (CLM next-token objective)
+# ---------------------------------------------------------------------------
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class CausalLMLossTests(unittest.TestCase):
+    """Tests for the trainer's causal-LM (next-token) loss path."""
+
+    def _trainer(self):
+        from src.training.trainer import TitanTrainer
+        model = FrankensteinDecoder(
+            FrankensteinDecoder.build_decoder_config(
+                vocab_size=VOCAB,
+                hidden_size=HIDDEN,
+                num_layers=1,
+                num_loops=1,
+                use_bitnet=False,
+                layer_pattern=["standard_attn"],
+            )
+        )
+        return TitanTrainer(model, model.config, device="cpu", task="causal_lm")
+
+    def _batch(self):
+        ids = torch.randint(0, VOCAB, (BSZ, SEQ))
+        # CLM: labels mirror the (unmasked) input_ids.
+        labels = ids.clone()
+        attn = torch.ones_like(ids)
+        return ids, attn, labels
+
+    def test_loss_is_finite(self):
+        trainer = self._trainer()
+        ids, attn, labels = self._batch()
+        loss, acc = trainer.compute_causal_lm_loss(ids, attn, labels)
+        self.assertTrue(torch.isfinite(loss), f"Non-finite CLM loss: {loss}")
+        self.assertTrue(0.0 <= float(acc) <= 1.0)
+
+    def test_loss_requires_grad(self):
+        trainer = self._trainer()
+        ids, attn, labels = self._batch()
+        loss, _ = trainer.compute_causal_lm_loss(ids, attn, labels)
+        self.assertTrue(loss.requires_grad, "CLM loss must require grad")
+        loss.backward()
+        grads = [p.grad for p in trainer.model.parameters() if p.grad is not None]
+        self.assertGreater(len(grads), 0, "No gradients flowed from CLM loss")
+
+    def test_pad_positions_ignored(self):
+        # Zero out the second half via attention_mask; CLM loss should still be
+        # finite and computed only over the attended (left) positions.
+        trainer = self._trainer()
+        ids, attn, labels = self._batch()
+        attn[:, SEQ // 2:] = 0
+        loss, acc = trainer.compute_causal_lm_loss(ids, attn, labels)
+        self.assertTrue(torch.isfinite(loss), "Non-finite loss with padding")
+
+    def test_task_attribute_threaded(self):
+        trainer = self._trainer()
+        self.assertEqual(trainer.task, "causal_lm")
+
+
 if __name__ == "__main__":
     unittest.main()

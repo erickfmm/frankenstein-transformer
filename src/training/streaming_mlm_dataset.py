@@ -157,33 +157,47 @@ def _apply_mlm_mask_standalone(
 
 
 def _process_single_example(args):
-    """Process a single text example: tokenize and apply MLM masking.
+    """Process a single text example: tokenize and (optionally) apply MLM masking.
 
     Designed for use with :class:`ProcessPoolExecutor` for parallel
     processing. Each worker reconstructs its own tokenizer from the
     serialized spec to avoid pickling issues.
 
     Args:
-        args: Tuple of ``(text, tokenizer_spec, max_length, mlm_probability)``.
+        args: Tuple of ``(text, tokenizer_spec, max_length, mlm_probability,
+            apply_mlm_mask)``. ``apply_mlm_mask`` defaults to ``True`` when
+            omitted for backward compatibility.
 
     Returns:
         Dictionary with ``"input_ids"``, ``"attention_mask"``, and
-        ``"labels"``, or ``None`` on error.
+        ``"labels"``, or ``None`` on error. When masking is disabled the
+        returned ``input_ids`` and ``labels`` are identical (unmasked
+        sequences for causal language modeling).
     """
-    text, tokenizer_spec, max_length, mlm_probability = args
+    # Backward-compatible unpacking: older callers passed a 4-tuple.
+    if len(args) == 4:
+        text, tokenizer_spec, max_length, mlm_probability = args
+        apply_mlm_mask = True
+    else:
+        text, tokenizer_spec, max_length, mlm_probability, apply_mlm_mask = args
 
     try:
         tokenizer = _load_tokenizer_from_spec(tokenizer_spec)
         encoded = _encode_text_with_spec(tokenizer_spec, tokenizer, text, max_length)
-        mlm_input, mlm_labels = _apply_mlm_mask_standalone(
-            encoded["input_ids"].copy(),
-            encoded["attention_mask"],
-            mlm_probability,
-            int(tokenizer_spec["vocab_size"]),
-            int(tokenizer_spec["mask_token_id"]),
-            list(tokenizer_spec["special_token_ids"]),
-            int(tokenizer_spec["pad_token_id"]),
-        )
+        if apply_mlm_mask:
+            mlm_input, mlm_labels = _apply_mlm_mask_standalone(
+                encoded["input_ids"].copy(),
+                encoded["attention_mask"],
+                mlm_probability,
+                int(tokenizer_spec["vocab_size"]),
+                int(tokenizer_spec["mask_token_id"]),
+                list(tokenizer_spec["special_token_ids"]),
+                int(tokenizer_spec["pad_token_id"]),
+            )
+        else:
+            # Causal-LM mode: no masking; labels mirror the (unmasked) input.
+            mlm_input = encoded["input_ids"].copy()
+            mlm_labels = encoded["input_ids"].copy()
 
         return {
             "input_ids": mlm_input,
@@ -232,6 +246,7 @@ class StreamingMLMDataset(TorchDataset):
         stream_local_parquet: bool = True,
         join_temp_data_context_window: int = 0,
         join_temp_data_min_remainder_tokens: int = 128,
+        apply_mlm_mask: bool = True,
     ):
         """Initialize the streaming MLM dataset.
 
@@ -257,10 +272,16 @@ class StreamingMLMDataset(TorchDataset):
                 into contiguous sequences of this length.
             join_temp_data_min_remainder_tokens: Minimum remaining tokens
                 to form a final joined sequence.
+            apply_mlm_mask: If ``True`` (default), apply BERT-style MLM
+                masking at cache-build time. If ``False`` (e.g. for causal
+                language modeling), sequences are stored unmasked and
+                ``labels == input_ids`` so the trainer can compute shifted
+                next-token loss.
         """
         self.tokenizer = tokenizer
         self.max_length = int(max_length)
         self.mlm_probability = float(mlm_probability)
+        self.apply_mlm_mask = bool(apply_mlm_mask)
         self.max_samples = int(max_samples)
         self.batch_size = int(batch_size)
         requested_workers = num_workers or min(8, max(1, mp.cpu_count() // 2))
@@ -707,6 +728,7 @@ class StreamingMLMDataset(TorchDataset):
                 self.tokenizer_spec,
                 self.max_length,
                 self.mlm_probability,
+                self.apply_mlm_mask,
             )
             for text in texts
         )
@@ -732,6 +754,7 @@ class StreamingMLMDataset(TorchDataset):
                             self.tokenizer_spec,
                             self.max_length,
                             self.mlm_probability,
+                            self.apply_mlm_mask,
                         )
                     )
                     if result is not None:
@@ -785,15 +808,20 @@ class StreamingMLMDataset(TorchDataset):
             sequence.extend([self.pad_token_id] * pad_len)
             attention_mask.extend([0] * pad_len)
 
-        masked_input_ids, labels = _apply_mlm_mask_standalone(
-            sequence.copy(),
-            attention_mask,
-            self.mlm_probability,
-            self.vocab_size,
-            self.mask_token_id,
-            list(self.special_token_ids),
-            self.pad_token_id,
-        )
+        if self.apply_mlm_mask:
+            masked_input_ids, labels = _apply_mlm_mask_standalone(
+                sequence.copy(),
+                attention_mask,
+                self.mlm_probability,
+                self.vocab_size,
+                self.mask_token_id,
+                list(self.special_token_ids),
+                self.pad_token_id,
+            )
+        else:
+            # Causal-LM mode: no masking; labels mirror the (unmasked) input.
+            masked_input_ids = sequence.copy()
+            labels = sequence.copy()
         return {
             "input_ids": masked_input_ids,
             "attention_mask": attention_mask,
@@ -918,6 +946,9 @@ class StreamingMLMDataset(TorchDataset):
         self._load_existing_batches()
 
     def _apply_mlm_mask(self, input_ids: List[int], attention_mask: List[int]) -> Tuple[List[int], List[int]]:
+        if not self.apply_mlm_mask:
+            # Causal-LM mode: identity (labels == input_ids).
+            return input_ids, input_ids
         return _apply_mlm_mask_standalone(
             input_ids,
             attention_mask,

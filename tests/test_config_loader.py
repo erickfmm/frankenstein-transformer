@@ -393,6 +393,125 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
 
 
 @unittest.skipUnless(_IMPORTS_OK, "torch and training deps required")
+class LoadTrainingConfigCausalLMTests(unittest.TestCase):
+    """Tests for the causal_lm training task (FrankensteinDecoder CLM)."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.mkdtemp()
+
+    def _cfg_path(self, content):
+        return _write_yaml(self._tmpdir, "cfg.yaml", content)
+
+    def _decoder_model_block(self):
+        return """
+            model_class: frankensteindecoder
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+              ffn_hidden_size: 96
+              ffn_activation: gelu
+              mode: decoder
+        """
+
+    def test_causal_lm_minimal_config(self):
+        path = self._cfg_path(self._decoder_model_block() + """
+            training:
+              task: causal_lm
+              optimizer:
+                optimizer_class: adamw
+                parameters: {}
+        """)
+        cfg = load_training_config(path)
+        self.assertEqual(cfg.task, "causal_lm")
+        self.assertEqual(cfg.model_class, "frankensteindecoder")
+        self.assertIsNotNone(cfg.model_config)
+        self.assertEqual(cfg.model_config.mode, "decoder")
+
+    def test_causal_lm_missing_optimizer_raises(self):
+        path = self._cfg_path(self._decoder_model_block() + """
+            training:
+              task: causal_lm
+        """)
+        with self.assertRaises(ValueError):
+            load_training_config(path)
+
+    def test_causal_lm_requires_decoder_model_class(self):
+        # model_class=frankenstein (encoder) must be rejected for causal_lm.
+        path = self._cfg_path("""
+            model_class: frankenstein
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+              ffn_hidden_size: 96
+              ffn_activation: gelu
+            training:
+              task: causal_lm
+              optimizer:
+                optimizer_class: adamw
+                parameters: {}
+        """)
+        with self.assertRaises(ValueError):
+            load_training_config(path)
+
+    def test_causal_lm_missing_model_class_raises(self):
+        # No model_class provided defaults to "frankenstein" -> rejected.
+        path = self._cfg_path("""
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+              ffn_hidden_size: 96
+              ffn_activation: gelu
+              mode: decoder
+            training:
+              task: causal_lm
+              optimizer:
+                optimizer_class: adamw
+                parameters: {}
+        """)
+        with self.assertRaises(ValueError):
+            load_training_config(path)
+
+
+@unittest.skipUnless(_IMPORTS_OK, "torch and training deps required")
 class ListConfigPathsTests(unittest.TestCase):
     def test_lists_yaml_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
