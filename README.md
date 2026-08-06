@@ -6,6 +6,8 @@
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)](https://github.com/erickfmm/frankenstein-transformer/actions)
 [![Docs](https://img.shields.io/badge/docs-readthedocs-blue.svg)](https://frankenstein-transformer.readthedocs.io/en/latest/)
 
+```See https://erickfmm.github.io/frankestein-transformer/index.html for a web interface to configure your YAML!```
+
 Config-driven transformer experimentation toolkit with 33+ mixer architectures and 23 optimizer families.
 
 ## Quick Start
