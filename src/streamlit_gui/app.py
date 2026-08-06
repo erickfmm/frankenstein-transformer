@@ -270,9 +270,10 @@ def render_object(
 
 def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
     """Render the optimizer configuration section."""
-    result = {
+    result: Dict[str, Any] = {
         "optimizer_class": optimizer_class,
     }
+    parameters: Dict[str, Any] = {}
     
     # Load schema for optimizer parameters
     schema = load_schema()
@@ -301,6 +302,10 @@ def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
         "schedulefree_adamw": "schedulefree_adamw",
         "shampoo": "shampoo",
         "soap": "soap",
+        "anon": "anon",
+        "apollo": "apollo",
+        "apollo_mini": "apollo_mini",
+        "q_apollo": "q_apollo",
     }
     
     prefix = prefix_map.get(optimizer_class, optimizer_class)
@@ -331,9 +336,8 @@ def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
             key=f"{prefix}-wd_embeddings",
             help=f"{prefix}-wd_embeddings: {param_descriptions['wd_']}",
         )
-        result[f"{prefix}-lr_embeddings"] = lr_emb
-        result[f"{prefix}-wd_embeddings"] = wd_emb
-    
+        parameters[f"{prefix}-lr_embeddings"] = lr_emb
+        parameters[f"{prefix}-wd_embeddings"] = wd_emb
     with st.expander(get_ui_text("normalization_group"), expanded=False):
         st.caption(get_ui_text("normalization_caption"))
         lr_norm = st.number_input(
@@ -352,8 +356,8 @@ def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
             key=f"{prefix}-wd_norms",
             help=f"{prefix}-wd_norms: {param_descriptions['wd_']}",
         )
-        result[f"{prefix}-lr_norms"] = lr_norm
-        result[f"{prefix}-wd_norms"] = wd_norm
+        parameters[f"{prefix}-lr_norms"] = lr_norm
+        parameters[f"{prefix}-wd_norms"] = wd_norm
     
     with st.expander(get_ui_text("attention_group"), expanded=False):
         st.caption(get_ui_text("attention_caption"))
@@ -373,8 +377,8 @@ def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
             key=f"{prefix}-wd_attention",
             help=f"{prefix}-wd_attention: {param_descriptions['wd_']}",
         )
-        result[f"{prefix}-lr_attention"] = lr_attn
-        result[f"{prefix}-wd_attention"] = wd_attn
+        parameters[f"{prefix}-lr_attention"] = lr_attn
+        parameters[f"{prefix}-wd_attention"] = wd_attn
     
     with st.expander(get_ui_text("other_group"), expanded=False):
         st.caption(get_ui_text("other_caption"))
@@ -408,11 +412,185 @@ def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
             key=f"{prefix}-eps_other",
             help=f"{prefix}-eps_other: {param_descriptions['eps_']}",
         )
-        result[f"{prefix}-lr_other"] = lr_other
-        result[f"{prefix}-wd_other"] = wd_other
-        result[f"{prefix}-betas_other"] = betas_other
-        result[f"{prefix}-eps_other"] = eps_other
-    
+        parameters[f"{prefix}-lr_other"] = lr_other
+        parameters[f"{prefix}-wd_other"] = wd_other
+        parameters[f"{prefix}-betas_other"] = betas_other
+        parameters[f"{prefix}-eps_other"] = eps_other
+
+    result["parameters"] = parameters
+    return result
+
+
+def render_sbert_section(training_schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Render the ``training.sbert`` configuration block.
+
+    Shown only when ``training.task == "sbert"``. Reads the SBERT subsection
+    from the training schema and produces a nested ``sbert`` dict.
+
+    Args:
+        training_schema: The resolved ``training`` property schema.
+
+    Returns:
+        The SBERT configuration dict, or an empty dict if the schema
+        does not expose an ``sbert`` property.
+    """
+    sbert_props = (
+        training_schema.get("properties", {}).get("sbert", {}).get("properties", {})
+    )
+    if not sbert_props:
+        return {}
+
+    def field_title(name, fallback=""):
+        return get_field_title(sbert_props.get(name, {}), fallback)
+
+    def field_help(name):
+        return get_field_description(sbert_props.get(name, {}))
+
+    def field_example(name, default):
+        examples = sbert_props.get(name, {}).get("examples", [])
+        return examples[0] if examples else default
+
+    result: Dict[str, Any] = {}
+
+    with st.expander("SBERT Configuration", expanded=True):
+        result["dataset_name"] = st.text_input(
+            field_title("dataset_name", "Dataset Name"),
+            value=str(field_example("dataset_name", "erickfmm/agentlans__multilingual-sentences__paired_10_sts")),
+            key="sbert.dataset_name",
+            help=field_help("dataset_name"),
+        )
+        dataset_type_schema = sbert_props.get("dataset_type", {})
+        result["dataset_type"] = st.selectbox(
+            field_title("dataset_type", "Dataset Type"),
+            dataset_type_schema.get("enum", ["paired_similarity", "triplets", "qa"]),
+            index=0,
+            key="sbert.dataset_type",
+            help=field_help("dataset_type"),
+        )
+        result["output_dir"] = st.text_input(
+            field_title("output_dir", "Output Dir"),
+            value=str(field_example("output_dir", "./output/sbert_model")),
+            key="sbert.output_dir",
+            help=field_help("output_dir"),
+        )
+        result["batch_size"] = st.number_input(
+            field_title("batch_size", "Batch Size"),
+            value=int(field_example("batch_size", 16)),
+            min_value=1,
+            key="sbert.batch_size",
+            help=field_help("batch_size"),
+        )
+        result["gradient_accumulation_steps"] = st.number_input(
+            field_title("gradient_accumulation_steps", "Gradient Accumulation Steps"),
+            value=int(field_example("gradient_accumulation_steps", 1)),
+            min_value=1,
+            key="sbert.gradient_accumulation_steps",
+            help=field_help("gradient_accumulation_steps"),
+        )
+        result["max_grad_norm"] = st.number_input(
+            field_title("max_grad_norm", "Max Gradient Norm"),
+            value=float(field_example("max_grad_norm", 1.0)),
+            min_value=0.0,
+            key="sbert.max_grad_norm",
+            help=field_help("max_grad_norm"),
+        )
+        result["epochs"] = st.number_input(
+            field_title("epochs", "Epochs"),
+            value=int(field_example("epochs", 4)),
+            min_value=1,
+            key="sbert.epochs",
+            help=field_help("epochs"),
+        )
+        result["warmup_steps"] = st.number_input(
+            field_title("warmup_steps", "Warmup Steps"),
+            value=int(field_example("warmup_steps", 1000)),
+            min_value=0,
+            key="sbert.warmup_steps",
+            help=field_help("warmup_steps"),
+        )
+        result["evaluation_steps"] = st.number_input(
+            field_title("evaluation_steps", "Evaluation Steps"),
+            value=int(field_example("evaluation_steps", 5000)),
+            min_value=1,
+            key="sbert.evaluation_steps",
+            help=field_help("evaluation_steps"),
+        )
+        result["checkpoint_save_steps"] = st.number_input(
+            field_title("checkpoint_save_steps", "Checkpoint Save Interval"),
+            value=int(field_example("checkpoint_save_steps", 1000)),
+            min_value=0,
+            key="sbert.checkpoint_save_steps",
+            help=field_help("checkpoint_save_steps"),
+        )
+        result["learning_rate"] = st.number_input(
+            field_title("learning_rate", "Learning Rate"),
+            value=float(field_example("learning_rate", 2e-5)),
+            min_value=0.0,
+            format="%.2e",
+            key="sbert.learning_rate",
+            help=field_help("learning_rate"),
+        )
+        result["max_train_samples"] = st.number_input(
+            field_title("max_train_samples", "Max Training Samples"),
+            value=int(field_example("max_train_samples", 100000)),
+            min_value=1,
+            key="sbert.max_train_samples",
+            help=field_help("max_train_samples"),
+        )
+        result["max_eval_samples"] = st.number_input(
+            field_title("max_eval_samples", "Max Eval Samples"),
+            value=int(field_example("max_eval_samples", 10000)),
+            min_value=1,
+            key="sbert.max_eval_samples",
+            help=field_help("max_eval_samples"),
+        )
+        result["max_seq_length"] = st.number_input(
+            field_title("max_seq_length", "Max Sequence Length"),
+            value=int(field_example("max_seq_length", 512)),
+            min_value=1,
+            key="sbert.max_seq_length",
+            help=field_help("max_seq_length"),
+        )
+        pooling_schema = sbert_props.get("pooling_mode", {})
+        result["pooling_mode"] = st.selectbox(
+            field_title("pooling_mode", "Pooling Mode"),
+            pooling_schema.get("enum", ["mean", "cls", "max"]),
+            index=0,
+            key="sbert.pooling_mode",
+            help=field_help("pooling_mode"),
+        )
+        result["resample_balanced"] = st.checkbox(
+            field_title("resample_balanced", "Resample Balanced"),
+            value=bool(field_example("resample_balanced", False)),
+            key="sbert.resample_balanced",
+            help=field_help("resample_balanced"),
+        )
+        result["standardize_scores"] = st.checkbox(
+            field_title("standardize_scores", "Standardize Scores"),
+            value=bool(field_example("standardize_scores", False)),
+            key="sbert.standardize_scores",
+            help=field_help("standardize_scores"),
+        )
+        result["resample_std"] = st.number_input(
+            field_title("resample_std", "Resample Std Dev"),
+            value=float(field_example("resample_std", 0.3)),
+            min_value=0.0,
+            key="sbert.resample_std",
+            help=field_help("resample_std"),
+        )
+        result["trust_remote_code"] = st.checkbox(
+            field_title("trust_remote_code", "Trust Remote Code"),
+            value=bool(field_example("trust_remote_code", False)),
+            key="sbert.trust_remote_code",
+            help=field_help("trust_remote_code"),
+        )
+        result["use_amp"] = st.checkbox(
+            field_title("use_amp", "Use AMP"),
+            value=bool(field_example("use_amp", True)),
+            key="sbert.use_amp",
+            help=field_help("use_amp"),
+        )
+
     return result
 
 
@@ -478,6 +656,11 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         )
         
         training_config = {"task": task}
+
+        if task == "sbert":
+            sbert_config = render_sbert_section(training_schema)
+            if sbert_config:
+                training_config["sbert"] = sbert_config
         
         # General training parameters
         with st.expander("General Training Parameters", expanded=True):
@@ -666,11 +849,11 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         gpu_temp_guard_enabled_schema = training_schema["properties"]["gpu_temp_guard_enabled"]
         gpu_temp_pause_threshold_c_schema = training_schema["properties"]["gpu_temp_pause_threshold_c"]
         gpu_temp_resume_threshold_c_schema = training_schema["properties"]["gpu_temp_resume_threshold_c"]
-        gpu_temp_critical_threshold_c_schema = training_schema["properties"].get("gpu_temp_critical_threshold_c")
-        gpu_temp_poll_interval_schema = training_schema["properties"].get("gpu_temp_poll_interval_seconds")
-        gpu_temp_grace_schema = training_schema["properties"].get("gpu_temp_checkpoint_grace_seconds")
-        switch_on_thermal_schema = training_schema["properties"].get("switch_on_thermal")
-        resume_from_checkpoint_schema = training_schema["properties"].get("resume_from_checkpoint")
+        gpu_temp_critical_threshold_c_schema = training_schema["properties"]["gpu_temp_critical_threshold_c"]
+        gpu_temp_poll_interval_schema = training_schema["properties"]["gpu_temp_poll_interval_seconds"]
+        gpu_temp_grace_schema = training_schema["properties"]["gpu_temp_checkpoint_grace_seconds"]
+        switch_on_thermal_schema = training_schema["properties"]["switch_on_thermal"]
+        resume_from_checkpoint_schema = training_schema["properties"]["resume_from_checkpoint"]
         with st.expander("GPU Settings", expanded=False):
             gpu_temp_guard_enabled = st.checkbox(
                 get_field_title(gpu_temp_guard_enabled_schema, "Enable GPU Temperature Guard"),
@@ -692,51 +875,46 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
                 key="training.gpu_temp_resume_threshold_c",
                 help=get_field_description(gpu_temp_resume_threshold_c_schema),
             )
-            if gpu_temp_critical_threshold_c_schema is not None:
-                gpu_temp_critical_threshold_c = st.number_input(
-                    get_field_title(gpu_temp_critical_threshold_c_schema, "GPU Temp Critical Threshold (°C)"),
-                    value=0.0,
-                    min_value=0.0,
-                    key="training.gpu_temp_critical_threshold_c",
-                    help=get_field_description(gpu_temp_critical_threshold_c_schema),
-                )
-                training_config["gpu_temp_critical_threshold_c"] = (
-                    gpu_temp_critical_threshold_c if gpu_temp_critical_threshold_c > 0 else None
-                )
-            if gpu_temp_poll_interval_schema is not None:
-                gpu_temp_poll_interval_seconds = st.number_input(
-                    get_field_title(gpu_temp_poll_interval_schema, "GPU Temp Poll Interval (s)"),
-                    value=30.0,
-                    min_value=0.0,
-                    key="training.gpu_temp_poll_interval_seconds",
-                    help=get_field_description(gpu_temp_poll_interval_schema),
-                )
-                training_config["gpu_temp_poll_interval_seconds"] = gpu_temp_poll_interval_seconds
-            if gpu_temp_grace_schema is not None:
-                gpu_temp_checkpoint_grace_seconds = st.number_input(
-                    get_field_title(gpu_temp_grace_schema, "GPU Temp Checkpoint Grace (s)"),
-                    value=30.0,
-                    min_value=0.0,
-                    key="training.gpu_temp_checkpoint_grace_seconds",
-                    help=get_field_description(gpu_temp_grace_schema),
-                )
-                training_config["gpu_temp_checkpoint_grace_seconds"] = gpu_temp_checkpoint_grace_seconds
-            if switch_on_thermal_schema is not None:
-                switch_on_thermal = st.checkbox(
-                    get_field_title(switch_on_thermal_schema, "Switch on Thermal (continue on CPU at critical temp)"),
-                    value=False,
-                    key="training.switch_on_thermal",
-                    help=get_field_description(switch_on_thermal_schema),
-                )
-                training_config["switch_on_thermal"] = switch_on_thermal
-            if resume_from_checkpoint_schema is not None:
-                resume_from_checkpoint = st.text_input(
-                    get_field_title(resume_from_checkpoint_schema, "Resume From Checkpoint (auto or path)"),
-                    value="",
-                    key="training.resume_from_checkpoint",
-                    help=get_field_description(resume_from_checkpoint_schema),
-                )
-                training_config["resume_from_checkpoint"] = resume_from_checkpoint.strip() or None
+            gpu_temp_critical_threshold_c = st.number_input(
+                get_field_title(gpu_temp_critical_threshold_c_schema, "GPU Temp Critical Threshold (°C)"),
+                value=0.0,
+                min_value=0.0,
+                key="training.gpu_temp_critical_threshold_c",
+                help=get_field_description(gpu_temp_critical_threshold_c_schema),
+            )
+            training_config["gpu_temp_critical_threshold_c"] = (
+                gpu_temp_critical_threshold_c if gpu_temp_critical_threshold_c > 0 else None
+            )
+            gpu_temp_poll_interval_seconds = st.number_input(
+                get_field_title(gpu_temp_poll_interval_schema, "GPU Temp Poll Interval (s)"),
+                value=30.0,
+                min_value=0.0,
+                key="training.gpu_temp_poll_interval_seconds",
+                help=get_field_description(gpu_temp_poll_interval_schema),
+            )
+            training_config["gpu_temp_poll_interval_seconds"] = gpu_temp_poll_interval_seconds
+            gpu_temp_checkpoint_grace_seconds = st.number_input(
+                get_field_title(gpu_temp_grace_schema, "GPU Temp Checkpoint Grace (s)"),
+                value=30.0,
+                min_value=0.0,
+                key="training.gpu_temp_checkpoint_grace_seconds",
+                help=get_field_description(gpu_temp_grace_schema),
+            )
+            training_config["gpu_temp_checkpoint_grace_seconds"] = gpu_temp_checkpoint_grace_seconds
+            switch_on_thermal = st.checkbox(
+                get_field_title(switch_on_thermal_schema, "Switch on Thermal (continue on CPU at critical temp)"),
+                value=False,
+                key="training.switch_on_thermal",
+                help=get_field_description(switch_on_thermal_schema),
+            )
+            training_config["switch_on_thermal"] = switch_on_thermal
+            resume_from_checkpoint = st.text_input(
+                get_field_title(resume_from_checkpoint_schema, "Resume From Checkpoint (auto or path)"),
+                value="",
+                key="training.resume_from_checkpoint",
+                help=get_field_description(resume_from_checkpoint_schema),
+            )
+            training_config["resume_from_checkpoint"] = resume_from_checkpoint.strip() or None
 
             training_config["gpu_temp_guard_enabled"] = gpu_temp_guard_enabled
             training_config["gpu_temp_pause_threshold_c"] = gpu_temp_pause_threshold_c
@@ -753,27 +931,336 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         training_config["use_amp"] = use_amp
         
         config["training"] = training_config
-    
+
+    # Causal-LM requires the decoder model class. Enforce at config build time.
+    if config.get("training", {}).get("task") == "causal_lm":
+        if "base_model" not in config:
+            config["model_class"] = "frankensteindecoder"
+            st.warning(
+                "Training task 'causal_lm' requires the decoder model class. "
+                "'model_class' has been set to 'frankensteindecoder'."
+            )
+
     return config
 
 
-def build_cli_command(command: str, config: Dict[str, Any], output_path: str) -> str:
-    """Build the CLI command based on the selected command and configuration."""
+def _add_optional(
+    cmd_parts: List[str], flag: str, value: Any, *, store_true: bool = False
+) -> None:
+    """Append an optional CLI flag to ``cmd_parts`` when ``value`` is truthy.
+
+    For ``store_true`` flags only the flag is appended (no value). ``value``
+    may be a boolean (enables/disables the flag) or a scalar that is skipped
+    when empty/None.
+    """
+    if store_true:
+        if value:
+            cmd_parts.append(flag)
+        return
+    if value is None or value == "" or value == []:
+        return
+    if isinstance(value, bool):
+        cmd_parts.append(flag)
+        return
+    cmd_parts.extend([flag, str(value)])
+
+
+def build_cli_command(
+    command: str,
+    config: Dict[str, Any],
+    output_path: str,
+    extra_args: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Build the CLI command based on the selected command and configuration.
+
+    Each subcommand builds the argument list expected by ``src/cli.py``.
+    ``extra_args`` carries command-specific inputs collected from the UI
+    (e.g. ``--checkpoint``/``--output`` for deploy, ``--model`` for infer).
+
+    Args:
+        command: One of the supported CLI subcommands.
+        config: The (training) configuration dict built by the builder.
+        output_path: Path of the generated YAML config file.
+        extra_args: Optional mapping of command-specific argument values.
+
+    Returns:
+        The fully-formed CLI command as a string.
+    """
+    extra_args = extra_args or {}
     cmd_parts = ["python", "-m", "src.cli", command]
-    
+
+    def add(flag, value, *, store_true=False):
+        _add_optional(cmd_parts, flag, value, store_true=store_true)
+
     if command == "train":
-        cmd_parts.extend(["--config", output_path])
-        cmd_parts.extend(["--config-name", config.get("model_class", "frankenstein")])
+        add("--config", output_path)
+        add("--config-name", config.get("model_class", "frankenstein"))
+        add("--device", extra_args.get("device"))
+        add("--batch-size", extra_args.get("batch_size"))
+        add("--gpu-temp-guard", extra_args.get("gpu_temp_guard"), store_true=True)
+        add("--no-gpu-temp-guard", extra_args.get("gpu_temp_guard") is False, store_true=True)
+        add("--gpu-temp-pause-threshold-c", extra_args.get("gpu_temp_pause_threshold_c"))
+        add("--gpu-temp-resume-threshold-c", extra_args.get("gpu_temp_resume_threshold_c"))
+        add("--gpu-temp-critical-threshold-c", extra_args.get("gpu_temp_critical_threshold_c"))
+        add("--gpu-temp-poll-interval-seconds", extra_args.get("gpu_temp_poll_interval_seconds"))
+        add("--gpu-temp-checkpoint-grace-seconds", extra_args.get("gpu_temp_checkpoint_grace_seconds"))
+        add("--resume-from-checkpoint", extra_args.get("resume_from_checkpoint"))
+        add("--switch-on-thermal", extra_args.get("switch_on_thermal"), store_true=True)
+        add("--no-switch-on-thermal", extra_args.get("switch_on_thermal") is False, store_true=True)
     elif command in ["deploy", "quantize"]:
-        cmd_parts.extend(["--config", output_path])
+        add("--checkpoint", extra_args.get("checkpoint"))
+        add("--output", extra_args.get("output"))
+        add("--format", extra_args.get("format"))
+        add("--device", extra_args.get("device"))
+        add("--config", extra_args.get("config"))
+        add("--yaml", extra_args.get("yaml"))
+        add("--validate", extra_args.get("validate"), store_true=True)
     elif command == "infer":
-        cmd_parts.extend(["--config", output_path])
+        add("--model", extra_args.get("model"))
+        add("--device", extra_args.get("device"))
+        add("--batch-size", extra_args.get("batch_size"))
+        add("--text", extra_args.get("text"))
+        add("--input", extra_args.get("input"))
+        add("--output", extra_args.get("output"))
+        add("--fp16", extra_args.get("fp16"), store_true=True)
+        add("--benchmark", extra_args.get("benchmark"), store_true=True)
     elif command == "sbert-train":
-        cmd_parts.extend(["--config", output_path])
+        add("--base-model", extra_args.get("base_model"))
+        add("--pretrained", extra_args.get("pretrained"))
+        add("--output_dir", extra_args.get("output_dir"))
+        add("--dataset_name", extra_args.get("dataset_name"))
+        add("--batch_size", extra_args.get("batch_size"))
+        add("--epochs", extra_args.get("epochs"))
+        add("--warmup_steps", extra_args.get("warmup_steps"))
+        add("--evaluation_steps", extra_args.get("evaluation_steps"))
+        add("--learning_rate", extra_args.get("learning_rate"))
+        add("--max_train_samples", extra_args.get("max_train_samples"))
+        add("--max_eval_samples", extra_args.get("max_eval_samples"))
+        add("--max_seq_length", extra_args.get("max_seq_length"))
+        add("--hidden_size", extra_args.get("hidden_size"))
+        add("--num_layers", extra_args.get("num_layers"))
+        add("--pooling_mode", extra_args.get("pooling_mode"))
+        add("--resample_std", extra_args.get("resample_std"))
+        add("--device", extra_args.get("device"))
+        add("--trust_remote_code", extra_args.get("trust_remote_code"), store_true=True)
+        add("--no_amp", extra_args.get("no_amp"), store_true=True)
+        add("--no_resample", extra_args.get("no_resample"), store_true=True)
+        add("--switch-on-thermal", extra_args.get("switch_on_thermal"), store_true=True)
+        add("--no-switch-on-thermal", extra_args.get("switch_on_thermal") is False, store_true=True)
     elif command == "sbert-infer":
-        cmd_parts.extend(["--config", output_path])
-    
+        add("--model_path", extra_args.get("model_path"))
+        add("--mode", extra_args.get("mode"))
+        add("--batch_size", extra_args.get("batch_size"))
+        add("--device", extra_args.get("device"))
+        add("--top_k", extra_args.get("top_k"))
+        add("--n_clusters", extra_args.get("n_clusters"))
+        add("--sentence1", extra_args.get("sentence1"))
+        add("--sentence2", extra_args.get("sentence2"))
+        add("--query", extra_args.get("query"))
+        add("--corpus_file", extra_args.get("corpus_file"))
+        add("--sentences_file", extra_args.get("sentences_file"))
+        add("--input_file", extra_args.get("input_file"))
+        add("--output_file", extra_args.get("output_file"))
+
     return " ".join(str(part) for part in cmd_parts)
+
+
+def render_command_args(command: str) -> Dict[str, Any]:
+    """Render command-specific argument inputs for the selected subcommand.
+
+    Returns a dict of argument values that is passed to
+    :func:`build_cli_command` as ``extra_args``. Keys match the flags the
+    CLI expects for each subcommand.
+
+    Args:
+        command: The selected CLI subcommand.
+
+    Returns:
+        Mapping of argument key -> value collected from the UI.
+    """
+    args: Dict[str, Any] = {}
+
+    device = st.selectbox(
+        "Device",
+        ["auto", "cpu", "cuda", "mps"],
+        index=0,
+        key=f"{command}.device",
+    )
+
+    if command == "train":
+        args["device"] = device
+        args["batch_size"] = st.number_input(
+            "Batch Size (override)", value=0, min_value=0, step=1, key="train.batch_size"
+        ) or None
+        args["gpu_temp_guard"] = st.checkbox(
+            "Enable GPU Temp Guard", value=True, key="train.gpu_temp_guard"
+        )
+        args["switch_on_thermal"] = st.checkbox(
+            "Switch on Thermal", value=False, key="train.switch_on_thermal"
+        )
+        args["resume_from_checkpoint"] = st.text_input(
+            "Resume From Checkpoint (auto or path)", value="", key="train.resume"
+        ).strip() or None
+        with st.expander("Advanced GPU Temp Thresholds", expanded=False):
+            args["gpu_temp_pause_threshold_c"] = st.number_input(
+                "GPU Temp Pause (°C)", value=0.0, min_value=0.0, key="train.temp_pause"
+            ) or None
+            args["gpu_temp_resume_threshold_c"] = st.number_input(
+                "GPU Temp Resume (°C)", value=0.0, min_value=0.0, key="train.temp_resume"
+            ) or None
+            args["gpu_temp_critical_threshold_c"] = st.number_input(
+                "GPU Temp Critical (°C)", value=0.0, min_value=0.0, key="train.temp_critical"
+            ) or None
+            args["gpu_temp_poll_interval_seconds"] = st.number_input(
+                "GPU Temp Poll Interval (s)", value=0.0, min_value=0.0, key="train.temp_poll"
+            ) or None
+            args["gpu_temp_checkpoint_grace_seconds"] = st.number_input(
+                "GPU Temp Checkpoint Grace (s)", value=0.0, min_value=0.0, key="train.temp_grace"
+            ) or None
+    elif command in ["deploy", "quantize"]:
+        args["device"] = device
+        args["checkpoint"] = st.text_input(
+            "Checkpoint Path", value="", key=f"{command}.checkpoint"
+        ).strip() or None
+        args["output"] = st.text_input(
+            "Output Directory", value="", key=f"{command}.output"
+        ).strip() or None
+        if command == "deploy":
+            args["format"] = st.selectbox(
+                "Deploy Format",
+                ["quantized", "standard"],
+                index=0,
+                key="deploy.format",
+            )
+        args["validate"] = st.checkbox(
+            "Validate Output", value=False, key=f"{command}.validate"
+        )
+        args["config"] = st.text_input(
+            "Training Config YAML (optional)", value="", key=f"{command}.config"
+        ).strip() or None
+        args["yaml"] = st.text_input(
+            "Model YAML (for transformers-export, optional)", value="", key=f"{command}.yaml"
+        ).strip() or None
+    elif command == "infer":
+        args["device"] = device
+        args["model"] = st.text_input(
+            "Model Path", value="", key="infer.model"
+        ).strip() or None
+        args["batch_size"] = st.number_input(
+            "Batch Size", value=8, min_value=1, step=1, key="infer.batch_size"
+        )
+        args["text"] = st.text_input(
+            "Text (single prompt)", value="", key="infer.text"
+        ).strip() or None
+        args["input"] = st.text_input(
+            "Input File", value="", key="infer.input"
+        ).strip() or None
+        args["output"] = st.text_input(
+            "Output File", value="", key="infer.output"
+        ).strip() or None
+        args["fp16"] = st.checkbox("Use FP16", value=False, key="infer.fp16")
+        args["benchmark"] = st.checkbox("Run Benchmark", value=False, key="infer.benchmark")
+    elif command == "sbert-train":
+        args["device"] = device
+        args["base_model"] = st.text_input(
+            "Base Model", value="", key="sbert_train.base_model"
+        ).strip() or None
+        args["pretrained"] = st.text_input(
+            "Pretrained Model", value="", key="sbert_train.pretrained"
+        ).strip() or None
+        args["output_dir"] = st.text_input(
+            "Output Dir", value="./output/sbert_frankenstein_v2", key="sbert_train.output_dir"
+        ).strip()
+        args["dataset_name"] = st.text_input(
+            "Dataset Name",
+            value="erickfmm/agentlans__multilingual-sentences__paired_10_sts",
+            key="sbert_train.dataset_name",
+        ).strip()
+        args["batch_size"] = st.number_input(
+            "Batch Size", value=16, min_value=1, step=1, key="sbert_train.batch_size"
+        )
+        args["epochs"] = st.number_input(
+            "Epochs", value=4, min_value=1, step=1, key="sbert_train.epochs"
+        )
+        args["warmup_steps"] = st.number_input(
+            "Warmup Steps", value=1000, min_value=0, step=1, key="sbert_train.warmup_steps"
+        )
+        args["evaluation_steps"] = st.number_input(
+            "Evaluation Steps", value=5000, min_value=1, step=1, key="sbert_train.eval_steps"
+        )
+        args["learning_rate"] = st.number_input(
+            "Learning Rate", value=2e-5, min_value=0.0, format="%.2e", key="sbert_train.lr"
+        )
+        args["max_seq_length"] = st.number_input(
+            "Max Sequence Length", value=512, min_value=1, step=1, key="sbert_train.max_len"
+        )
+        args["hidden_size"] = st.number_input(
+            "Hidden Size", value=768, min_value=1, step=1, key="sbert_train.hidden"
+        )
+        args["num_layers"] = st.number_input(
+            "Num Layers", value=12, min_value=1, step=1, key="sbert_train.layers"
+        )
+        args["pooling_mode"] = st.selectbox(
+            "Pooling Mode", ["mean", "cls", "max"], index=0, key="sbert_train.pooling"
+        )
+        args["resample_std"] = st.number_input(
+            "Resample Std", value=0.3, min_value=0.0, key="sbert_train.resample_std"
+        )
+        args["trust_remote_code"] = st.checkbox(
+            "Trust Remote Code", value=False, key="sbert_train.trust_remote"
+        )
+        args["no_amp"] = st.checkbox(
+            "Disable AMP", value=False, key="sbert_train.no_amp"
+        )
+        args["no_resample"] = st.checkbox(
+            "Disable Resample", value=False, key="sbert_train.no_resample"
+        )
+        args["switch_on_thermal"] = st.checkbox(
+            "Switch on Thermal", value=False, key="sbert_train.switch_on_thermal"
+        )
+    elif command == "sbert-infer":
+        args["device"] = device
+        args["model_path"] = st.text_input(
+            "Model Path", value="", key="sbert_infer.model_path"
+        ).strip() or None
+        args["mode"] = st.selectbox(
+            "Inference Mode",
+            ["similarity", "search", "cluster", "encode"],
+            index=0,
+            key="sbert_infer.mode",
+        )
+        args["batch_size"] = st.number_input(
+            "Batch Size", value=32, min_value=1, step=1, key="sbert_infer.batch_size"
+        )
+        args["top_k"] = st.number_input(
+            "Top K", value=5, min_value=1, step=1, key="sbert_infer.top_k"
+        )
+        args["n_clusters"] = st.number_input(
+            "N Clusters", value=5, min_value=1, step=1, key="sbert_infer.n_clusters"
+        )
+        args["sentence1"] = st.text_input(
+            "Sentence 1", value="", key="sbert_infer.sentence1"
+        ).strip() or None
+        args["sentence2"] = st.text_input(
+            "Sentence 2", value="", key="sbert_infer.sentence2"
+        ).strip() or None
+        args["query"] = st.text_input(
+            "Query", value="", key="sbert_infer.query"
+        ).strip() or None
+        args["corpus_file"] = st.text_input(
+            "Corpus File", value="", key="sbert_infer.corpus_file"
+        ).strip() or None
+        args["sentences_file"] = st.text_input(
+            "Sentences File", value="", key="sbert_infer.sentences_file"
+        ).strip() or None
+        args["input_file"] = st.text_input(
+            "Input File", value="", key="sbert_infer.input_file"
+        ).strip() or None
+        args["output_file"] = st.text_input(
+            "Output File", value="", key="sbert_infer.output_file"
+        ).strip() or None
+
+    return args
 
 
 def run_command_with_nohup(command: str, log_file: str) -> subprocess.Popen:
@@ -888,9 +1375,12 @@ def main(argv=None):
                 value="./config_generated.yaml",
                 key="exec_output_path",
             )
-            
+
+            st.subheader("Command Arguments")
+            extra_args = render_command_args(command_id)
+
             # Build CLI command
-            cli_command = build_cli_command(command_id, config, output_path)
+            cli_command = build_cli_command(command_id, config, output_path, extra_args=extra_args)
             
             st.subheader("Generated CLI Command")
             st.code(cli_command, language="bash")
@@ -899,7 +1389,7 @@ def main(argv=None):
             
             with col1:
                 if st.button("📋 Copy to Clipboard"):
-                    st.code_area("Copy this command:", cli_command, height=100, key="copy_command")
+                    st.code(cli_command, language="bash")
                     st.success("Command displayed above - copy it manually")
             
             with col2:
