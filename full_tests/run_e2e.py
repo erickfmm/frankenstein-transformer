@@ -28,12 +28,17 @@ To run on a specific device (default is cpu):
 To enable the GPU thermal guard during training (with optional thresholds):
 
     conda run -n frankenstein python full_tests/run_e2e.py --device cuda --gpu-temp-guard
+
+To resume from existing tmp/results directory (skip cleanup):
+
+    conda run -n frankenstein python full_tests/run_e2e.py --resume
 """
 from __future__ import annotations
 
 import argparse
 import itertools
 import logging
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -272,7 +277,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--logging-level",
         choices=["none", "info", "debug", "only-errors"],
         default="info",
-        help="How much progress logging to emit to stderr (default: info).",
+        help="How much progress logging to emit to stdout (default: info).",
     )
     parser.add_argument(
         "--limit",
@@ -348,6 +353,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Grace period in seconds before a thermal checkpoint (default: CLI default).",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from existing tmp/results directory instead of cleaning up first.",
+    )
     return parser
 
 
@@ -361,6 +371,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         "only-errors": logging.ERROR,
     }[args.logging_level]
     helpers.setup_logging(log_level)
+
+    # Clean up tmp directory unless --resume is specified
+    if not args.resume and helpers.TMP_DIR.exists():
+        logging.info("Cleaning up tmp directory: %s", helpers.TMP_DIR)
+        shutil.rmtree(helpers.TMP_DIR)
 
     helpers.TMP_DIR.mkdir(parents=True, exist_ok=True)
     helpers.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -417,6 +432,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         gpu_temp_checkpoint_grace_seconds=args.gpu_temp_checkpoint_grace_seconds,
     )
 
+    def write_results_incremental() -> None:
+        """Write results to disk immediately (for crash recovery)."""
+        helpers.write_results(results)
+
+    def find_metrics_csv(combo_id: str) -> Optional[str]:
+        """Find the training_metrics.csv file for a given combo."""
+        run_dir = helpers.RUNS_DIR / combo_id
+        metrics_path = run_dir / "training_metrics.csv"
+        if metrics_path.exists():
+            return str(metrics_path)
+        return None
+
     for idx, (combo_id, config) in enumerate(combos, start=1):
         logging.info("[%d/%d] Running %s", idx, len(combos), combo_id)
         result = helpers.run_training(
@@ -425,8 +452,17 @@ def main(argv: Optional[List[str]] = None) -> int:
             batch_size=config["training"].get("batch_size", 1),
             **train_kwargs,
         )
+        # Capture metrics CSV path if training produced one
+        if result.status in ("OK", "GRAD_EXPLODED"):
+            metrics_path = find_metrics_csv(combo_id)
+            if metrics_path:
+                result.metrics_path = metrics_path
+                logging.info("  Metrics saved to: %s", metrics_path)
         results.append(result)
         logging.info("[%d/%d] %s -> %s (%.1fs) %s", idx, len(combos), combo_id, result.status, result.duration_sec, result.notes)
+
+        # Write results incrementally after each combo
+        write_results_incremental()
 
         if result.status == "OK" and successful_training is None:
             successful_training = result
@@ -443,16 +479,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             logging.info("Running deploy (standard) %s -> %s", base_id, deploy_std_dir)
             res = helpers.run_deploy(checkpoint_path, deploy_std_dir, f"{base_id}_deploy_std", runner, env_extra, fmt="standard", device=args.device)
             results.append(res)
+            write_results_incremental()
             logging.info("%s -> %s (%.1fs) %s", res.combo_id, res.status, res.duration_sec, res.notes)
             if res.status == "OK":
                 helpers.copy_tokenizer_to_deploy_dir(deploy_std_dir, vocab_size)
                 results.append(helpers.run_infer(deploy_std_dir, f"{base_id}_infer", runner, env_extra, device=args.device))
+                write_results_incremental()
                 logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
 
             # quantized deploy
             deploy_q_dir = helpers.TMP_DIR / "deploy" / f"{base_id}_quantized"
             logging.info("Running deploy (quantized) %s -> %s", base_id, deploy_q_dir)
             results.append(helpers.run_deploy(checkpoint_path, deploy_q_dir, f"{base_id}_deploy_quantized", runner, env_extra, fmt="quantized", device=args.device))
+            write_results_incremental()
             logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
 
             # transformers-export (needs the original YAML)
@@ -461,6 +500,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 export_dir = helpers.TMP_DIR / "transformers-export" / base_id
                 logging.info("Running transformers-export %s -> %s", base_id, export_dir)
                 results.append(helpers.run_transformers_export(checkpoint_path, yaml_path, export_dir, f"{base_id}_export", runner, env_extra))
+                write_results_incremental()
                 logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
 
     # Dedicated BitNet+standard_attn training + bitnet-gguf export, if not already covered.
@@ -478,7 +518,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             batch_size=1,
             **train_kwargs,
         )
+        # Capture metrics for bitnet training too
+        if bitnet_result.status in ("OK", "GRAD_EXPLODED"):
+            metrics_path = find_metrics_csv(bitnet_id)
+            if metrics_path:
+                bitnet_result.metrics_path = metrics_path
+                logging.info("  Metrics saved to: %s", metrics_path)
         results.append(bitnet_result)
+        write_results_incremental()
         if bitnet_result.status == "OK" and bitnet_result.checkpoint_path:
             yaml_path = helpers.RUNS_DIR / bitnet_id / "config.yaml"
             gguf_path = helpers.TMP_DIR / "bitnet-gguf" / f"{bitnet_id}.gguf"
@@ -491,8 +538,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 runner,
                 env_extra,
             ))
+            write_results_incremental()
             logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
 
+    # Final write (ensures everything is flushed)
     helpers.write_results(results)
     return helpers.print_summary(results)
 

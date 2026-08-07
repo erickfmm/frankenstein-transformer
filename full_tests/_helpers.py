@@ -64,11 +64,16 @@ except Exception:
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-def setup_logging(level: int = logging.INFO) -> None:
+def setup_logging(level: int = logging.INFO, stream: Optional[object] = None) -> None:
+    """Configure logging to output to stdout by default."""
+    if stream is None:
+        import sys
+        stream = sys.stdout
     logging.basicConfig(
         level=level,
         format="%(asctime)s | %(levelname)-8s | %(message)s",
         datefmt="%H:%M:%S",
+        stream=stream,
     )
 
 
@@ -87,6 +92,7 @@ class RunResult:
     notes: str = ""
     checkpoint_path: Optional[str] = None
     deploy_dir: Optional[str] = None
+    metrics_path: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {k: v for k, v in dataclasses.asdict(self).items()}
