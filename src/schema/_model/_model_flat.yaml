@@ -411,49 +411,65 @@ properties:
       prelu_init:
         type: number
         default: 0.25
+        examples: [0.25]
       elu_alpha:
         type: number
         default: 1.0
+        examples: [1.0]
       celu_alpha:
         type: number
         default: 1.0
+        examples: [1.0]
       swish_beta:
         type: number
         default: 1.0
+        examples: [1.0]
       leaky_relu_slope:
         type: number
         default: 0.01
+        examples: [0.01]
       pelu_alpha:
         type: number
         default: 1.0
+        examples: [1.0]
       mpelu_alpha:
         type: number
         default: 1.0
+        examples: [1.0]
       mpelu_beta:
         type: number
         default: 1.0
+        examples: [1.0]
       felu_alpha:
         type: number
         default: 1.0
+        examples: [1.0]
       eelu_alpha:
         type: number
         default: 1.0
+        examples: [1.0]
       eelu_beta:
         type: number
         default: 1.0
+        examples: [1.0]
       pdelu_alpha:
         type: number
         default: 1.0
+        examples: [1.0]
       preu_alpha:
         type: number
         default: 1.0
+        examples: [1.0]
       preu_beta:
         type: number
         default: 1.0
+        examples: [1.0]
       softexp_alpha:
         type: number
         default: 0.0
+        examples: [0.0]
       maxout_pieces:
         type: integer
         minimum: 1
         default: 2
+        examples: [2]

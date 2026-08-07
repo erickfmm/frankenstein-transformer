@@ -125,6 +125,32 @@ def get_field_description(field_schema: Dict[str, Any]) -> str:
     return get_localized_schema_value(field_schema, "description", "")
 
 
+def _resolve_default(
+    field_schema: Dict[str, Any],
+    fallback: Any,
+    field_title: str,
+) -> Any:
+    """Resolve a field's default value from the schema.
+
+    Precedence: ``examples[0]`` → ``default`` → ``minimum`` → ``fallback``.
+    Emits a warning when the schema provides none of the first three so the
+    missing metadata is surfaced to the developer.
+    """
+    examples = field_schema.get("examples", [])
+    if examples:
+        return examples[0]
+    if "default" in field_schema:
+        return field_schema["default"]
+    min_val = field_schema.get("minimum", None)
+    if min_val is not None:
+        return min_val
+    st.warning(
+        f"Schema field '{field_title}' has no 'examples', 'default', or "
+        f"'minimum'; using fallback value {fallback!r}."
+    )
+    return fallback
+
+
 def render_field(
     field_name: str,
     field_schema: Dict[str, Any],
@@ -149,8 +175,7 @@ def render_field(
     elif field_type == "integer":
         min_val = field_schema.get("minimum", None)
         max_val = field_schema.get("maximum", None)
-        examples = field_schema.get("examples", [])
-        default = examples[0] if examples else min_val
+        default = _resolve_default(field_schema, 0, field_title)
         
         return st.number_input(
             field_title,
@@ -165,8 +190,7 @@ def render_field(
     elif field_type == "number":
         min_val = field_schema.get("minimum", None)
         max_val = field_schema.get("maximum", None)
-        examples = field_schema.get("examples", [])
-        default = examples[0] if examples else min_val
+        default = _resolve_default(field_schema, 0.0, field_title)
         
         return st.number_input(
             field_title,
@@ -181,8 +205,7 @@ def render_field(
     
     elif field_type == "string":
         enum = field_schema.get("enum")
-        examples = field_schema.get("examples", [])
-        default = examples[0] if examples else ""
+        default = _resolve_default(field_schema, "", field_title)
         
         if enum:
             return st.selectbox(field_title, enum, index=0 if enum else 0, key=field_key, help=field_description)
