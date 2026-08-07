@@ -1,0 +1,143 @@
+\section{Vision Transformer: Patch Prediction, Classification, and Segmentation}
+\label{sec:annex-vision}
+
+This annex documents the \texttt{frankenstein\_vit} model class, a Vision Transformer (ViT) implementation \citep{dosovitskiy2021vit} that reuses the modality-agnostic \texttt{HybridLayer} stack from the encoder. It supports three tasks: autosupervised masked patch prediction, image classification, and image segmentation (per-pixel or EoMT-style \citep{kerssies2025eomt}).
+
+\subsection{Patch Embedding and Positional Encoding}
+
+Following Eq.~1 of the ViT paper, an input image $x \in \mathbb{R}^{H \times W \times C}$ is split into $N = HW/P^2$ non-overlapping $P \times P$ patches, each linearly projected to $D$ dimensions. A Conv2d with kernel and stride $P$ performs both the splitting and the projection in a single operation. A learnable \texttt{[CLS]} token is optionally prepended, and a learnable positional embedding is added:
+\[
+z_0 = \big[\,x_\text{class};\, x_p^1 E;\, x_p^2 E;\, \dots;\, x_p^N E\,\big] + E_\text{pos},
+\qquad
+E \in \mathbb{R}^{(P^2 C) \times D},\quad
+E_\text{pos} \in \mathbb{R}^{(N+1) \times D}.
+\]
+
+\paragraph{Positional encoding.}
+The default positional encoding is a learnable 1D \texttt{nn.Parameter} of shape $(1, N+1, D)$, faithful to the original ViT. The alternative \texttt{none} drops the explicit embedding and relies on RoPE/HoPE applied inside the attention mixers (§\ref{sec:annex-norm-bitnet-mod}), which is consistent with the encoder's modality-agnostic handling of rotary embeddings.
+
+\paragraph{\texttt{[CLS]} token.}
+A learnable \texttt{[CLS]} token is optionally prepended at position~$0$ for classification: the output of position~$0$ after the final normalization is fed to the task head. When \texttt{[CLS]} is disabled, classification relies on Global Average Pooling (GAP) over the patch tokens.
+
+\subsection{Masked Patch Prediction (Autosupervised)}
+
+The autosupervised task mirrors the BERT-style objective of the ViT paper (App.~B.1.2). A corruption ratio of $50\%$ is applied to the patch tokens: of the corrupted subset, $80\%$ are replaced by a learnable mask token, $10\%$ are replaced by a random patch, and $10\%$ are kept unchanged.
+
+Three reconstruction targets are supported:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{3-bit mean color} (default): each patch's mean color is quantized to 3 bits per channel ($2^{3\times3} = 512$ bins), and a 512-way cross-entropy is computed. This target is the most stable and best-performing in the ViT paper.
+    \item \textbf{$4\times4$ downsampled 3-bit}: the patch is downsampled to a $4\times4$ grid of 3-bit colors, producing $16 \times 512$ cross-entropy targets.
+    \item \textbf{Full-patch L2}: mean squared error on the raw pixels of the masked patches, equivalent to the pixel reconstruction loss of Masked Autoencoders \citep{he2022mae}.
+\end{enumerate}
+
+The model predicts only at masked positions; the loss is computed on corrupted patches only, so the network is never asked to reconstruct patches it was allowed to observe.
+
+\subsection{Image Classification}
+
+Classification fine-tuning follows ViT Sec.~3.2:
+
+\paragraph{Pooling.}
+The representation is pooled either by taking the \texttt{[CLS]} token output at position~$0$ or by Global Average Pooling over the patch tokens.
+
+\paragraph{Head.}
+A zero-initialized \texttt{Linear}(D, K) projects the pooled vector to $K$ class logits. The zero initialization guarantees that the fine-tuning starts from the pretrained linear projection and that no class bias is introduced before the first optimizer step.
+
+\paragraph{Loss.}
+Standard cross-entropy over the $K$ classes.
+
+\subsection{Image Segmentation}
+
+Two head types are selected by the \texttt{seg\_head\_type} config field.
+
+\subsubsection{Per-Pixel Head (\texttt{pixel})}
+A \texttt{Linear}(D, \texttt{num\_seg\_classes}) is applied per patch token, and the resulting per-patch logits are reshaped to $(H/P, W/P)$. A ViTDet-style transposed-convolution upsampler then scales the logits to the full image resolution $(H, W)$. The training loss is the unweighted sum of cross-entropy and Dice:
+\[
+\mathcal{L}_\text{pixel} = \mathrm{CE}(\hat{y}, y) + \mathrm{Dice}(\hat{y}, y).
+\]
+This head supports both 1D grayscale (2 classes) and multicolor non-overlapping ($N+1$ classes) segmentation.
+
+\subsubsection{Encoder-only Mask Transformer (\texttt{eomt})}
+
+The EoMT head \citep{kerssies2025eomt} repurposes the ViT backbone as a mask decoder by splitting the layer stack into two contiguous groups:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{$L_1$} (patch-only): the first $L_1$ blocks process the patch tokens as in a plain ViT.
+    \item \textbf{$L_2$} (patches + queries): the remaining $L_2$ blocks receive a concatenation of $K$ learnable object queries and the patch tokens. The multi-head self-attention inside each $L_2$ block therefore computes all four attention quadrants (patch$\leftrightarrow$patch, query$\leftrightarrow$query, query$\to$patch, patch$\to$query) in a single operation, halving the decoder compute relative to an encoder--decoder Mask2Former.
+\end{itemize}
+
+\paragraph{Mask module.}
+The mask module predicts, for each query, class logits via a linear layer and a mask embedding via a 3-layer MLP. The mask embedding is dot-producted with the upscaled patch feature map $\tilde{F}_4$ to produce per-pixel mask logits.
+
+\paragraph{Loss with Hungarian matching.}
+Following Mask2Former, predictions are first matched to ground-truth masks via the Hungarian algorithm, then supervised with:
+\[
+\mathcal{L}_\text{eomt} = 5\,\mathrm{BCE} + 5\,\mathrm{Dice} + 2\,\mathrm{CE},
+\]
+where the BCE and Dice terms act on mask logits and the CE term acts on class logits (factor~2 for matched queries, factor~0 for the no-object class).
+
+\paragraph{Mask annealing.}
+A fraction $P_\text{mask}$ of patches is masked during training, with the fraction decaying polynomially (decay factor $0.9$) to $0$ at inference time. When $P_\text{mask}=0$ the model reverts to a plain ViT and the $L_2$ blocks operate on patches only, yielding $\sim 4\times$ faster inference than at training time while preserving mask quality.
+
+\subsection{Reuse of Existing Infrastructure}
+
+Because the \texttt{HybridLayer} stack is modality-agnostic and operates purely on $(B, S, D)$ tensors, the Vision Transformer reuses the entire encoder-side machinery without modification:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Attention mixers:} all 34 sequence mixers are available, except \texttt{engram\_attn}, which requires discrete token IDs and is therefore not meaningful for continuous patch embeddings.
+    \item \textbf{Normalization:} all 6 norm variants (LayerNorm, RMSNorm, pRMSNorm, DyT, Derf, FlashNorm).
+    \item \textbf{Residuals:} all 4 residual variants.
+    \item \textbf{Activations:} all 42 activation functions (including GLU gated FFN units).
+    \item \textbf{Optimizers:} all 23 optimizer families with prefixed per-parameter-group hyperparameter control.
+\end{itemize}
+
+The \texttt{FrankensteinViT} class mirrors the \texttt{FrankensteinDecoder} wrapper pattern: it owns a \texttt{PatchEmbed} module, a \texttt{HybridLayer} stack, and a task-specific head, and it forces \texttt{mode='encoder'} so that the bidirectional attention pattern required by vision tasks is preserved.
+
+\subsection{PyTorch Pseudocode}
+
+The forward pass for each task is sketched below.
+
+\paragraph{Classification.}
+\begin{algorithmic}[1]
+\State $x \gets \texttt{patch\_embed}(\texttt{pixel\_values})$ \Comment{$(B, N, D)$}
+\State $x \gets [\,\texttt{cls\_token}\,;\, x\,]$ \Comment{$(B, N+1, D)$}
+\State $x \gets x + \texttt{pos\_embed}$ \Comment{learnable 1D}
+\State $x \gets \texttt{dropout}(x)$
+\For{each \texttt{layer} in \texttt{layers}}
+    \State $x \gets \texttt{layer}(x)$
+\EndFor
+\State $x \gets \texttt{final\_norm}(x)$
+\State $\texttt{logits} \gets \texttt{head}(x[:, 0])$ \Comment{\texttt{[CLS]} token}
+\end{algorithmic}
+
+\paragraph{Masked patch prediction.}
+\begin{algorithmic}[1]
+\State $x \gets \texttt{patch\_embed}(\texttt{pixel\_values})$ \Comment{$(B, N, D)$}
+\State $(x,\, m) \gets \texttt{mask}(x,\, r=0.5)$ \Comment{$m$: binary mask of corrupted positions}
+\State $x \gets [\,\texttt{cls\_token}\,;\, x\,] + \texttt{pos\_embed}$
+\State $x \gets \texttt{dropout}(x)$
+\For{each \texttt{layer} in \texttt{layers}}
+    \State $x \gets \texttt{layer}(x)$
+\EndFor
+\State $x \gets \texttt{final\_norm}(x)$
+\State $\hat{y} \gets \texttt{head}(x[:, 1:])$ \Comment{predict at patch positions only}
+\State $\mathcal{L} \gets \texttt{loss}(\hat{y}[m],\, y[m])$ \Comment{loss on corrupted patches only}
+\end{algorithmic}
+
+\paragraph{EoMT segmentation.}
+\begin{algorithmic}[1]
+\State $x \gets \texttt{patch\_embed}(\texttt{pixel\_values})$ \Comment{$(B, N, D)$}
+\State $x \gets x + \texttt{pos\_embed}$
+\State $x \gets \texttt{mask\_anneal}(x)$ \Comment{mask $P_\text{mask}$ patches when training}
+\For{each \texttt{layer} in $L_1$}
+    \State $x \gets \texttt{layer}(x)$ \Comment{patch-only blocks}
+\EndFor
+\State $q \gets \texttt{learnable\_queries}$ \Comment{$(B, K, D)$}
+\State $x \gets [\,x;\, q\,]$ \Comment{concatenate patches and queries}
+\For{each \texttt{layer} in $L_2$}
+    \State $x \gets \texttt{layer}(x)$ \Comment{four-quadrant self-attention}
+\EndFor
+\State $\hat{c},\, \hat{m} \gets \texttt{mask\_module}(x_\text{patches},\, x_\text{queries},\, \tilde{F}_4)$ \Comment{class + mask logits}
+\State $(\sigma,\, \hat{y}_\sigma) \gets \texttt{Hungarian}(\hat{c},\, \hat{m},\, y)$ \Comment{match to ground truth}
+\State $\mathcal{L} \gets 5\,\mathrm{BCE} + 5\,\mathrm{Dice} + 2\,\mathrm{CE}$ \Comment{supervise matched predictions}
+\end{algorithmic}

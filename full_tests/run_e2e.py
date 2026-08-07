@@ -8,6 +8,7 @@ SentencePiece tokenizer, exercising:
 * every normalization type,
 * major transversal toggles (BitNet, MoE, MoD, mHC, embeddings, residuals, etc.),
 * encoder/MLM and decoder/causal-LM tasks,
+* vision tasks (frankenstein_vit: patch_prediction, classification, segmentation),
 * deploy, inference, quantization, transformers-export and bitnet-gguf smoke tests.
 
 It is intentionally NOT collected by ``pytest tests/`` (it lives in ``full_tests/``
@@ -260,6 +261,82 @@ def make_batch_size_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     return configs
 
 
+def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
+    """Build frankenstein_vit (Vision Transformer) e2e configs for all 3 tasks."""
+    configs: List[Tuple[str, dict]] = []
+
+    def _vit_model() -> dict:
+        return {
+            "dims": {
+                "hidden_size": 64, "num_layers": 2, "num_heads": 4, "num_loops": 1,
+                "layer_pattern": ["standard_attn"], "mode": "encoder", "dropout": 0.0,
+                "vocab_size": vocab_size,
+            },
+            "norm": {"type": "layer_norm"},
+            "embedding": {},
+            "attention": {},
+            "use_moe": False,
+            "use_bitnet": False,
+            "ffn_activation": "gelu",
+            "ffn_hidden_size": 256,
+        }
+
+    def _vit_training(task: str) -> dict:
+        return {
+            "task": task,
+            "batch_size": 2,
+            "num_epochs": 1,
+            "optimizer": {
+                "optimizer_class": "adamw",
+                "parameters": {
+                    "adamw-lr_embeddings": 1e-4,
+                    "adamw-lr_norms": 1e-4,
+                    "adamw-lr_attention": 1e-4,
+                    "adamw-lr_other": 1e-4,
+                    "adamw-wd_embeddings": 0.0,
+                    "adamw-wd_norms": 0.0,
+                    "adamw-wd_attention": 0.0,
+                    "adamw-wd_other": 0.0,
+                },
+            },
+            task: {"batch_size": 2, "num_epochs": 1, "learning_rate": 1e-4},
+        }
+
+    base_image = {
+        "image_size": {"height": 32, "width": 32},
+        "patch_size": 16, "in_channels": 3, "pos_embedding_type": "learned_1d",
+        "cls_token": True, "pooling_mode": "cls",
+    }
+    base_dataset = {"rescale": {"height": 32, "width": 32}}
+
+    # Classification
+    image = dict(base_image, num_classes=10)
+    configs.append(("vit_classification", {
+        "model_class": "frankenstein_vit", "model": _vit_model(),
+        "image": image, "dataset": base_dataset,
+        "training": _vit_training("classification"),
+    }))
+
+    # Patch prediction (autosupervised)
+    image = dict(base_image, mask_ratio=0.5, mask_token_strategy="bert",
+                 prediction_target="mean_color_3bit")
+    configs.append(("vit_patch_prediction", {
+        "model_class": "frankenstein_vit", "model": _vit_model(),
+        "image": image, "dataset": base_dataset,
+        "training": _vit_training("patch_prediction"),
+    }))
+
+    # Segmentation (pixel head)
+    image = dict(base_image, seg_head_type="pixel", num_seg_classes=5)
+    configs.append(("vit_segmentation_pixel", {
+        "model_class": "frankenstein_vit", "model": _vit_model(),
+        "image": image, "dataset": base_dataset,
+        "training": _vit_training("segmentation"),
+    }))
+
+    return configs
+
+
 # ---------------------------------------------------------------------------
 # CLI / main
 # ---------------------------------------------------------------------------
@@ -269,7 +346,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--category",
-        choices=["all", "attn", "opt", "norm", "transversal", "task", "batch_size", "deploy"],
+        choices=["all", "attn", "opt", "norm", "transversal", "task", "batch_size", "vision", "deploy"],
         default="all",
         help="Which sweep to run (default: all).",
     )
@@ -408,6 +485,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         combos.extend(make_task_configs(args.vocab_size))
     if args.category in {"all", "batch_size"}:
         combos.extend(make_batch_size_configs(args.vocab_size))
+    if args.category in {"all", "vision"}:
+        combos.extend(make_vision_configs(args.vocab_size))
 
     if args.limit is not None:
         combos = combos[: args.limit]

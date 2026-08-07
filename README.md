@@ -26,8 +26,8 @@ Verify: `frankenstein-transformer --help`
 |---------|-------|
 | Sequence mixer architectures | 33 across 5 categories (Dense, Recurrent, Sparse, Gated, Latent) |
 | Optimizer families | 23 across 6 categories |
-| Model classes | `frankenstein`, `frankensteindecoder` |
-| Training modes | Encoder (MLM) / Decoder (autoregressive) |
+| Model classes | `frankenstein`, `frankensteindecoder`, `frankenstein_vit` |
+| Training modes | Encoder (MLM) / Decoder (autoregressive) / Vision (patch prediction, classification, segmentation) |
 | Normalization types | `layer_norm`, `dynamic_tanh`, `derf` |
 | CLI subcommands | 8 |
 | Web configuration UI | Streamlit schema-driven YAML builder |
@@ -40,6 +40,7 @@ Verify: `frankenstein-transformer --help`
 |-------------|------|----------|
 | `frankenstein` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 33 mixer types |
 | `frankensteindecoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
+| `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `dataset:` blocks |
 
 See [configs/README.md](configs/README.md) for preset details and [docs/specs/](docs/specs/) for architecture deep-dives.
 
@@ -95,6 +96,7 @@ Parameters use prefixed keys: `<optimizer_class>-<group>_<param>` (e.g. `adamw-l
 | [docs/paper.pdf](docs/paper.pdf) | Technical report (English) |
 | [docs/paper-es.pdf](docs/paper-es.pdf) | Technical report (Spanish) |
 | [docs/specs/](docs/specs/) | Architecture and feature specifications |
+| [docs/specs/vision.md](docs/specs/vision.md) | Vision Transformer (frankenstein_vit) spec — patch prediction, classification, segmentation |
 | [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specs, API, papers, bibliography) |
 | [docs/transformers_compatibility.md](docs/transformers_compatibility.md) | HuggingFace export compatibility guide |
 
@@ -200,6 +202,56 @@ List available named presets:
 ```bash
 frankenstein-transformer train --list-configs
 ```
+
+## Vision Transformer (frankenstein_vit) Example
+
+The `frankenstein_vit` model class (arXiv:2010.11929) splits images into patches, embeds them, and processes the sequence through the same HybridLayer stack as the text models. It supports three tasks: `patch_prediction` (autosupervised masked patch prediction), `classification` (image classification), and `segmentation` (per-pixel or EoMT query-based, arXiv:2503.19108).
+
+Minimal classification YAML (`vit_config.yaml`):
+
+```yaml
+model_class: frankenstein_vit
+model:
+  dims:
+    hidden_size: 768
+    num_layers: 12
+    num_heads: 12
+    layer_pattern: [standard_attn]
+    mode: encoder
+  norm: {type: layer_norm}
+  use_moe: false
+  use_bitnet: false
+  ffn_activation: gelu
+  ffn_hidden_size: 3072
+image:
+  image_size: {height: 224, width: 224}
+  patch_size: 16
+  in_channels: 3
+  pos_embedding_type: learned_1d
+  cls_token: true
+  pooling_mode: cls
+  num_classes: 10
+dataset:
+  dataset_name: cifar10
+  rescale: {height: 224, width: 224}
+training:
+  task: classification
+  batch_size: 512
+  num_epochs: 90
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_other: 0.001
+      adamw-wd_other: 0.1
+  classification:
+    batch_size: 512
+    num_epochs: 90
+    learning_rate: 0.001
+```
+
+Run: `frankenstein-transformer train --config vit_config.yaml --device auto`
+
+See [configs/frankenstein_vit_base.yaml](configs/frankenstein_vit_base.yaml) for the full ViT-Base/16 preset and [docs/specs/vision.md](docs/specs/vision.md) for the complete specification.
 
 ## License
 

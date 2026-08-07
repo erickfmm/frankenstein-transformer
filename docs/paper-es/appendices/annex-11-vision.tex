@@ -1,0 +1,86 @@
+\section{Vision Transformer: Predicción de Parches, Clasificación y Segmentación}
+\label{sec:annex-vision}
+
+Este anexo documenta la clase de modelo \texttt{frankenstein\_vit}, una implementación del Vision Transformer (ViT) \citep{dosovitskiy2021vit} que reutiliza la pila de \texttt{HybridLayer} agnóstica de modalidad del encoder. Soporta tres tareas: predicción autosupervisada de parches enmascarados, clasificación de imágenes y segmentación de imágenes (por-pixel o estilo EoMT \citep{kerssies2025eomt}).
+
+\subsection{Embedding de Parches y Codificación Posicional}
+
+\paragraph{Embedding de Parches.}
+La imagen de entrada $x \in \mathbb{R}^{H \times W \times C}$ se divide en $N = HW/P^2$ parches no solapados de $P \times P$, proyectados linealmente a $D$ dimensiones mediante una Conv2d (Ec.~1 del paper ViT). La secuencia de entrada se construye como
+\[
+z_0 = [x_\text{class};\; x_p^1 E;\; \dots;\; x_p^N E] + E_\text{pos},
+\]
+donde $E \in \mathbb{R}^{P^2 C \times D}$ es la matriz de proyección de parches y $E_\text{pos}$ es la codificación posicional.
+
+\paragraph{Codificación Posicional.}
+Por defecto, se usa una \texttt{nn.Parameter} aprendible 1D de forma $(1, N+1, D)$, fiel al paper ViT. La alternativa \texttt{none} confía en RoPE/HoPE dentro de los mezcladores de atención, delegando la codificación posicional a los componentes de atención reutilizables.
+
+\paragraph{Token [CLS].}
+Un token aprendible opcional se antepone a la secuencia de parches para clasificación. La salida en la posición 0 alimenta la cabeza de clasificación.
+
+\subsection{Predicción de Parches Enmascarados (Autosupervisado)}
+
+El preentrenamiento autosupervisado sigue el esquema de enmascaramiento estilo BERT del Apéndice B.1.2 del paper ViT: se corrompe el $50\%$ de los parches, de los cuales el $80\%$ se reemplaza por un token de máscara, el $10\%$ por un parche aleatorio y el $10\%$ se mantiene sin cambios.
+
+Se soportan tres objetivos de reconstrucción:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Color medio de 3 bits}: cross-entropy sobre $512$ clases (mejor desempeño reportado).
+    \item \textbf{Parche 4$\times$4 submuestreado de 3 bits}: $16 \times 512$ cabeceras de cross-entropy.
+    \item \textbf{L2 de parche completo}: MSE sobre los píxeles crudos (estilo MAE \citep{he2022mae}).
+\end{enumerate}
+
+El modelo predice solo en las posiciones enmascaradas; la pérdida se calcula exclusivamente sobre los parches corrompidos, evitando que la reconstrucción trivial de parches no enmascarados domine la señal de aprendizaje.
+
+\subsection{Clasificación de Imágenes}
+
+\paragraph{Pooling.}
+La representación de salida se obtiene del token [CLS] (posición 0) o mediante Global Average Pooling (GAP) sobre todos los parches.
+
+\paragraph{Cabeza.}
+Una capa lineal $\text{Linear}(D, K)$ inicializada en cero, siguiendo ViT Sec.~3.2, para fine-tuning estable sobre las clases $K$.
+
+\paragraph{Pérdida.}
+Cross-entropy estándar sobre las $K$ clases.
+
+\subsection{Segmentación de Imágenes}
+
+Dos tipos de cabeza, seleccionados por el campo de esquema \texttt{seg\_head\_type}:
+
+\subsubsection{Cabeza Por-Pixel (\texttt{pixel})}
+
+Cada token de parche se proyecta a \texttt{num\_seg\_classes} canales mediante una $\text{Linear}(D, \text{num\_seg\_classes})$, se redimensiona a $(H/P, W/P)$ y luego un upsampler de convoluciones transpuestas estilo ViTDet lo escala a la resolución completa $(H, W)$. La pérdida combina cross-entropy + Dice. Se soporta segmentación 1D en escala de grises (2 clases) y multicolor no solapada ($N+1$ clases).
+
+\subsubsection{Encoder-only Mask Transformer (\texttt{eomt})}
+
+Basado en EoMT \citep{kerssies2025eomt}:
+\begin{itemize}[leftmargin=*]
+    \item El backbone se divide en $L_1$ (solo parches) + $L_2$ (parches + $K$ consultas aprendibles).
+    \item La MHSA dentro de los bloques $L_2$ procesa los cuatro cuadrantes de atención (parche$\leftrightarrow$parche, consulta$\leftrightarrow$consulta, consulta$\leftrightarrow$parche, parche$\leftrightarrow$consulta) en una sola operación.
+    \item \textbf{Módulo de máscara}: logits de clase lineales + MLP de 3 capas para el embedding de máscara, producto punto con $\tilde{F}_4$ escalado.
+    \item \textbf{Pérdida}: BCE ($\times5$) + Dice ($\times5$) + CE ($\times2$) con emparejamiento húngaro.
+    \item \textbf{Recocido de máscara}: $P_\text{mask}$ decae polinomialmente (factor $0.9$) a $0$ en inferencia, lo que revierte el modelo a un ViT plano, $4\times$ más rápido.
+\end{itemize}
+
+\subsection{Reutilización de la Infraestructura Existente}
+
+Los 34 mezcladores de atención (excepto \texttt{engram\_attn}, que requiere IDs de tokens), 6 normas, 4 residuales, 42 activaciones y 23 optimizadores se reutilizan sin cambios mediante \texttt{HybridLayer}, que es agnóstica de modalidad y opera sobre tensores de forma $(B, S, D)$.
+
+La clase \texttt{FrankensteinViT} refleja el patrón envoltorio de \texttt{FrankensteinDecoder}: posee un \texttt{PatchEmbed} + una pila de \texttt{HybridLayer} + una cabeza específica de tarea, y fuerza \texttt{mode='encoder'} en tiempo de ejecución.
+
+\subsection{Pseudocódigo en PyTorch}
+
+El siguiente pseudocódigo ilustra el paso forward para la tarea de clasificación:
+
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} \texttt{pixel\_values} $\in \mathbb{R}^{B \times C \times H \times W}$
+\State $x \gets \texttt{patch\_embed}(\texttt{pixel\_values})$ \Comment{$(B, N, D)$}
+\State $x \gets [\texttt{cls\_token}];\, x$ \Comment{anteponer token [CLS] $\to (B, N{+}1, D)$}
+\State $x \gets x + \texttt{pos\_embed}$ \Comment{codificación posicional aprendible 1D}
+\State $x \gets \texttt{dropout}(x)$
+\For{cada \texttt{layer} en \texttt{layers}}
+    \State $x \gets \texttt{layer}(x)$ \Comment{\texttt{HybridLayer} agnóstica de modalidad}
+\EndFor
+\State $x \gets \texttt{final\_norm}(x)$
+\State $\texttt{logits} \gets \texttt{head}(x[:, 0])$ \Comment{token [CLS]}
+\State \textbf{Salida:} \texttt{logits} $\in \mathbb{R}^{B \times K}$
+\end{algorithmic}
