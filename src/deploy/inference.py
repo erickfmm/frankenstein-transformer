@@ -201,8 +201,8 @@ class FrankensteinInference:
             
             input_ids = []
             for text in inputs:
-                tokens = self.tokenizer.encode(text)
-                tokens = tokens[:max_length]  # Truncate
+                encoded = self.tokenizer.encode(text)
+                tokens = encoded["input_ids"][:max_length]  # Truncate
                 input_ids.append(tokens)
             
             # Pad sequences
@@ -258,7 +258,8 @@ class FrankensteinInference:
             raise ValueError("Tokenizer required for masked prediction")
         
         # Tokenize
-        tokens = self.tokenizer.encode(text)
+        encoded = self.tokenizer.encode(text)
+        tokens = encoded["input_ids"]
         mask_positions = [i for i, t in enumerate(tokens) if t == self.tokenizer.mask_id]
         
         if not mask_positions:

@@ -25,3 +25,11 @@ docs/pdoc/
 *.csv
 
 .opencode/node_modules/
+
+# Exhaustive end-to-end harness workspace (generated tokenizers, checkpoints, deploys)
+full_tests/tmp/
+full_tests/runs/
+full_tests/**/__pycache__/
+full_tests/**/*.pyc
+full_tests/**/*.model
+full_tests/**/*.vocab
