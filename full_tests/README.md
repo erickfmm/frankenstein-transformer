@@ -40,6 +40,39 @@ Saltar el barrido más lento de atenciones de a pares:
 conda run -n frankenstein python full_tests/run_e2e.py --skip-attn-pairs
 ```
 
+### Selección de dispositivo
+
+Por defecto todo corre en `cpu`. Para ejecutar los tests en otro dispositivo (entrenamiento, deploy e inferencia):
+
+```bash
+# En GPU
+conda run -n frankenstein python full_tests/run_e2e.py --device cuda
+
+# En Apple Silicon (Metal)
+conda run -n frankenstein python full_tests/run_e2e.py --device mps
+
+# Dejar que el CLI resuelva el dispositivo automáticamente
+conda run -n frankenstein python full_tests/run_e2e.py --device auto
+```
+
+Valores válidos: `auto`, `cpu`, `cuda`, `mps` (por defecto `cpu`).
+
+### Guarda térmica de GPU
+
+La guarda térmica está **desactivada por defecto** (se pasa `--no-gpu-temp-guard`). Para activarla durante el entrenamiento en GPU y ajustar sus umbrales:
+
+```bash
+conda run -n frankenstein python full_tests/run_e2e.py --device cuda \
+  --gpu-temp-guard \
+  --gpu-temp-pause-threshold-c 80 \
+  --gpu-temp-resume-threshold-c 70 \
+  --gpu-temp-critical-threshold-c 90 \
+  --gpu-temp-poll-interval-seconds 5 \
+  --gpu-temp-checkpoint-grace-seconds 30
+```
+
+Cada umbral es opcional; si se omite, el CLI usa su valor por defecto. Solo tienen efecto cuando `--gpu-temp-guard` está activo.
+
 ## Filosofía de los resultados
 
 - `OK`: el entrenamiento terminó sin error.

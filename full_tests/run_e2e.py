@@ -20,6 +20,14 @@ Run from the repo root inside the ``frankenstein`` conda env:
 To run only a subset:
 
     conda run -n frankenstein python full_tests/run_e2e.py --category optimizers --limit 3
+
+To run on a specific device (default is cpu):
+
+    conda run -n frankenstein python full_tests/run_e2e.py --device cuda
+
+To enable the GPU thermal guard during training (with optional thresholds):
+
+    conda run -n frankenstein python full_tests/run_e2e.py --device cuda --gpu-temp-guard
 """
 from __future__ import annotations
 
@@ -261,6 +269,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Which sweep to run (default: all).",
     )
     parser.add_argument(
+        "--logging-level",
+        choices=["none", "info", "debug", "only-errors"],
+        default="info",
+        help="How much progress logging to emit to stderr (default: info).",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -293,12 +307,60 @@ def build_parser() -> argparse.ArgumentParser:
         default=helpers.TOY_VOCAB_SIZE,
         help="Toy tokenizer vocab size (default: 256).",
     )
+    parser.add_argument(
+        "--device",
+        choices=["auto", "cpu", "cuda", "mps"],
+        default="cpu",
+        help="Device to run training/deploy/infer on (default: cpu).",
+    )
+    parser.add_argument(
+        "--gpu-temp-guard",
+        action="store_true",
+        help="Enable the GPU thermal guard during training (only meaningful on cuda).",
+    )
+    parser.add_argument(
+        "--gpu-temp-pause-threshold-c",
+        type=float,
+        default=None,
+        help="GPU temp (C) at which training pauses (default: CLI default).",
+    )
+    parser.add_argument(
+        "--gpu-temp-resume-threshold-c",
+        type=float,
+        default=None,
+        help="GPU temp (C) at which training resumes (default: CLI default).",
+    )
+    parser.add_argument(
+        "--gpu-temp-critical-threshold-c",
+        type=float,
+        default=None,
+        help="GPU temp (C) considered critical (default: CLI default).",
+    )
+    parser.add_argument(
+        "--gpu-temp-poll-interval-seconds",
+        type=float,
+        default=None,
+        help="GPU temp polling interval in seconds (default: CLI default).",
+    )
+    parser.add_argument(
+        "--gpu-temp-checkpoint-grace-seconds",
+        type=float,
+        default=None,
+        help="Grace period in seconds before a thermal checkpoint (default: CLI default).",
+    )
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
-    helpers.setup_logging(logging.INFO)
+
+    log_level = {
+        "none": logging.CRITICAL + 10,
+        "info": logging.INFO,
+        "debug": logging.DEBUG,
+        "only-errors": logging.ERROR,
+    }[args.logging_level]
+    helpers.setup_logging(log_level)
 
     helpers.TMP_DIR.mkdir(parents=True, exist_ok=True)
     helpers.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -336,19 +398,32 @@ def main(argv: Optional[List[str]] = None) -> int:
         combos = combos[: args.limit]
 
     logging.info("Planning to run %d training combos", len(combos))
+    logging.debug("Category=%s limit=%s skip_attn_pairs=%s skip_singles=%s skip_deploy=%s",
+                  args.category, args.limit, args.skip_attn_pairs, args.skip_singles, args.skip_deploy)
 
     results: List[helpers.RunResult] = []
     successful_training: helpers.RunResult | None = None
+
+    train_kwargs = dict(
+        runner=runner,
+        env_extra=env_extra,
+        timeout=args.timeout,
+        device=args.device,
+        gpu_temp_guard=args.gpu_temp_guard,
+        gpu_temp_pause_threshold_c=args.gpu_temp_pause_threshold_c,
+        gpu_temp_resume_threshold_c=args.gpu_temp_resume_threshold_c,
+        gpu_temp_critical_threshold_c=args.gpu_temp_critical_threshold_c,
+        gpu_temp_poll_interval_seconds=args.gpu_temp_poll_interval_seconds,
+        gpu_temp_checkpoint_grace_seconds=args.gpu_temp_checkpoint_grace_seconds,
+    )
 
     for idx, (combo_id, config) in enumerate(combos, start=1):
         logging.info("[%d/%d] Running %s", idx, len(combos), combo_id)
         result = helpers.run_training(
             config=config,
             combo_id=combo_id,
-            runner=runner,
-            env_extra=env_extra,
             batch_size=config["training"].get("batch_size", 1),
-            timeout=args.timeout,
+            **train_kwargs,
         )
         results.append(result)
         logging.info("[%d/%d] %s -> %s (%.1fs) %s", idx, len(combos), combo_id, result.status, result.duration_sec, result.notes)
@@ -365,21 +440,28 @@ def main(argv: Optional[List[str]] = None) -> int:
 
             # standard deploy
             deploy_std_dir = helpers.TMP_DIR / "deploy" / f"{base_id}_standard"
-            res = helpers.run_deploy(checkpoint_path, deploy_std_dir, f"{base_id}_deploy_std", runner, env_extra, fmt="standard")
+            logging.info("Running deploy (standard) %s -> %s", base_id, deploy_std_dir)
+            res = helpers.run_deploy(checkpoint_path, deploy_std_dir, f"{base_id}_deploy_std", runner, env_extra, fmt="standard", device=args.device)
             results.append(res)
+            logging.info("%s -> %s (%.1fs) %s", res.combo_id, res.status, res.duration_sec, res.notes)
             if res.status == "OK":
                 helpers.copy_tokenizer_to_deploy_dir(deploy_std_dir, vocab_size)
-                results.append(helpers.run_infer(deploy_std_dir, f"{base_id}_infer", runner, env_extra))
+                results.append(helpers.run_infer(deploy_std_dir, f"{base_id}_infer", runner, env_extra, device=args.device))
+                logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
 
             # quantized deploy
             deploy_q_dir = helpers.TMP_DIR / "deploy" / f"{base_id}_quantized"
-            results.append(helpers.run_deploy(checkpoint_path, deploy_q_dir, f"{base_id}_deploy_quantized", runner, env_extra, fmt="quantized"))
+            logging.info("Running deploy (quantized) %s -> %s", base_id, deploy_q_dir)
+            results.append(helpers.run_deploy(checkpoint_path, deploy_q_dir, f"{base_id}_deploy_quantized", runner, env_extra, fmt="quantized", device=args.device))
+            logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
 
             # transformers-export (needs the original YAML)
             yaml_path = helpers.RUNS_DIR / base_id / "config.yaml"
             if yaml_path.exists():
                 export_dir = helpers.TMP_DIR / "transformers-export" / base_id
+                logging.info("Running transformers-export %s -> %s", base_id, export_dir)
                 results.append(helpers.run_transformers_export(checkpoint_path, yaml_path, export_dir, f"{base_id}_export", runner, env_extra))
+                logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
 
     # Dedicated BitNet+standard_attn training + bitnet-gguf export, if not already covered.
     if not args.skip_deploy and (args.category in {"all", "transversal"}):
@@ -393,15 +475,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         bitnet_result = helpers.run_training(
             config={"model_class": "frankenstein", "model": model, "training": training},
             combo_id=bitnet_id,
-            runner=runner,
-            env_extra=env_extra,
             batch_size=1,
-            timeout=args.timeout,
+            **train_kwargs,
         )
         results.append(bitnet_result)
         if bitnet_result.status == "OK" and bitnet_result.checkpoint_path:
             yaml_path = helpers.RUNS_DIR / bitnet_id / "config.yaml"
             gguf_path = helpers.TMP_DIR / "bitnet-gguf" / f"{bitnet_id}.gguf"
+            logging.info("Running bitnet-gguf %s -> %s", bitnet_id, gguf_path)
             results.append(helpers.run_bitnet_gguf(
                 Path(bitnet_result.checkpoint_path),
                 yaml_path,
@@ -410,6 +491,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 runner,
                 env_extra,
             ))
+            logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
 
     helpers.write_results(results)
     return helpers.print_summary(results)

@@ -496,6 +496,13 @@ def run_training(
     env_extra: dict,
     batch_size: int = 1,
     timeout: int = 600,
+    device: str = "cpu",
+    gpu_temp_guard: bool = False,
+    gpu_temp_pause_threshold_c: Optional[float] = None,
+    gpu_temp_resume_threshold_c: Optional[float] = None,
+    gpu_temp_critical_threshold_c: Optional[float] = None,
+    gpu_temp_poll_interval_seconds: Optional[float] = None,
+    gpu_temp_checkpoint_grace_seconds: Optional[float] = None,
 ) -> RunResult:
     """Run one training combo via the CLI as a subprocess."""
     run_dir = RUNS_DIR / combo_id
@@ -519,10 +526,23 @@ def run_training(
     cmd = runner + [
         "train",
         "--config", str(yaml_path),
-        "--device", "cpu",
-        "--no-gpu-temp-guard",
+        "--device", device,
         "--batch-size", str(batch_size),
     ]
+    if gpu_temp_guard:
+        cmd.append("--gpu-temp-guard")
+    else:
+        cmd.append("--no-gpu-temp-guard")
+    if gpu_temp_pause_threshold_c is not None:
+        cmd.extend(["--gpu-temp-pause-threshold-c", str(gpu_temp_pause_threshold_c)])
+    if gpu_temp_resume_threshold_c is not None:
+        cmd.extend(["--gpu-temp-resume-threshold-c", str(gpu_temp_resume_threshold_c)])
+    if gpu_temp_critical_threshold_c is not None:
+        cmd.extend(["--gpu-temp-critical-threshold-c", str(gpu_temp_critical_threshold_c)])
+    if gpu_temp_poll_interval_seconds is not None:
+        cmd.extend(["--gpu-temp-poll-interval-seconds", str(gpu_temp_poll_interval_seconds)])
+    if gpu_temp_checkpoint_grace_seconds is not None:
+        cmd.extend(["--gpu-temp-checkpoint-grace-seconds", str(gpu_temp_checkpoint_grace_seconds)])
 
     logging.info("[%s] Starting training (timeout=%ds)", combo_id, timeout)
     start = time.time()
@@ -616,6 +636,7 @@ def run_deploy(
     env_extra: dict,
     fmt: str = "standard",
     timeout: int = 300,
+    device: str = "cpu",
 ) -> RunResult:
     output_dir.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
@@ -645,7 +666,7 @@ def run_deploy(
         "--output", str(output_dir),
         "--format", fmt,
         "--validate",
-        "--device", "cpu",
+        "--device", device,
     ]
     if config_json_path.exists():
         cmd.extend(["--config", str(config_json_path)])
@@ -712,6 +733,7 @@ def run_infer(
     env_extra: dict,
     text: str = "el rápido zorro salta",
     timeout: int = 120,
+    device: str = "cpu",
 ) -> RunResult:
     env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
     env["PYTHONPATH"] = str(TMP_DIR) + os.pathsep + str(PROJECT_ROOT)
