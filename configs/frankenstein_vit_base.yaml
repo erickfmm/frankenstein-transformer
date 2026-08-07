@@ -1,0 +1,48 @@
+# FrankensteinViT Base preset (ViT-Base/16, arXiv:2010.11929)
+# D=768, L=12, heads=12, patch=16, GELU, 4*D MLP, no MoE, layer_norm
+model_class: frankenstein_vit
+model:
+  dims:
+    hidden_size: 768
+    num_layers: 12
+    num_heads: 12
+    num_loops: 1
+    layer_pattern: ["standard_attn"]
+    mode: encoder
+    dropout: 0.1
+  norm:
+    type: layer_norm
+  embedding: {}
+  attention: {}
+  use_moe: false
+  use_bitnet: false
+  ffn_activation: gelu
+  ffn_hidden_size: 3072
+image:
+  image_size:
+    height: 224
+    width: 224
+  patch_size: 16
+  in_channels: 3
+  pos_embedding_type: learned_1d
+  cls_token: true
+  pooling_mode: cls
+  num_classes: 1000
+dataset:
+  dataset_name: ""
+  rescale:
+    height: 224
+    width: 224
+training:
+  task: classification
+  batch_size: 512
+  num_epochs: 90
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_other: 0.001
+      adamw-wd_other: 0.1
+  classification:
+    batch_size: 512
+    num_epochs: 90
+    learning_rate: 0.001

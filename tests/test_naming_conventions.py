@@ -85,6 +85,9 @@ class TestSchemaModelClassEnum(unittest.TestCase):
     def test_enum_contains_well_spelled_decoder(self):
         self.assertIn("frankensteindecoder", self.enum)
 
+    def test_enum_contains_vit(self):
+        self.assertIn("frankenstein_vit", self.enum)
+
     def test_enum_does_not_contain_misspelled_decoder(self):
         self.assertNotIn("frankesteindecoder", self.enum)
 

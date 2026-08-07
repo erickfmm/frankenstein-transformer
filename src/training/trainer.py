@@ -1253,6 +1253,153 @@ class TitanTrainer:
 
         return loss, accuracy
 
+    # ---- Vision task loss methods (frankenstein_vit) ----
+
+    def _forward_vision_logits(self, pixel_values: torch.Tensor, task: str) -> torch.Tensor:
+        """Forward pass for the Vision Transformer.
+
+        Args:
+            pixel_values: Image tensor of shape ``(B, C, H, W)``.
+            task: Vision task name.
+
+        Returns:
+            Model output logits tensor.
+        """
+        outputs = self.model(pixel_values, task=task)
+        if torch.is_tensor(outputs):
+            return outputs
+        if isinstance(outputs, dict):
+            logits = outputs.get("logits")
+            if logits is not None:
+                return logits
+        if hasattr(outputs, "logits"):
+            return outputs.logits
+        raise RuntimeError("Vision model forward did not return logits.")
+
+    def compute_patch_prediction_loss(self, batch: dict) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute masked patch prediction loss (arXiv:2010.11929 App. B.1.2).
+
+        Loss is computed only on masked patch positions. The reconstruction
+        target depends on ``config.prediction_target``:
+        - ``mean_color_3bit``: 512-way cross-entropy per masked patch.
+        - ``downsampled_3bit``: 16×512 cross-entropy per masked patch.
+        - ``full_patch_l2``: MSE on raw patch pixels.
+
+        Args:
+            batch: Dict with keys ``pixel_values``, ``mask_bool``, and
+                ``mask_target``.
+
+        Returns:
+            Tuple of ``(loss, accuracy)``.
+        """
+        pixel_values = batch["pixel_values"]
+        mask_bool = batch.get("mask_bool")
+        mask_target = batch.get("mask_target")
+
+        # The model generates its own mask if none is provided.
+        logits = self._forward_vision_logits(pixel_values, task="patch_prediction")
+        # logits: (B, N, pred_dim). Strip [CLS] if present.
+        if logits.shape[1] == self.model.num_patches + 1:
+            logits = logits[:, 1:]
+        B, N, pred_dim = logits.shape
+
+        if mask_bool is None:
+            mask_bool = getattr(self.model, "_last_mask_bool", None)
+        if mask_bool is None:
+            raise RuntimeError("No mask available for patch_prediction loss.")
+
+        target_type = getattr(self.model.config, "prediction_target", "mean_color_3bit")
+        if target_type == "full_patch_l2":
+            # MSE on masked patches.
+            if mask_target is None:
+                raise RuntimeError("mask_target required for full_patch_l2.")
+            pred = logits[mask_bool]  # (M, pred_dim)
+            target = mask_target[mask_bool]
+            loss = F.mse_loss(pred.float(), target.float())
+            accuracy = torch.tensor(0.0, device=logits.device)
+        else:
+            # Cross-entropy on masked patches.
+            if mask_target is None:
+                raise RuntimeError("mask_target required for color CE targets.")
+            pred = logits[mask_bool]  # (M, pred_dim) or (M, 16, 512)
+            target = mask_target[mask_bool]  # (M,) or (M, 16)
+            if pred.dim() == 3:
+                # downsampled_3bit: (M, 16, 512) -> flatten
+                loss = F.cross_entropy(pred.reshape(-1, pred.size(-1)).float(),
+                                       target.reshape(-1).long())
+                acc = (pred.argmax(-1) == target).float().mean()
+            else:
+                loss = F.cross_entropy(pred.float(), target.long())
+                acc = (pred.argmax(-1) == target).float().mean()
+            accuracy = acc
+
+        # Add auxiliary losses (MoE/MoD).
+        aux = getattr(self.model, "last_auxiliary_losses", None)
+        if aux:
+            for v in aux.values():
+                if torch.is_tensor(v):
+                    loss = loss + v
+        return loss, accuracy
+
+    def compute_classification_loss(self, batch: dict) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute image classification cross-entropy loss.
+
+        Args:
+            batch: Dict with ``pixel_values`` and ``labels`` (class indices).
+
+        Returns:
+            Tuple of ``(loss, accuracy)``.
+        """
+        pixel_values = batch["pixel_values"]
+        labels = batch["labels"]
+        logits = self._forward_vision_logits(pixel_values, task="classification")
+        loss = F.cross_entropy(logits.float(), labels.long())
+        accuracy = (logits.argmax(-1) == labels).float().mean()
+        aux = getattr(self.model, "last_auxiliary_losses", None)
+        if aux:
+            for v in aux.values():
+                if torch.is_tensor(v):
+                    loss = loss + v
+        return loss, accuracy
+
+    def compute_segmentation_loss(self, batch: dict) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute image segmentation loss (per-pixel head).
+
+        Uses cross-entropy + Dice loss on the per-pixel segmentation map.
+
+        Args:
+            batch: Dict with ``pixel_values`` and ``segmentation_map``
+                (Long tensor of class indices, shape ``(B, H, W)``).
+
+        Returns:
+            Tuple of ``(loss, accuracy)``.
+        """
+        pixel_values = batch["pixel_values"]
+        seg_map = batch["segmentation_map"]  # (B, H, W) long
+        logits = self._forward_vision_logits(pixel_values, task="segmentation")
+        # logits: (B, num_seg_classes, H, W)
+        num_seg_classes = logits.shape[1]
+        ce_loss = F.cross_entropy(logits.float(), seg_map.long())
+
+        # Dice loss (per-class, macro average).
+        probs = F.softmax(logits, dim=1)  # (B, C, H, W)
+        target_onehot = F.one_hot(seg_map.long(), num_seg_classes)  # (B, H, W, C)
+        target_onehot = target_onehot.permute(0, 3, 1, 2).float()  # (B, C, H, W)
+        dims = (0, 2, 3)
+        intersection = (probs * target_onehot).sum(dim=dims)
+        union = probs.sum(dim=dims) + target_onehot.sum(dim=dims)
+        dice = (2 * intersection + 1e-6) / (union + 1e-6)
+        dice_loss = 1.0 - dice.mean()
+
+        loss = ce_loss + dice_loss
+        accuracy = (logits.argmax(1) == seg_map).float().mean()
+        aux = getattr(self.model, "last_auxiliary_losses", None)
+        if aux:
+            for v in aux.values():
+                if torch.is_tensor(v):
+                    loss = loss + v
+        return loss, accuracy
+
     def train_epoch(self, dataloader: DataLoader, epoch: int) -> Tuple[float, bool]:
         """
         Train for one epoch with advanced monitoring.
@@ -1305,6 +1452,12 @@ class TitanTrainer:
                                 batch['attention_mask'],
                                 batch['labels']
                             )
+                        elif self.task == "patch_prediction":
+                            loss, accuracy = self.compute_patch_prediction_loss(batch)
+                        elif self.task == "classification":
+                            loss, accuracy = self.compute_classification_loss(batch)
+                        elif self.task == "segmentation":
+                            loss, accuracy = self.compute_segmentation_loss(batch)
                         else:
                             loss, accuracy = self.compute_mlm_loss(
                                 batch['input_ids'],

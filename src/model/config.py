@@ -387,6 +387,54 @@ class FrankensteinModelConfig:
     sparda_topk_blocks: int = 16
     sparda_forecast_dim: int = 64
 
+    # ---- Vision Transformer (frankenstein_vit, arXiv:2010.11929) ----
+    # Image dimensions and patch config for the Vision Transformer model class.
+    # When ``model_class == "frankenstein_vit"``, the model splits an image
+    # into non-overlapping ``patch_size``×``patch_size`` patches, linearly
+    # projects each patch to ``hidden_size`` dimensions, and processes the
+    # resulting sequence through the standard HybridLayer stack.
+    image_height: int = 224
+    image_width: int = 224
+    patch_size: int = 16
+    in_channels: int = 3
+    to_grayscale: bool = False
+    # Positional encoding for ViT: ``"learned_1d"`` adds a learnable
+    # ``nn.Parameter`` of shape ``(1, N+cls, D)`` after patch embedding
+    # (faithful to the ViT paper). ``"none"`` relies on the existing
+    # RoPE/HoPE inside attention mixers (treats patches as a sequence).
+    pos_embedding_type: str = "learned_1d"
+    # Whether to prepend a learnable [CLS] token (ViT paper default).
+    cls_token: bool = True
+    # Pooling mode for classification: ``"cls"`` reads the [CLS] token
+    # output at position 0; ``"gap"`` averages over all patch tokens.
+    pooling_mode: str = "cls"
+    # Masked patch prediction (autosupervised): fraction of patches to
+    # corrupt during ``task == "patch_prediction"``. Paper default: 0.5.
+    mask_ratio: float = 0.5
+    # Masking strategy: ``"bert"`` = 80% mask-token / 10% random / 10%
+    # keep (paper recipe); ``"mask_only"`` = 100% mask-token;
+    # ``"random_only"`` = 100% random patch.
+    mask_token_strategy: str = "bert"
+    # Reconstruction target for patch prediction: ``"mean_color_3bit"``
+    # (512-way CE, paper best), ``"downsampled_3bit"`` (16×512 CE),
+    # ``"full_patch_l2"`` (MSE on raw patch pixels, MAE-style).
+    prediction_target: str = "mean_color_3bit"
+    # Segmentation head type: ``"pixel"`` = per-pixel linear head
+    # (supports 1D grayscale + multicolor); ``"eomt"`` = Encoder-only
+    # Mask Transformer (arXiv:2503.19108, query-based with Hungarian
+    # matching and mask annealing).
+    seg_head_type: str = "pixel"
+    # Number of classes for image classification.
+    num_classes: int = 1000
+    # Number of segmentation classes (including background).
+    num_seg_classes: int = 21
+    # EoMT: number of learnable object queries.
+    seg_num_queries: int = 100
+    # EoMT: number of L₂ blocks that process patches + queries jointly.
+    seg_l2_blocks: int = 3
+    # EoMT: mask annealing (polynomial decay of P_mask to 0 at inference).
+    seg_mask_annealing: bool = True
+
     def __post_init__(self):
         """Validate and derive dependent configuration fields after dataclass init.
 
@@ -506,3 +554,54 @@ class FrankensteinModelConfig:
                     "ffn_activation_config must be a mapping (dict) when provided"
                 )
             _validate_ffn_activation_config(self.ffn_activation, self.ffn_activation_config)
+
+        # ---- Validate Vision Transformer fields ----
+        if self.pos_embedding_type not in {"learned_1d", "none"}:
+            raise ValueError(
+                "pos_embedding_type must be 'learned_1d' or 'none', "
+                f"got {self.pos_embedding_type!r}"
+            )
+        if self.pooling_mode not in {"cls", "gap"}:
+            raise ValueError(
+                f"pooling_mode must be 'cls' or 'gap', got {self.pooling_mode!r}"
+            )
+        if self.mask_token_strategy not in {"bert", "mask_only", "random_only"}:
+            raise ValueError(
+                "mask_token_strategy must be 'bert', 'mask_only', or 'random_only', "
+                f"got {self.mask_token_strategy!r}"
+            )
+        if self.prediction_target not in {
+            "mean_color_3bit", "downsampled_3bit", "full_patch_l2"
+        }:
+            raise ValueError(
+                "prediction_target must be 'mean_color_3bit', 'downsampled_3bit', "
+                f"or 'full_patch_l2', got {self.prediction_target!r}"
+            )
+        if self.seg_head_type not in {"pixel", "eomt"}:
+            raise ValueError(
+                f"seg_head_type must be 'pixel' or 'eomt', got {self.seg_head_type!r}"
+            )
+        if int(self.patch_size) < 1:
+            raise ValueError(f"patch_size must be >= 1, got {self.patch_size}")
+        if int(self.image_height) % int(self.patch_size) != 0:
+            raise ValueError(
+                f"image_height ({self.image_height}) must be divisible by "
+                f"patch_size ({self.patch_size})"
+            )
+        if int(self.image_width) % int(self.patch_size) != 0:
+            raise ValueError(
+                f"image_width ({self.image_width}) must be divisible by "
+                f"patch_size ({self.patch_size})"
+            )
+        if not 0.0 < float(self.mask_ratio) < 1.0:
+            raise ValueError(
+                f"mask_ratio must be in the range (0, 1), got {self.mask_ratio}"
+            )
+        if int(self.num_classes) < 1:
+            raise ValueError(f"num_classes must be >= 1, got {self.num_classes}")
+        if int(self.num_seg_classes) < 1:
+            raise ValueError(f"num_seg_classes must be >= 1, got {self.num_seg_classes}")
+        if int(self.seg_num_queries) < 1:
+            raise ValueError(f"seg_num_queries must be >= 1, got {self.seg_num_queries}")
+        if int(self.seg_l2_blocks) < 1:
+            raise ValueError(f"seg_l2_blocks must be >= 1, got {self.seg_l2_blocks}")

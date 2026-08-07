@@ -16,11 +16,11 @@ import yaml
 try:
     from .trainer import TrainingConfig
     from ..model.config import FrankensteinModelConfig
-    from ..utils.config_flatten import flatten_model_dict
+    from ..utils.config_flatten import flatten_model_dict, flatten_image_dict
 except ImportError:
     from training.trainer import TrainingConfig
     from model.config import FrankensteinModelConfig
-    from utils.config_flatten import flatten_model_dict
+    from utils.config_flatten import flatten_model_dict, flatten_image_dict
 
 
 def _field_names(cls) -> set:
@@ -110,6 +110,8 @@ class LoadedTrainingConfig:
     tokenizer_config: Dict[str, Any]
     training_config: TrainingConfig
     training_runtime: Dict[str, Any]
+    image_config: Dict[str, Any]
+    dataset_config: Dict[str, Any]
 
 
 def load_training_config(path: str) -> LoadedTrainingConfig:
@@ -144,10 +146,10 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     if model_class is not None:
         model_class = str(model_class).strip().lower()
 
-    valid_model_classes = {"frankenstein", "frankensteindecoder"}
+    valid_model_classes = {"frankenstein", "frankensteindecoder", "frankenstein_vit"}
     if model_class is not None and model_class not in valid_model_classes:
         raise ValueError(
-            "model_class must be one of: frankenstein, frankensteindecoder"
+            "model_class must be one of: frankenstein, frankensteindecoder, frankenstein_vit"
         )
 
     model_data = data.get("model", {}) or {}
@@ -155,16 +157,31 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     tokenizer_config = data.get("tokenizer", {}) or {}
     if not isinstance(tokenizer_config, dict):
         raise ValueError("tokenizer must be an object when provided")
+    image_data = data.get("image", {}) or {}
+    if not isinstance(image_data, dict):
+        raise ValueError("image must be an object when provided")
+    dataset_data = data.get("dataset", {}) or {}
+    if not isinstance(dataset_data, dict):
+        raise ValueError("dataset must be an object when provided")
 
     task = str(training_data.get("task", "")).strip().lower()
-    if task not in {"mlm", "sbert", "causal_lm"}:
-        raise ValueError("training.task is required and must be one of: mlm, sbert, causal_lm")
+    if task not in {"mlm", "sbert", "causal_lm", "patch_prediction", "classification", "segmentation"}:
+        raise ValueError(
+            "training.task is required and must be one of: mlm, sbert, causal_lm, "
+            "patch_prediction, classification, segmentation"
+        )
 
     model_config: Optional[FrankensteinModelConfig] = None
     if not base_model:
         if not model_data:
             raise ValueError("model is required when base_model is not provided")
         model_data = flatten_model_dict(model_data)
+        # Merge vision-specific config from the top-level ``image:`` block.
+        # The image block is a sibling of ``model:`` but its fields flatten
+        # into the same FrankensteinModelConfig dataclass.
+        image_flat = flatten_image_dict(image_data)
+        if image_flat:
+            model_data.update(image_flat)
         _validate_bitnet_flags(model_data)
         _validate_ffn_activation(model_data)
         model_config = FrankensteinModelConfig(**model_data)
@@ -189,8 +206,17 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
             "(causal/autoregressive masking is only provided by the decoder)"
         )
 
+    # Vision tasks require the frankenstein_vit model class (patch embedding
+    # + vision heads are only provided by the ViT class).
+    vision_tasks = {"patch_prediction", "classification", "segmentation"}
+    if task in vision_tasks and model_class != "frankenstein_vit":
+        raise ValueError(
+            f"training.task={task} requires model_class=frankenstein_vit "
+            f"(patch embedding and vision heads are only provided by the ViT class)"
+        )
+
     optimizer_data = training_data.get("optimizer")
-    if task in {"mlm", "causal_lm"}:
+    if task in {"mlm", "causal_lm", "patch_prediction", "classification", "segmentation"}:
         if not isinstance(optimizer_data, dict):
             raise ValueError(
                 "Missing required 'training.optimizer' object in config. "
@@ -232,6 +258,8 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         tokenizer_config=tokenizer_config,
         training_config=training_config,
         training_runtime=training_runtime,
+        image_config=image_data,
+        dataset_config=dataset_data,
     )
 
 

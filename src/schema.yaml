@@ -18,6 +18,10 @@ properties:
     $ref: "schema/_model.yaml"
   training:
     $ref: "schema/_training.yaml"
+  image:
+    $ref: "schema/_image.yaml"
+  dataset:
+    $ref: "schema/_dataset.yaml"
 
 allOf:
   $ref: "schema/_conditional_rules.yaml"

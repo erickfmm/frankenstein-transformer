@@ -5,6 +5,7 @@ description: |-
   Model architecture variant to instantiate. Determines which model implementation class is used.
   - `frankenstein`: mixed-architecture encoder with various attention mechanisms (standard, sigmoid, retentive, state-space, sparse, and gated mixers), MoE (Mixture of Experts), and advanced features. Optimized for bidirectional encoder-style training with masked language modeling (MLM).
   - `frankensteindecoder`: autoregressive causal decoder for LLM-style next-token generation. **Automatically forces `mode: decoder`** at runtime. Enables causal masking for text generation tasks.
+  - `frankenstein_vit`: Vision Transformer (arXiv:2010.11929). Splits images into fixed-size patches, linearly embeds each patch, adds positional embeddings, and processes the resulting sequence through the mixed-attention HybridLayer stack. Supports three tasks: `patch_prediction` (masked patch prediction / autosupervised pre-training), `classification` (image classification), and `segmentation` (per-pixel or EoMT-style image segmentation, arXiv:2503.19108). **Requires the `image:` top-level block** for patch/image/task-specific configuration and the `dataset:` block for data loading. Automatically forces `mode: encoder` at runtime.
 
   **Examples explained:**
   - `frankenstein`: Use when you need a full-featured encoder with mixed attention mechanisms, MoE, and advanced normalization. Best for MLM pre-training with large datasets where architectural flexibility matters. Supports all 17 mixer types in `layer_pattern`.
@@ -17,9 +18,12 @@ description_es: |-
   **Ejemplos explicados:**
   - `frankenstein`: Usar cuando se necesita un encoder completo con mecanismos de atención mixtos, MoE y normalización avanzada. Ideal para preentrenamiento MLM con datasets grandes donde importa la flexibilidad arquitectónica. Soporta los 17 tipos de mixer en `layer_pattern`.
   - `frankensteindecoder`: Usar para tareas de generación de texto autorregresivas (tipo GPT). El sistema fuerza `mode=decoder` automáticamente. Soporta atención causal donde cada token solo atiende a tokens previos.
+  - `frankenstein_vit`: Vision Transformer (arXiv:2010.11929). Divide imágenes en parches de tamaño fijo, embebe cada parche linealmente, añade embeddings posicionales y procesa la secuencia resultante a través del stack de HybridLayers con atención mixta. Soporta tres tareas: `patch_prediction` (predicción de parches enmascarados / preentrenamiento autosupervisado), `classification` (clasificación de imágenes), y `segmentation` (segmentación por-pixel o estilo EoMT, arXiv:2503.19108). **Requiere el bloque top-level `image:`** para configuración de parches/imagen/tarea y el bloque `dataset:` para carga de datos. Fuerza automáticamente `mode: encoder` en tiempo de ejecución.
 enum:
   - frankenstein
   - frankensteindecoder
+  - frankenstein_vit
 examples:
   - frankenstein
   - frankensteindecoder
+  - frankenstein_vit

@@ -114,6 +114,9 @@ def _build_core_model(config: FrankensteinConfig) -> nn.Module:
         if model_cfg.mode != "decoder":
             model_cfg.mode = "decoder"
         return FrankensteinDecoder(model_cfg)
+    if model_class == "frankenstein_vit":
+        from ..model.frankenstein_vit import FrankensteinViT
+        return FrankensteinViT(model_cfg)
     return FrankensteinEncoder(model_cfg)
 
 

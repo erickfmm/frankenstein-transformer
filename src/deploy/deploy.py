@@ -84,6 +84,10 @@ class ModelDeployer:
         """
         if getattr(config, "mode", "encoder") == "decoder":
             return FrankensteinDecoder(config)
+        # Vision Transformer: detect via patch_size > 0 and in_channels present.
+        if hasattr(config, "patch_size") and getattr(config, "pos_embedding_type", "") in ("learned_1d", "none"):
+            from ..model.frankenstein_vit import FrankensteinViT
+            return FrankensteinViT(config)
         return FrankensteinEncoder(config)
 
     def load_training_checkpoint(self, checkpoint_path: str) -> None:

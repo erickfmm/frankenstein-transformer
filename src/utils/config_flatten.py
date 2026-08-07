@@ -133,6 +133,59 @@ def _is_nested_shape(model_data: Dict[str, Any]) -> bool:
     return False
 
 
+def flatten_image_dict(image_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Flatten the top-level ``image:`` block into flat FrankensteinModelConfig kwargs.
+
+    This is separate from :func:`flatten_model_dict` because the ``image:``
+    block is a top-level YAML key (sibling of ``model:``), not a sub-key of
+    ``model:``. The resulting flat keys (``image_height``, ``patch_size``,
+    etc.) are merged into the model config kwargs before constructing
+    :class:`FrankensteinModelConfig`.
+
+    Args:
+        image_data: The ``image:`` mapping from a YAML config.
+
+    Returns:
+        A flat dictionary of vision config kwargs. Empty if ``image_data``
+        is not a dict.
+    """
+    if not isinstance(image_data, dict):
+        return {}
+
+    out: Dict[str, Any] = {}
+
+    # image_size.{height, width} -> image_height, image_width
+    image_size = image_data.get("image_size")
+    if isinstance(image_size, dict):
+        if "height" in image_size:
+            out["image_height"] = image_size["height"]
+        if "width" in image_size:
+            out["image_width"] = image_size["width"]
+
+    # Direct leaf mappings (flat keys with same name).
+    for leaf in (
+        "patch_size",
+        "in_channels",
+        "to_grayscale",
+        "pos_embedding_type",
+        "cls_token",
+        "pooling_mode",
+        "mask_ratio",
+        "mask_token_strategy",
+        "prediction_target",
+        "seg_head_type",
+        "num_classes",
+        "num_seg_classes",
+        "seg_num_queries",
+        "seg_l2_blocks",
+        "seg_mask_annealing",
+    ):
+        if leaf in image_data:
+            out[leaf] = image_data[leaf]
+
+    return out
+
+
 def _flatten_attention(attn: Dict[str, Any], out: Dict[str, Any]) -> None:
     """Flatten the ``model.attention`` sub-tree into flat keys in ``out``."""
     for mixer, spec in attn.items():

@@ -29,6 +29,7 @@ try:
     from ..model.config import FrankensteinModelConfig
     from ..model.frankenstein_decoder import FrankensteinDecoder
     from ..model.frankenstein_encoder import FrankensteinEncoder
+    from ..model.frankenstein_vit import FrankensteinViT
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 except ImportError:
     from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
@@ -38,6 +39,7 @@ except ImportError:
     from model.config import FrankensteinModelConfig
     from model.frankenstein_decoder import FrankensteinDecoder
     from model.frankenstein_encoder import FrankensteinEncoder
+    from model.frankenstein_vit import FrankensteinViT
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
 
@@ -171,6 +173,8 @@ def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> Tuple[torch
     if loaded.model_class == "frankensteindecoder":
         config.mode = "decoder"
         model = FrankensteinDecoder(config)
+    elif loaded.model_class == "frankenstein_vit":
+        model = FrankensteinViT(config)
     else:
         model = FrankensteinEncoder(config)
 
@@ -829,6 +833,79 @@ def _run_sbert_task(
     return int(result) if isinstance(result, int) else 0
 
 
+# ==================== VISION TASK (frankenstein_vit) ====================
+def _run_vision_task(loaded, resolved_device, training_config, args):
+    """Run a vision task (patch_prediction / classification / segmentation).
+
+    Mirrors the SBERT early-return pattern: builds the FrankensteinViT model,
+    a vision dataset, and a TitanTrainer, then runs the epoch loop.
+    """
+    from .vision_dataset import DummyImageDataset
+    from torch.utils.data import DataLoader
+
+    logging.info("\n" + "=" * 60)
+    logging.info("Vision task: %s (model_class=%s)", loaded.task, loaded.model_class)
+    logging.info("=" * 60)
+
+    config = loaded.model_config
+    model = FrankensteinViT(config)
+
+    # Determine task-specific config from the training sub-block.
+    task_config = loaded.training_runtime.get(loaded.task, {})
+    if not isinstance(task_config, dict):
+        task_config = {}
+    batch_size = task_config.get("batch_size", args.batch_size or 32)
+    num_epochs = task_config.get("num_epochs", training_config.num_epochs or 1)
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logging.info("Total Parameters: %.2fM", total_params / 1e6)
+    logging.info("Trainable Parameters: %.2fM", trainable_params / 1e6)
+
+    # Build dataset. For now, use a DummyImageDataset if no real dataset is
+    # configured (enables smoke-testing without image data).
+    dataset_name = loaded.dataset_config.get("dataset_name")
+    dataset_dir = loaded.dataset_config.get("dataset_dir")
+    if dataset_name or dataset_dir:
+        from .vision_dataset import ImageDataset
+        dataset = ImageDataset(loaded.dataset_config, loaded.image_config, loaded.task)
+    else:
+        logging.info("No dataset_name/dataset_dir — using DummyImageDataset for smoke test")
+        dataset = DummyImageDataset(
+            task=loaded.task,
+            num_samples=64,
+            image_height=config.image_height,
+            image_width=config.image_width,
+            in_channels=config.in_channels,
+            patch_size=config.patch_size,
+            num_classes=config.num_classes,
+            num_seg_classes=config.num_seg_classes,
+            mask_ratio=config.mask_ratio,
+            prediction_target=config.prediction_target,
+        )
+
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    logging.info("Step 4: %s training", loaded.task.upper())
+    trainer = TitanTrainer(
+        model,
+        config,
+        training_config=training_config,
+        device=resolved_device,
+        task=loaded.task,
+    )
+
+    for epoch in range(num_epochs):
+        logging.info("Epoch %d/%d", epoch + 1, num_epochs)
+        avg_loss, should_stop = trainer.train_epoch(dataloader, epoch)
+        logging.info("Epoch %d avg loss: %.4f", epoch + 1, avg_loss)
+        if should_stop:
+            break
+
+    logging.info("Vision training complete.")
+    return 0
+
+
 # ==================== MAIN EXECUTION ====================
 def main(argv=None):
     """Main training pipeline for Frankenstein Transformer and base-model finetuning."""
@@ -844,7 +921,7 @@ def main(argv=None):
     parser.add_argument("--batch-size", type=int, default=None, help="Override batch size from YAML")
     parser.add_argument(
         "--model-mode",
-        choices=["frankenstein", "frankensteindecoder"],
+        choices=["frankenstein", "frankensteindecoder", "frankenstein_vit"],
         default=None,
         help="Deprecated: use --config-name instead",
     )
@@ -972,6 +1049,10 @@ def main(argv=None):
 
     if loaded.task == "sbert":
         return _run_sbert_task(loaded, resolved_device, training_config)
+
+    vision_tasks = {"patch_prediction", "classification", "segmentation"}
+    if loaded.task in vision_tasks:
+        return _run_vision_task(loaded, resolved_device, training_config, args)
 
     if loaded.base_model:
         logging.info("\n" + "=" * 60)

@@ -69,3 +69,73 @@
     required:
     - model_class
     - model
+- if:
+    properties:
+      training:
+        properties:
+          task:
+            const: patch_prediction
+  then:
+    properties:
+      training:
+        required:
+        - optimizer
+        - patch_prediction
+      model_class:
+        const: frankenstein_vit
+      image:
+        required:
+        - image_size
+        - patch_size
+    required:
+    - model_class
+    - model
+    - image
+    - dataset
+- if:
+    properties:
+      training:
+        properties:
+          task:
+            const: classification
+  then:
+    properties:
+      training:
+        required:
+        - optimizer
+        - classification
+      model_class:
+        const: frankenstein_vit
+      image:
+        required:
+        - image_size
+        - patch_size
+        - num_classes
+    required:
+    - model_class
+    - model
+    - image
+    - dataset
+- if:
+    properties:
+      training:
+        properties:
+          task:
+            const: segmentation
+  then:
+    properties:
+      training:
+        required:
+        - optimizer
+        - segmentation
+      model_class:
+        const: frankenstein_vit
+      image:
+        required:
+        - image_size
+        - patch_size
+    required:
+    - model_class
+    - model
+    - image
+    - dataset

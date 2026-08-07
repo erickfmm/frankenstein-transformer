@@ -14,3 +14,4 @@ Specifications
    sbert-workflows
    schema-reference
    training-safety
+   vision

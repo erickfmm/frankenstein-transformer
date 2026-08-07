@@ -1,0 +1,107 @@
+type: object
+title: Image Segmentation Task Configuration
+title_es: Configuración de Tarea Segmentation
+description: |-
+  Task-specific configuration for `training.task: segmentation` (image
+  segmentation). Supports per-pixel linear head (`seg_head_type: pixel`)
+  for 1D grayscale or multicolor non-overlapping segmentation, or EoMT
+  query-based head (`seg_head_type: eomt`, arXiv:2503.19108) with Hungarian
+  matching, BCE+Dice+CE loss, and mask annealing.
+description_es: |-
+  Configuración específica de tarea para `training.task: segmentation`
+  (segmentación de imágenes).
+additionalProperties: false
+properties:
+  batch_size:
+    type: integer
+    minimum: 1
+    title: Batch Size
+    title_es: Tamaño de Batch
+    default: 64
+  num_epochs:
+    type: integer
+    minimum: 1
+    title: Epochs
+    title_es: Épocas
+    default: 50
+  learning_rate:
+    type: number
+    exclusiveMinimum: 0
+    title: Learning Rate
+    title_es: Tasa de Aprendizaje
+    default: 0.0001
+  weight_decay:
+    type: number
+    minimum: 0
+    title: Weight Decay
+    title_es: Decaimiento de Peso
+    default: 0.1
+  warmup_steps:
+    type: integer
+    minimum: 0
+    title: Warmup Steps
+    title_es: Pasos de Calentamiento
+    default: 1500
+  scheduler_type:
+    type: string
+    enum:
+      - cosine
+      - linear
+    title: Scheduler Type
+    title_es: Tipo de Scheduler
+    default: cosine
+  grad_clip_max_norm:
+    type: number
+    minimum: 0
+    title: Gradient Clip Max Norm
+    title_es: Norma Máxima de Clip de Gradiente
+    default: 1.0
+  evaluation_steps:
+    type: integer
+    minimum: 0
+    title: Evaluation Steps
+    title_es: Pasos de Evaluación
+    default: 5000
+  checkpoint_save_steps:
+    type: integer
+    minimum: 0
+    title: Checkpoint Save Steps
+    title_es: Pasos de Guardado de Checkpoint
+    default: 10000
+  output_dir:
+    type: string
+    title: Output Directory
+    title_es: Directorio de Salida
+    default: ./checkpoints/vit_segmentation
+  seg_loss_bce_weight:
+    type: number
+    minimum: 0
+    title: BCE Loss Weight
+    title_es: Peso de Pérdida BCE
+    description: "Weight for binary cross-entropy mask loss (EoMT). Paper default: 5.0."
+    description_es: "Peso para la pérdida BCE de máscara (EoMT)."
+    default: 5
+  seg_loss_dice_weight:
+    type: number
+    minimum: 0
+    title: Dice Loss Weight
+    title_es: Peso de Pérdida Dice
+    description: "Weight for Dice mask loss (EoMT). Paper default: 5.0."
+    description_es: "Peso para la pérdida Dice de máscara (EoMT)."
+    default: 5
+  seg_loss_ce_weight:
+    type: number
+    minimum: 0
+    title: CE Loss Weight
+    title_es: Peso de Pérdida CE
+    description: "Weight for cross-entropy class loss (EoMT). Paper default: 2.0."
+    description_es: "Peso para la pérdida CE de clase (EoMT)."
+    default: 2
+  mask_annealing_factor:
+    type: number
+    exclusiveMinimum: 0
+    title: Mask Annealing Factor
+    title_es: Factor de Recocido de Máscara
+    description: "Polynomial decay factor for mask annealing (EoMT). Paper default: 0.9."
+    description_es: "Factor de decaimiento polinomial para recocido de máscara (EoMT)."
+    default: 0.9

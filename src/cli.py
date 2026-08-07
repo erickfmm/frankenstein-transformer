@@ -430,7 +430,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--batch-size", type=int, default=None)
     train_parser.add_argument(
         "--model-mode",
-        choices=["frankenstein", "frankensteindecoder"],
+        choices=["frankenstein", "frankensteindecoder", "frankenstein_vit"],
         default=None,
     )
     train_parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")

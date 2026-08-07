@@ -69,7 +69,7 @@ def _make_load_test(path: str):
     def test_method(self):
         cfg = load_training_config(path)
         self.assertIsInstance(cfg, LoadedTrainingConfig)
-        self.assertIn(cfg.task, {"mlm", "sbert", "causal_lm"}, f"Unexpected task in {path}")
+        self.assertIn(cfg.task, {"mlm", "sbert", "causal_lm", "patch_prediction", "classification", "segmentation"}, f"Unexpected task in {path}")
         # model_config is present when no base_model is given
         if cfg.base_model is None:
             self.assertIsNotNone(cfg.model_config, f"model_config missing for {path}")

@@ -37,6 +37,9 @@ properties:
     - mlm
     - sbert
     - causal_lm
+    - patch_prediction
+    - classification
+    - segmentation
     examples:
     - mlm
   num_epochs:
@@ -989,6 +992,12 @@ properties:
     $ref: _optimizer.yaml
   sbert:
     $ref: _sbert.yaml
+  patch_prediction:
+    $ref: _vision_patch.yaml
+  classification:
+    $ref: _vision_classification.yaml
+  segmentation:
+    $ref: _vision_segmentation.yaml
 allOf:
 - if:
     properties:

@@ -1,0 +1,126 @@
+type: object
+title: Dataset Configuration
+title_es: Configuración de Dataset
+description: |-
+  Dataset configuration for image-based tasks (`patch_prediction`,
+  `classification`, `segmentation`). Specifies the data source (HuggingFace
+  dataset or local directory), column mappings, image rescaling, normalization,
+  and augmentations.
+
+  Required when `model_class: frankenstein_vit`.
+description_es: |-
+  Configuración de dataset para tareas de imagen (`patch_prediction`,
+  `classification`, `segmentation`). Especifica la fuente de datos, mapeo de
+  columnas, reescalado de imagen, normalización y aumentaciones.
+
+  Obligatorio cuando `model_class: frankenstein_vit`.
+additionalProperties: false
+properties:
+  dataset_name:
+    type: string
+    title: Dataset Name
+    title_es: Nombre de Dataset
+    description: HuggingFace dataset identifier (e.g. `cifar10`, `imagenet-1k`).
+    description_es: Identificador de dataset de HuggingFace.
+  dataset_dir:
+    type: string
+    title: Dataset Directory
+    title_es: Directorio de Dataset
+    description: |-
+      Local directory path containing images. For classification, expects
+      per-class subfolders or a labels CSV. For segmentation, expects images
+      + segmentation maps.
+    description_es: Ruta local del directorio que contiene las imágenes.
+  image_column:
+    type: string
+    title: Image Column
+    title_es: Columna de Imagen
+    description: Column name for images in a HuggingFace dataset.
+    description_es: Nombre de columna para imágenes en un dataset de HuggingFace.
+    default: image
+  label_column:
+    type: string
+    title: Label Column
+    title_es: Columna de Etiqueta
+    description: Column name for classification labels in a HuggingFace dataset.
+    description_es: Nombre de columna para etiquetas de clasificación.
+    default: label
+  segmentation_column:
+    type: string
+    title: Segmentation Column
+    title_es: Columna de Segmentación
+    description: Column name for segmentation maps in a HuggingFace dataset.
+    description_es: Nombre de columna para mapas de segmentación.
+    default: segmentation_map
+  rescale:
+    type: object
+    title: Rescale
+    title_es: Reescalado
+    description: Rescale images to this (height, width) before patch embedding.
+    description_es: Reescalar imágenes a este (alto, ancho) antes del patch embedding.
+    additionalProperties: false
+    properties:
+      height:
+        type: integer
+        minimum: 1
+        title: Rescale Height
+        title_es: Alto de Reescalado
+      width:
+        type: integer
+        minimum: 1
+        title: Rescale Width
+        title_es: Ancho de Reescalado
+    required:
+      - height
+      - width
+  normalize:
+    type: object
+    title: Normalize
+    title_es: Normalización
+    description: |-
+      Per-channel mean and std for normalization. Applied after rescaling.
+      If omitted, no normalization is applied.
+    description_es: Media y desviación estándar por canal para normalización.
+    additionalProperties: false
+    properties:
+      mean:
+        type: array
+        items:
+          type: number
+        title: Mean
+        title_es: Media
+      std:
+        type: array
+        items:
+          type: number
+        title: Std
+        title_es: Desviación Estándar
+  augmentations:
+    type: object
+    title: Augmentations
+    title_es: Aumentaciones
+    description: Data augmentation options applied during training.
+    description_es: Opciones de aumentación de datos aplicadas durante el entrenamiento.
+    additionalProperties: false
+    properties:
+      random_crop:
+        type: boolean
+        title: Random Crop
+        title_es: Recorte Aleatorio
+        default: false
+      horizontal_flip:
+        type: boolean
+        title: Horizontal Flip
+        title_es: Volteo Horizontal
+        default: true
+      color_jitter:
+        type: boolean
+        title: Color Jitter
+        title_es: Variación de Color
+        default: false
+      mixup_alpha:
+        type: number
+        minimum: 0
+        title: Mixup Alpha
+        title_es: Alpha de Mixup
+        default: 0

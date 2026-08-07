@@ -110,6 +110,9 @@ class FrankensteinInference:
         # Initialize model (decoder when configured)
         if isinstance(self.config.mode, str) and self.config.mode == "decoder":
             model = FrankensteinDecoder(self.config)
+        elif hasattr(self.config, "patch_size") and getattr(self.config, "pos_embedding_type", "") in ("learned_1d", "none"):
+            from ..model.frankenstein_vit import FrankensteinViT
+            model = FrankensteinViT(self.config)
         else:
             model = FrankensteinEncoder(self.config)
         

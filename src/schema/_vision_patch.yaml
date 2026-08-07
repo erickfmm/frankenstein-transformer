@@ -1,0 +1,69 @@
+type: object
+title: Patch Prediction Task Configuration
+title_es: Configuración de Tarea Patch Prediction
+description: |-
+  Task-specific configuration for `training.task: patch_prediction` (masked
+  patch prediction / autosupervised pre-training, arXiv:2010.11929 App. B.1.2).
+  Patches are corrupted (50% default) and the model predicts the reconstruction
+  target (3-bit mean color, downsampled 3-bit, or full-patch L2) for each
+  corrupted patch.
+description_es: |-
+  Configuración específica de tarea para `training.task: patch_prediction`
+  (predicción de parches enmascarados / preentrenamiento autosupervisado).
+additionalProperties: false
+properties:
+  batch_size:
+    type: integer
+    minimum: 1
+    title: Batch Size
+    title_es: Tamaño de Batch
+    default: 256
+  num_epochs:
+    type: integer
+    minimum: 1
+    title: Epochs
+    title_es: Épocas
+    default: 100
+  learning_rate:
+    type: number
+    exclusiveMinimum: 0
+    title: Learning Rate
+    title_es: Tasa de Aprendizaje
+    default: 0.0002
+  weight_decay:
+    type: number
+    minimum: 0
+    title: Weight Decay
+    title_es: Decaimiento de Peso
+    default: 0.1
+  warmup_steps:
+    type: integer
+    minimum: 0
+    title: Warmup Steps
+    title_es: Pasos de Calentamiento
+    default: 10000
+  scheduler_type:
+    type: string
+    enum:
+      - cosine
+      - linear
+    title: Scheduler Type
+    title_es: Tipo de Scheduler
+    default: cosine
+  evaluation_steps:
+    type: integer
+    minimum: 0
+    title: Evaluation Steps
+    title_es: Pasos de Evaluación
+    default: 5000
+  checkpoint_save_steps:
+    type: integer
+    minimum: 0
+    title: Checkpoint Save Steps
+    title_es: Pasos de Guardado de Checkpoint
+    default: 10000
+  output_dir:
+    type: string
+    title: Output Directory
+    title_es: Directorio de Salida
+    default: ./checkpoints/vit_patch_prediction

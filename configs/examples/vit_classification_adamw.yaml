@@ -1,0 +1,46 @@
+model_class: frankenstein_vit
+model:
+  dims:
+    hidden_size: 64
+    num_layers: 2
+    num_heads: 4
+    num_loops: 1
+    layer_pattern: ["standard_attn"]
+    mode: encoder
+    dropout: 0.1
+  norm:
+    type: layer_norm
+  embedding: {}
+  attention: {}
+  use_moe: false
+  use_bitnet: false
+  ffn_activation: gelu
+  ffn_hidden_size: 256
+image:
+  image_size:
+    height: 32
+    width: 32
+  patch_size: 16
+  in_channels: 3
+  pos_embedding_type: learned_1d
+  cls_token: true
+  pooling_mode: cls
+  num_classes: 10
+dataset:
+  dataset_name: ""
+  rescale:
+    height: 32
+    width: 32
+training:
+  task: classification
+  batch_size: 8
+  num_epochs: 1
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_other: 0.001
+      adamw-wd_other: 0.1
+  classification:
+    batch_size: 8
+    num_epochs: 1
+    learning_rate: 0.001
