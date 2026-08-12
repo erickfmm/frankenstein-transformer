@@ -59,13 +59,13 @@ These still hold and the integration must respect them:
 
 Authoritative sources: `DashAI/back/plugins/utils.py`, `DashAI/back/dependencies/registry/component_registry.py`, `DashAI/back/models/base_model.py`, `DashAI/back/converters/base_converter.py`, `DashAI/back/config_object.py`, and the official docs at <https://docs.dash-ai.com/deep-dive/components>.
 
-**Discovery.** `get_available_plugins()` calls `importlib.metadata.entry_points(group="dashai.plugins")` and `load()`s each entry (`plugins/utils.py:199`). `register_plugin_components()` then calls `registry.register_component(plugin_class)` for each (`plugins/utils.py:287`). Install/uninstall is a `pip` subprocess plus a DB-tracked `Plugin` row; plugins are expected to be PyPI packages whose name starts with `dashai-` (`plugins/utils.py:168`, `:221`).
+**Discovery.** `get_available_plugins()` calls `importlib.metadata.entry_points(group="dashai.plugins")` and `load()`s each entry (`plugins/utils.py:199`, call at `:209`). `register_plugin_components()` then calls `registry.register_component(plugin_class)` for each (`plugins/utils.py:287`, call at `:302`). Install/uninstall runs a `pip` subprocess (`execute_pip_command`, `plugins/utils.py:221`); the `Plugin` DB row is written by the **API layer**, not by `utils.py` (the `Plugin` SQLAlchemy model lives at `back/dependencies/database/models.py:298`). The PyPI listing filter in `get_plugins_from_pypi` selects packages whose lowercased name `startswith("dashai")` **and** `!= "dashai"` (`plugins/utils.py:178-182`) — so `dashai-frankenstein` matches, but so would `dashaifoo`; the prefix is `dashai`, not `dashai-`.
 
-**The component contract.** When a class is registered, `_get_base_type()` walks the MRO and requires **exactly one** base class that carries a `TYPE` attribute (`component_registry.py:138`). More than one → `TypeError`. A class is a *configurable object* iff `ConfigObject` is in its MRO, in which case it **must** implement `get_schema()` (`component_registry.py:214`), which `ConfigObject` provides by serializing a pydantic `SCHEMA` to JSON Schema (`config_object.py:14`).
+**The component contract.** When a class is registered, `_get_base_type()` walks the MRO — **first filtering to ancestors whose `__name__` contains the substring `"Base"`** (`component_registry.py:142`) — and requires **exactly one** of those filtered ancestors to carry a `TYPE` attribute (`component_registry.py:138`). Zero or more than one → `TypeError` (`:153`, `:159`). A class is a *configurable object* iff `ConfigObject` is in its MRO, in which case it **must** implement `get_schema()` (`component_registry.py:214`), which `ConfigObject` provides by serializing a pydantic `SCHEMA` to JSON Schema (`config_object.py:14`).
 
 **Component `TYPE`s** relevant here: `Model` (`BaseModel`), `GenerativeModel` (`BaseGenerativeModel`), `Task` (`BaseTask`), `GenerativeTask`, `Converter`, `DataLoader`, `Optimizer`, `Metric`, `Explorer`, `Job`.
 
-**`BaseModel` contract** (`base_model.py`): abstract `save(filename)`, `load(filename)`, `train(x_train, y_train, x_validation=None, y_validation=None)`; hooks `predict`, `prepare_dataset`, `prepare_output`, `calculate_metrics`. Metrics are persisted to SQLite via `_save_metrics` (`base_model.py:107`), keyed by `run_id`. Data unit is `DashAIDataset` (a HuggingFace `datasets` wrapper). Training executes inside a **Huey** background job.
+**`BaseModel` contract** (`base_model.py:20`): abstract `save(filename)` (`:51`), `load(filename)` (`:62`), `train(x_train, y_train, x_validation=None, y_validation=None)` (`:78`); concrete hooks `prepare_dataset` (`:301`), `prepare_output` (`:325`), and the `@final` `calculate_metrics` (`:226`, which calls `self.predict(...)` at `:278`). **`predict` is NOT declared on `BaseModel`** — neither abstract nor concrete — but subclasses must implement it because `calculate_metrics` invokes it at runtime. Metrics are persisted to SQLite via the `@final` `_save_metrics` (`base_model.py:107`), keyed by `run_id` (the `Metric` FK at `database/models.py:280`). Data unit is `DashAIDataset` (a HuggingFace `datasets` wrapper, `dataloaders/classes/dashai_dataset.py:54`). Training executes inside a **Huey** background job (`ModelJob` at `job/model_job.py:27`, `HueyJobQueue` at `dependencies/job_queues/huey_job_queue.py:66`). Note: `HuggingFaceTextClassificationTransformer.load` overrides the abstract `load` as a `@classmethod` (`base_text_classification_transformer.py:439`) — a legitimate divergence the Frankenstein adapters may follow.
 
 **Models ↔ Tasks.** Binding is by name via the class attribute `COMPATIBLE_COMPONENTS` (e.g. `TextClassificationModel.COMPATIBLE_COMPONENTS = ["TextClassificationTask"]`). The registry collects these along the whole MRO (`component_registry.py:174`).
 
@@ -81,8 +81,8 @@ Authoritative sources: `AGENTS.md`, `pyproject.toml`, `src/cli.py`, `src/schema.
 
 - **Entrypoint:** `src/cli.py:main` → console script `frankenstein-transformer` (`pyproject.toml:30`). Subcommands: `train`, `deploy`, `quantize`, `infer`, `sbert-train`, `sbert-infer`, `transformers-export`, `bitnet-gguf`, `web-server`.
 - **Source of truth:** JSON Schema. `src/schema.yaml` `$ref`s into modular `src/schema/_*.yaml` and `src/schema/_model/_*.yaml`; `additionalProperties: false` everywhere. **Not pydantic.**
-- **Config objects (dataclasses):** `FrankensteinModelConfig` — **151 typed fields** (`src/model/config.py`); `TrainingConfig` — ~100 fields (`src/training/trainer.py`); plus `image`/`dataset`/`sbert` blocks. The YAML `model:` block is nested and **flattened** before constructing `FrankensteinModelConfig` (`src/utils/config_flatten.py:flatten_model_dict`, `flatten_image_dict`).
-- **Model classes:** `FrankensteinEncoder` (`src/model/frankenstein_encoder.py`, MLM/encoder), `FrankensteinDecoder` (causal), `FrankensteinViT` (`src/model/frankenstein_vit.py`, vision). All are **plain `nn.Module` exposing only `forward()`** — no DashAI-style lifecycle methods.
+- **Config objects (dataclasses):** `FrankensteinModelConfig` — **151 typed fields** (`src/model/config.py:91`); `TrainingConfig` — **38 fields** (`src/training/trainer.py:52`, fields at lines 104-160); plus `image`/`dataset`/`sbert` blocks. The YAML `model:` block is nested and **flattened** before constructing `FrankensteinModelConfig` (`src/utils/config_flatten.py:flatten_model_dict`, `flatten_image_dict`).
+- **Model classes:** `FrankensteinEncoder` (`src/model/frankenstein_encoder.py:29`, MLM/encoder), `FrankensteinDecoder` (causal), `FrankensteinViT` (`src/model/frankenstein_vit.py:94`, vision). All are **plain `nn.Module`** — `FrankensteinEncoder` and `FrankensteinViT` expose `forward()` only; `FrankensteinDecoder` exposes `forward()` **and `generate()`** (`frankenstein_decoder.py:129-166`, autoregressive top-k sampling) — no DashAI-style lifecycle methods (`save`/`load`/`train`/`predict`) on any of them.
 - **Training orchestration** is fused into `src/training/main.py`: `main()` at line 910 dispatches on `model_class`/`task`; `_run_vision_task` at 837; `_run_sbert_task` at 635; `_run_under_supervisor` at 565 spawns a **GPU-thermal supervisor subprocess**. The loop itself is `TitanTrainer` (`src/training/trainer.py`).
 - **Persistence / inference:** `src/deploy/` — `deploy.py` (checkpoint→artifacts), `inference.py` (batch/interactive), `quantization.py` (BitNet), `transformers_export.py` (HF export). No `save`/`load` on the model classes themselves.
 - **Tokenizer:** custom `SpanishSPMTokenizer` (`src/tokenizer/`) or HF `AutoTokenizer` (the `base_model` path in `main.py:_load_base_model_and_tokenizer`).
@@ -142,14 +142,14 @@ The plugin exposes a **minimal pydantic schema** per component. The main field i
 
 1. Parses the YAML into a Python dict.
 2. Injects DashAI-derived values (tokenizer, dataset reference, run outputs, `vocab_size`/`num_classes` from the `DashAIDataset`).
-3. Writes it to a temp file and calls Frankenstein's `load_training_config(path)` — **Frankenstein's JSON Schema is the validator.** A validation error surfaces to the DashAI user verbatim.
+3. Writes it to a temp file and calls Frankenstein's `load_training_config(path)` (`src/training/config_loader.py:117`) — this is the config validator. **Note:** `load_training_config` validates via `FrankensteinModelConfig.__post_init__` (`src/model/config.py:438-607`) + inline `ValueError` checks in the loader (task/model_class compatibility, bitnet flags, ffn activation, optimizer presence) — it does **not** invoke `jsonschema.validate`. The strict JSON Schema (`src/schema.yaml` + `src/schema/_*.yaml`) is the declared source of truth (AGENTS.md constraint #1) but is consumed by the Streamlit GUI / `src/utils/schema_loader.py`, not by `load_training_config`. For **strict JSON-Schema validation** in the plugin (catching unknown keys rejected by `additionalProperties: false`), the adapter should additionally call the schema validator exposed by `src/utils/schema_loader.py`; otherwise `load_training_config` alone will catch structural/compatibility errors but not `additionalProperties` violations. A validation error surfaces to the DashAI user verbatim.
 
 This preserves all 33 mixers / 23 optimizers / 6 norms / 43 activations instantly, keeps `AGENTS.md` constraint #1 intact, and requires zero schema translation. To make the UX bearable, the schema also offers:
 
 - `preset: enum_field([...])` — a dropdown of **bundled Frankenstein presets** (loaded from Frankenstein's `configs/*.yaml` via `list_config_paths`). Selecting one populates `frankenstein_yaml` with the preset content.
 - `device`, `batch_size`, `num_epochs` — a few convenience overrides that the adapter merges into the YAML before validation (these are also native Frankenstein keys, so they are schema-legal).
 
-**v2 (deferred):** translate ~15 high-leverage fields (`model_class`, `hidden_size`, `num_layers`, `num_heads`, `layer_pattern`, `task`, `optimizer_class`, `ffn_activation`, `norm_type`, `use_moe`, `use_bitnet`, …) into native `schema_field`s for first-class form UX, while still serializing them into the same Frankenstein YAML under the hood. Full translation of all 151 model + ~100 training fields is **not recommended** (brittle against an actively-evolving schema).
+**v2 (deferred):** translate ~15 high-leverage fields (`model_class`, `hidden_size`, `num_layers`, `num_heads`, `layer_pattern`, `task`, `optimizer_class`, `ffn_activation`, `norm_type`, `use_moe`, `use_bitnet`, …) into native `schema_field`s for first-class form UX, while still serializing them into the same Frankenstein YAML under the hood. Full translation of all 151 model + 38 training fields is **not recommended** (brittle against an actively-evolving schema).
 
 ### 5.2 Plugin package layout
 
@@ -162,7 +162,7 @@ dashai-frankenstein/                      # standalone PyPI package
                                           #     frankenstein_vit_cls  = "dashai_frankenstein:FrankensteinViTClassifier"
                                           #     frankenstein_vit_seg  = "dashai_frankenstein:FrankensteinViTSegmenter"
                                           #     segmentation_task     = "dashai_frankenstein:SegmentationTask"
-                                          # dependencies = ["transformer-encoder-frankenstein", ...]
+                                          # dependencies = ["frankenstein-transformer>=1.1.0", ...]
   README.md
   src/dashai_frankenstein/
     __init__.py                           # re-exports the 5 component classes (entry-point targets)
@@ -212,12 +212,14 @@ All components share the same engine facade and differ mainly in: base class, `C
 
 ### 5.4 The classification-head question
 
-Frankenstein's encoder is an MLM backbone (token-level logits over the vocab). DashAI's `TextClassificationTask`/`ImageClassificationTask` expect sequence/image-level class probabilities. Two viable strategies:
+Frankenstein's encoder is an MLM backbone (token-level logits over the vocab, `frankenstein_encoder.py:209` returns `(B, S, vocab_size)`). DashAI's `TextClassificationTask`/`ImageClassificationTask` expect sequence/image-level class probabilities. Two viable strategies, **both implemented** (A as the default, B as an opt-in route):
 
-- **Strategy A (recommended): fine-tune a classification head on top of the encoder pooler.** Add a small pooling + linear head (weight-initialized, not BitNet-quantized) on the encoder output; train it jointly or as a second stage. This is exactly what HF's `AutoModelForSequenceClassification` does and what `HuggingFaceTextClassificationTransformer` wraps.
-- **Strategy B: HF-export bridge.** Use Frankenstein's existing `transformers_export.py` to convert a trained checkpoint into a HF model, then load it via `AutoModelForSequenceClassification`. Reuses DashAI's existing HF infra but adds an export step and is limited to export-compatible configs (`check_yaml_export_compatibility`).
+- **Strategy A (default — in-process classification head): fine-tune a classification head on top of the encoder pooler.** Add an optional pooling + linear head (weight-initialized, **not** BitNet-quantized — full-precision `nn.Linear`) on the encoder output, gated by `FrankensteinModelConfig.classification_head=True` + `num_labels=N` (new fields added in Phase 0 §7.5). `forward()` then returns `(B, num_labels)` when the head is active, and `(B, S, vocab_size)` otherwise (MLM CLI path unchanged). Train it jointly or as a second stage via `engine.train_from_config(...)`. This is exactly what HF's `AutoModelForSequenceClassification` does and what `HuggingFaceTextClassificationTransformer` wraps. **Pros:** in-process, no export step, works with all 33 mixers / 6 norms. **Cons:** the head is Frankenstein-specific (not portable to the broader HF ecosystem without export).
+- **Strategy B (opt-in — HF-export bridge): use `src/deploy/transformers_export.py` to convert a trained checkpoint into a HF model, then load it via `AutoModelForSequenceClassification`.** Reuses DashAI's existing HF infra. **Cons:** adds an export step; is limited to export-compatible configs (`check_yaml_export.py` `check_yaml_export_compatibility` rejects `base_model` and `sbert`); and the current `_MODELING_FILE` template only emits `FrankensteinForMaskedLM` / `FrankensteinForCausalLM` — there is **no `FrankensteinForSequenceClassification`** class in the generated modeling file today, so Strategy B requires extending `transformers_export.py` to emit a sequence-classification modeling class. **Recommended for:** users who want to ship a Frankenstein model into the rest of the HF ecosystem (HF Hub, `transformers` pipelines, DashAI's existing `HuggingFaceTextClassificationTransformer`).
 
-The audit recommends **Strategy A** for v1 (in-process, no export dependency), with Strategy B documented as an alternative for users who want to ship a Frankenstein model into the rest of the HF ecosystem.
+**Decision (locked with author):** implement **both** — Strategy A is the default `FrankensteinMLMModel` path (Phase 1); Strategy B is documented as an alternative route and gated behind an explicit opt-in (e.g. `export_to_hf: bool` schema field, Phase 2/3). The `FrankensteinMLMModel` adapter uses A internally; users who prefer B run `frankenstein-transformer transformers-export` separately and then point DashAI's native `HuggingFaceTextClassificationTransformer` at the exported directory.
+
+**ViT note:** `FrankensteinViT` already has a classification head (`classification_head = Linear(hidden_size, num_classes)`, `frankenstein_vit.py:188`) and a segmentation head (`seg_head = Linear(hidden_size, num_seg_classes)` + upsampler, `:201-206`), selected at runtime via `forward(task=...)`. No new head is needed for the vision components — only the encoder needs Strategy A.
 
 ### 5.5 Dataset, IO, and metrics adapters
 
@@ -268,19 +270,22 @@ Goal: prove the full DashAI contract end-to-end.
 These are the **required** modifications in this repository. Each is scoped to be backward-compatible with the existing CLI and tests.
 
 ### 7.1 Relax the torch pin *(packaging blocker)*
-- **File:** `pyproject.toml:17`.
-- **Today:** `torch==2.6.0+cu118` as a hard dependency with a default uv index (`pyproject.toml:11-14`).
-- **Change:** make the core requirement `torch>=2.0` (no index, no `+cu118` suffix). Keep `cu118`/`cu126`/`cu128`/`cpu` as **optional extras** that pin specific wheels for users who want them (including the dev box P40/CUDA-11.8 path).
-- **Why:** DashAI brings its own torch via `cpu`/`cuda` extras (`DashAI/pyproject.toml:84-92`); a hard `torch==2.6.0+cu118` makes the two uninstallable together. The CI matrix already tests CPU torch (`AGENTS.md` CI quirks), so `torch>=2.0` is safe.
+- **File:** `pyproject.toml:21` (the `dependencies` list) and `pyproject.toml:15-18` (the default `[[tool.uv.index]]`).
+- **Today:** `torch==2.6.0+cu118` is a **hard dependency** in `dependencies` (with a default uv index `pytorch-cu118`). CPU/CUDA extras **already exist** — `[cpu]` (`torch==2.7.0+cpu`), `[cu118]` (`torch==2.6.0+cu118`), `[cu126]` (`torch==2.7.0+cu126`), `[cu128]` (`torch==2.7.0+cu128`) at `pyproject.toml:36-52` — but the core requirement still forces the `+cu118` wheel on every install, which conflicts with DashAI's unpinned torch.
+- **Change:** make the core requirement `torch>=2.0` (no index, no `+cu118` suffix). Remove the default `[[tool.uv.index]] pytorch-cu118` block (the per-extra indexes in `[cu118]`/`[cu126]`/`[cu128]` already cover their respective wheels). Keep the existing `[cpu]`/`[cu118]`/`[cu126]`/`[cu128]` extras unchanged — users who want a specific CUDA wheel still get it via `pip install -e ".[cu118]"`.
+- **Why:** DashAI brings its own torch via `cpu`/`cuda` extras (`DashAI/pyproject.toml:84-92`, unpinned); a hard `torch==2.6.0+cu118` in Frankenstein's core makes the two uninstallable together. The CI matrix already tests CPU torch (`AGENTS.md` CI quirks), so `torch>=2.0` is safe. The extras (already present) preserve the dev-box P40/CUDA-11.8 path.
 
 ### 7.2 Move optional deps into extras
-- **File:** `pyproject.toml:16-27`.
+- **File:** `pyproject.toml:20-31` (the `dependencies` list) and `pyproject.toml:36-52` (the `[project.optional-dependencies]` block).
+- **Today:** `streamlit>=1.39.0` (`pyproject.toml:30`), `sentence-transformers>=3.3.0` (`:23`), and `sentencepiece>=0.2.0` (`:24`) are all in the **core** `dependencies`. The only extras that exist today are the torch-wheel extras `[cpu]`/`[cu118]`/`[cu126]`/`[cu128]` (`:36-52`). There is **no** `[train]`, `[sbert]`, or `[web]` extra today — despite `AGENTS.md` referencing `pip install -e ".[train]"`, that extra does not exist in `pyproject.toml` (the install works only because every dep is already core).
 - **Change:**
-  - Core (required): `transformers`, `datasets`, `PyYAML`, `numpy`, `tqdm`, `psutil` (and `torch>=2.0`).
-  - Extra `train` (or keep as-is for local installs): keeps the current full set.
-  - Extra `sbert`: `sentence-transformers`, `sentencepiece`.
-  - Extra `web`: `streamlit`.
-- **Why:** the DashAI plugin should not force `streamlit` or `sentence-transformers` on every DashAI user; only the components that need them pull the extra.
+  - Core (required): `transformers>=4.45.0,<5.0.0`, `datasets>=3.0.0`, `PyYAML>=6.0.1`, `numpy>=1.26.0,<3.0`, `tqdm>=4.66.0`, `psutil>=5.9.0`, and `torch>=2.0` (per §7.1).
+  - New extra `sbert`: `sentence-transformers>=3.3.0`, `sentencepiece>=0.2.0`.
+  - New extra `web`: `streamlit>=1.39.0`.
+  - New extra `train`: union of `sbert` + `web` (+ any dev tools) — makes the `pip install -e ".[train]"` documented in `AGENTS.md` actually resolve to a real extra, and preserves the "full install" path for local development.
+  - Preserve the existing `[cpu]`/`[cu118]`/`[cu126]`/`[cu128]` torch-wheel extras.
+- **Why:** the DashAI plugin should not force `streamlit` or `sentence-transformers` on every DashAI user; only the components that need them pull the extra. Splitting also fixes the `AGENTS.md` ↔ `pyproject.toml` mismatch (the `[train]` extra is documented but does not exist today).
+- **Caveat:** `src/training/main.py` and `src/sbert/` import `sentence_transformers` lazily (inside functions, guarded by `try/except ImportError`), and `src/streamlit_gui/` is only imported by the `web-server` subcommand — so moving them to extras is safe (no top-level import breakage). Verify with `pip install -e .` (no extras) and `python -c "import src.cli"`.
 
 ### 7.3 Extract a reusable engine API *(main refactor)*
 - **Today:** model construction + tokenizer setup + dataset wiring + supervisor spawn are all fused in `src/training/main.py` (`_load_legacy_frankenstein_model:115`, `_load_base_model_and_tokenizer:46`, `_build_dataloader:198`, `_run_vision_task:837`, `main:910`). None of this is callable without the CLI/supervisor.
@@ -303,9 +308,9 @@ These are the **required** modifications in this repository. Each is scoped to b
 - **Why:** DashAI's classification tasks require sequence/image-level probabilities (see §5.4, Strategy A).
 
 ### 7.6 Publish to PyPI
-- **Today:** `name = "transformer_encoder_frankenstein"`, `version = "0.1.0"`, no PyPI release.
-- **Change:** publish (under a public name — e.g. `transformer-encoder-frankenstein`) so the plugin can list it in `dependencies`. Tag a release; keep the version compatible with DashAI's Python `>=3.10`.
-- **Why:** locked decision (PyPI dependency).
+- **Today:** `name = "frankenstein-transformer"`, `version = "1.0.0"` (`pyproject.toml:2-3`), no PyPI release.
+- **Change:** publish under the current package name `frankenstein-transformer` so the plugin can list it in `dependencies`. Tag a release (e.g. `v1.1.0` post-refactor); keep the version compatible with DashAI's Python `>=3.10`. The plugin's `dependencies` entry will be `frankenstein-transformer>=1.1.0`.
+- **Why:** locked decision (PyPI dependency). The package name is already correct — no rename needed.
 
 ### 7.7 (Optional, v2) Field-metadata export
 - **Change:** emit `FrankensteinModelConfig`/`TrainingConfig` field metadata (name, type, default, range, enum) as JSON (e.g. `src/schema/_field_metadata.json` generated at build time).
@@ -315,12 +320,12 @@ These are the **required** modifications in this repository. Each is scoped to b
 
 | # | File(s) | Change | Risk | Backward-compatible? |
 |---|---|---|---|---|
-| 7.1 | `pyproject.toml` | Relax torch pin to `>=2.0`, CUDA via extras | Low | Yes (extras preserve local CUDA path) |
-| 7.2 | `pyproject.toml` | `streamlit`/`sbert` → extras | Low | Yes (extras preserve full install) |
+| 7.1 | `pyproject.toml:21` (core deps), `:15-18` (default uv index) | Move `torch==2.6.0+cu118` → core `torch>=2.0`; remove default `pytorch-cu118` index; **preserve existing `[cpu]`/`[cu118]`/`[cu126]`/`[cu128]` extras** (`:36-52`) | Low | Yes (extras preserve local CUDA path) |
+| 7.2 | `pyproject.toml:20-31` (core deps), `:36-52` (extras) | Move `streamlit`/`sentence-transformers`/`sentencepiece` from core → new `[sbert]`/`[web]`/`[train]` extras; fix `AGENTS.md` `.[train]` mismatch (extra doesn't exist today) | Low | Yes (new `[train]` extra preserves full install) |
 | 7.3 | new `src/engine.py`, rewrite `src/training/main.py` | Extract non-CLI engine façade | Medium | Yes (CLI delegates, behavior preserved) |
-| 7.4 | `src/training/main.py`, `trainer.py` | `supervisor: off` mode | Low-Medium | Yes (default `auto` unchanged) |
-| 7.5 | `frankenstein_encoder.py`, `engine.py` | Optional classification head | Low | Yes (opt-in) |
-| 7.6 | release | PyPI publish | Low | n/a |
+| 7.4 | `src/training/trainer.py:52` (TrainingConfig), `src/training/main.py:1043`, `src/schema/_training.yaml`, `src/engine.py` | Add `supervisor: auto\|off` field + schema entry; `off` runs `TitanTrainer` in-process | Low-Medium | Yes (default `auto` unchanged) |
+| 7.5 | `src/model/frankenstein_encoder.py:84/126`, `src/model/config.py:91`, `src/schema/_model/_model_flat.yaml`, `src/engine.py` | Optional non-BitNet classification head (`num_labels`, `classification_head`, `pooling_mode`) on encoder; ViT already has heads | Low | Yes (opt-in, default `False`) |
+| 7.6 | release | PyPI publish as `frankenstein-transformer==1.1.0` (name already correct, no rename) | Low | n/a |
 | 7.7 | build-time generator | Field-metadata JSON (v2) | Low | Yes (additive) |
 
 ---
@@ -370,19 +375,21 @@ Frankenstein:
 - CLI & subcommands: `src/cli.py:412 build_parser`, `src/cli.py:565 main`
 - JSON Schema root: `src/schema.yaml`; modular: `src/schema/_*.yaml`, `src/schema/_model/_*.yaml`
 - Model config (151 fields): `src/model/config.py:91 FrankensteinModelConfig`
-- Training config (~100 fields): `src/training/trainer.py:52 TrainingConfig`
+- Training config (38 fields): `src/training/trainer.py:52 TrainingConfig` (fields at lines 104-160)
 - Training orchestration: `src/training/main.py:910 main`, `:837 _run_vision_task`, `:635 _run_sbert_task`, `:565 _run_under_supervisor`
-- Model classes: `src/model/frankenstein_encoder.py:29`, `src/model/frankenstein_vit.py`
+- Model classes: `src/model/frankenstein_encoder.py:29` (`FrankensteinEncoder`, `forward:126` returns `(B, S, vocab_size)`), `src/model/frankenstein_decoder.py:24` (`FrankensteinDecoder`, `forward:113` returns `(B, S, vocab_size)`, **`generate:129`** autoregressive top-k), `src/model/frankenstein_vit.py:94` (`FrankensteinViT`, `forward:370` dispatches on `task=` to classification/segmentation/patch-prediction heads at `:188/201/199`)
 - Config flatten (nested YAML → flat dataclass): `src/utils/config_flatten.py`
-- Deploy/inference: `src/deploy/{deploy,inference,quantization,transformers_export}.py`
+- Deploy/inference: `src/deploy/{deploy,inference,quantization,transformers_export}.py` (checkpoint format = torch dict: `model_state_dict` + optimizer/scheduler/scaler + pickled `FrankensteinModelConfig` + `global_step`/`best_loss`/`epoch`/`model_class`; no `save`/`load` on the `nn.Module`s)
 
 DashAI:
-- Plugin discovery/registration: `DashAI/back/plugins/utils.py:199`, `:287`, `:168`, `:221`
-- Component registry: `DashAI/back/dependencies/registry/component_registry.py:138`, `:174`, `:202`
-- Configurable objects / schema: `DashAI/back/config_object.py:14`; `DashAI/back/core/schema_fields/{base_schema,schema_field,enum_field,list_field,union_type}.py`
-- Model contract: `DashAI/back/models/base_model.py:20` (abstract `save/load/train`), `:107 _save_metrics`, `:226 calculate_metrics`
-- Reference HF wrapper: `DashAI/back/models/hugging_face/base_text_classification_transformer.py` (train/predict/save/load + `MetricsCallback`)
-- Base converter: `DashAI/back/converters/base_converter.py:24`
-- Base task: `DashAI/back/tasks/base_task.py:14`
-- Existing tasks: `DashAI/back/tasks/{text_classification,image_classification,text_to_text_generation,...}_task.py`
+- Repo path: `dashAI/DashAI/back/...` (the `dashAI/` repo contains a `DashAI/` subdirectory holding the `back/` package; the audit's `DashAI/back/...` shorthand is relative to that subdirectory).
+- Plugin discovery/registration: `DashAI/back/plugins/utils.py:199` (`get_available_plugins`, `entry_points` call at `:209`), `:287` (`register_plugin_components`, `register_component` call at `:302`), `:178-182` (PyPI `startswith("dashai")` filter), `:221` (`execute_pip_command` pip subprocess)
+- Component registry: `DashAI/back/dependencies/registry/component_registry.py:138` (`_get_base_type`, MRO `"Base"`-name filter at `:142`, `TYPE` check, `TypeError` at `:153`/`:159`), `:174` (`_collect_compatible_components` MRO walk), `:214` (`ConfigObject`/`get_schema` check)
+- Configurable objects / schema: `DashAI/back/config_object.py:14` (`get_schema`); `DashAI/back/core/schema_fields/{base_schema.py:6 (replace_defs_in_schema), schema_field.py:11 (schema_field), enum_field, list_field, union_type}.py`
+- Model contract: `DashAI/back/models/base_model.py:20` (class, `TYPE="Model"` at `:28`), abstract `save:51`/`load:62`/`train:78`; `:107 _save_metrics` (SQLite, `run_id`-keyed via `Metric` FK at `database/models.py:280`); `:226 calculate_metrics` (`@final`, calls `self.predict` at `:278`); `:301 prepare_dataset`, `:325 prepare_output`. **`predict` is NOT declared on `BaseModel`** — subclasses must provide it.
+- Reference HF wrapper: `DashAI/back/models/hugging_face/base_text_classification_transformer.py:26` (`HuggingFaceTextClassificationTransformer(HFDownloadableMixin, TextClassificationModel)`; `train:167`, `predict:286`, `save:404` via `save_pretrained`, `load:439` as `@classmethod` via `from_pretrained`; `MetricsCallback` at `models/hugging_face/metrics_callback.py`)
+- Base converter: `DashAI/back/converters/base_converter.py:35` (`BaseConverter`, `TYPE="Converter"`)
+- Base task: `DashAI/back/tasks/base_task.py:17` (`BaseTask`, `TYPE="Task"`); `base_generative_task.py:10` (`BaseGenerativeTask`, `TYPE="GenerativeTask"`)
+- Existing tasks: `DashAI/back/tasks/{text_classification:14, image_classification:14, text_to_text_generation:8, ...}_task.py` — **no `SegmentationTask` exists**
+- Torch deps: `DashAI/pyproject.toml:48` (core, unpinned `torch`), `:84-89` (`cpu` extra), `:92` (`cuda` extra); `requires-python = ">=3.10"` at `:12`
 - Plugin docs: <https://docs.dash-ai.com/deep-dive/components>, <https://docs.dash-ai.com/deep-dive/architecture>
