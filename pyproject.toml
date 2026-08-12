@@ -1,8 +1,12 @@
 [project]
-name = "transformer_encoder_frankenstein"
-version = "0.1.0"
-description = "Config-driven training library and CLI for end-to-end NLP workflows"
+name = "frankenstein-transformer"
+version = "1.0.0"
+description = "Config-driven, schema-validated training library and CLI for building, training, and deploying hybrid Transformer architectures (attention mixers, BitNet, MoE, SBERT, and Vision Transformers)."
 readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Erick Merino", email = "erickfmm@gmail.com" },
+]
 requires-python = ">=3.9, <3.13"  # CI matrix: 3.10/3.11/3.12; conda env: 3.9
 
 # Default CUDA index — Tesla P40 / driver 12.4 compatible (cu118).

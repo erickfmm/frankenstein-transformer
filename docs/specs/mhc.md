@@ -1,7 +1,24 @@
 # mHC: Manifold-Constrained Hyper-Connections
 
+> Cross-references: [Architecture](architecture.md) · [Schema Reference](schema-reference.md) · [Training Safety](training-safety.md)
+
 This spec documents the Frankenstein integration of **mHC**
 (Manifold-Constrained Hyper-Connections), arXiv:2512.24880 (DeepSeek-AI).
+
+## What problem does mHC solve?
+
+A normal residual connection (the `x + F(x)` pattern in every transformer
+layer) is what lets gradients flow cleanly through a deep network. When you
+expand this to an **n-stream residual** (keeping `n` copies of the hidden
+state instead of one), you gain representational power but lose the
+identity-mapping property: the network can now distort or lose information
+between layers, which causes unstable gradients and poor scaling.
+
+mHC fixes this by **constraining the within-stream mixing matrix to the
+Birkhoff polytope** (doubly-stochastic matrices). This restores the
+identity/conservation property, so you get the benefits of a wider stream
+without the gradient-instability cost. In plain terms: it lets the model use
+a wider, more expressive residual while guaranteeing the math stays stable.
 
 ## Overview
 
@@ -80,6 +97,37 @@ The `model.mhc` sub-object (hierarchical schema) or flat keys:
 | `full_prec_under_bitnet` | `mhc_full_prec_under_bitnet` | bool | `true` | Keep `φ_l` full-precision under BitNet. |
 
 Example config: `configs/examples/es_arch_mhc_adamw.yaml`.
+
+### Enabling mHC in your config
+
+The nested `model.mhc` block and its flat equivalent are equivalent. To turn
+mHC on with a wider stream and checkpointing:
+
+```yaml
+model:
+  mhc:
+    enabled: true
+    expansion_rate: 4      # stream width = 4 × hidden_size
+    sinkhorn_iters: 20
+    gating_init: 0.01
+    checkpoint: true       # trade compute for lower activation memory
+```
+
+### Choosing `expansion_rate`
+
+`expansion_rate` (`n`) is the width multiplier of the residual stream. Larger
+`n` gives more representational capacity but multiplies activation memory by
+roughly `n×` (this is why `mhc_checkpoint` exists). As a rule of thumb:
+
+| Goal | Suggested `n` |
+|---|---|
+| Minimal overhead, near-standard residual | `2` |
+| Balanced capacity vs. memory (paper default) | `4` |
+| Maximum expressiveness (large memory budget) | `8` |
+
+When `n = 1`, mHC degenerates to the plain identity residual and adds no
+benefit. If you are memory-constrained, start at `n = 2` with `checkpoint:
+true`.
 
 ## Constraints
 

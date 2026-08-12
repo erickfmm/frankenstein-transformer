@@ -6,9 +6,9 @@
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)](https://github.com/erickfmm/frankenstein-transformer/actions)
 [![Docs](https://img.shields.io/badge/docs-readthedocs-blue.svg)](https://frankenstein-transformer.readthedocs.io/en/latest/)
 
-**See [https://erickfmm.github.io/frankestein-transformer/index.html](https://erickfmm.github.io/frankestein-transformer/index.html) for a web interface to configure your YAML!**
+**See [frankenstein-transformer](https://erickfmm.github.io/frankenstein-transformer/index.html) for a web interface to configure your YAML!**
 
-Config-driven transformer experimentation toolkit with 33+ mixer architectures and 23 optimizer families.
+Config-driven transformer experimentation toolkit with 36 mixer architectures and 23 optimizer families.
 
 ## Quick Start
 
@@ -24,12 +24,12 @@ Verify: `frankenstein-transformer --help`
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | 33 across 5 categories (Dense, Recurrent, Sparse, Gated, Latent) |
+| Sequence mixer architectures | 36 across 5 categories (Dense, Recurrent, Sparse, Gated, Latent) |
 | Optimizer families | 23 across 6 categories |
 | Model classes | `frankenstein`, `frankensteindecoder`, `frankenstein_vit` |
 | Training modes | Encoder (MLM) / Decoder (autoregressive) / Vision (patch prediction, classification, segmentation) |
-| Normalization types | `layer_norm`, `dynamic_tanh`, `derf` |
-| CLI subcommands | 8 |
+| Normalization types | `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm` |
+| CLI subcommands | 9 |
 | Web configuration UI | Streamlit schema-driven YAML builder |
 | Quantized deployment | BitNet + checkpoint export pipeline |
 | SBERT workflows | Training + inference (similarity, search, cluster, encode) |
@@ -38,7 +38,7 @@ Verify: `frankenstein-transformer --help`
 
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
-| `frankenstein` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 33 mixer types |
+| `frankenstein` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 36 mixer types |
 | `frankensteindecoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 | `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `dataset:` blocks |
 
@@ -55,6 +55,7 @@ See [configs/README.md](configs/README.md) for preset details and [docs/specs/](
 | `sbert-train` | Train sentence embedding model | `frankenstein-transformer sbert-train --output_dir ./sbert_out --batch_size 16 --epochs 4` |
 | `sbert-infer` | SBERT similarity/search/cluster/encode | `frankenstein-transformer sbert-infer --model_path ./sbert_out --mode similarity --sentence1 "a" --sentence2 "b"` |
 | `transformers-export` | Export to HuggingFace Transformers format | `frankenstein-transformer transformers-export --config-name frankenstein --output ./hf_export/` |
+| `bitnet-gguf` | Export a BitNet model to GGUF (i2_s) for bitnet.cpp | `frankenstein-transformer bitnet-gguf --model ckpt.pt --yaml cfg.yaml --output out.gguf` |
 | `web-server` | Launch Streamlit config builder UI | `frankenstein-transformer web-server` |
 
 All model-executing commands accept `--device auto|cpu|cuda|mps`.
@@ -63,15 +64,16 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 | Category | Code Names | Description |
 |----------|------------|-------------|
-| **Dense** | `standard_attn`, `sigmoid_attn`, `gated_softmax_attn`, `titan_attn` | Full quadratic attention variants with positional encoding support |
-| **Recurrent** | `retnet`, `retnet_attn`, `mamba`, `ode` | Retention networks, state-space models, and continuous-depth ODE layers |
+| **Dense** | `standard_attn`, `sigmoid_attn` | Full quadratic attention variants |
+| **GQA** | `gqa_attn` | Grouped-query attention with configurable KV heads |
+| **Recurrent** | `retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `engram_attn` | Retention networks, state-space models, continuous-depth ODE layers, memory-augmented attention, and n-gram memory |
 | **Sparse** | `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn` ⚠️, `fasa_attn` ⚠️, `msa_attn`, `sparda_attn` | Factorized, sliding-window, token-selection, and block-sparse (GQA-based) patterns |
-| **Gated** | `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `kda_attn`, `engram_attn` | Linear attention with multiplicative gates, delta rules, and n-gram memory |
-| **Latent** | `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, interleaved pseudo-heads, temporal merging) |
+| **Gated** | `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` | Linear attention with multiplicative gates, delta rules, and gated softmax |
+| **Latent** | `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention) |
 
 ⚠️ `sparge_attn` and `fasa_attn` are **eval-only** — training raises a runtime error.
 
-Configure via `layer_pattern` in YAML. See [configs/schema.yaml](src/schema.yaml) for the full mixer reference table.
+Configure via `layer_pattern` in YAML. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table.
 
 ## Optimizer Categories
 
@@ -91,7 +93,7 @@ Parameters use prefixed keys: `<optimizer_class>-<group>_<param>` (e.g. `adamw-l
 | Resource | Content |
 |----------|---------|
 | [configs/README.md](configs/README.md) | Schema walkthrough, preset details, optimizer parameter reference |
-| [configs/schema.yaml](src/schema.yaml) | Authoritative training config schema (source of truth) |
+| [src/schema.yaml](src/schema.yaml) | Authoritative training config schema (source of truth) |
 | [docs/README.md](docs/README.md) | CLI reference and workflow guide |
 | [docs/paper.pdf](docs/paper.pdf) | Technical report (English) |
 | [docs/paper-es.pdf](docs/paper-es.pdf) | Technical report (Spanish) |
@@ -160,30 +162,18 @@ training:
     parameters:
       adamw-lr_embeddings: 1e-4
       adamw-lr_norms: 1e-4
-      adamw-lr_ode: 1e-4
-      adamw-lr_retnet: 1e-4
-      adamw-lr_mamba: 1e-4
       adamw-lr_attention: 1e-4
       adamw-lr_other: 1e-4
       adamw-wd_embeddings: 0.01
       adamw-wd_norms: 0.01
-      adamw-wd_ode: 0.01
-      adamw-wd_retnet: 0.01
-      adamw-wd_mamba: 0.01
       adamw-wd_attention: 0.01
       adamw-wd_other: 0.01
       adamw-betas_embeddings: [0.9, 0.95]
       adamw-betas_norms: [0.9, 0.95]
-      adamw-betas_ode: [0.9, 0.95]
-      adamw-betas_retnet: [0.9, 0.95]
-      adamw-betas_mamba: [0.9, 0.95]
       adamw-betas_attention: [0.9, 0.95]
       adamw-betas_other: [0.9, 0.95]
       adamw-eps_embeddings: 1e-8
       adamw-eps_norms: 1e-8
-      adamw-eps_ode: 1e-8
-      adamw-eps_retnet: 1e-8
-      adamw-eps_mamba: 1e-8
       adamw-eps_attention: 1e-8
       adamw-eps_other: 1e-8
   scheduler_total_steps: 1000

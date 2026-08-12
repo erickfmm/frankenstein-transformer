@@ -1,5 +1,7 @@
 # AGENTS.md
 
+- **Project name**: `frankenstein-transformer`
+
 ## Environment & Commands
 
 - **Conda env**: `frankenstein` (Python 3.9). Prefix commands: `conda run -n frankenstein <cmd>`.

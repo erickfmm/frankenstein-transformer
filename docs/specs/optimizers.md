@@ -6,6 +6,21 @@
 
 The system supports **23 optimizer families** across seven algorithmic categories. The optimizer is selected via `training.optimizer.optimizer_class` and configured through prefixed parameter groups.
 
+### How to pick an optimizer (plain English)
+
+The main trade-off is **quality vs. optimizer memory vs. tuning effort**:
+
+| Your priority | Suggested optimizers |
+|---|---|
+| Reliable, well-tested default | `adamw`, `radam` |
+| Low optimizer memory (long fine-tunes) | `adafactor`, `lion`, `galore_adamw`, `apollo` |
+| Faster convergence / aggressive updates | `adan`, `adopt`, `sophia`, `muon` |
+| Structured / second-order quality | `shampoo`, `soap` |
+| Remove scheduler tuning | `schedulefree_adamw`, `prodigy` |
+| Adaptive-tunable behavior | `anon` |
+
+You configure it under `training.optimizer`:
+
 ### Optimizer Selection Decision Tree
 
 ```
@@ -91,6 +106,31 @@ All other classes accept only prefixed shared groups.
 | Geometry-oriented | Muon, Turbo-Muon | Orthogonalized update structure |
 | Adaptivity-tunable | Anon | Continuously tunable adaptivity γ ∈ ℝ |
 
+## Example configuration
+
+Here is a complete `training.optimizer` block using the prefixed-key contract,
+with per-group learning rates and weight decays plus an optimizer-specific
+parameter:
+
+```yaml
+training:
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-4     # learning rate for the embeddings group
+      adamw-lr_norms: 1e-3          # higher LR for norm parameters
+      adamw-lr_attention: 3e-4      # attention block LR
+      adamw-lr_other: 3e-4          # remaining parameters
+      adamw-wd_embeddings: 0.01     # weight decay on embeddings
+      adamw-wd_attention: 0.1       # stronger decay on attention
+      adamw-betas_other: [0.9, 0.95]
+      adamw-eps_other: 1e-8
+```
+
+Every key follows `<optimizer_class>-<group>_<param>`. Groups are
+`embeddings`, `norms`, `attention`, `other`. An optimizer with extra
+parameters (e.g. `muon`) adds unprefixed-by-group keys like `muon-ns_steps`.
+
 ## Key Optimizer Equations
 
 ### AdamW (Baseline)
@@ -117,3 +157,23 @@ fixed_lr updated at t = 2^k via recursive aggregation
 θ_{t+1} = θ_t − η/(1−β₁^t) · m_t ⊙ fixed_lr
 ```
 γ > 1: accelerates saddle escape; γ = 1: Adam-like; γ = 0: SGD-like; γ < 0: flatter minima bias.
+
+### Other key families (concise)
+
+Most remaining optimizers are variants of the Adam update
+`θ ← θ − η·m̂/(√v̂+ε) − ηλθ` with a distinctive twist. The ones worth knowing:
+
+| Optimizer | Key idea in one line | Core equation |
+|---|---|---|
+| `lion` | Sign of momentum replaces the adaptive denominator — one buffer, very cheap | `θ ← θ − η·sign(β₁m + (1−β₁)g)` |
+| `radam` | Adam with a rectified step that stabilizes early, low-sample variance | Adam update with variance rectifier `r_t` on `m̂/√v̂` |
+| `adan` | Uses a gradient-difference EMA to reduce variance | `θ ← θ − η·m̂_t/(√v̂_t+ε)`, `m_t = β₁m + (1−β₁)g + β₃(g−g_{t−1})` |
+| `cautious_adamw` | Masks the Adam update to only move in the sign-consistent direction | `θ ← θ − η·(m̂/√v̂) ⊙ I[g·m̂ ≥ 0]` |
+| `schedulefree_adamw` | Removes the LR schedule by interpolating weights; no `β₁` warmup | `θ_t = (1−λ)z_t + λθ_{t−1}` with implicit schedule |
+| `sophia` | Approximates curvature (Hessian diag) and divides the update by it | `θ ← θ − η·m̂_t / (ρ·h_t + ε)`, `h_t` from gradient-squared EMA |
+| `lamb` | Adam with layer-wise adaptive trust ratio `‖θ‖/‖Δθ‖` | `θ ← θ − η·(‖θ‖/‖Δ‖)·(m̂/(√v̂+ε))` |
+| `shampoo` | Preconditioner built from Kronecker factors `L_i`, `R_i` of the gradient | `θ ← θ − η·L_i^{-1/4} g R_i^{-1/4}` |
+| `soap` | Adam in a Shampoo-computed basis — Adam steps in the Shampoo eigenspace | Adam on `g` projected via `Q·Q^⊤` |
+
+For a full per-optimizer breakdown (state buffers, memory, hyperparameters,
+references) see the [Complete Optimizer Inventory](#complete-optimizer-inventory).

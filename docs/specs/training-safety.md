@@ -56,6 +56,23 @@ For each optimizer step:
 
 NaN/Inf checks occur every `nan_check_interval` steps.
 
+### AMP / loss-scaling interplay
+
+When `use_amp: true`, training runs in mixed precision (FP16/BF16 compute with
+FP32 master weights). AMP uses a **gradient scaler** that grows/shrinks a
+scale factor to keep gradients in range. This interacts with the NaN/Inf
+retry path:
+
+- A **NaN/Inf in the scaled loss** is usually a transient overflow, not a
+  real training failure. The retry logic can skip the step and let the scaler
+  reduce the scale factor, recovering automatically.
+- If retries exhaust `max_nan_retries`, training aborts — this typically
+  indicates a genuine instability (e.g. wrong LR, broken config) rather than
+  an AMP artifact.
+
+Rule of thumb: keep `max_nan_retries ≥ 3` when using AMP so transient
+scaler overflows do not abort a healthy run.
+
 ## Checkpointing Policy
 
 ### Rolling Checkpoints
@@ -134,6 +151,24 @@ Gradient Low-Rank Projection (GaLore) reduces optimizer memory by projecting 2D 
 
 GaLore works synergistically with memory-efficient optimizers (Adafactor, APOLLO) and is most beneficial when VRAM is dominated by optimizer state.
 
+## Memory Optimization
+
+When VRAM is the bottleneck, the main levers are:
+
+| Lever | What it does | Effect on memory |
+|---|---|---|
+| `use_amp` | Mixed precision (FP16/BF16 compute, FP32 master weights) | ~50% reduction on compute-heavy tensors |
+| Small `batch_size` + larger `gradient_accumulation_steps` | Keeps the same effective batch with a smaller live batch | Reduces activation memory |
+| Memory-efficient optimizer (`adafactor`, `galore_adamw`, `apollo`) | Reduces optimizer-state footprint | Frees optimizer-state VRAM |
+| `mhc_checkpoint` / gradient checkpointing | Recompute activations on the backward pass instead of storing them | Large reduction in activation memory, at the cost of extra compute |
+| Shorter `max_length` | Shrinks the sequence-dimension activations | Reduces activation memory quadratically for dense attention |
+
+Memory is dominated by three things, in rough order of impact for most
+models: **optimizer state**, **activations**, and **weights**. Choosing
+optimizer-state-light optimizers (GaLore/Adafactor/APOLLO) addresses the
+first; gradient checkpointing and a smaller live batch address the second;
+`use_amp` reduces the third.
+
 ## Scheduler Types
 
 | Type | Behavior | Key Parameters |
@@ -169,9 +204,11 @@ For each optimizer step:
 ## Stability Best Practices
 
 1. **Start with `grad_clip_max_norm = 1.0`** — the standard value for transformer training.
-2. **Set `max_nan_retries = 3`** — allows transient instability without aborting.
+2. **Set `max_nan_retries = 3`** — allows transient instability without aborting (especially under AMP).
 3. **Use `inf_post_clip_threshold`** as a secondary safety net (e.g., 10.0).
 4. **Enable `use_amp`** on modern GPUs for ~50% memory savings with automatic gradient scaling.
 5. **Monitor `csv_log_path`** output to detect training degradation early.
 6. **Set `checkpoint_every_n_steps`** to a value that balances disk I/O with recovery granularity (e.g., 1000).
 7. **Use `gpu_temp_guard`** in production environments to prevent hardware damage.
+8. **Watch the first few steps closely** — most instability (NaN, explosions) appears early; keep a low `nan_check_interval` at the start.
+9. **When changing LR, scale it with the effective batch size** (`batch_size × gradient_accumulation_steps`).

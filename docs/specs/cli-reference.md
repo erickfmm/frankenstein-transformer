@@ -13,7 +13,6 @@ frankenstein-transformer <subcommand> [flags]
 | Subcommand | Purpose |
 |---|---|
 | `train` | Run main MLM/decoder training |
-| `finetune` | Fine-tune a pretrained model |
 | `deploy` | Convert checkpoint to deployment artifacts |
 | `quantize` | Export checkpoint in quantized format |
 | `infer` | Run deployed model inference |
@@ -21,6 +20,19 @@ frankenstein-transformer <subcommand> [flags]
 | `sbert-infer` | Run SBERT inference (similarity/search/cluster/encode) |
 | `web-server` | Launch Streamlit configuration builder |
 | `transformers-export` | Export checkpoint + YAML to HuggingFace Transformers format |
+| `bitnet-gguf` | Export a BitNet model to GGUF (i2_s) for bitnet.cpp |
+
+### Global flags
+
+Every subcommand accepts the standard Python argparse flags:
+
+| Flag | Description |
+|---|---|
+| `--help` / `-h` | Show the subcommand's help and exit |
+| `--version` | Print the version and exit (where supported) |
+
+Run `frankenstein-transformer <subcommand> --help` to see the exact flags and
+defaults for that subcommand.
 
 ## Device Choices
 
@@ -227,6 +239,45 @@ frankenstein-transformer web-server --server-port 8080 --server-headless
 ```bash
 frankenstein-transformer transformers-export --model checkpoints/model.pt --yaml config.yaml --output ./hf-export
 ```
+
+## `bitnet-gguf` — BitNet GGUF Export
+
+Exports a BitNet-configured model (single `standard_attn` mixer,
+`use_bitnet: true`) to the GGUF `i2_s` ternary format for
+[bitnet.cpp](https://github.com/microsoft/BitNet). See
+[Deployment](deployment.md) for the format details and limitations.
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--model` | string | — | Path to checkpoint (required for export) |
+| `--yaml` | string | **Required** | Path to training YAML |
+| `--output` | string | — | Output `.gguf` file path (required for export) |
+| `--check` | flag | — | Only check compatibility, then exit (no export) |
+
+### Examples
+
+```bash
+# Compatibility check only
+frankenstein-transformer bitnet-gguf --yaml cfg.yaml --output out.gguf --check
+
+# Export a standard_attn-only BitNet model
+frankenstein-transformer bitnet-gguf --model ckpt.pt --yaml cfg.yaml --output out.gguf
+```
+
+> ⚠️ Hybrid mixers (`retnet`, `mamba`, `gla_attn`, …) are **not** supported by
+> this exporter — `check_gguf_compatibility` rejects them because llama.cpp has
+> no equivalent compute graph.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `error: unrecognized arguments` | Wrong flags for the subcommand | Run `<subcommand> --help` to confirm flag names |
+| Config fails validation with "additional properties" | An unknown YAML key | Remove the key or add it to the schema |
+| `--yaml required` error on `deploy`/`quantize` | `--transformers-export` needs the source YAML | Pass `--yaml config.yaml` |
+| Model loads but produces garbage | Vocab mismatch between checkpoint and tokenizer | Ensure `vocab_size` matches the tokenizer |
+| FP16 ignored on `infer` | The model uses BitNet (`BitLinear`) | FP16 is disabled for BitNet models by design |
+| Training aborts at a temperature | GPU thermal guard hit `critical_threshold` | Raise the threshold or improve cooling |
 
 ## GPU Thermal Guard Flags
 

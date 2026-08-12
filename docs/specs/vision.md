@@ -1,5 +1,7 @@
 # Vision Transformer (frankenstein_vit) Specification
 
+> Cross-references: [Architecture](architecture.md) · [Schema Reference](schema-reference.md) · [Training Safety](training-safety.md) · [Deployment](deployment.md)
+
 ## Overview
 
 The `frankenstein_vit` model class implements the Vision Transformer (ViT)
@@ -19,7 +21,32 @@ It supports three tasks:
   (`seg_head_type: pixel`) or an EoMT query-based head
   (`seg_head_type: eomt`).
 
+### What is a Vision Transformer (plain English)?
+
+A ViT treats an image like a "sentence" of patches. The image is cut into a
+grid of small square patches (e.g. 16×16), each patch is projected into an
+embedding (like a token), and then a standard transformer encoder processes
+the patch sequence. This reuses the exact same `HybridLayer` machinery as the
+language model, so all mixers, norms, activations, and optimizers carry over.
+
 ## Architecture
+
+```
+Image (H × W × C)
+   │  PatchEmbed: Conv2d(H×W×C → N×(P·P·C)) + linear → D
+   ▼
+Patches (B, N, D)          N = (H/P)·(W/P)
+   │  [+ optional learnable [CLS] token]  [+ positional encoding]
+   ▼
+Frankenstein HybridLayer stack (all 36 mixers)
+   │  → pooled representation (CLS token or GAP)
+   ▼
+Task head
+   ├── patch_prediction → Linear(D, pred_dim)
+   ├── classification   → Linear(D, num_classes)
+   └── segmentation     → pixel head (upsample + per-pixel Linear)
+                         or eomt head (queries + mask module)
+```
 
 ### Patch Embedding (Eq. 1)
 Images are split into non-overlapping `patch_size`×`patch_size` patches and
@@ -39,7 +66,7 @@ flatten + linear). Output: `(B, N, D)` where `N = (H/P) * (W/P)`.
 
 ### Transformer Encoder
 The `HybridLayer` stack from the Frankenstein codebase is reused **as-is**.
-All 34 attention mixers, 6 norms, 4 residual types, 42 activations, and 23
+All 36 attention mixers, 6 norms, 4 residual types, 43 activations, and 23
 optimizers are available. Only `engram_attn` requires `input_ids` (token
 IDs) and is not usable for images.
 
@@ -126,3 +153,60 @@ Following ViT App. B.1.2:
 - arXiv:2010.11929 — ViT (Dosovitskiy et al., ICLR 2021)
 - arXiv:2503.19108 — EoMT (Kerssies et al., 2025)
 - arXiv:2111.06377 — MAE (He et al., 2022, for full_patch_l2 target)
+
+## Example configuration
+
+A minimal classification config for `frankenstein_vit`:
+
+```yaml
+model_class: frankenstein_vit
+model:
+  dims:
+    hidden_size: 512
+    num_layers: 6
+    num_heads: 8
+    layer_pattern: [standard_attn, standard_attn, standard_attn,
+                    standard_attn, standard_attn, standard_attn]
+image:
+  image_size: { height: 224, width: 224 }
+  patch_size: 16
+  num_classes: 10          # required for classification
+training:
+  task: classification
+  classification:
+    batch_size: 32
+    epochs: 10
+    optimizer:
+      optimizer_class: adamw
+      parameters:
+        adamw-lr_other: 3e-4
+```
+
+## CLI usage
+
+Vision tasks are trained through the same `train` subcommand as language
+models (the task is read from the config):
+
+```bash
+# Train a vision classifier
+frankenstein-transformer train --config configs/frankenstein_vit_base.yaml
+
+# Train masked-patch pre-training
+frankenstein-transformer train --config my_vision_mlm.yaml
+```
+
+Inference and deployment work as usual with `infer` / `deploy` on the
+produced checkpoint.
+
+## Key files
+
+| File | Role |
+|---|---|
+| `src/model/frankenstein_vit.py` | `FrankensteinViT`, `PatchEmbed`, task heads |
+| `src/model/config.py` | Vision fields on the model config |
+| `src/schema/_image.yaml`, `src/schema/_dataset.yaml` | Vision schema blocks |
+| `src/training/vision_dataset.py` | `ImageDataset`, `DummyImageDataset`, target builders |
+| `src/training/trainer.py` | `compute_patch_prediction_loss`, `compute_classification_loss`, `compute_segmentation_loss` |
+| `src/utils/config_flatten.py` | `flatten_image_dict` |
+| `configs/frankenstein_vit_base.yaml` | Vision base preset |
+| `configs/examples/vit_*.yaml` | Vision example presets |

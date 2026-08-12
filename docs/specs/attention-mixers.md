@@ -4,19 +4,48 @@
 
 ## Taxonomy Overview
 
-The system implements **20 sequence mixer architectures** organized into five functional categories, with two additional latent attention variants documented for reference. The taxonomy figure from the paper:
+The system implements **36 sequence mixer architectures** (the full
+`layer_pattern` enum) organized into five functional categories. The taxonomy
+figure from the paper:
 
 ```
-Sequence Mixer Registry (20 variants)
+Sequence Mixer Registry (36 variants)
 ├── Dense (2): standard_attn, sigmoid_attn
 ├── GQA (1): gqa_attn
-├── Recurrent (5): retnet/retnet_attn, mamba, ode, titan_attn, engram_attn
-├── Sparse (7): sparse_transformer_attn, longformer_attn, bigbird_attn,
-│                sparsek_attn, nsa_attn, sparge_attn, fasa_attn
-├── Gated (6): gla_attn, deltanet_attn, gated_deltanet_attn,
-│              hgrn2_attn, fox_attn, gated_softmax_attn
-└── Latent (documented): cca_attn, ccgqa_attn
+├── Recurrent / Retentive (6): retnet/retnet_attn, mamba, ode, titan_attn,
+│                               engram_attn
+├── Sparse (9): sparse_transformer_attn, longformer_attn, bigbird_attn,
+│               sparsek_attn, nsa_attn, sparge_attn, fasa_attn, msa_attn,
+│               sparda_attn
+├── Gated (8): gla_attn, deltanet_attn, gated_deltanet_attn,
+│              gated_deltanet2_attn, hgrn2_attn, fox_attn, gated_softmax_attn,
+│              kda_attn
+└── Latent / KV-compression (9): mla_attn, gqla_attn, mlra_attn, tucker_attn,
+                                 iha_attn, gta_attn, mtla_attn, cca_attn,
+                                 ccgqa_attn
 ```
+
+> The detailed per-mixer attribute tables below cover the most commonly used
+> and best-documented families. The authoritative list of all 36 names is the
+> `layer_pattern` enum in `src/schema/_model/_dims.yaml`.
+
+### How to pick a mixer (plain English)
+
+The core question is: **how much context do you need, and how much
+memory/speed budget do you have?**
+
+| Your situation | Suggested mixers |
+|---|---|
+| Standard-length text, max quality | `standard_attn`, `sigmoid_attn`, `gqa_attn` |
+| Very long sequences, tight memory | `retnet`, `mamba`, `gla_attn`, `deltanet_attn` |
+| Linear training + constant inference | `mamba`, `retnet`, `gated` family |
+| >1M-token context / associative recall | `titan_attn`, `engram_attn` |
+| Long-context but want softmax quality | `longformer_attn`, `bigbird_attn`, `nsa_attn`, `sparsek_attn` |
+| Shrink KV cache / params in latent space | `mla_attn`, `cca_attn`, `ccgqa_attn` |
+| Inference-only speedup (no training) | `sparge_attn`, `fasa_attn` (eval-only) |
+
+You can mix families freely within a `layer_pattern` — the dispatcher routes
+each position independently.
 
 ## Training-Free Policy
 
@@ -62,7 +91,7 @@ Sequence Mixer Registry (20 variants)
 | Pros | Quality close to MHA with speed almost matching MQA; reduces KV-cache memory by num_heads/num_kv_heads × ; can be uptrained from MHA checkpoints via mean-pooling |
 | Cons | Still O(n²) quadratic; KV cache larger than pure MQA; optimal group count is model-size dependent |
 
-## Recurrent and Retentive Architectures (5)
+## Recurrent and Retentive Architectures (6)
 
 ### `retnet` / `retnet_attn` — Retentive Network
 
@@ -124,7 +153,7 @@ Sequence Mixer Registry (20 variants)
 | Pros | New axis of sparsity; constant-time context retrieval; complementary to attention |
 | Cons | Hash collisions; embedding table count grows quadratically with max N-gram size |
 
-## Sparse Attention Patterns (7)
+## Sparse Attention Patterns (9)
 
 ### Sparse Attention Design Strategies
 
@@ -219,7 +248,7 @@ Token sequence
 | Pros | Near-oracle accuracy with ≤256 tokens; 2.56× speedup; 8× KV cache compression |
 | Cons | Requires RoPE-based models; offline calibration step needed |
 
-## Gated Attention Mechanisms (6)
+## Gated Attention Mechanisms (8)
 
 ### Generic Gating Template
 
@@ -301,7 +330,7 @@ Previous state S_{t−1} → Gate(s) α_t, β_t, G_t, f_t → New key/value or S
 | Pros | Eliminates attention sink; improves training stability; <2% latency overhead; drop-in improvement |
 | Cons | Still O(n²) quadratic; marginal benefit for short-context tasks |
 
-## Latent Attention Mechanisms (2)
+## Latent Attention Mechanisms (9)
 
 ### `cca_attn` — Compressed Convolutional Attention
 
@@ -356,3 +385,45 @@ Previous state S_{t−1} → Gate(s) α_t, β_t, G_t, f_t → New key/value or S
 | `gated_softmax_attn` | Gated | O(n²d) | O(n)/step | Yes | Post-SDPA sigmoid gating |
 | `cca_attn` | Latent | O(n²d/C) | O(n)/step | Yes | Latent-space attention, C× FLOP reduction |
 | `ccgqa_attn` | Latent | O(n²d/C₁) | O(n)/step | Yes | Decoupled latent compression + GQA head sharing |
+
+## Config knobs and example assembly
+
+Mixers are selected by name in `layer_pattern` and tuned by per-mixer config
+keys that live under `model.attention.<mixer>`. Here is a small reference for
+the most common knobs (see [Schema Reference](schema-reference.md) for the
+full list):
+
+| Mixer | Example config keys |
+|---|---|
+| `gqa_attn` | `num_kv_heads` |
+| `retnet` / `retnet_attn` | `retention_heads`, `retnet_chunk_size` |
+| `titan_attn` | `positional_encoding` (`rope`/`hope`), RoPE/HoPE base |
+| `ode` | `ode_solver` (`rk4`/`euler`), `ode_steps` |
+| `engram_attn` | `engram_max_ngram_size`, `engram_n_heads_per_ngram`, `engram_embed_dim_per_head`, `engram_kernel_size` |
+| `sparsek_attn` | `sparsek_k` |
+| `longformer_attn` | window size |
+| `cca_attn` | `compression_factor`, `cca_qk_mean`, `cca_value_shift`, `cca_learnable_temp`, `cca_conv_kernel_size`, `cca_conv_groups` |
+| `ccgqa_attn` | `query_compression`, `kv_compression`, `num_kv_heads`, CCA flags |
+
+### Building a hybrid network
+
+You can combine a dense baseline, a linear-recurrent mixer, and a sparse
+mixer in one model. For a 4-layer encoder:
+
+```yaml
+model:
+  dims:
+    num_layers: 4
+    hidden_size: 512
+    num_heads: 8
+    layer_pattern:
+      - standard_attn   # full attention at the bottom
+      - gla_attn        # linear gated attention for long-range
+      - longformer_attn # windowed attention to keep memory low
+      - standard_attn   # full attention near the head
+  attention:
+    gqa_attn:
+      num_kv_heads: 4   # (only applies to gqa_attn layers)
+```
+
+Every position reads its own mixer class, so per-layer mixing is trivial.

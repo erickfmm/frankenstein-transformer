@@ -8,6 +8,10 @@ Sentence embedding workflows are built on Siamese-style training inspired by SBE
 
 ## Siamese Training
 
+Sentence embeddings are learned so that similar sentences map to nearby
+points and dissimilar ones map far apart. All three dataset types feed a
+Siamese (shared-encoder) setup.
+
 ### Cosine Similarity Loss
 
 For sentence pair `(s₁, s₂)` with embeddings `(e₁, e₂)`:
@@ -17,7 +21,33 @@ cos(e₁, e₂) = e₁^⊤ e₂ / (‖e₁‖ · ‖e₂‖)
 L_cos = (cos(e₁, e₂) − y)²
 ```
 
-where `y ∈ [−1, 1]` is the ground-truth similarity score. This is a regression-style cosine loss.
+where `y ∈ [−1, 1]` is the ground-truth similarity score. This is a regression-style cosine loss, used for `paired_similarity` data.
+
+### Triplet Loss
+
+For a triplet `(anchor a, positive p, negative n)`, the goal is to pull the
+anchor closer to the positive than to the negative by a margin `m`:
+
+```
+L_triplet = max(0, cos(a, n) − cos(a, p) + m)
+```
+
+Here `m` is the margin (a small positive constant, e.g. `0.3`). This is a
+contrastive objective used for `triplets` data — it only pushes on the
+hardest cases (when the margin is violated).
+
+### QA (contrastive) Objective
+
+For a `(question, answer)` pair, the objective encourages the question
+embedding to be close to the correct answer embedding and far from other
+answers in the batch:
+
+```
+L_qa = − log( exp(cos(q, a⁺)/τ) / Σ_{a∈batch} exp(cos(q, a)/τ) )
+```
+
+where `τ` is a temperature. This is standard in dense-retrieval training and
+is used for `qa` data.
 
 ## Pooling Modes
 
@@ -114,6 +144,21 @@ elif mode == cluster:
 else:  # encode
     return serialized embeddings E(X)
 ```
+
+## Evaluation
+
+Because SBERT is about *relative* distances rather than exact outputs, it is
+normally evaluated on **semantic textual similarity (STS)** benchmarks:
+
+| Metric | What it measures | Where to look |
+|---|---|---|
+| Spearman rank correlation | Whether the model's cosine scores rank sentence pairs the same way humans do | STS-B, STS12–16 |
+| Recall@k (retrieval) | Fraction of queries whose correct answer appears in the top-k | `search` mode against a corpus |
+| Clustering metrics (ARI/NMI) | How well the embeddings group into true clusters | `cluster` mode on labeled sets |
+
+For a quick internal check without external benchmarks, run the `similarity`
+mode on a handful of hand-labeled pairs and confirm that semantically related
+sentences score noticeably higher than unrelated ones.
 
 ## CLI Examples
 
