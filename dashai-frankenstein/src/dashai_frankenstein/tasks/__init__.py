@@ -1,1 +1,4 @@
-"""Frankenstein DashAI task components (e.g. SegmentationTask, added in Phase 3)."""
+"""Frankenstein DashAI task components."""
+from dashai_frankenstein.tasks.segmentation import SegmentationTask  # noqa: F401
+
+__all__ = ["SegmentationTask"]
