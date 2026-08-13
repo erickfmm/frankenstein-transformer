@@ -19,7 +19,7 @@ import glob
 import time
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Any, List, Tuple, Optional, Dict
+from typing import Any, List, Tuple, Optional, Dict, Callable
 from tqdm import tqdm
 import torch.optim as optim
 from torch.amp import autocast, GradScaler
@@ -100,6 +100,9 @@ class TrainingConfig:
         galore_max_dim: Maximum dimension for GaLore projection.
         use_amp: Whether to use automatic mixed precision (FP16/BF16).
     """
+    # Supervisor / runtime control
+    supervisor: str = "auto"  # "auto" (legacy CLI subprocess) | "off" (run in-process)
+
     # CSV Logging
     csv_log_path: str = "training_metrics.csv"
     csv_rotate_on_schema_change: bool = True
@@ -187,7 +190,9 @@ class TitanTrainer:
     def __init__(self, model: torch.nn.Module, config: Optional[Any],
                  training_config: TrainingConfig = None,
                  device: str = None,
-                 task: str = "mlm"): #torch.device = None):
+                 task: str = "mlm",
+                 metrics_callback: Optional[Callable[[Dict[str, Any]], None]] = None):
+        #torch.device = None):
         """Initialize the trainer.
 
         Args:
@@ -207,6 +212,7 @@ class TitanTrainer:
         self.config = config
         self.training_config = training_config or TrainingConfig()
         self.task = str(task or "mlm").strip().lower()
+        self.metrics_callback = metrics_callback
         self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
         self._primary_device = str(self.device)
         self._configured_use_amp = bool(self.training_config.use_amp)
@@ -695,6 +701,48 @@ class TitanTrainer:
             int(effective_batch_size),
         ])
         self.csv_file.flush()
+
+        # Emit step-level metrics to an optional in-process callback (e.g. a
+        # DashAI MetricsCallback) so training progress is visible outside the
+        # CSV log. The callback receives a flat dict mirroring the CSV columns.
+        if self.metrics_callback is not None:
+            self.metrics_callback({
+                "level": "step",
+                "timestamp": datetime.now().isoformat(),
+                "epoch": epoch,
+                "step": step,
+                "global_step": self.global_step,
+                "loss": loss,
+                "accuracy": accuracy,
+                "learning_rate": lr,
+                "grad_norm": grad_norm,
+                "scaler_scale": self.scaler.get_scale(),
+                "gpu_memory_gb": gpu_memory,
+                "gpu_cached_gb": gpu_cached,
+                "has_nan": bool(has_nan),
+                "has_inf": bool(has_inf),
+                "has_zero": bool(has_zero),
+                "repair_action": repair_action,
+                "gpu_temp_c": float(telemetry["gpu_temp_c"]),
+                "gpu_power_w": float(telemetry["gpu_power_w"]),
+                "gpu_util_pct": float(telemetry["gpu_util_pct"]),
+                "gpu_mem_used_mib": float(telemetry["gpu_mem_used_mib"]),
+                "grad_norm_embeddings": float(grad_buckets["embeddings"]),
+                "grad_norm_attention": float(grad_buckets["attention"]),
+                "grad_norm_ffn": float(grad_buckets["ffn"]),
+                "grad_norm_experts": float(grad_buckets["experts"]),
+                "grad_norm_router": float(grad_buckets["router"]),
+                "grad_norm_ode": float(grad_buckets["ode"]),
+                "grad_norm_retnet": float(grad_buckets["retnet"]),
+                "grad_norm_mamba": float(grad_buckets["mamba"]),
+                "grad_norm_norms": float(grad_buckets["norms"]),
+                "grad_norm_head": float(grad_buckets["head"]),
+                "grad_norm_other": float(grad_buckets["other"]),
+                "step_time_ms": step_time_ms,
+                "tokens_per_sec": tokens_per_sec,
+                "clip_ratio": clip_ratio,
+                "effective_batch_size": effective_batch_size,
+            })
     
     def _check_for_nan(self, loss: torch.Tensor, step: int, batch: dict) -> bool:
         """Check if loss is NaN and log debug information if detected"""
@@ -1760,6 +1808,17 @@ class TitanTrainer:
             f"InfEpochs={self.consecutive_inf_epochs}, "
             f"ZeroGradPlateauEpochs={self.consecutive_zero_grad_plateau_epochs}"
         )
+
+        # Emit epoch-level metrics to the optional in-process callback.
+        if self.metrics_callback is not None:
+            self.metrics_callback({
+                "level": "epoch",
+                "epoch": epoch,
+                "loss": avg_loss,
+                "accuracy": avg_accuracy,
+                "best_loss": self.best_loss,
+                "global_step": self.global_step,
+            })
 
         # Early stop policy: unrecoverable exploding gradients across epochs
         if self.consecutive_inf_epochs > self.training_config.inf_epoch_patience:

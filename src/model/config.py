@@ -434,6 +434,21 @@ class FrankensteinModelConfig:
     seg_l2_blocks: int = 3
     # EoMT: mask annealing (polynomial decay of P_mask to 0 at inference).
     seg_mask_annealing: bool = True
+    # Optional sequence-level classification head on the NLP encoder (DashAI
+    # integration, Strategy A). When ``classification_head=True`` and
+    # ``num_labels`` is set, ``FrankensteinEncoder.forward`` returns
+    # ``(B, num_labels)`` class logits instead of ``(B, S, vocab_size)`` MLM
+    # logits. The head is a full-precision ``nn.Linear`` (NOT BitNet-quantized)
+    # over a pooled representation. Disabled by default so the MLM CLI path is
+    # unchanged.
+    classification_head: bool = False
+    # Number of target classes for the encoder classification head. Ignored
+    # unless ``classification_head=True``.
+    num_labels: Optional[int] = None
+    # Pooling for the encoder classification head: ``"cls"`` reads the first
+    # token output; ``"gap"`` averages over all tokens. Ignored unless
+    # ``classification_head=True``. Mirrors the ViT ``pooling_mode``.
+    encoder_pooling_mode: str = "cls"
 
     def __post_init__(self):
         """Validate and derive dependent configuration fields after dataclass init.
@@ -605,3 +620,18 @@ class FrankensteinModelConfig:
             raise ValueError(f"seg_num_queries must be >= 1, got {self.seg_num_queries}")
         if int(self.seg_l2_blocks) < 1:
             raise ValueError(f"seg_l2_blocks must be >= 1, got {self.seg_l2_blocks}")
+
+        # Classification-head validation (NLP encoder, DashAI Strategy A).
+        if bool(self.classification_head) and self.num_labels is None:
+            raise ValueError(
+                "num_labels is required when classification_head=True"
+            )
+        if self.num_labels is not None and int(self.num_labels) < 1:
+            raise ValueError(
+                f"num_labels must be >= 1, got {self.num_labels}"
+            )
+        if str(self.encoder_pooling_mode) not in ("cls", "gap"):
+            raise ValueError(
+                f"encoder_pooling_mode must be 'cls' or 'gap', "
+                f"got {self.encoder_pooling_mode}"
+            )

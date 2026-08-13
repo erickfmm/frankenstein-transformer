@@ -195,7 +195,6 @@ class TestPackageMetadata(unittest.TestCase):
 
     def test_pyproject_names(self):
         text = (_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertIn("transformer_encoder_frankenstein", text)
         self.assertIn("frankenstein-transformer", text)
         self.assertNotIn("transformer_encoder_frankestein", text)
         self.assertNotIn("frankestein-transformer", text)

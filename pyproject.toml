@@ -9,25 +9,14 @@ authors = [
 ]
 requires-python = ">=3.9, <3.13"  # CI matrix: 3.10/3.11/3.12; conda env: 3.9
 
-# Default CUDA index — Tesla P40 / driver 12.4 compatible (cu118).
-# Users with newer drivers should pass the matching extra (`.[cu126]`/`.[cu128]`)
-# which overrides this default through its own index.
-[[tool.uv.index]]
-name = "pytorch-cu118"
-url = "https://download.pytorch.org/whl/cu118"
-default = true
-
 dependencies = [
-    "torch==2.6.0+cu118",                        # cu118 is the only install tested on the dev box (P40 / driver 12.4)
-    "transformers>=4.45.0,<5.0.0",              # 4.45+ for current SBERT/ModernBERT examples
-    "sentence-transformers>=3.3.0",             # pulled in by sbert-train/sbert-infer; 3.3 unlocks ModernBERT
-    "sentencepiece>=0.2.0",                     # optional Spanish tokenizer (spm_spa_redpajama35)
-    "datasets>=3.0.0",                          # HuggingFace streaming dataset for MLM + SBERT
+    "torch>=2.0",                              # unpinned: DashAI/CI bring their own (cpu/cuda) torch
+    "transformers>=4.45.0,<5.0.0",             # 4.45+ for current SBERT/ModernBERT examples
+    "datasets>=3.0.0",                         # HuggingFace streaming dataset for MLM + SBERT
     "tqdm>=4.66.0",
-    "numpy>=1.26.0,<3.0",                       # last 1.x series (still Py 3.9 friendly); transformers caps it
-    "psutil>=5.9.0",                            # optional — startup disk-usage log in training main
+    "numpy>=1.26.0,<3.0",                      # last 1.x series (still Py 3.9 friendly); transformers caps it
+    "psutil>=5.9.0",                           # optional — startup disk-usage log in training main
     "PyYAML>=6.0.1",
-    "streamlit>=1.39.0",                        # web-server subcommand
 ]
 
 [project.scripts]
@@ -49,6 +38,77 @@ cu126 = [
 # For CUDA 12.8 (driver >= 570):              pip install -e ".[cu128]"
 cu128 = [
     "torch==2.7.0+cu128",
+]
+# Optional capability extras — kept out of core so the DashAI plugin (and the
+# CI CPU-only install) don't pull streamlit/sentence-transformers/sentencepiece
+# unless the components that need them are used.
+# SBERT fine-tuning/inference:                pip install -e ".[sbert]"
+sbert = [
+    "sentence-transformers>=3.3.0",            # 3.3 unlocks ModernBERT
+    "sentencepiece>=0.2.0",                    # Spanish SPM tokenizer (spm_spa_redpajama35)
+]
+# Streamlit web builder:                      pip install -e ".[web]"
+web = [
+    "streamlit>=1.39.0",
+]
+# Full local dev install (union of sbert + web):  pip install -e ".[train]"
+train = [
+    "sentence-transformers>=3.3.0",
+    "sentencepiece>=0.2.0",
+    "streamlit>=1.39.0",
+]
+
+# Dev/test tooling (uv dependency-groups, PEP 735). Synced by default — no
+# extra flag needed: `uv sync --extra cpu` already brings pytest in.
+# Run tests: `uv run --extra cpu python -m pytest tests/ -v`
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+# PyTorch wheel indexes for the torch extras (`cpu`/`cu118`/`cu126`/`cu128`).
+# The core `torch>=2.0` resolves from PyPI; the extras pin specific
+# +cpu/+cuXXX wheels that only exist on the PyTorch index, so uv is pointed
+# at the matching index per extra via `[tool.uv.sources]`.
+[tool.uv]
+# The torch-wheel extras (cpu/cu118/cu126/cu128) each pin a mutually-exclusive
+# PyTorch index. Declaring them as a conflict group lets uv resolve each in
+# isolation instead of erroring with "conflicting indexes in all marker
+# environments". Always install exactly ONE, e.g. `uv sync --extra cpu`.
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "cu118" },
+        { extra = "cu126" },
+        { extra = "cu128" },
+    ],
+]
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu118", extra = "cu118" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu128", extra = "cu128" },
 ]
 
 [build-system]

@@ -473,3 +473,31 @@ properties:
         minimum: 1
         default: 2
         examples: [2]
+  classification_head:
+    type: boolean
+    default: false
+    title: Classification Head (NLP Encoder)
+    title_es: Cabeza de Clasificación (Encoder NLP)
+    description: 'Enable an optional sequence-level classification head on the NLP encoder (DashAI integration). When ``true`` and ``num_labels`` is set, ``FrankensteinEncoder.forward`` returns ``(B, num_labels)`` class logits instead of ``(B, S, vocab_size)`` MLM logits. The head is a full-precision ``nn.Linear`` (NOT BitNet-quantized). Default ``false`` leaves the MLM CLI path unchanged.'
+    description_es: 'Habilita una cabeza de clasificación opcional a nivel de secuencia en el encoder NLP (integración DashAI). Cuando es ``true`` y ``num_labels`` está definido, ``FrankensteinEncoder.forward`` devuelve logits de clase ``(B, num_labels)`` en lugar de logits MLM ``(B, S, vocab_size)``. La cabeza es un ``nn.Linear`` de precisión completa (NO cuantizado con BitNet). El valor ``false`` por defecto deja el camino MLM de CLI sin cambios.'
+    examples:
+    - false
+  num_labels:
+    type: integer
+    minimum: 1
+    title: Number of Classes (NLP)
+    title_es: Número de Clases (NLP)
+    description: 'Number of target classes for the encoder classification head. Ignored unless ``classification_head=True``. Required when ``classification_head`` is ``true``.'
+    description_es: 'Número de clases objetivo para la cabeza de clasificación del encoder. Se ignora salvo que ``classification_head=true``. Obligatorio cuando ``classification_head`` es ``true``.'
+    examples:
+    - 2
+  encoder_pooling_mode:
+    type: string
+    enum: [cls, gap]
+    default: cls
+    title: Encoder Pooling Mode
+    title_es: Modo de Pooling del Encoder
+    description: 'Pooling for the encoder classification head: ``cls`` reads the first token output; ``gap`` averages over all tokens. Ignored unless ``classification_head=True``. Mirrors the ViT ``pooling_mode``.'
+    description_es: 'Pooling para la cabeza de clasificación del encoder: ``cls`` lee la salida del primer token; ``gap`` promedia sobre todos los tokens. Se ignora salvo que ``classification_head=true``. Refleja el ``pooling_mode`` del ViT.'
+    examples:
+    - cls

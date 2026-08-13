@@ -23,10 +23,8 @@ from torch.utils.data import Dataset as TorchDataset
 
 try:
     from ..utils.storage_manager import StorageManager
-    from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 except ImportError:
     from utils.storage_manager import StorageManager
-    from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 
 
 def _load_tokenizer_from_spec(tokenizer_spec: Dict[str, Any]):
@@ -46,6 +44,8 @@ def _load_tokenizer_from_spec(tokenizer_spec: Dict[str, Any]):
     """
     backend = tokenizer_spec["backend"]
     if backend == "spm":
+        from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+
         return SpanishSPMTokenizer(model_path=tokenizer_spec["model_path"])
 
     if backend == "hf":
@@ -330,6 +330,8 @@ class StreamingMLMDataset(TorchDataset):
             self._prepare_joined_cache()
 
     def _build_tokenizer_spec(self, tokenizer: Any) -> Dict[str, Any]:
+        from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+
         if isinstance(tokenizer, SpanishSPMTokenizer):
             if not tokenizer.model_path:
                 raise ValueError("SpanishSPMTokenizer requires a model_path for multiprocessing")

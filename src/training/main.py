@@ -22,7 +22,6 @@ import torch
 from torch.utils.data import DataLoader
 
 try:
-    from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
     from .streaming_mlm_dataset import StreamingMLMDataset
     from .trainer import TitanTrainer, TrainingConfig
     from .config_loader import LoadedTrainingConfig, load_training_config, list_config_paths
@@ -32,7 +31,6 @@ try:
     from ..model.frankenstein_vit import FrankensteinViT
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 except ImportError:
-    from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
     from training.config_loader import LoadedTrainingConfig, load_training_config, list_config_paths
@@ -112,7 +110,7 @@ def _load_base_model_and_tokenizer(
     return model, tokenizer
 
 
-def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> Tuple[torch.nn.Module, SpanishSPMTokenizer, FrankensteinModelConfig]:
+def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> "Tuple[torch.nn.Module, Any, FrankensteinModelConfig]":
     """Load a custom Frankenstein model with SentencePiece tokenizer.
 
     Trains or loads an SPM tokenizer, then constructs the model based on
@@ -131,6 +129,8 @@ def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> Tuple[torch
     config = loaded.model_config
     if config is None:
         raise ValueError("model config is required when base_model is not provided")
+
+    from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 
     logging.info("\n" + "=" * 60)
     logging.info("Step 1: Training/Loading SPM tokenizer (%s vocab)", config.vocab_size)
@@ -1039,9 +1039,12 @@ def main(argv=None):
     # When the GPU temperature supervisor is enabled on CUDA and this process
     # is NOT already a supervisor child, hand off to the CPU-side supervisor.
     # The supervisor re-executes the training command as a subprocess and
-    # manages kill/checkpoint/resume on thermal events.
+    # manages kill/checkpoint/resume on thermal events. Set `supervisor: off`
+    # (or `engine.train_from_config(..., supervisor="off")`) to force training
+    # to run in-process in the current process instead (no child subprocess).
     if (
-        bool(training_config.gpu_temp_guard_enabled)
+        str(training_config.supervisor).strip().lower() != "off"
+        and bool(training_config.gpu_temp_guard_enabled)
         and str(resolved_device).startswith("cuda")
         and os.environ.get("FRANKENSTEIN_SUPERVISOR_CHILD") != "1"
     ):
@@ -1050,157 +1053,22 @@ def main(argv=None):
     if loaded.task == "sbert":
         return _run_sbert_task(loaded, resolved_device, training_config)
 
-    vision_tasks = {"patch_prediction", "classification", "segmentation"}
-    if loaded.task in vision_tasks:
-        return _run_vision_task(loaded, resolved_device, training_config, args)
+    # All other tasks (mlm / causal_lm / base_model / patch_prediction /
+    # classification / segmentation) are delegated to the reusable non-CLI
+    # engine. The CLI passes its resolved device, thermal-guard overrides, and
+    # the validated config so behavior is preserved exactly.
+    from ..engine import train_from_config
 
-    if loaded.base_model:
-        logging.info("\n" + "=" * 60)
-        logging.info("Step 1: Loading base MLM model + external tokenizer")
-        logging.info("=" * 60)
-        model, tokenizer = _load_base_model_and_tokenizer(loaded)
-        model_descriptor = loaded.base_model
-        runtime_config = getattr(model, "config", None)
-    else:
-        model, tokenizer, runtime_config = _load_legacy_frankenstein_model(loaded)
-        model_descriptor = loaded.model_class or "frankenstein"
-
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    logging.info("Model Descriptor: %s", model_descriptor)
-    logging.info("Total Parameters: %.2fM", total_params / 1e6)
-    logging.info("Trainable Parameters: %.2fM", trainable_params / 1e6)
-
-    dataloader, dataset, stats, _ = _build_dataloader(
-        tokenizer=tokenizer,
-        training_runtime=training_runtime,
-        resolved_device=resolved_device,
-        cli_batch_size=args.batch_size,
-        task=loaded.task,
-    )
-
-    logging.info("\n" + "=" * 60)
-    logging.info("Step 4: %s training (%s)", loaded.task.upper(), model_descriptor)
-    logging.info("=" * 60)
-
-    trainer = TitanTrainer(
-        model,
-        runtime_config,
-        training_config=training_config,
+    result = train_from_config(
+        config_path,
         device=resolved_device,
-        task=loaded.task,
+        supervisor=str(training_config.supervisor).strip().lower() or "auto",
+        batch_size=args.batch_size,
+        config_path_hint=os.getcwd(),
+        training_config=training_config,
     )
-
-    # Resume from the latest rolling checkpoint when requested (supervisor
-    # re-launches pass --resume-from-checkpoint auto).
-    resume_epoch = 0
-    resume_spec = training_config.resume_from_checkpoint
-    if resume_spec:
-        resume_epoch = trainer.resume_from_latest_checkpoint(resume_spec)
-
-    num_epochs = int(training_runtime.get("num_epochs", 5))
-    nan_detected = False
-
-    try:
-        for epoch in range(resume_epoch, num_epochs):
-            logging.info("\n🚀 Starting Epoch %s/%s", epoch + 1, num_epochs)
-            try:
-                avg_loss, should_stop = trainer.train_epoch(dataloader, epoch)
-                if should_stop:
-                    logging.error("❌ Training stopped due to NaN/instability at epoch %s", epoch + 1)
-                    nan_detected = True
-                    break
-
-                logging.info("✅ Epoch %s completed - Average Loss: %.4f", epoch + 1, avg_loss)
-                checkpoint_path = trainer.save_checkpoint(epoch, suffix="_epoch_end")
-                logging.info("💾 Epoch checkpoint saved: %s", checkpoint_path)
-
-                if torch.cuda.is_available():
-                    memory_allocated = torch.cuda.memory_allocated() / 1024**3
-                    memory_cached = torch.cuda.memory_reserved() / 1024**3
-                    logging.info(
-                        "GPU Memory - Allocated: %.2fGB, Cached: %.2fGB",
-                        memory_allocated,
-                        memory_cached,
-                    )
-
-                storage_used = trainer.storage_manager.used_bytes / 1024**3
-                logging.info("Storage used: %.2fGB / 300GB", storage_used)
-                if storage_used > 250:
-                    logging.warning("Approaching storage limit, stopping training")
-                    break
-
-            except Exception as exc:
-                logging.error("Error in epoch %s: %s", epoch + 1, exc)
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                try:
-                    emergency_path = trainer.save_checkpoint(epoch, suffix="_emergency")
-                    logging.info("Emergency checkpoint saved: %s", emergency_path)
-                except Exception:
-                    logging.error("Failed to save emergency checkpoint")
-                raise
-    finally:
-        trainer.close()
-
-    if nan_detected:
-        logging.error("\n" + "=" * 60)
-        logging.error("🚨 TRAINING TERMINATED DUE TO NaN/INF")
-        logging.error("Check training_metrics.csv for progression leading to failure")
-        logging.error("=" * 60)
-    else:
-        logging.info("\n" + "=" * 60)
-        logging.info("🎉 Training completed successfully")
-        logging.info("=" * 60)
-
-        model.eval()
-        with torch.no_grad():
-            vocab_size = _resolve_vocab_size(model)
-            seq_len = int(training_runtime.get("max_length", 512))
-            test_input = torch.randint(0, vocab_size, (1, seq_len), device=resolved_device)
-
-            logging.info("🔍 Testing final model forward pass...")
-            try:
-                test_output = model(input_ids=test_input)
-            except TypeError:
-                test_output = model(test_input)
-
-            logits = test_output
-            if hasattr(test_output, "logits"):
-                logits = test_output.logits
-            elif isinstance(test_output, dict) and "logits" in test_output:
-                logits = test_output["logits"]
-
-            logging.info("✅ Model output shape: %s", tuple(logits.shape))
-            logging.info(
-                "Output range: [%.3f, %.3f]",
-                logits.min().item(),
-                logits.max().item(),
-            )
-
-    if loaded.base_model and hasattr(model, "save_pretrained"):
-        hf_output_dir = str(training_runtime.get("hf_output_dir", "checkpoints/hf_final"))
-        trainer.save_pretrained_artifacts(hf_output_dir, tokenizer=tokenizer)
-
-    logging.info("\n🧹 Cleaning up temporary files...")
-    if hasattr(tokenizer, "storage_manager") and tokenizer.storage_manager is not None:
-        tokenizer.storage_manager.cleanup()
-    trainer.storage_manager.cleanup()
-
-    logging.info("💡 Dataset cache preserved for fault recovery")
-    logging.info("   Location: %s", stats["cache_dir"])
-
-    logging.info("\n📁 Checkpoint Summary:")
-    logging.info("  Rolling checkpoints kept: %s", len(trainer.rolling_checkpoints))
-    for checkpoint_path in trainer.rolling_checkpoints:
-        logging.info("    - %s", checkpoint_path)
-    logging.info("  Best model checkpoints: %s", len(trainer.best_checkpoints))
-    for neg_loss, checkpoint_path in sorted(trainer.best_checkpoints, reverse=True):
-        logging.info("    - %s (loss=%.6f)", checkpoint_path, -neg_loss)
-
-    logging.info("\n📊 Training metrics saved to: %s", training_config.csv_log_path)
-    logging.info("✨ Training pipeline completed!")
-
+    del result
+    return 0
 
 if __name__ == "__main__":
     main()

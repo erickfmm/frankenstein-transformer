@@ -112,6 +112,7 @@ class LoadedTrainingConfig:
     training_runtime: Dict[str, Any]
     image_config: Dict[str, Any]
     dataset_config: Dict[str, Any]
+    config_dict: Optional[Dict[str, Any]] = None
 
 
 def load_training_config(path: str) -> LoadedTrainingConfig:
@@ -260,6 +261,7 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         training_runtime=training_runtime,
         image_config=image_data,
         dataset_config=dataset_data,
+        config_dict=data,
     )
 
 

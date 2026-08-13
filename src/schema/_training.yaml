@@ -42,6 +42,17 @@ properties:
     - segmentation
     examples:
     - mlm
+  supervisor:
+    type: string
+    title: Training Supervisor Mode
+    title_es: Modo Supervisor de Entrenamiento
+    description: "Runtime control for the GPU-temperature supervisor subprocess.\n- `auto`: spawn the CPU-side supervisor subprocess when running on CUDA with `gpu_temp_guard_enabled=true` (legacy CLI behavior).\n- `off`: run training in-process in the current process (no child subprocess spawned). The GPU thermal guard still operates as an in-process polling loop where supported. Required when driving training from an embedding host (e.g. a DashAI Huey worker) that already manages its own process lifecycle.\n\n**Impact:** `off` avoids nested supervisor/child subprocesses conflicting with an external job-queue lifecycle; `auto` preserves the standalone CLI behavior."
+    description_es: "Control en runtime del subproceso supervisor de temperatura GPU.\n- `auto`: genera el subproceso supervisor de CPU cuando se entrena en CUDA con `gpu_temp_guard_enabled=true` (comportamiento CLI heredado).\n- `off`: entrena en-proceso en el proceso actual (sin generar subproceso hijo). El guard térmico GPU sigue operando como un bucle de polling en-proceso donde se soporte. Necesario al orquestar el entrenamiento desde un host embebido (p. ej. un worker Huey de DashAI) que ya gestiona su propio ciclo de vida de proceso.\n\n**Impacto:** `off` evita que subprocesos supervisor/hijo anidados entren en conflicto con un ciclo de vida de cola de trabajos externo; `auto` preserva el comportamiento CLI independiente."
+    enum:
+    - auto
+    - off
+    examples:
+    - auto
   num_epochs:
     type: integer
     title: Training Epochs

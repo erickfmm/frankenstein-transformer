@@ -108,3 +108,9 @@ properties:
     $ref: "_model/_model_flat.yaml#/properties/ffn_activation"
   ffn_activation_config:
     $ref: "_model/_model_flat.yaml#/properties/ffn_activation_config"
+  classification_head:
+    $ref: "_model/_model_flat.yaml#/properties/classification_head"
+  num_labels:
+    $ref: "_model/_model_flat.yaml#/properties/num_labels"
+  encoder_pooling_mode:
+    $ref: "_model/_model_flat.yaml#/properties/encoder_pooling_mode"

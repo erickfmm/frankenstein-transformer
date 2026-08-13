@@ -110,6 +110,17 @@ class FrankensteinEncoder(nn.Module):
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         self.head = proj_cls(config.hidden_size, config.vocab_size)
 
+        # Optional sequence-level classification head (DashAI Strategy A).
+        # Full-precision (NOT BitNet-quantized) so downstream fine-tuning is
+        # stable regardless of the backbone's quantization flags. Disabled by
+        # default; when active, ``forward`` returns ``(B, num_labels)``.
+        self.classification_head = bool(getattr(config, "classification_head", False))
+        self.cls_num_labels = getattr(config, "num_labels", None)
+        self.encoder_pooling_mode = str(getattr(config, "encoder_pooling_mode", "cls"))
+        self.cls_head = None
+        if self.classification_head and self.cls_num_labels is not None:
+            self.cls_head = nn.Linear(config.hidden_size, int(self.cls_num_labels))
+
         # ---- Residual-connection module (AttnRes / standard) ----
         # Built unconditionally so the encoder can dispatch on
         # ``self.residual.is_attn_res`` without checking config flags.
@@ -135,7 +146,9 @@ class FrankensteinEncoder(nn.Module):
             input_ids: Integer token indices of shape ``(B, S)``.
 
         Returns:
-            Logits tensor of shape ``(B, S, vocab_size)``.
+            Logits tensor of shape ``(B, S, vocab_size)``, or ``(B, num_labels)``
+            when the optional classification head is enabled
+            (``classification_head=True``).
         """
         x = self.emb(input_ids)
         x = self.dropout(x)
@@ -206,4 +219,12 @@ class FrankensteinEncoder(nn.Module):
         else:
             self.last_auxiliary_losses = {}
             self.last_mixture_of_depths_stats = {}
+        if self.classification_head and self.cls_head is not None:
+            # Sequence-level classification: pool the final hidden states and
+            # project to ``(B, num_labels)``.
+            if self.encoder_pooling_mode == "gap":
+                pooled = x.mean(dim=1)
+            else:
+                pooled = x[:, 0]
+            return self.cls_head(pooled)
         return self.head(x)
