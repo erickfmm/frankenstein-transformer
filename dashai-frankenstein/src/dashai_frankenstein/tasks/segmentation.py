@@ -12,15 +12,12 @@ binds to :class:`FrankensteinViTSegmenter` via ``COMPATIBLE_COMPONENTS``.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, TYPE_CHECKING, Union
 
 from DashAI.back.core.utils import MultilingualString
 from DashAI.back.tasks.base_task import BaseTask
 from DashAI.back.types.categorical import Categorical
 from DashAI.back.types.dashai_image import DashAIImage
-
-if TYPE_CHECKING:
-    pass
 
 
 class SegmentationTask(BaseTask):
@@ -101,9 +98,6 @@ class SegmentationTask(BaseTask):
             return output_type.num_categories()
         return None
 
-
-# Re-export DashAIDataset type hint target lazily.
-from typing import TYPE_CHECKING  # noqa: E402
 
 if TYPE_CHECKING:  # pragma: no cover
     from DashAI.back.dataloaders.classes.dashai_dataset import DashAIDataset  # noqa: F401

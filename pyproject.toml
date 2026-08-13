@@ -7,7 +7,7 @@ license = { text = "MIT" }
 authors = [
     { name = "Erick Merino", email = "erickfmm@gmail.com" },
 ]
-requires-python = ">=3.9, <3.13"  # CI matrix: 3.10/3.11/3.12; conda env: 3.9
+requires-python = ">=3.10"  # CI matrix: 3.10/3.11/3.12; DashAI uv tool: 3.12. Upper bound removed so the DashAI plugin installer (pip under Py3.12+) doesn't filter this package out.
 
 dependencies = [
     "torch>=2.0",                              # unpinned: DashAI/CI bring their own (cpu/cuda) torch

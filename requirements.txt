@@ -1,5 +1,5 @@
 # Core dependencies for Spanish MoE-BERT
-# Python version: >=3.9, <3.13
+# Python version: >=3.10
 # Unused legacy deps removed: accelerate, sacremoses, pandas, wandb, tensorboard (audit 2026-08).
 
 # PyTorch CUDA 11.8 index — Tesla P40 / driver 12.4 compatible.

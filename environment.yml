@@ -2,7 +2,7 @@ name: frankenstein
 channels:
   - defaults
 dependencies:
-  - python>=3.9,<3.13
+  - python>=3.10
   - pip
   - pip:
     # Torch pinned to cu118 (Tesla P40 / driver 12.4 compatible).
