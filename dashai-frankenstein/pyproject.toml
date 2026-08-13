@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dashai-frankenstein"
+version = "0.1.0"
+description = "DashAI plugin that registers Frankenstein Transformer model classes (MLM encoder, causal decoder, ViT) as DashAI components."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Erick Merino", email = "erickfmm@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    # Frankenstein ships the importable ``src`` package and the engine API.
+    # Pin to the Phase-0 release that exposes engine.build_model / train_from_config.
+    "frankenstein-transformer>=1.1.0",
+    "torch>=2.0",
+    "transformers>=4.45.0,<5.0.0",
+    "datasets>=3.0.0",
+    "numpy>=1.26.0,<3.0",
+    "PyYAML>=6.0.1",
+]
+
+[project.optional-dependencies]
+sbert = ["sentence-transformers>=3.3.0", "sentencepiece>=0.2.0"]
+
+# DashAI discovers plugins whose distribution name startswith("dashai").
+# Each entry points to a class that inherits a DashAI base (BaseModel /
+# BaseGenerativeModel / BaseTask) carrying a TYPE attribute.
+[project.entry-points."dashai.plugins"]
+frankenstein_mlm = "dashai_frankenstein:FrankensteinMLMModel"
+frankenstein_decoder = "dashai_frankenstein:FrankensteinDecoderModel"
+frankenstein_vit_cls = "dashai_frankenstein:FrankensteinViTClassifier"
+frankenstein_vit_seg = "dashai_frankenstein:FrankensteinViTSegmenter"
+segmentation_task = "dashai_frankenstein:SegmentationTask"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dashai_frankenstein"]
