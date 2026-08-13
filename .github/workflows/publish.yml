@@ -1,0 +1,130 @@
+name: Publish to PyPI
+
+# Triggered by any git tag matching v* (e.g. v1.0.0, v1.1.0a1).
+# Builds the sdist + wheel once, then publishes to TestPyPI first (sanity
+# check, environment-gated) and to PyPI (environment-gated). Uses Trusted
+# Publishing (OIDC) — no API tokens stored as secrets.
+#
+# PyPI / TestPyPI Trusted Publishing must be configured once per project:
+#   publisher: GitHub
+#   owner:     erickfmm
+#   repo:      frankenstein-transformer
+#   workflow:  publish.yml
+#   environment: pypi      (and testpypi for TestPyPI)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history + tags so hatch-vcs can derive the version.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: pip install --upgrade build twine
+
+      - name: Clean stale artifacts
+        run: rm -rf dist/ build/ src/*.egg-info
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Check metadata (twine check)
+        run: twine check dist/*
+
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14
+
+  publish-testpypi:
+    name: Publish to TestPyPI (sanity check)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write   # Trusted Publishing (OIDC)
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # Idempotent: re-pushing the same tag won't fail if already uploaded.
+          skip-existing: true
+          verbose: true
+
+  publish-pypi:
+    name: Publish to PyPI (production)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # Trusted Publishing (OIDC)
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          verbose: true
+
+  github-release:
+    name: Create GitHub Release
+    needs: [publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Creating release for tag $TAG"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            dist/*

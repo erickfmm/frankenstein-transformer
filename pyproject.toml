@@ -1,6 +1,6 @@
 [project]
 name = "frankenstein-transformer"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Config-driven, schema-validated training library and CLI for building, training, and deploying hybrid Transformer architectures (attention mixers, BitNet, MoE, SBERT, and Vision Transformers)."
 readme = "README.md"
 license = { text = "MIT" }
@@ -112,8 +112,38 @@ torch = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+# Fallback version when .git is absent (e.g. sdist built from a tarball
+# download) so `python -m build` works without a full clone.
+fallback-version = "0.0.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.hatch.build.targets.sdist]
+# Keep the sdist lean: exclude dev/test/docs/plugin scaffolding that is not
+# needed to install or run the library. Hatchling already excludes .git,
+# .venv, __pycache__, etc. by default.
+exclude = [
+    ".agents",
+    ".opencode",
+    "dashai-frankenstein",
+    "docs",
+    "full_tests",
+    "tests",
+    "examples",
+    "configs",
+    "environment.yml",
+    "requirements.txt",
+    "run_tests.sh",
+    "skills-lock.json",
+    "uv.lock",
+    ".readthedocs.yaml",
+    ".github",
+    "AGENTS.md",
+    "training_metrics.csv",
+]
