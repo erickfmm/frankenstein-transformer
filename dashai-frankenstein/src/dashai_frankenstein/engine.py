@@ -75,6 +75,7 @@ def build_model_from_yaml(
     num_labels: Optional[int] = None,
     tokenizer_name_or_path: Optional[str] = None,
     vocab_size_override: Optional[int] = None,
+    overrides: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Any, Any, Any]:
     """Build a Frankenstein model + config + tokenizer from a YAML payload.
 
@@ -84,6 +85,8 @@ def build_model_from_yaml(
     (Strategy A) is enabled. When ``vocab_size_override`` is provided it is
     injected as ``model.dims.vocab_size`` so the embedding matches the tokenizer
     (Frankenstein constraint: vocab_size must match the tokenizer's vocab).
+    Arbitrary nested keys can be injected via ``overrides`` (e.g. ViT
+    ``model.num_classes`` / ``model.image_height``).
 
     Parameters
     ----------
@@ -97,6 +100,9 @@ def build_model_from_yaml(
         Injected as ``tokenizer.name_or_path`` when the YAML omits it.
     vocab_size_override : int, optional
         Injected as ``model.dims.vocab_size`` to match the resolved tokenizer.
+    overrides : dict, optional
+        Nested dict deep-merged into the parsed YAML before validation. Use
+        dotted-free nested form, e.g. ``{"model": {"num_classes": 10}}``.
 
     Returns
     -------
@@ -124,6 +130,8 @@ def build_model_from_yaml(
         model_block = parsed.setdefault("model", {})
         dims_block = model_block.setdefault("dims", {})
         dims_block["vocab_size"] = int(vocab_size_override)
+    if overrides:
+        _deep_merge(parsed, overrides)
 
     fd, tmp_path = tempfile.mkstemp(suffix=".yaml", prefix="dashai_frank_")
     try:
@@ -179,3 +187,32 @@ def resolve_tokenizer(loaded: Any) -> Any:
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
+
+
+def _deep_merge(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merge ``extra`` into ``base`` (in place); returns ``base``.
+
+    Lists are replaced (not extended) to keep behavior predictable.
+
+    Parameters
+    ----------
+    base : dict
+        Target dict (mutated).
+    extra : dict
+        Source dict whose values win on conflict.
+
+    Returns
+    -------
+    dict
+        The merged ``base`` dict.
+    """
+    for key, value in extra.items():
+        if (
+            key in base
+            and isinstance(base[key], dict)
+            and isinstance(value, dict)
+        ):
+            _deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base

@@ -155,3 +155,127 @@ def prediction_loader(
         shuffle=False,
         pin_memory=str(device).startswith("cuda"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Vision: DashAI image columns -> (pixel_values, labels) tensors
+# ---------------------------------------------------------------------------
+
+def _image_column(dataset: Any) -> str:
+    """Return the single image column of a DashAIDataset (DashAIImage type)."""
+    try:
+        from DashAI.back.types.dashai_image import DashAIImage
+    except ImportError:  # pragma: no cover
+        DashAIImage = ()  # type: ignore
+    try:
+        types = dataset.types
+    except AttributeError:
+        types = {}
+    img_cols = [
+        col
+        for col in dataset.column_names
+        if (DashAIImage and isinstance(types.get(col), DashAIImage))
+        or str(types.get(col)).lower() == "dashaiimage"
+    ]
+    if len(img_cols) != 1:
+        raise ValueError(
+            f"Expected exactly one image column, found {img_cols} "
+            f"(columns={list(dataset.column_names)})."
+        )
+    return img_cols[0]
+
+
+def image_dataloader(
+    dataset: Any,
+    y_dataset: Any = None,
+    *,
+    image_size: int = 224,
+    batch_size: int = 32,
+    device: str = "cpu",
+    shuffle: bool = True,
+    label_column: Optional[str] = None,
+) -> Any:
+    """Build a DataLoader of (pixel_values, labels) or pixel_values tensors.
+
+    Images are resized to ``image_size`` x ``image_size`` and normalized with
+    ImageNet statistics (matching the torchvision DashAI classifiers).
+
+    Parameters
+    ----------
+    dataset : DashAIDataset
+        Source dataset carrying an image column.
+    y_dataset : DashAIDataset, optional
+        Label dataset (train mode). When ``None``, the loader yields images only.
+    image_size : int
+        Target square image size.
+    batch_size, device, shuffle
+        Loader options.
+    label_column : str, optional
+        Override label column name in ``y_dataset``.
+
+    Returns
+    -------
+    torch.utils.data.DataLoader
+    """
+    import torch
+    import torch.utils.data
+    from torchvision import transforms
+
+    image_col = _image_column(dataset)
+    label_col = label_column
+    if y_dataset is not None and label_col is None:
+        label_col = y_dataset.column_names[0]
+
+    label_to_idx: dict = {}
+    if y_dataset is not None and label_col is not None:
+        cat = (getattr(y_dataset, "types", {}) or {}).get(label_col)
+        if cat is not None and getattr(cat, "categories", None):
+            unique_labels = sorted(cat.categories)
+        else:
+            unique_labels = sorted(set(y_dataset[label_col]))
+        label_to_idx = {lbl: i for i, lbl in enumerate(unique_labels)}
+
+    transform = transforms.Compose(
+        [
+            transforms.Lambda(lambda img: img.convert("RGB")),
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+
+    class _ImageDataset(torch.utils.data.Dataset):
+        def __init__(self):
+            self.x = dataset
+            self.y = y_dataset
+
+        def __len__(self):
+            return len(self.x)
+
+        def __getitem__(self, idx):
+            image = transform(self.x[idx][image_col].to_pil())
+            if self.y is None:
+                return image
+            label_str = self.y[idx][label_col]
+            return image, int(label_to_idx.get(label_str, -1))
+
+    def _collate_with_labels(batch):
+        images = torch.stack([b[0] for b in batch])
+        labels = torch.tensor([b[1] for b in batch], dtype=torch.long)
+        return images, labels
+
+    def _collate_images(batch):
+        return torch.stack(batch)
+
+    ds_obj = _ImageDataset()
+    return (
+        torch.utils.data.DataLoader(
+            ds_obj,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            collate_fn=_collate_with_labels if y_dataset is not None else _collate_images,
+            pin_memory=str(device).startswith("cuda"),
+        ),
+        label_to_idx,
+        len(label_to_idx),
+    )
