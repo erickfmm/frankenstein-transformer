@@ -1,12 +1,14 @@
 # DashAI Plugin Integration Audit — Frankenstein Transformer
 
-**Status:** Planning / architecture audit (no code executed yet)
+**Status:** Phase 0 **implemented** (commit `b4c1437`, plus the SBERT engine routing + engine test suite in the follow-up). Phases 1–3 (the `dashai-frankenstein` plugin package) are **not started**.
 **Scope:** Turn Frankenstein Transformer into a `dashai-frankenstein` plugin that registers Frankenstein's model classes as DashAI components, with **minimal changes to DashAI** and **contained, well-defined refactors to Frankenstein**.
 **Decisions locked with the author:**
 
 1. **Schema (v1):** *Passthrough YAML* — a single Frankenstein YAML payload validated by Frankenstein's own JSON Schema. Curated native form fields are deferred to v2.
 2. **Component scope:** *All four* — MLM text classifier, causal decoder (generative), ViT image classifier, and ViT segmentation (+ a plugin-provided segmentation task).
 3. **Delivery:** Frankenstein is **published to PyPI** and consumed by the plugin as a normal dependency.
+
+> **Implementation status of Phase 0 (Frankenstein side).** Items §7.1–§7.5 landed in commit `b4c1437` ("feat: add reusable engine API and encoder classification head for DashAI integration") and are marked ✅ in the §7 summary table. The follow-up commit routes the SBERT task through the engine (`_train_sbert` in `src/engine.py`, removing the CLI special-case in `src/training/main.py`) and adds `tests/test_engine_api.py` (14 tests) plus `examples/engine_demo.py` to satisfy the Phase 0 exit criterion. Only §7.6 (PyPI publish as `1.1.0`) remains before Phase 1. The "Today" prose in §7.1–§7.5 is preserved as the original design rationale but no longer describes HEAD — trust the summary table and `git show b4c1437` for current state.
 
 ---
 
@@ -83,10 +85,10 @@ Authoritative sources: `AGENTS.md`, `pyproject.toml`, `src/cli.py`, `src/schema.
 - **Source of truth:** JSON Schema. `src/schema.yaml` `$ref`s into modular `src/schema/_*.yaml` and `src/schema/_model/_*.yaml`; `additionalProperties: false` everywhere. **Not pydantic.**
 - **Config objects (dataclasses):** `FrankensteinModelConfig` — **151 typed fields** (`src/model/config.py:91`); `TrainingConfig` — **38 fields** (`src/training/trainer.py:52`, fields at lines 104-160); plus `image`/`dataset`/`sbert` blocks. The YAML `model:` block is nested and **flattened** before constructing `FrankensteinModelConfig` (`src/utils/config_flatten.py:flatten_model_dict`, `flatten_image_dict`).
 - **Model classes:** `FrankensteinEncoder` (`src/model/frankenstein_encoder.py:29`, MLM/encoder), `FrankensteinDecoder` (causal), `FrankensteinViT` (`src/model/frankenstein_vit.py:94`, vision). All are **plain `nn.Module`** — `FrankensteinEncoder` and `FrankensteinViT` expose `forward()` only; `FrankensteinDecoder` exposes `forward()` **and `generate()`** (`frankenstein_decoder.py:129-166`, autoregressive top-k sampling) — no DashAI-style lifecycle methods (`save`/`load`/`train`/`predict`) on any of them.
-- **Training orchestration** is fused into `src/training/main.py`: `main()` at line 910 dispatches on `model_class`/`task`; `_run_vision_task` at 837; `_run_sbert_task` at 635; `_run_under_supervisor` at 565 spawns a **GPU-thermal supervisor subprocess**. The loop itself is `TitanTrainer` (`src/training/trainer.py`).
+- **Training orchestration** is fused into `src/training/main.py`: `main()` at line 910 dispatches on `model_class`/`task`; `_run_vision_task` at 837; `_run_under_supervisor` at 565 spawns a **GPU-thermal supervisor subprocess**. The loop itself is `TitanTrainer` (`src/training/trainer.py`). *(After `b4c1437`+follow-up, all non-supervisor tasks — MLM, causal-LM, SBERT, vision, base-model — are delegated to the reusable `src/engine.py` façade; SBERT now lives in `engine._train_sbert`.)*
 - **Persistence / inference:** `src/deploy/` — `deploy.py` (checkpoint→artifacts), `inference.py` (batch/interactive), `quantization.py` (BitNet), `transformers_export.py` (HF export). No `save`/`load` on the model classes themselves.
 - **Tokenizer:** custom `SpanishSPMTokenizer` (`src/tokenizer/`) or HF `AutoTokenizer` (the `base_model` path in `main.py:_load_base_model_and_tokenizer`).
-- **Dependencies (`pyproject.toml`):** `torch==2.6.0+cu118` (hard pin with a default uv index), `transformers`, `sentence-transformers`, `sentencepiece`, `datasets`, `streamlit`, plus `numpy`, `tqdm`, `psutil`, `PyYAML`. Python `>=3.9, <3.13`.
+- **Dependencies (`pyproject.toml`):** core `torch>=2.0` (unpinned — DashAI/CI bring their own cpu/cuda wheel), `transformers`, `datasets`, `PyYAML`, `numpy`, `tqdm`, `psutil`. Optional extras: `[sbert]` (`sentence-transformers`, `sentencepiece`), `[web]` (`streamlit`), `[train]` (union), plus `[cpu]`/`[cu118]`/`[cu126]`/`[cu128]` torch-wheel extras. Python `>=3.9, <3.13`. *(Pre-`b4c1437` this was a hard `torch==2.6.0+cu118` core pin with all deps in core — see §7.1/§7.2 for the change.)*
 
 ### 3.3 Compatibility matrix
 
@@ -231,17 +233,17 @@ Frankenstein's encoder is an MLM backbone (token-level logits over the vocab, `f
 
 ## 6. Phased plan
 
-### Phase 0 — Prepare Frankenstein (this repo; no plugin yet)
+### Phase 0 — Prepare Frankenstein (this repo; no plugin yet) — ✅ COMPLETE
 Goal: make Frankenstein importable and drivable from a non-CLI host.
 
-1. Relax torch pin and split extras (§7.1, §7.2).
-2. Extract `src/engine.py` — a non-CLI, non-supervisor façade (§7.3).
-3. Add an in-process / supervisor-off mode to training (§7.4).
-4. Formalize classification heads on encoder + reuse ViT heads (§7.5).
-5. Publish to PyPI (§7.6).
-6. Verify the existing CLI, presets, and `tests/test_yaml_examples.py` still pass unchanged.
+1. ✅ Relax torch pin and split extras (§7.1, §7.2).
+2. ✅ Extract `src/engine.py` — a non-CLI, non-supervisor façade (§7.3). SBERT routed through the engine in the follow-up.
+3. ✅ Add an in-process / supervisor-off mode to training (§7.4).
+4. ✅ Formalize classification heads on encoder + reuse ViT heads (§7.5).
+5. ⬜ Publish to PyPI (§7.6) — the only remaining Phase 0 item.
+6. ✅ Verify the existing CLI, presets, and `tests/test_yaml_examples.py` still pass unchanged; add `tests/test_engine_api.py` + `examples/engine_demo.py`.
 
-**Exit criterion:** a small Python script can `import` Frankenstein, build a model from a YAML dict, train one step in-process, and save/load — without touching `src/cli.py`.
+**Exit criterion MET:** `examples/engine_demo.py` (and `tests/test_engine_api.py`) `import`s Frankenstein, builds a model from a config, trains steps in-process, and saves/loads — without touching `src/cli.py`.
 
 ### Phase 1 — MVP plugin (one model)
 Goal: prove the full DashAI contract end-to-end.
@@ -318,15 +320,19 @@ These are the **required** modifications in this repository. Each is scoped to b
 
 ### Summary table — Frankenstein changes
 
-| # | File(s) | Change | Risk | Backward-compatible? |
-|---|---|---|---|---|
-| 7.1 | `pyproject.toml:21` (core deps), `:15-18` (default uv index) | Move `torch==2.6.0+cu118` → core `torch>=2.0`; remove default `pytorch-cu118` index; **preserve existing `[cpu]`/`[cu118]`/`[cu126]`/`[cu128]` extras** (`:36-52`) | Low | Yes (extras preserve local CUDA path) |
-| 7.2 | `pyproject.toml:20-31` (core deps), `:36-52` (extras) | Move `streamlit`/`sentence-transformers`/`sentencepiece` from core → new `[sbert]`/`[web]`/`[train]` extras; fix `AGENTS.md` `.[train]` mismatch (extra doesn't exist today) | Low | Yes (new `[train]` extra preserves full install) |
-| 7.3 | new `src/engine.py`, rewrite `src/training/main.py` | Extract non-CLI engine façade | Medium | Yes (CLI delegates, behavior preserved) |
-| 7.4 | `src/training/trainer.py:52` (TrainingConfig), `src/training/main.py:1043`, `src/schema/_training.yaml`, `src/engine.py` | Add `supervisor: auto\|off` field + schema entry; `off` runs `TitanTrainer` in-process | Low-Medium | Yes (default `auto` unchanged) |
-| 7.5 | `src/model/frankenstein_encoder.py:84/126`, `src/model/config.py:91`, `src/schema/_model/_model_flat.yaml`, `src/engine.py` | Optional non-BitNet classification head (`num_labels`, `classification_head`, `pooling_mode`) on encoder; ViT already has heads | Low | Yes (opt-in, default `False`) |
-| 7.6 | release | PyPI publish as `frankenstein-transformer==1.1.0` (name already correct, no rename) | Low | n/a |
-| 7.7 | build-time generator | Field-metadata JSON (v2) | Low | Yes (additive) |
+Status legend: ✅ landed in `b4c1437`; ✅+ landed in the `b4c1437` follow-up (SBERT engine routing + engine test suite); ⬜ not yet started.
+
+| # | File(s) | Change | Status | Risk | Backward-compatible? |
+|---|---|---|---|---|---|
+| 7.1 | `pyproject.toml:21` (core deps), `:15-18` (default uv index) | Move `torch==2.6.0+cu118` → core `torch>=2.0`; remove default `pytorch-cu118` index; **preserve existing `[cpu]`/`[cu118]`/`[cu126]`/`[cu128]` extras** (`:36-52`) | ✅ | Low | Yes (extras preserve local CUDA path) |
+| 7.2 | `pyproject.toml:20-31` (core deps), `:36-52` (extras) | Move `streamlit`/`sentence-transformers`/`sentencepiece` from core → new `[sbert]`/`[web]`/`[train]` extras; fix `AGENTS.md` `.[train]` mismatch (extra doesn't exist today) | ✅ | Low | Yes (new `[train]` extra preserves full install) |
+| 7.3 | new `src/engine.py`, rewrite `src/training/main.py` | Extract non-CLI engine façade (`build_model` / `build_tokenizer` / `build_dataloader` / `train_from_config` / `save_checkpoint` / `load_checkpoint` / `TrainResult`). SBERT now routed through the engine via `_train_sbert` (CLI special-case removed). | ✅ / ✅+ | Medium | Yes (CLI delegates, behavior preserved) |
+| 7.4 | `src/training/trainer.py:52` (TrainingConfig), `src/training/main.py:1043`, `src/schema/_training.yaml`, `src/engine.py` | Add `supervisor: auto\|off` field + schema entry; `off` runs `TitanTrainer` in-process; `metrics_callback` hook added to `TitanTrainer` | ✅ | Low-Medium | Yes (default `auto` unchanged) |
+| 7.5 | `src/model/frankenstein_encoder.py:84/126`, `src/model/config.py:91`, `src/schema/_model/_model_flat.yaml`, `src/engine.py` | Optional non-BitNet classification head (`num_labels`, `classification_head`, `encoder_pooling_mode`) on encoder; ViT already has heads | ✅ | Low | Yes (opt-in, default `False`) |
+| 7.6 | release | PyPI publish as `frankenstein-transformer==1.1.0` (name already correct, no rename) | ⬜ | Low | n/a |
+| 7.7 | build-time generator | Field-metadata JSON (v2) | ⬜ | Low | Yes (additive) |
+
+**Phase 0 exit criterion verification:** `tests/test_engine_api.py` (14 tests, CPU) covers `build_model` shapes, the Strategy-A classification head (including full-precision-under-BitNet), `save_checkpoint`/`load_checkpoint` round-trip (state-dict equality + `num_labels` head rebuild), and SBERT engine dispatch. `examples/engine_demo.py` is the human-runnable proof: build → train 3 steps → head → save/load, no `src/cli.py`. Run: `uv run --extra cpu --extra train python -m pytest tests/test_engine_api.py -v`.
 
 ---
 
@@ -376,7 +382,7 @@ Frankenstein:
 - JSON Schema root: `src/schema.yaml`; modular: `src/schema/_*.yaml`, `src/schema/_model/_*.yaml`
 - Model config (151 fields): `src/model/config.py:91 FrankensteinModelConfig`
 - Training config (38 fields): `src/training/trainer.py:52 TrainingConfig` (fields at lines 104-160)
-- Training orchestration: `src/training/main.py:910 main`, `:837 _run_vision_task`, `:635 _run_sbert_task`, `:565 _run_under_supervisor`
+- Training orchestration: `src/training/main.py:910 main`, `:837 _run_vision_task`, `:565 _run_under_supervisor`. *(Non-supervisor task dispatch — incl. SBERT — now lives in `src/engine.py: train_from_config` / `_train_sbert` after the `b4c1437` follow-up.)*
 - Model classes: `src/model/frankenstein_encoder.py:29` (`FrankensteinEncoder`, `forward:126` returns `(B, S, vocab_size)`), `src/model/frankenstein_decoder.py:24` (`FrankensteinDecoder`, `forward:113` returns `(B, S, vocab_size)`, **`generate:129`** autoregressive top-k), `src/model/frankenstein_vit.py:94` (`FrankensteinViT`, `forward:370` dispatches on `task=` to classification/segmentation/patch-prediction heads at `:188/201/199`)
 - Config flatten (nested YAML → flat dataclass): `src/utils/config_flatten.py`
 - Deploy/inference: `src/deploy/{deploy,inference,quantization,transformers_export}.py` (checkpoint format = torch dict: `model_state_dict` + optimizer/scheduler/scaler + pickled `FrankensteinModelConfig` + `global_step`/`best_loss`/`epoch`/`model_class`; no `save`/`load` on the `nn.Module`s)

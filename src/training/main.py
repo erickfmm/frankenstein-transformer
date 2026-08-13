@@ -471,8 +471,10 @@ def _build_sbert_supervisor_child_argv(
 ) -> list:
     """Build the supervisor child argv for the SBERT task.
 
-    Mirrors :func:`_run_sbert_task` argument construction but re-runs the
-    SBERT entrypoint as a subprocess so the supervisor can kill/restart it.
+    Mirrors the SBERT argv construction in :func:`src.engine._train_sbert`
+    but re-runs the SBERT entrypoint as a subprocess (``-m
+    src.sbert.train_sbert``) so the GPU-thermal supervisor can kill/restart
+    it independently of the parent CLI process.
     """
     sbert_cfg = loaded.training_runtime.get("sbert", {}) or {}
     if not isinstance(sbert_cfg, dict):
@@ -630,207 +632,6 @@ def _run_under_supervisor(
         child_argv=child_argv,
     )
     return int(supervisor.run())
-
-
-def _run_sbert_task(
-    loaded: LoadedTrainingConfig,
-    resolved_device: str,
-    training_config: TrainingConfig,
-) -> int:
-    """Dispatch SBERT fine-tuning from the training pipeline.
-
-    Translates the YAML config's ``training.sbert`` block into CLI
-    arguments for :func:`sbert.train_sbert.main`.
-
-    Args:
-        loaded: Validated :class:`LoadedTrainingConfig` with ``task="sbert"``.
-        resolved_device: Resolved PyTorch device string.
-        training_config: :class:`TrainingConfig` for thermal guard settings.
-
-    Returns:
-        Exit code (0 for success, non-zero for failure).
-
-    Raises:
-        ValueError: If ``base_model`` is not set or ``training.sbert``
-            is not a valid object.
-    """
-    if not loaded.base_model:
-        raise ValueError("training.task=sbert requires top-level base_model")
-
-    try:
-        from ..sbert.train_sbert import main as sbert_train_main
-    except ImportError:
-        from sbert.train_sbert import main as sbert_train_main
-
-    sbert_cfg = loaded.training_runtime.get("sbert", {}) or {}
-    if not isinstance(sbert_cfg, dict):
-        raise ValueError("training.sbert must be an object")
-
-    argv = [
-        "--base-model",
-        loaded.base_model,
-        "--output_dir",
-        str(sbert_cfg.get("output_dir", "./output/sbert_base_model")),
-        "--batch_size",
-        str(int(sbert_cfg.get("batch_size", 16))),
-        "--epochs",
-        str(int(sbert_cfg.get("epochs", 4))),
-        "--learning_rate",
-        str(float(sbert_cfg.get("learning_rate", 2e-5))),
-        "--max_eval_samples",
-        str(int(sbert_cfg.get("max_eval_samples", 10000))),
-        "--pooling_mode",
-        str(sbert_cfg.get("pooling_mode", "mean")),
-        "--resample_std",
-        str(float(sbert_cfg.get("resample_std", 0.3))),
-        "--device",
-        resolved_device,
-    ]
-    gradient_accumulation_steps = sbert_cfg.get("gradient_accumulation_steps")
-    if gradient_accumulation_steps is not None:
-        argv.extend(
-            [
-                "--gradient_accumulation_steps",
-                str(int(gradient_accumulation_steps)),
-            ]
-        )
-    max_grad_norm = sbert_cfg.get("max_grad_norm")
-    if max_grad_norm is not None:
-        argv.extend(["--max_grad_norm", str(float(max_grad_norm))])
-
-    dataset_name = str(sbert_cfg.get("dataset_name", "")).strip()
-    if dataset_name:
-        argv.extend(["--dataset_name", dataset_name])
-    dataset_type = str(sbert_cfg.get("dataset_type", "")).strip()
-    if dataset_type:
-        argv.extend(["--dataset_type", dataset_type])
-
-    max_train_samples = sbert_cfg.get("max_train_samples")
-    if max_train_samples is not None:
-        argv.extend(["--max_train_samples", str(int(max_train_samples))])
-
-    warmup_steps = sbert_cfg.get("warmup_steps")
-    if warmup_steps is not None:
-        argv.extend(["--warmup_steps", str(int(warmup_steps))])
-
-    evaluation_steps = sbert_cfg.get("evaluation_steps")
-    if evaluation_steps is not None:
-        argv.extend(["--evaluation_steps", str(int(evaluation_steps))])
-    checkpoint_save_steps = sbert_cfg.get("checkpoint_save_steps")
-    if checkpoint_save_steps is not None:
-        argv.extend(["--checkpoint_save_steps", str(int(checkpoint_save_steps))])
-    if bool(sbert_cfg.get("resume_from_checkpoint", False)):
-        argv.append("--resume_from_checkpoint")
-
-    max_seq_length = sbert_cfg.get("max_seq_length")
-    if max_seq_length is not None:
-        argv.extend(["--max_seq_length", str(int(max_seq_length))])
-
-    if not bool(sbert_cfg.get("use_amp", True)):
-        argv.append("--no_amp")
-    if not bool(sbert_cfg.get("resample_balanced", True)):
-        argv.append("--no_resample")
-    if bool(sbert_cfg.get("standardize_scores", False)):
-        argv.append("--standardize_scores")
-    if bool(sbert_cfg.get("trust_remote_code", False)):
-        argv.append("--trust_remote_code")
-
-    columns_cfg = sbert_cfg.get("columns", {}) or {}
-    if not isinstance(columns_cfg, dict):
-        raise ValueError("training.sbert.columns must be an object when provided")
-    column_arg_map = {
-        "sentence1": "--col_sentence1",
-        "sentence2": "--col_sentence2",
-        "similarity": "--col_similarity",
-        "query": "--col_query",
-        "positive": "--col_positive",
-        "negatives": "--col_negatives",
-        "question": "--col_question",
-        "answer": "--col_answer",
-    }
-    for key, cli_flag in column_arg_map.items():
-        value = columns_cfg.get(key)
-        if value is None:
-            continue
-        text_value = str(value).strip()
-        if text_value:
-            argv.extend([cli_flag, text_value])
-
-    query_prefix = sbert_cfg.get("query_prefix")
-    if query_prefix is not None:
-        argv.extend(["--query_prefix", str(query_prefix)])
-
-    document_prefix = sbert_cfg.get("document_prefix")
-    if document_prefix is not None:
-        argv.extend(["--document_prefix", str(document_prefix)])
-
-    if bool(training_config.gpu_temp_guard_enabled):
-        argv.append("--gpu-temp-guard")
-    else:
-        argv.append("--no-gpu-temp-guard")
-    if bool(training_config.switch_on_thermal):
-        argv.append("--switch-on-thermal")
-    else:
-        argv.append("--no-switch-on-thermal")
-    argv.extend(
-        [
-            "--gpu-temp-pause-threshold-c",
-            str(float(training_config.gpu_temp_pause_threshold_c)),
-            "--gpu-temp-resume-threshold-c",
-            str(float(training_config.gpu_temp_resume_threshold_c)),
-            "--gpu-temp-poll-interval-seconds",
-            str(float(training_config.gpu_temp_poll_interval_seconds)),
-            "--gpu-temp-checkpoint-grace-seconds",
-            str(float(training_config.gpu_temp_checkpoint_grace_seconds)),
-            "--nvml-device-index",
-            str(int(training_config.nvml_device_index)),
-        ]
-    )
-    if training_config.gpu_temp_critical_threshold_c is not None:
-        argv.extend(
-            [
-                "--gpu-temp-critical-threshold-c",
-                str(float(training_config.gpu_temp_critical_threshold_c)),
-            ]
-        )
-    argv.extend(
-        [
-            "--csv-log-path",
-            str(training_config.csv_log_path),
-            "--telemetry-log-interval",
-            str(int(training_config.telemetry_log_interval)),
-            "--gpu-metrics-backend",
-            str(training_config.gpu_metrics_backend),
-        ]
-    )
-    if bool(training_config.csv_rotate_on_schema_change):
-        argv.append("--csv-rotate-on-schema-change")
-    else:
-        argv.append("--no-csv-rotate-on-schema-change")
-    if bool(training_config.enable_block_grad_norms):
-        argv.append("--enable-block-grad-norms")
-    else:
-        argv.append("--no-enable-block-grad-norms")
-
-    # Pass custom optimizer if specified in sbert config
-    sbert_optimizer = sbert_cfg.get("optimizer")
-    if isinstance(sbert_optimizer, dict):
-        optimizer_class = sbert_optimizer.get("optimizer_class")
-        if isinstance(optimizer_class, str) and optimizer_class.strip():
-            argv.extend(["--optimizer_class", str(optimizer_class).strip()])
-        optimizer_params = sbert_optimizer.get("parameters", {})
-        if isinstance(optimizer_params, dict):
-            for key, value in optimizer_params.items():
-                import json as _json
-                argv.extend(["--optimizer_param", f"{key}={_json.dumps(value)}"])
-
-    wandb_project = sbert_cfg.get("wandb_project")
-    if wandb_project is not None:
-        argv.extend(["--wandb_project", str(wandb_project)])
-
-    logging.info("Dispatching SBERT finetuning with base_model=%s", loaded.base_model)
-    result = sbert_train_main(argv)
-    return int(result) if isinstance(result, int) else 0
 
 
 # ==================== VISION TASK (frankenstein_vit) ====================
@@ -1050,10 +851,7 @@ def main(argv=None):
     ):
         return _run_under_supervisor(args, training_config, resolved_device, config_path, loaded.task)
 
-    if loaded.task == "sbert":
-        return _run_sbert_task(loaded, resolved_device, training_config)
-
-    # All other tasks (mlm / causal_lm / base_model / patch_prediction /
+    # All tasks (mlm / causal_lm / sbert / base_model / patch_prediction /
     # classification / segmentation) are delegated to the reusable non-CLI
     # engine. The CLI passes its resolved device, thermal-guard overrides, and
     # the validated config so behavior is preserved exactly.
