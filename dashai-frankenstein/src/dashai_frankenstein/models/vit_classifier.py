@@ -19,8 +19,12 @@ from DashAI.back.core.utils import MultilingualString
 from DashAI.back.models.base_model import BaseModel
 
 from dashai_frankenstein.config import FrankensteinClassifierSchema
-from dashai_frankenstein.engine import build_model_from_yaml, resolve_device
-from dashai_frankenstein.models.base import resolve_yaml
+from dashai_frankenstein.engine import (
+    build_model_from_yaml,
+    resolve_device,
+    validate_training_yaml,
+)
+from dashai_frankenstein.models.base import resolve_yaml, _extract_lr_from_optimizer
 
 
 class FrankensteinViTClassifier(BaseModel):
@@ -64,11 +68,6 @@ class FrankensteinViTClassifier(BaseModel):
     def __init__(self, **kwargs) -> None:
         kwargs = self.validate_and_transform(kwargs)
         self.frankenstein_yaml = kwargs.get("frankenstein_yaml", "")
-        self.preset = kwargs.get("preset", "")
-        self.device = kwargs.get("device", "CPU")
-        self.batch_size = kwargs.get("batch_size", 32)
-        self.num_epochs = kwargs.get("num_epochs", 3)
-        self.learning_rate = kwargs.get("learning_rate", None)
 
         self.num_classes = None
         self.fitted = False
@@ -77,6 +76,7 @@ class FrankensteinViTClassifier(BaseModel):
         self._frank_model = None
         self._loaded_config = None
         self._device = "cpu"
+        self._batch_size = 32
         self._image_size = 224
         self.x_data = None
         self.y_data = None
@@ -91,15 +91,14 @@ class FrankensteinViTClassifier(BaseModel):
         from dashai_frankenstein.adapters.dataset import image_dataloader
 
         yaml_text = resolve_yaml(self)
-        device = resolve_device(self.device)
-        self._device = device
-        batch_size = int(self.batch_size or 32)
-        num_epochs = int(self.num_epochs or 3)
-        lr = float(self.learning_rate) if self.learning_rate is not None else 1e-4
+        validate_training_yaml(yaml_text)
 
-        train_loader, label_to_idx, num_classes = image_dataloader(
+        # Resolve label mapping first (needed for model num_classes override).
+        # image_dataloader returns (loader, label_to_idx, num_classes); we use
+        # a throwaway loader on CPU just to extract the label mapping.
+        _, label_to_idx, num_classes = image_dataloader(
             x_train, y_dataset=y_train, image_size=self._image_size,
-            batch_size=batch_size, device=device, shuffle=True,
+            batch_size=1, device="cpu", shuffle=False,
         )
         self.label_to_idx = label_to_idx
         self.idx_to_label = {i: lbl for lbl, i in label_to_idx.items()}
@@ -115,8 +114,25 @@ class FrankensteinViTClassifier(BaseModel):
         model, loaded, _ = build_model_from_yaml(
             yaml_text, model_class_override="frankenstein_vit", overrides=overrides,
         )
+
+        runtime = getattr(loaded, "training_runtime", {}) or {}
+        device = resolve_device(runtime.get("device", "auto"))
+        batch_size = int(runtime.get("batch_size", 32) or 32)
+        num_epochs = int(runtime.get("num_epochs", 3) or 3)
+        opt_cfg = getattr(loaded.training_config, "optimizer_parameters", {}) or {}
+        opt_class = str(getattr(loaded.training_config, "optimizer_class", "adamw"))
+        lr = _extract_lr_from_optimizer(opt_class, opt_cfg)
+
+        self._device = device
+        self._batch_size = batch_size
         self._frank_model = model.to(device)
         self._loaded_config = loaded
+
+        # Build the real train loader with the resolved device/batch_size.
+        train_loader, _, _ = image_dataloader(
+            x_train, y_dataset=y_train, image_size=self._image_size,
+            batch_size=batch_size, device=device, shuffle=True,
+        )
 
         val_loader = None
         if x_validation is not None and y_validation is not None:
@@ -175,7 +191,8 @@ class FrankensteinViTClassifier(BaseModel):
 
         loader, _, _ = image_dataloader(
             x_pred, y_dataset=None, image_size=self._image_size,
-            batch_size=int(self.batch_size or 32), device=self._device, shuffle=False,
+            batch_size=int(getattr(self, "_batch_size", 32) or 32),
+            device=self._device, shuffle=False,
         )
         model = self._frank_model
         model.eval()

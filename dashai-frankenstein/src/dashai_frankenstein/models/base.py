@@ -22,8 +22,8 @@ from dashai_frankenstein.engine import (
     build_model_from_yaml,
     resolve_device,
     resolve_tokenizer,
+    validate_training_yaml,
 )
-from dashai_frankenstein.presets import load_preset_yaml
 
 log = logging.getLogger(__name__)
 
@@ -31,24 +31,60 @@ log = logging.getLogger(__name__)
 def resolve_yaml(self) -> str:
     """Return the effective Frankenstein YAML text for this component.
 
-    If ``frankenstein_yaml`` is empty and a ``preset`` is set, the preset's YAML
-    is used. Otherwise the raw ``frankenstein_yaml`` string is returned.
-
     Returns
     -------
     str
         A Frankenstein training YAML document.
+
+    Raises
+    ------
+    ValueError
+        If ``frankenstein_yaml`` is empty.
     """
     yaml_text = str(getattr(self, "frankenstein_yaml", "") or "").strip()
     if not yaml_text:
-        preset = str(getattr(self, "preset", "") or "").strip()
-        if preset:
-            yaml_text = load_preset_yaml(preset) or ""
-    if not yaml_text:
         raise ValueError(
-            "Either frankenstein_yaml must be provided or a valid preset selected."
+            "frankenstein_yaml is required. Build a YAML with the "
+            "Frankenstein YAML builder "
+            "(https://erickfmm.github.io/frankenstein-transformer/index.html) "
+            "and paste it into the field."
         )
     return yaml_text
+
+
+def _extract_lr_from_optimizer(
+    optimizer_class: str, optimizer_parameters: Dict[str, Any]
+) -> float:
+    """Extract a learning rate from the Frankenstein optimizer parameters.
+
+    The Frankenstein optimizer schema uses prefixed per-group keys
+    (``<opt_class>-lr_<group>``). The classifier head is a single ``nn.Linear``
+    over a pooled representation (group ``other``). This helper tries, in order:
+    ``<opt>-lr_other``, ``<opt>-lr_attention``, ``<opt>-lr_embeddings``,
+    ``<opt>-lr_norms``, and falls back to ``1e-4`` if none are set.
+
+    Parameters
+    ----------
+    optimizer_class : str
+        Optimizer class name (e.g. ``"adamw"``).
+    optimizer_parameters : dict
+        The flat optimizer parameters dict from the loaded config.
+
+    Returns
+    -------
+    float
+        A learning rate for the classifier-head optimizer.
+    """
+    prefix = str(optimizer_class or "adamw").strip().lower()
+    for group in ("other", "attention", "embeddings", "norms"):
+        key = f"{prefix}-lr_{group}"
+        val = optimizer_parameters.get(key)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                continue
+    return 1e-4
 
 
 def classification_train(
@@ -94,12 +130,7 @@ def classification_train(
 
     self.num_labels = int(num_labels)
     yaml_text = resolve_yaml(self)
-    device = resolve_device(getattr(self, "device", "CPU"))
-    batch_size = int(getattr(self, "batch_size", 16) or 16)
-    num_epochs = int(getattr(self, "num_epochs", 3) or 3)
-    lr = getattr(self, "learning_rate", None)
-    if lr is None:
-        lr = 1e-4
+    validate_training_yaml(yaml_text)
 
     # Build model + config; tokenizer resolved to match the embedding vocab.
     model, loaded, _ = build_model_from_yaml(
@@ -107,6 +138,17 @@ def classification_train(
         model_class_override=model_class_override,
         num_labels=self.num_labels,
     )
+
+    # Runtime params from the loaded config's training_runtime.
+    runtime = getattr(loaded, "training_runtime", {}) or {}
+    device = resolve_device(runtime.get("device", "auto"))
+    batch_size = int(runtime.get("batch_size", 16) or 16)
+    num_epochs = int(runtime.get("num_epochs", 3) or 3)
+    # lr from optimizer parameters (source of truth = Frankenstein schema).
+    opt_cfg = getattr(loaded.training_config, "optimizer_parameters", {}) or {}
+    opt_class = str(getattr(loaded.training_config, "optimizer_class", "adamw"))
+    lr = _extract_lr_from_optimizer(opt_class, opt_cfg)
+
     tokenizer = resolve_tokenizer(loaded)
     if tokenizer is None:
         raise ValueError(
@@ -129,6 +171,7 @@ def classification_train(
     self._loaded_config = loaded
     self._tokenizer = tokenizer
     self._device = device
+    self._batch_size = batch_size
     self._label_column = label_column
     self._text_column_fn = text_column_fn
 
@@ -252,16 +295,12 @@ def persistence_load(cls, filename: str):
     model, loaded, tokenizer, extra = io_adapter.load_run(filename)
     instance = cls(
         frankenstein_yaml="",
-        preset="",
-        device="CPU",
-        batch_size=16,
-        num_epochs=1,
-        learning_rate=None,
     )
     instance._frank_model = model
     instance._loaded_config = loaded
     instance._tokenizer = tokenizer
     instance._device = "cpu"
+    instance._batch_size = 16
     instance.num_labels = extra.get("num_labels")
     instance.fitted = bool(extra.get("fitted", True))
     return instance

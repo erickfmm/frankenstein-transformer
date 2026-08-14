@@ -23,6 +23,7 @@ try:
     from src.training.config_loader import load_training_config  # type: ignore
     from src.training.trainer import TrainingConfig  # type: ignore
     from src.model.config import FrankensteinModelConfig  # type: ignore
+    from src.utils.schema_loader import resolve_schema  # type: ignore
 except ImportError as exc:  # pragma: no cover - depends on install env
     raise ImportError(
         "frankenstein-transformer is required by the dashai-frankenstein plugin. "
@@ -42,30 +43,61 @@ __all__ = [
     "resolve_torch_device",
     "save_checkpoint",
     "load_training_config",
+    "resolve_schema",
     "resolve_device",
+    "validate_training_yaml",
 ]
 
 
 def resolve_device(label: str) -> str:
-    """Map a DashAI device label (``"GPU"``/``"CPU"``) to a torch device string.
+    """Map a DashAI/Frankenstein device label to a torch device string.
+
+    Accepts DashAI labels (``"GPU"``/``"CPU"``) and Frankenstein/runtime
+    labels (``"auto"``, ``"cuda"``, ``"cpu"``, ``"mps"``). ``"auto"`` selects
+    CUDA if available, then MPS, falling back to CPU (via
+    :func:`src.utils.device.resolve_torch_device`).
 
     Parameters
     ----------
     label : str
-        DashAI device label.
+        Device label (``"GPU"``, ``"CPU"``, ``"auto"``, ``"cuda"``, ``"mps"``).
 
     Returns
     -------
     str
-        A torch device string accepted by the Frankenstein engine.
+        A torch device string accepted by the Frankenstein engine
+        (``"cuda"``, ``"cpu"``, or ``"mps"``).
     """
-    label = str(label or "").strip().lower()
-    if label in {"gpu", "cuda"}:
-        return "cuda"
-    if label.startswith("gpu"):
+    label = str(label or "auto").strip().lower()
+    if label in {"gpu", "cuda"} or label.startswith("gpu"):
         # DashAI enumerates "GPU 0: <name> - ..." for multi-GPU hosts.
         return "cuda"
-    return "cpu"
+    if label in {"cpu"}:
+        return "cpu"
+    # ``auto``, ``cuda``, ``mps`` — delegate to Frankenstein's resolver,
+    # which checks availability and raises ValueError if unsupported.
+    return resolve_torch_device(label)
+
+
+def validate_training_yaml(yaml_text: str) -> None:
+    """Validate a Frankenstein training YAML before launching train/inference.
+
+    Thin facade over :func:`dashai_frankenstein.validate.validate_yaml` so the
+    engine remains the single entry point for Frankenstein interaction.
+
+    Parameters
+    ----------
+    yaml_text : str
+        A full Frankenstein training YAML document.
+
+    Raises
+    ------
+    ValueError
+        If the YAML fails schema or config-loader validation.
+    """
+    from dashai_frankenstein.validate import validate_yaml
+
+    validate_yaml(yaml_text)
 
 
 def build_model_from_yaml(

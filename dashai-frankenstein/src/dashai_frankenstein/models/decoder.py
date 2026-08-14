@@ -20,6 +20,7 @@ from dashai_frankenstein.engine import (
     build_model_from_yaml,
     resolve_device,
     resolve_tokenizer,
+    validate_training_yaml,
 )
 from dashai_frankenstein.models.base import resolve_yaml
 
@@ -37,7 +38,10 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
     the YAML (or a checkpoint loaded via ``load``) and used for inference.
 
     Generation parameters (``max_new_tokens``, ``temperature``, ``top_k``) are
-    surfaced on the schema as passthrough/convenience fields.
+    surfaced on the schema as passthrough/convenience fields. Training
+    parameters (``device``, ``batch_size``, ``num_epochs``, learning rate) are
+    read from the Frankenstein YAML's ``training_runtime`` / optimizer
+    parameters — they are NOT DashAI form fields.
     """
 
     COMPATIBLE_COMPONENTS = ["TextToTextGenerationTask"]
@@ -69,11 +73,6 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
     def __init__(self, **kwargs) -> None:
         kwargs = self.validate_and_transform(kwargs)
         self.frankenstein_yaml = kwargs.get("frankenstein_yaml", "")
-        self.preset = kwargs.get("preset", "")
-        self.device = kwargs.get("device", "CPU")
-        self.batch_size = kwargs.get("batch_size", 1)
-        self.num_epochs = kwargs.get("num_epochs", 1)
-        self.learning_rate = kwargs.get("learning_rate", None)
         # Generation defaults (overridable via kwargs from the schema/runner).
         self.max_new_tokens = int(kwargs.get("max_new_tokens", 128))
         self.temperature = float(kwargs.get("temperature", 1.0))
@@ -89,15 +88,17 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
         """Lazily build/resolve the decoder + tokenizer if not already loaded."""
         if self._frank_model is not None:
             return
-        import torch
 
         yaml_text = resolve_yaml(self)
-        device = resolve_device(self.device)
-        self._device = device
+        validate_training_yaml(yaml_text)
 
         model, loaded, _ = build_model_from_yaml(
             yaml_text, model_class_override="frankensteindecoder"
         )
+        runtime = getattr(loaded, "training_runtime", {}) or {}
+        device = resolve_device(runtime.get("device", "auto"))
+        self._device = device
+
         tokenizer = resolve_tokenizer(loaded)
         if tokenizer is None:
             raise ValueError(
@@ -164,7 +165,7 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
         from dashai_frankenstein.models.base import persistence_load
 
         instance = persistence_load(cls, str(filename))
-        instance._device = resolve_device(instance.device)
+        instance._device = resolve_device("auto")
         if instance._frank_model is not None:
             instance._frank_model = instance._frank_model.to(instance._device)
         return instance

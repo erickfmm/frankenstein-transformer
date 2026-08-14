@@ -18,8 +18,12 @@ from DashAI.back.core.utils import MultilingualString
 from DashAI.back.models.base_model import BaseModel
 
 from dashai_frankenstein.config import FrankensteinClassifierSchema
-from dashai_frankenstein.engine import build_model_from_yaml, resolve_device
-from dashai_frankenstein.models.base import resolve_yaml
+from dashai_frankenstein.engine import (
+    build_model_from_yaml,
+    resolve_device,
+    validate_training_yaml,
+)
+from dashai_frankenstein.models.base import resolve_yaml, _extract_lr_from_optimizer
 
 
 class FrankensteinViTSegmenter(BaseModel):
@@ -58,17 +62,13 @@ class FrankensteinViTSegmenter(BaseModel):
     def __init__(self, **kwargs) -> None:
         kwargs = self.validate_and_transform(kwargs)
         self.frankenstein_yaml = kwargs.get("frankenstein_yaml", "")
-        self.preset = kwargs.get("preset", "")
-        self.device = kwargs.get("device", "CPU")
-        self.batch_size = kwargs.get("batch_size", 8)
-        self.num_epochs = kwargs.get("num_epochs", 3)
-        self.learning_rate = kwargs.get("learning_rate", None)
 
         self.num_seg_classes = None
         self.fitted = False
         self._frank_model = None
         self._loaded_config = None
         self._device = "cpu"
+        self._batch_size = 8
         self._image_size = 224
         self.x_data = None
         self.y_data = None
@@ -87,13 +87,8 @@ class FrankensteinViTSegmenter(BaseModel):
         from dashai_frankenstein.adapters.dataset import image_dataloader
 
         yaml_text = resolve_yaml(self)
-        device = resolve_device(self.device)
-        self._device = device
-        batch_size = int(self.batch_size or 8)
-        num_epochs = int(self.num_epochs or 3)
-        lr = float(self.learning_rate) if self.learning_rate is not None else 1e-4
+        validate_training_yaml(yaml_text)
 
-        # num_seg_classes comes from the YAML (model.num_seg_classes).
         img_size = self._image_size
         overrides = {
             "model": {
@@ -106,6 +101,17 @@ class FrankensteinViTSegmenter(BaseModel):
         )
         cfg = loaded.model_config
         self.num_seg_classes = int(getattr(cfg, "num_seg_classes", 2))
+
+        runtime = getattr(loaded, "training_runtime", {}) or {}
+        device = resolve_device(runtime.get("device", "auto"))
+        batch_size = int(runtime.get("batch_size", 8) or 8)
+        num_epochs = int(runtime.get("num_epochs", 3) or 3)
+        opt_cfg = getattr(loaded.training_config, "optimizer_parameters", {}) or {}
+        opt_class = str(getattr(loaded.training_config, "optimizer_class", "adamw"))
+        lr = _extract_lr_from_optimizer(opt_class, opt_cfg)
+
+        self._device = device
+        self._batch_size = batch_size
         self._frank_model = model.to(device)
         self._loaded_config = loaded
 
@@ -153,7 +159,8 @@ class FrankensteinViTSegmenter(BaseModel):
 
         loader, _, _ = image_dataloader(
             x_pred, y_dataset=None, image_size=self._image_size,
-            batch_size=int(self.batch_size or 8), device=self._device, shuffle=False,
+            batch_size=int(getattr(self, "_batch_size", 8) or 8),
+            device=self._device, shuffle=False,
         )
         model = self._frank_model
         model.eval()

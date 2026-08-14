@@ -3,7 +3,7 @@
 Wraps the Frankenstein encoder backbone with the Strategy-A sequence-level
 classification head (see ``docs/dashai-plugin-audit.md`` §5.4). The encoder is
 built in-process via the Frankenstein engine; DashAI drives train/predict/save/
-load. The Frankenstein YAML (passed through or selected via a bundled preset)
+load. The Frankenstein YAML (passed through the ``frankenstein_yaml`` field)
 remains the source of truth for the backbone configuration.
 """
 from __future__ import annotations
@@ -78,16 +78,10 @@ class FrankensteinMLMModel(TextClassificationModel):
         ----------
         **kwargs
             Validated against :class:`FrankensteinClassifierSchema`
-            (``frankenstein_yaml``, ``preset``, ``device``, ``batch_size``,
-            ``num_epochs``, ``learning_rate``).
+            (``frankenstein_yaml``).
         """
         kwargs = self.validate_and_transform(kwargs)
         self.frankenstein_yaml = kwargs.get("frankenstein_yaml", "")
-        self.preset = kwargs.get("preset", "")
-        self.device = kwargs.get("device", "CPU")
-        self.batch_size = kwargs.get("batch_size", 16)
-        self.num_epochs = kwargs.get("num_epochs", 3)
-        self.learning_rate = kwargs.get("learning_rate", None)
 
         self.num_labels = None
         self.fitted = False
@@ -96,6 +90,7 @@ class FrankensteinMLMModel(TextClassificationModel):
         self._loaded_config = None
         self._tokenizer = None
         self._device = "cpu"
+        self._batch_size = 16
         self._label_column = None
         self._text_column_fn = lambda ds: _first_text_column(ds)
         self.x_data = None
