@@ -5,7 +5,7 @@ Wraps :class:`FrankensteinDecoder` (which exposes ``forward`` and
 ``TextToTextGenerationTask``. Forces ``model_class: frankensteindecoder`` (which
 forces ``mode: decoder``). Generation is autoregressive top-k sampling via the
 decoder's own ``generate`` method; tokenization/detokenization uses an HF
-tokenizer resolved from the YAML.
+tokenizer resolved from the config.
 """
 from __future__ import annotations
 
@@ -17,12 +17,12 @@ from DashAI.back.models.base_generative_model import BaseGenerativeModel
 
 from dashai_frankenstein.config import FrankensteinPassthroughSchema
 from dashai_frankenstein.engine import (
-    build_model_from_yaml,
+    build_model_from_json,
     resolve_device,
     resolve_tokenizer,
-    validate_training_yaml,
+    validate_training_json,
 )
-from dashai_frankenstein.models.base import resolve_yaml
+from dashai_frankenstein.models.base import resolve_json
 
 
 class FrankensteinDecoderSchema(FrankensteinPassthroughSchema):
@@ -33,14 +33,14 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
     """Frankenstein causal decoder for text-to-text generation.
 
     Builds a :class:`FrankensteinDecoder` backbone (all mixers/norms/activations
-    via the passthrough YAML) and exposes autoregressive generation. The decoder
+    via the passthrough config) and exposes autoregressive generation. The decoder
     is not fine-tuned by DashAI's generative-task flow; it is instantiated from
-    the YAML (or a checkpoint loaded via ``load``) and used for inference.
+    the config (or a checkpoint loaded via ``load``) and used for inference.
 
     Generation parameters (``max_new_tokens``, ``temperature``, ``top_k``) are
     surfaced on the schema as passthrough/convenience fields. Training
     parameters (``device``, ``batch_size``, ``num_epochs``, learning rate) are
-    read from the Frankenstein YAML's ``training_runtime`` / optimizer
+    read from the Frankenstein config's ``training_runtime`` / optimizer
     parameters — they are NOT DashAI form fields.
     """
 
@@ -72,7 +72,7 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
 
     def __init__(self, **kwargs) -> None:
         kwargs = self.validate_and_transform(kwargs)
-        self.frankenstein_yaml = kwargs.get("frankenstein_yaml", "")
+        self.frankenstein_json = kwargs.get("frankenstein_json", "")
         # Generation defaults (overridable via kwargs from the schema/runner).
         self.max_new_tokens = int(kwargs.get("max_new_tokens", 128))
         self.temperature = float(kwargs.get("temperature", 1.0))
@@ -89,11 +89,11 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
         if self._frank_model is not None:
             return
 
-        yaml_text = resolve_yaml(self)
-        validate_training_yaml(yaml_text)
+        json_text = resolve_json(self)
+        validate_training_json(json_text)
 
-        model, loaded, _ = build_model_from_yaml(
-            yaml_text, model_class_override="frankensteindecoder"
+        model, loaded, _ = build_model_from_json(
+            json_text, model_class_override="frankensteindecoder"
         )
         runtime = getattr(loaded, "training_runtime", {}) or {}
         device = resolve_device(runtime.get("device", "auto"))
@@ -103,14 +103,14 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
         if tokenizer is None:
             raise ValueError(
                 "A tokenizer is required for generation. Set "
-                "tokenizer.name_or_path (or base_model) in the Frankenstein YAML."
+                "tokenizer.name_or_path (or base_model) in the Frankenstein config."
             )
         # Keep embedding vocab consistent with the tokenizer (constraint).
         tok_vocab = len(tokenizer)
         if hasattr(model, "backbone") and hasattr(model.backbone, "emb"):
             if tok_vocab != int(model.backbone.emb.num_embeddings):
-                model, loaded, _ = build_model_from_yaml(
-                    yaml_text,
+                model, loaded, _ = build_model_from_json(
+                    json_text,
                     model_class_override="frankensteindecoder",
                     vocab_size_override=tok_vocab,
                 )

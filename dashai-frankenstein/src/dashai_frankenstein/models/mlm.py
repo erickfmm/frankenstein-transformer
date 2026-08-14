@@ -1,11 +1,11 @@
 """FrankensteinMLMModel — DashAI text-classification component over the encoder.
 
-Wraps the Frankenstein encoder backbone with the Strategy-A sequence-level
-classification head (see ``docs/dashai-plugin-audit.md`` §5.4). The encoder is
-built in-process via the Frankenstein engine; DashAI drives train/predict/save/
-load. The Frankenstein YAML (passed through the ``frankenstein_yaml`` field)
-remains the source of truth for the backbone configuration.
-"""
+    Wraps the Frankenstein encoder backbone with the Strategy-A sequence-level
+    classification head (see ``docs/dashai-plugin-audit.md`` §5.4). The encoder is
+    built in-process via the Frankenstein engine; DashAI drives train/predict/save/
+    load. The Frankenstein config (passed through the ``frankenstein_json`` field)
+    remains the source of truth for the backbone configuration.
+    """
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,7 +22,7 @@ from dashai_frankenstein.models.base import (
     classification_train,
     persistence_load,
     persistence_save,
-    resolve_yaml,
+    resolve_json,
 )
 
 
@@ -34,7 +34,7 @@ class FrankensteinMLMModel(TextClassificationModel):
     with ``TextClassificationTask``.
 
     The backbone is fully configurable through the passthrough
-    ``frankenstein_yaml`` field (all 33 attention mixers, 23 optimizers, 6
+    ``frankenstein_json`` field (all 33 attention mixers, 23 optimizers, 6
     norms, 43 activations are available). The classifier head is a full-precision
     ``nn.Linear`` over a pooled representation and is NOT BitNet-quantized.
     """
@@ -78,10 +78,10 @@ class FrankensteinMLMModel(TextClassificationModel):
         ----------
         **kwargs
             Validated against :class:`FrankensteinClassifierSchema`
-            (``frankenstein_yaml``).
+            (``frankenstein_json``).
         """
         kwargs = self.validate_and_transform(kwargs)
-        self.frankenstein_yaml = kwargs.get("frankenstein_yaml", "")
+        self.frankenstein_json = kwargs.get("frankenstein_json", "")
 
         self.num_labels = None
         self.fitted = False

@@ -20,24 +20,24 @@ from DashAI.back.models.base_model import BaseModel
 
 from dashai_frankenstein.config import FrankensteinClassifierSchema
 from dashai_frankenstein.engine import (
-    build_model_from_yaml,
+    build_model_from_json,
     resolve_device,
-    validate_training_yaml,
+    validate_training_json,
 )
-from dashai_frankenstein.models.base import resolve_yaml, _extract_lr_from_optimizer
+from dashai_frankenstein.models.base import resolve_json, _extract_lr_from_optimizer
 
 
 class FrankensteinViTClassifier(BaseModel):
     """Frankenstein Vision Transformer for image classification.
 
     Builds a :class:`FrankensteinViT` backbone (all attention mixers / norms /
-    activations available via the passthrough YAML) and fine-tunes its built-in
+    activations available via the passthrough config) and fine-tunes its built-in
     classification head. Compatible with ``ImageClassificationTask``.
 
     The number of classes is derived from the DashAI dataset's categorical
     label column and injected into the model config before construction. The
     image size defaults to 224 (override via ``model.image_height`` /
-    ``model.image_width`` in the YAML).
+    ``model.image_width`` in the config).
     """
 
     COMPATIBLE_COMPONENTS = ["ImageClassificationTask"]
@@ -67,7 +67,7 @@ class FrankensteinViTClassifier(BaseModel):
 
     def __init__(self, **kwargs) -> None:
         kwargs = self.validate_and_transform(kwargs)
-        self.frankenstein_yaml = kwargs.get("frankenstein_yaml", "")
+        self.frankenstein_json = kwargs.get("frankenstein_json", "")
 
         self.num_classes = None
         self.fitted = False
@@ -90,8 +90,8 @@ class FrankensteinViTClassifier(BaseModel):
 
         from dashai_frankenstein.adapters.dataset import image_dataloader
 
-        yaml_text = resolve_yaml(self)
-        validate_training_yaml(yaml_text)
+        json_text = resolve_json(self)
+        validate_training_json(json_text)
 
         # Resolve label mapping first (needed for model num_classes override).
         # image_dataloader returns (loader, label_to_idx, num_classes); we use
@@ -111,8 +111,8 @@ class FrankensteinViTClassifier(BaseModel):
                 "image_width": self._image_size,
             }
         }
-        model, loaded, _ = build_model_from_yaml(
-            yaml_text, model_class_override="frankenstein_vit", overrides=overrides,
+        model, loaded, _ = build_model_from_json(
+            json_text, model_class_override="frankenstein_vit", overrides=overrides,
         )
 
         runtime = getattr(loaded, "training_runtime", {}) or {}

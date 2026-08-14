@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dashai-frankenstein"
-version = "0.2.0"
+version = "0.2.1"
 description = "DashAI plugin that registers Frankenstein Transformer model classes (MLM encoder, causal decoder, ViT) as DashAI components."
 readme = "README.md"
 license = { text = "MIT" }

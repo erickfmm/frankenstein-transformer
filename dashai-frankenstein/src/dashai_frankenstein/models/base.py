@@ -19,37 +19,37 @@ import numpy as np
 from dashai_frankenstein.adapters import io as io_adapter
 from dashai_frankenstein.adapters.metrics import EpochMetricsHook
 from dashai_frankenstein.engine import (
-    build_model_from_yaml,
+    build_model_from_json,
     resolve_device,
     resolve_tokenizer,
-    validate_training_yaml,
+    validate_training_json,
 )
 
 log = logging.getLogger(__name__)
 
 
-def resolve_yaml(self) -> str:
-    """Return the effective Frankenstein YAML text for this component.
+def resolve_json(self) -> str:
+    """Return the effective Frankenstein JSON text for this component.
 
     Returns
     -------
     str
-        A Frankenstein training YAML document.
+        A Frankenstein training config as a single-line JSON string.
 
     Raises
     ------
     ValueError
-        If ``frankenstein_yaml`` is empty.
+        If ``frankenstein_json`` is empty.
     """
-    yaml_text = str(getattr(self, "frankenstein_yaml", "") or "").strip()
-    if not yaml_text:
+    json_text = str(getattr(self, "frankenstein_json", "") or "").strip()
+    if not json_text:
         raise ValueError(
-            "frankenstein_yaml is required. Build a YAML with the "
+            "frankenstein_json is required. Build a config with the "
             "Frankenstein YAML builder "
-            "(https://erickfmm.github.io/frankenstein-transformer/index.html) "
-            "and paste it into the field."
+            "(https://erickfmm.github.io/frankenstein-transformer/index.html), "
+            "convert it to a one-line JSON, and paste it into the field."
         )
-    return yaml_text
+    return json_text
 
 
 def _extract_lr_from_optimizer(
@@ -129,12 +129,12 @@ def classification_train(
     from dashai_frankenstein.adapters.dataset import tokenized_dataloader
 
     self.num_labels = int(num_labels)
-    yaml_text = resolve_yaml(self)
-    validate_training_yaml(yaml_text)
+    json_text = resolve_json(self)
+    validate_training_json(json_text)
 
     # Build model + config; tokenizer resolved to match the embedding vocab.
-    model, loaded, _ = build_model_from_yaml(
-        yaml_text,
+    model, loaded, _ = build_model_from_json(
+        json_text,
         model_class_override=model_class_override,
         num_labels=self.num_labels,
     )
@@ -153,14 +153,14 @@ def classification_train(
     if tokenizer is None:
         raise ValueError(
             "A tokenizer is required for text classification. Set "
-            "tokenizer.name_or_path (or base_model) in the Frankenstein YAML."
+            "tokenizer.name_or_path (or base_model) in the Frankenstein config."
         )
     # Ensure the model embedding matches the tokenizer vocabulary.
     if hasattr(model, "emb") and hasattr(model.emb, "num_embeddings"):
         tok_vocab = len(tokenizer)
         if tok_vocab != int(model.emb.num_embeddings):
-            model, loaded, _ = build_model_from_yaml(
-                yaml_text,
+            model, loaded, _ = build_model_from_json(
+                json_text,
                 model_class_override=model_class_override,
                 num_labels=self.num_labels,
                 vocab_size_override=tok_vocab,
@@ -294,7 +294,7 @@ def persistence_load(cls, filename: str):
     """DashAI ``load`` -> rebuild from a Frankenstein checkpoint bundle."""
     model, loaded, tokenizer, extra = io_adapter.load_run(filename)
     instance = cls(
-        frankenstein_yaml="",
+        frankenstein_json="",
     )
     instance._frank_model = model
     instance._loaded_config = loaded

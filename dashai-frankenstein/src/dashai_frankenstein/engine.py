@@ -3,7 +3,13 @@
 This wraps :mod:`src.engine` (the Phase-0 non-CLI engine in
 ``frankenstein-transformer``) so the DashAI adapter components do not import
 Frankenstein internals directly. All Frankenstein interaction — model
-construction, checkpoint save/load, and YAML parsing — goes through here.
+construction, checkpoint save/load, and config parsing — goes through here.
+
+The user-facing field carries a **single-line JSON** string (the DashAI form
+field is single-line). It is parsed with ``json.loads`` here, then re-serialized
+to a ``.yaml`` temp file consumed by Frankenstein's ``load_training_config``
+(which reads YAML). JSON is a subset of YAML, so the schema and loader are
+agnostic to the input format.
 
 If Frankenstein is not installed, the import fails loudly with a clear message.
 """
@@ -37,7 +43,7 @@ __all__ = [
     "TrainingConfig",
     "FrankensteinModelConfig",
     "build_model",
-    "build_model_from_yaml",
+    "build_model_from_json",
     "resolve_tokenizer",
     "load_checkpoint",
     "resolve_torch_device",
@@ -45,7 +51,7 @@ __all__ = [
     "load_training_config",
     "resolve_schema",
     "resolve_device",
-    "validate_training_yaml",
+    "validate_training_json",
 ]
 
 
@@ -79,29 +85,29 @@ def resolve_device(label: str) -> str:
     return resolve_torch_device(label)
 
 
-def validate_training_yaml(yaml_text: str) -> None:
-    """Validate a Frankenstein training YAML before launching train/inference.
+def validate_training_json(json_text: str) -> None:
+    """Validate a Frankenstein training config (one-line JSON) before launch.
 
-    Thin facade over :func:`dashai_frankenstein.validate.validate_yaml` so the
+    Thin facade over :func:`dashai_frankenstein.validate.validate_json` so the
     engine remains the single entry point for Frankenstein interaction.
 
     Parameters
     ----------
-    yaml_text : str
-        A full Frankenstein training YAML document.
+    json_text : str
+        A full Frankenstein training config as a single-line JSON string.
 
     Raises
     ------
     ValueError
-        If the YAML fails schema or config-loader validation.
+        If the JSON fails schema or config-loader validation.
     """
-    from dashai_frankenstein.validate import validate_yaml
+    from dashai_frankenstein.validate import validate_json
 
-    validate_yaml(yaml_text)
+    validate_json(json_text)
 
 
-def build_model_from_yaml(
-    frankenstein_yaml: str,
+def build_model_from_json(
+    frankenstein_json: str,
     *,
     model_class_override: Optional[str] = None,
     num_labels: Optional[int] = None,
@@ -109,31 +115,32 @@ def build_model_from_yaml(
     vocab_size_override: Optional[int] = None,
     overrides: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Any, Any, Any]:
-    """Build a Frankenstein model + config + tokenizer from a YAML payload.
+    """Build a Frankenstein model + config + tokenizer from a JSON payload.
 
-    The YAML is written to a temp file and validated by Frankenstein's own
-    ``load_training_config`` (so the Frankenstein schema stays the source of
-    truth). When ``num_labels`` is provided the encoder classification head
-    (Strategy A) is enabled. When ``vocab_size_override`` is provided it is
-    injected as ``model.dims.vocab_size`` so the embedding matches the tokenizer
+    The JSON is parsed, merged with any overrides, written to a ``.yaml`` temp
+    file, and validated by Frankenstein's own ``load_training_config`` (so the
+    Frankenstein schema stays the source of truth). When ``num_labels`` is
+    provided the encoder classification head (Strategy A) is enabled. When
+    ``vocab_size_override`` is provided it is injected as
+    ``model.dims.vocab_size`` so the embedding matches the tokenizer
     (Frankenstein constraint: vocab_size must match the tokenizer's vocab).
     Arbitrary nested keys can be injected via ``overrides`` (e.g. ViT
     ``model.num_classes`` / ``model.image_height``).
 
     Parameters
     ----------
-    frankenstein_yaml : str
-        A full Frankenstein training YAML document.
+    frankenstein_json : str
+        A full Frankenstein training config as a single-line JSON string.
     model_class_override : str, optional
         Force a ``model_class`` (e.g. ``"frankensteindecoder"``).
     num_labels : int, optional
         Number of classes for the encoder classification head.
     tokenizer_name_or_path : str, optional
-        Injected as ``tokenizer.name_or_path`` when the YAML omits it.
+        Injected as ``tokenizer.name_or_path`` when the JSON omits it.
     vocab_size_override : int, optional
         Injected as ``model.dims.vocab_size`` to match the resolved tokenizer.
     overrides : dict, optional
-        Nested dict deep-merged into the parsed YAML before validation. Use
+        Nested dict deep-merged into the parsed JSON before validation. Use
         dotted-free nested form, e.g. ``{"model": {"num_classes": 10}}``.
 
     Returns
@@ -143,16 +150,15 @@ def build_model_from_yaml(
         :class:`LoadedTrainingConfig` and ``tokenizer`` may be ``None`` for
         vision/decoder paths that build lazily.
     """
+    import json
     import os
     import tempfile
 
     parsed: Dict[str, Any]
-    if isinstance(frankenstein_yaml, dict):
-        parsed = dict(frankenstein_yaml)
+    if isinstance(frankenstein_json, dict):
+        parsed = dict(frankenstein_json)
     else:
-        import yaml
-
-        parsed = yaml.safe_load(frankenstein_yaml) or {}
+        parsed = json.loads(frankenstein_json) or {}
 
     if model_class_override:
         parsed["model_class"] = model_class_override
@@ -181,7 +187,7 @@ def build_model_from_yaml(
     model = build_model(loaded.model_class, loaded.model_config, num_labels=num_labels)
 
     # The tokenizer is resolved by the model component (HF AutoTokenizer from the
-    # YAML's tokenizer.name_or_path / base_model), not here — keeps the facade
+    # JSON's tokenizer.name_or_path / base_model), not here — keeps the facade
     # focused on model construction and the vocab constraint.
     tokenizer: Any = None
 

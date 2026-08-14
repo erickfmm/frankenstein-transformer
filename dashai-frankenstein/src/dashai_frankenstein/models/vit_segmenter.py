@@ -19,11 +19,11 @@ from DashAI.back.models.base_model import BaseModel
 
 from dashai_frankenstein.config import FrankensteinClassifierSchema
 from dashai_frankenstein.engine import (
-    build_model_from_yaml,
+    build_model_from_json,
     resolve_device,
-    validate_training_yaml,
+    validate_training_json,
 )
-from dashai_frankenstein.models.base import resolve_yaml, _extract_lr_from_optimizer
+from dashai_frankenstein.models.base import resolve_json, _extract_lr_from_optimizer
 
 
 class FrankensteinViTSegmenter(BaseModel):
@@ -31,7 +31,7 @@ class FrankensteinViTSegmenter(BaseModel):
 
     Builds a :class:`FrankensteinViT` backbone and fine-tunes its segmentation
     head. Compatible with :class:`SegmentationTask`. The number of segmentation
-    classes (``num_seg_classes``) is taken from the Frankenstein YAML.
+    classes (``num_seg_classes``) is taken from the Frankenstein config.
     """
 
     COMPATIBLE_COMPONENTS = ["SegmentationTask"]
@@ -61,7 +61,7 @@ class FrankensteinViTSegmenter(BaseModel):
 
     def __init__(self, **kwargs) -> None:
         kwargs = self.validate_and_transform(kwargs)
-        self.frankenstein_yaml = kwargs.get("frankenstein_yaml", "")
+        self.frankenstein_json = kwargs.get("frankenstein_json", "")
 
         self.num_seg_classes = None
         self.fitted = False
@@ -86,8 +86,8 @@ class FrankensteinViTSegmenter(BaseModel):
 
         from dashai_frankenstein.adapters.dataset import image_dataloader
 
-        yaml_text = resolve_yaml(self)
-        validate_training_yaml(yaml_text)
+        json_text = resolve_json(self)
+        validate_training_json(json_text)
 
         img_size = self._image_size
         overrides = {
@@ -96,8 +96,8 @@ class FrankensteinViTSegmenter(BaseModel):
                 "image_width": img_size,
             }
         }
-        model, loaded, _ = build_model_from_yaml(
-            yaml_text, model_class_override="frankenstein_vit", overrides=overrides,
+        model, loaded, _ = build_model_from_json(
+            json_text, model_class_override="frankenstein_vit", overrides=overrides,
         )
         cfg = loaded.model_config
         self.num_seg_classes = int(getattr(cfg, "num_seg_classes", 2))

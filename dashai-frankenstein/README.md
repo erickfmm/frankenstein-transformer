@@ -15,29 +15,35 @@ save, and load them from the DashAI UI.
 | `frankenstein_vit_seg` | `FrankensteinViTSegmenter` | `BaseModel` | `SegmentationTask` |
 | `segmentation_task` | `SegmentationTask` | `BaseTask` | (new task provided by this plugin) |
 
-## Schema (v1: passthrough YAML)
+## Schema (v1: passthrough JSON)
 
 Each model exposes a minimal pydantic schema with a **single user-facing field**:
-`frankenstein_yaml`, a string containing a full Frankenstein training YAML. The
-Frankenstein JSON Schema is the source of truth — the YAML is validated against
-it (`additionalProperties: false` + enums) and Frankenstein's config loader
-(cross-component constraints) **before** any train/inference launches. Errors
-surface to the DashAI user as a readable `ValueError`.
+`frankenstein_json`, a string containing a full Frankenstein training config as a
+**single-line JSON**. The Frankenstein JSON Schema is the source of truth — the
+JSON is validated against it (`additionalProperties: false` + enums) and
+Frankenstein's config loader (cross-component constraints) **before** any
+train/inference launches. Errors surface to the DashAI user as a readable
+`ValueError`.
 
 Build your YAML with the
-[Frankenstein YAML builder](https://erickfmm.github.io/frankenstein-transformer/index.html)
-and paste it into the field.
+[Frankenstein YAML builder](https://erickfmm.github.io/frankenstein-transformer/index.html),
+**convert it to a one-line JSON string**, and paste it into the field:
+
+```bash
+python -c "import yaml,json,sys; print(json.dumps(yaml.safe_load(open(sys.argv[1]))))" my_config.yaml
+```
 
 Training parameters (`device`, `batch_size`, `num_epochs`, learning rate) are read
-from the YAML's `training_runtime` block and optimizer parameters — they are NOT
+from the config's `training_runtime` block and optimizer parameters — they are NOT
 separate DashAI form fields. Generation parameters (`max_new_tokens`,
 `temperature`, `top_k`) on the decoder component are kept as DashAI fields (they
 are inference-time, not training-time, and the Frankenstein schema has no home
 for them).
 
 > **Note:** The field is a single-line text input (DashAI does not yet support
-> a multiline textarea for plugin schema fields). A true multiline textarea is
-> tracked as a future upstream improvement to DashAI.
+> a multiline textarea for plugin schema fields), which is why the config is
+> passed as a one-line JSON string rather than a multiline YAML document. A
+> true multiline textarea is tracked as a future upstream improvement to DashAI.
 
 ## Install
 

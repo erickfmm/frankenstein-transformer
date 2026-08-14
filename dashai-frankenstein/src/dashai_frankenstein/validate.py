@@ -1,4 +1,4 @@
-"""Pre-launch validation of the Frankenstein training YAML.
+"""Pre-launch validation of the Frankenstein training config (one-line JSON).
 
 The Frankenstein JSON Schema (``src/schema.yaml`` + ``src/schema/*.yaml``) is the
 single source of truth: it enforces ``additionalProperties: false`` and the enum
@@ -6,11 +6,13 @@ ranges. The config loader (:func:`src.training.config_loader.load_training_confi
 adds cross-component constraints (``hidden_size % num_heads``, BitNet flags,
 optimizer presence, task/model_class compatibility, …).
 
-This module runs both checks on a raw YAML string and raises a single
-:class:`ValueError` with a concatenated, user-readable message on failure.
+This module runs both checks on a raw JSON string (single-line, as accepted by
+the DashAI single-line text field) and raises a single :class:`ValueError` with
+a concatenated, user-readable message on failure.
 """
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from typing import Any, Dict
@@ -44,13 +46,14 @@ def _frankenstein_schema_path() -> str:
     return os.path.join(os.path.dirname(os.path.abspath(src.__file__)), "schema.yaml")
 
 
-def validate_yaml(yaml_text: str) -> None:
-    """Validate a Frankenstein training YAML against schema + loader.
+def validate_json(json_text: str) -> None:
+    """Validate a Frankenstein training config (one-line JSON) against schema + loader.
 
     Runs three stages, each prefixed in the error message so the user knows
     which check failed:
 
-    1. ``yaml.safe_load`` — catches YAML syntax errors.
+    1. ``json.loads`` — catches JSON syntax errors (the DashAI field is
+       single-line, so the config is expected as a one-line JSON string).
     2. ``jsonschema.validate`` against the resolved Frankenstein JSON Schema —
        catches ``additionalProperties: false`` and enum violations.
     3. ``load_training_config`` on a temp file — catches cross-component
@@ -61,28 +64,30 @@ def validate_yaml(yaml_text: str) -> None:
 
     Parameters
     ----------
-    yaml_text : str
-        A full Frankenstein training YAML document.
+    json_text : str
+        A full Frankenstein training config as a single-line JSON string.
 
     Raises
     ------
     ValueError
         If any stage fails, with a message identifying the failing stage.
     """
-    if not yaml_text or not str(yaml_text).strip():
-        raise ValueError("frankenstein_yaml is empty — provide a full training YAML.")
+    if not json_text or not str(json_text).strip():
+        raise ValueError(
+            "frankenstein_json is empty — provide a one-line JSON config."
+        )
 
-    text = str(yaml_text)
+    text = str(json_text)
 
-    # Stage 1 — YAML syntax.
+    # Stage 1 — JSON syntax.
     try:
-        parsed: Dict[str, Any] = yaml.safe_load(text) or {}
-    except yaml.YAMLError as exc:
-        raise ValueError(f"[YAML parse] {exc}") from exc
+        parsed: Dict[str, Any] = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"[JSON parse] {exc}") from exc
 
     if not isinstance(parsed, dict):
         raise ValueError(
-            f"[YAML parse] Top-level YAML node must be a mapping, got "
+            f"[JSON parse] Top-level JSON node must be an object, got "
             f"{type(parsed).__name__}."
         )
 
