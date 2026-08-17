@@ -293,9 +293,9 @@ reglu & Gated & $\text{ReLU}(xW_g)\odot(xW_u)\,W_d$ & \textbf{yes} & \citep{shaz
 
 \subsection{Embedding Variants}
 
-Table~\ref{tab:all-embeddings} catalogs the four embedding methods supported by the codebase: two positional encoding schemes and two structural embedding optimizations.
+Table~\ref{tab:all-embeddings} catalogs the positional encodings and structural embedding optimizations supported by the codebase. The 11 positional encodings are configured via the model-wide \texttt{positional\_encoding} field (see Annex~12 for full formulations); the two structural optimizations are controlled by their own flags.
 
-\small
+\footnotesize
 \begin{longtable}{p{3.0cm}p{7.5cm}p{3.5cm}}
 \toprule
 \textbf{Method} & \textbf{Description} & \textbf{Reference} \\
@@ -309,11 +309,25 @@ Table~\ref{tab:all-embeddings} catalogs the four embedding methods supported by 
 \multicolumn{3}{r}{\textit{continued on next page}} \\
 \endfoot
 \bottomrule
-\caption{Embedding variants. $V$ = vocabulary size, $H$ = hidden size, $R$ = factorized intermediate dimension.}
+\caption{Embedding variants. $V$ = vocabulary size, $H$ = hidden size, $R$ = factorized intermediate dimension. The first 11 rows are positional encodings (Annex~12); the last two are structural embedding optimizations.}
 \label{tab:all-embeddings}
 \endlastfoot
-RoPE & Rotary Position Embedding; applies frequency-based rotation to query and key vectors, encoding relative position through inner product geometry & \citep{su_rope_2024} \\
-HoPE & Hyperbolic Rotary Positional Encoding; Lorentz-inspired rotation using hyperbolic functions; enforces monotonic attention decay with distance; RoPE is a special case & \citep{dai_hope_2025} \\
+\multicolumn{3}{c}{\textbf{Positional Encodings (11)}} \\
+\midrule
+RoPE & Rotary Position Embedding; frequency-based rotation of Q/K, encoding relative position via inner-product geometry & \citep{su_rope_2024} \\
+HoPE & Hyperbolic Rotary Positional Encoding; Lorentz-inspired rotation using hyperbolic functions; monotonic attention decay with distance; RoPE is a special case & \citep{dai_hope_2025} \\
+NoPE & No Positional Encoding; model learns position implicitly from causal mask; outperforms explicit PE on length generalization & \citep{kazemnejad_nope_2023} \\
+ALiBi & Attention with Linear Biases; static distance-proportional penalty on attention scores; enables length extrapolation & \citep{press_alibi_2022} \\
+PaPE & Parabolic Position Encoding; parabolic basis functions concatenated to Q/K; vision-centric, $n$-D, extrapolatable & \citep{ohrstrom_pape_2026} \\
+PaPE-Efficient & Pure-PyTorch PaPE; no custom Triton kernels, same math & \citep{ohrstrom_pape_2026} \\
+PaPE-RI & Rotation-invariant PaPE (PaPE-RI) & \citep{ohrstrom_pape_2026} \\
+Sinusoidal Absolute & Fixed sinusoidal added to embeddings (original Transformer) & \citep{vaswani_attention_2017} \\
+Sinusoidal Rotary & Sinusoidal frequencies as a rotation matrix on Q/K & \citep{vaswani_attention_2017} \\
+Learned Absolute & Learnable parameter matrix added to embeddings & \citep{vaswani_attention_2017} \\
+None & Null module; no positional information injected & --- \\
+\midrule
+\multicolumn{3}{c}{\textbf{Structural Embedding Optimizations (2)}} \\
+\midrule
 Factorized Embeddings & Decomposes $V \times H$ embedding matrix into $V \times R$ and $R \times H$ factors; reduces parameters from $\mathcal{O}(VH)$ to $\mathcal{O}(V R + R H)$; controlled by \texttt{factorized\_embedding\_dim} & (internal) \\
 Embedding Convolution & Depthwise Conv1d applied over the embedding stream before the first transformer block; provides lightweight local-context filtering; controlled by \texttt{embedding\_conv\_kernel} & (internal) \\
 \bottomrule

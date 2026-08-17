@@ -95,6 +95,11 @@ class GaussianMixtureAttention(nn.Module):
             (default 8), ``gma_routing_dim`` (default ``head_dim``),
             ``gma_epsilon`` (default 1e-6), ``gma_sigma_eps`` (default
             1e-4) and ``gma_init_mean_std`` (default 1.0).
+        pos_encoder: Shared positional encoding module applied to the
+            routing query/key tensors. If ``None``, no PE is applied.
+            Note: GMA does not materialise an ``(S, S)`` attention matrix,
+            so score-bias PEs (e.g. ALiBi) are not applicable; only
+            rotation-type PEs (rope/hope) affect the routing space.
 
     Attributes:
         hidden_size: Input embedding dimensionality.
@@ -120,6 +125,9 @@ class GaussianMixtureAttention(nn.Module):
         dropout: Dropout layer applied to the responsibilities.
         mode: ``"encoder"`` (bidirectional) or ``"decoder"`` (causal via
             prefix cumsums).
+        pos_encoder: Shared positional encoding module (or ``None``).
+        pe_type: Positional encoding type string (lowercased).
+        use_pe: Whether PE is enabled for this mixer.
 
     Raises:
         ValueError: If ``hidden_size`` is not divisible by ``num_heads``,
@@ -127,7 +135,7 @@ class GaussianMixtureAttention(nn.Module):
             is non-positive.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -198,6 +206,9 @@ class GaussianMixtureAttention(nn.Module):
             torch.tensor(math.log(2.0 * math.pi), dtype=torch.float32),
             persistent=False,
         )
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "gma_attn_use_pe", True))
 
     # ------------------------------------------------------------------
     # Core GMA primitives
@@ -258,13 +269,18 @@ class GaussianMixtureAttention(nn.Module):
     # ------------------------------------------------------------------
     # Forward
     # ------------------------------------------------------------------
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute Gaussian Mixture Attention.
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
-            logical_layer_idx: Unused; accepted for interface compatibility
-                with the project's attention-mixer contract.
+            logical_layer_idx: Logical layer index passed to the positional
+                encoder. Defaults to ``0`` if ``None``.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder`` for this forward call. Only rotation-type
+                PEs (rope/hope) affect the routing space; score-bias PEs
+                (e.g. ALiBi) are no-ops since GMA does not materialise an
+                attention matrix.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -272,11 +288,20 @@ class GaussianMixtureAttention(nn.Module):
         bsz, seq_len, _ = x.shape
         H, K = self.num_heads, self.num_components
         d_r, d_v = self.routing_dim, self.head_dim
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
 
         # --- Projections ---------------------------------------------------
         q = self.q_proj(x).view(bsz, seq_len, H, d_r)          # (B, N, H, d_r)
         k = self.k_proj(x).view(bsz, seq_len, H, d_r)          # (B, N, H, d_r)
         v = self.v_proj(x).view(bsz, seq_len, H, d_v)          # (B, N, H, d_v)
+
+        # --- Positional encoding on routing tensors (rotation only) -------
+        from ..common import apply_pe_to_qk
+        q_t = q.transpose(1, 2)                               # (B, H, N, d_r)
+        k_t = k.transpose(1, 2)
+        q_t, k_t = apply_pe_to_qk(pe, self.pe_type, q_t, k_t, x, logical_layer_idx or 0, self.use_pe)
+        q = q_t.transpose(1, 2)
+        k = k_t.transpose(1, 2)
 
         # --- Responsibilities ----------------------------------------------
         gamma_q = self._responsibilities(q)                    # (B, N, H, K)

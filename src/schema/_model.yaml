@@ -33,6 +33,10 @@ properties:
     $ref: "_model/_norm.yaml"
   embedding:
     $ref: "_model/_embedding.yaml"
+  positional_encoding:
+    $ref: "_model/_positional_encoding.yaml#/properties/positional_encoding"
+  positional_encoding_parameters:
+    $ref: "_model/_positional_encoding.yaml#/properties/positional_encoding_parameters"
   attention:
     type: object
     description: |-

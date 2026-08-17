@@ -6,6 +6,10 @@ properties:
     title: "Titan Positional Encoding"
     title_es: "Codificación Posicional Titan"
     description: |-
+      **Legacy.** This titan-specific `positional_encoding` is superseded by the
+      model-level `model.positional_encoding` enum (see `_positional_encoding.yaml`).
+      Kept for backward compatibility. New configs should use the model-level enum
+      + `positional_encoding_parameters` block instead.
       Positional encoding method for `titan_attn` layers. Provides position information to attention heads.
       - `hope`: Higher-Order Position Encoding — analytic formulation with tunable base frequency (`hope_base`) and damping (`hope_damping`) for controlling long-range vs. local attention behavior.
       - `rope`: Rotary Position Embedding — standard in Llama, GPT-3.5, Mistral. Better long-range generalization via `rope_base` and `rope_scaling`. RoPE applies rotation to query and key vectors based on token position, encoding relative positions in the dot product.
@@ -25,7 +29,7 @@ properties:
       - `hope` con `hope_base=100000.0, hope_damping=0.5`: Configuración HoPE de largo alcance. Base alta extiende longitud de onda para discriminación de posiciones distantes, amortiguación suave mantiene sensibilidad a tokens lejanos. Bueno para QA de documentos, tareas de razonamiento.
       - `rope` con `rope_base=10000.0, rope_scaling=1.0`: RoPE estándar (como Llama). Funciona bien para la mayoría de longitudes de secuencia. Entrenando en secuencias de hasta 512 tokens, las maneja naturalmente.
       - `rope` con `rope_base=100000.0, rope_scaling=4.0`: RoPE de contexto extendido. Entrena en secuencias de 512 tokens, infiere en hasta 2048 tokens. Base más alta + factor de escalado permite extrapolación de ventana de contexto sin reentrenar en secuencias de longitud completa.
-    enum: [hope, rope]
+    enum: [hope, rope, nope, alibi, pape, pape_efficient, pape_ri, sinusoidal_absolute, sinusoidal_rotary, learned_absolute, none]
     examples: [hope, rope]
   use_hope:
     type: boolean

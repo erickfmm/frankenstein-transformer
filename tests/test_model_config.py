@@ -78,6 +78,62 @@ class FrankensteinModelConfigDefaultsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             FrankensteinModelConfig(**_minimal_dict(positional_encoding="sinusoidal"))
 
+    def test_nope_positional_encoding_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="nope"))
+        self.assertEqual(cfg.positional_encoding, "nope")
+
+    def test_alibi_positional_encoding_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="alibi"))
+        self.assertEqual(cfg.positional_encoding, "alibi")
+        self.assertEqual(cfg.alibi_num_heads, cfg.num_heads)
+
+    def test_pape_positional_encoding_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="pape"))
+        self.assertEqual(cfg.positional_encoding, "pape")
+        self.assertEqual(cfg.pape_num_parabolas, 4)
+
+    def test_pape_efficient_positional_encoding_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="pape_efficient"))
+        self.assertEqual(cfg.positional_encoding, "pape_efficient")
+
+    def test_pape_ri_positional_encoding_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="pape_ri"))
+        self.assertEqual(cfg.positional_encoding, "pape_ri")
+
+    def test_sinusoidal_absolute_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="sinusoidal_absolute"))
+        self.assertEqual(cfg.positional_encoding, "sinusoidal_absolute")
+
+    def test_sinusoidal_rotary_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="sinusoidal_rotary"))
+        self.assertEqual(cfg.positional_encoding, "sinusoidal_rotary")
+
+    def test_learned_absolute_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="learned_absolute"))
+        self.assertEqual(cfg.positional_encoding, "learned_absolute")
+
+    def test_none_positional_encoding_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="none"))
+        self.assertEqual(cfg.positional_encoding, "none")
+
+    def test_pape_num_parabolas_validation(self):
+        with self.assertRaises(ValueError):
+            FrankensteinModelConfig(**_minimal_dict(positional_encoding="pape", pape_num_parabolas=0))
+
+    def test_pape_num_positions_validation(self):
+        with self.assertRaises(ValueError):
+            FrankensteinModelConfig(**_minimal_dict(positional_encoding="pape", pape_num_positions=0))
+
+    def test_per_mixer_use_pe_defaults(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict())
+        self.assertTrue(cfg.standard_attn_use_pe)
+        self.assertTrue(cfg.titan_attn_use_pe)
+        self.assertFalse(cfg.retnet_use_pe)
+        self.assertFalse(cfg.mamba_use_pe)
+        self.assertFalse(cfg.ode_use_pe)
+        self.assertFalse(cfg.gla_attn_use_pe)
+        self.assertTrue(cfg.gated_softmax_attn_use_pe)
+
     def test_encoder_mode_accepted(self):
         cfg = FrankensteinModelConfig(**_minimal_dict(mode="encoder"))
         self.assertEqual(cfg.mode, "encoder")

@@ -27,6 +27,8 @@ Reference:
     arXiv:2605.22791. NVIDIA. Code: NVlabs/GatedDeltaNet-2.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import torch
@@ -98,12 +100,13 @@ class GatedDeltaNet2Attention(nn.Module):
         arXiv:2605.22791. NVIDIA.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         """Initialize GatedDeltaNet2Attention.
 
         Args:
             config: Model configuration object. See class docstring for
                 required attributes.
+            pos_encoder: Optional shared positional encoding module.
 
         Raises:
             ValueError: If hidden_size is not divisible by num_heads.
@@ -135,7 +138,11 @@ class GatedDeltaNet2Attention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "gated_deltanet2_attn_use_pe", False))
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute Gated DeltaNet-2 attention over the input sequence.
 
         Processes the sequence token-by-token with a gated delta-rule
@@ -151,10 +158,14 @@ class GatedDeltaNet2Attention(nn.Module):
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
             logical_layer_idx: Unused; accepted for interface
                 compatibility with other attention mixers.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, _ = x.shape
 
         q = F.normalize(
@@ -170,6 +181,11 @@ class GatedDeltaNet2Attention(nn.Module):
         w = torch.sigmoid(self.write_proj(x)).view(
             bsz, seq_len, self.num_heads, self.head_dim
         )
+
+        if self.use_pe and pe is not None:
+            from ..common import apply_pe_to_qk
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+            k = F.normalize(k, dim=-1)
 
         # Channel-wise log-decay in fp32: g = base - softplus(delta); alpha = exp(g)
         log_decay = (

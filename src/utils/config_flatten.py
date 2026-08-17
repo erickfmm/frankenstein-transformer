@@ -36,6 +36,11 @@ The hierarchical schema groups keys as:
                     kernel_size, seed}
         gma:        {num_components, routing_dim, epsilon, sigma_eps,
                     init_mean_std}
+      positional_encoding: string enum (rope, hope, nope, alibi, pape, ...)
+      positional_encoding_parameters: {rope: {base, scaling}, hope: {base, damping},
+                         pape: {num_parabolas, num_positions, rotation_invariant},
+                         sinusoidal: {max_len, base, scale}, learned: {max_len, init_std},
+                         use_pe: {<mixer>: bool, ...}}
       # flat keys that were never moved (use_moe, use_bitnet, ffn_*, ode_*, ...)
 
 The flattener is tolerant: if the input ``model_data`` is already flat
@@ -136,7 +141,7 @@ def _is_nested_shape(model_data: Dict[str, Any]) -> bool:
     dict), ``mhc`` (as a dict) or ``residuals`` (as a dict) and are
     passed through unchanged.
     """
-    for key in ("dims", "norm", "embedding", "attention", "mhc", "residuals"):
+    for key in ("dims", "norm", "embedding", "attention", "mhc", "residuals", "positional_encoding_parameters"):
         if key in model_data and isinstance(model_data[key], dict):
             return True
     return False
@@ -231,6 +236,54 @@ def _flatten_titan(titan: Dict[str, Any], out: Dict[str, Any]) -> None:
             out["rope_scaling"] = rope["scaling"]
 
 
+def _flatten_pe_parameters(pe_params: Dict[str, Any], out: Dict[str, Any]) -> None:
+    """Flatten the ``model.positional_encoding_parameters`` sub-tree into flat keys."""
+    rope = pe_params.get("rope")
+    if isinstance(rope, dict):
+        if "base" in rope:
+            out["rope_base"] = rope["base"]
+        if "scaling" in rope:
+            out["rope_scaling"] = rope["scaling"]
+
+    hope = pe_params.get("hope")
+    if isinstance(hope, dict):
+        if "base" in hope:
+            out["hope_base"] = hope["base"]
+        if "damping" in hope:
+            out["hope_damping"] = hope["damping"]
+
+    pape = pe_params.get("pape")
+    if isinstance(pape, dict):
+        if "num_parabolas" in pape:
+            out["pape_num_parabolas"] = pape["num_parabolas"]
+        if "num_positions" in pape:
+            out["pape_num_positions"] = pape["num_positions"]
+        if "rotation_invariant" in pape:
+            out["pape_rotation_invariant"] = pape["rotation_invariant"]
+
+    sinusoidal = pe_params.get("sinusoidal")
+    if isinstance(sinusoidal, dict):
+        if "max_len" in sinusoidal:
+            out["sinusoidal_max_len"] = sinusoidal["max_len"]
+        if "base" in sinusoidal:
+            out["sinusoidal_base"] = sinusoidal["base"]
+        if "scale" in sinusoidal:
+            out["sinusoidal_scale"] = sinusoidal["scale"]
+
+    learned = pe_params.get("learned")
+    if isinstance(learned, dict):
+        if "max_len" in learned:
+            out["learned_max_len"] = learned["max_len"]
+        if "init_std" in learned:
+            out["learned_init_std"] = learned["init_std"]
+
+    use_pe = pe_params.get("use_pe")
+    if isinstance(use_pe, dict):
+        for mixer_name, flag in use_pe.items():
+            flat_key = f"{mixer_name}_use_pe"
+            out[flat_key] = flag
+
+
 def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a (possibly nested) ``model:`` block to flat FrankensteinModelConfig kwargs.
 
@@ -255,7 +308,7 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
 
     # Pass through the staying-flat keys (use_moe, use_bitnet, ffn_*, ...).
     # We do this by copying everything that is NOT a known grouping key.
-    grouping_keys = {"dims", "norm", "embedding", "attention", "mhc", "residuals"}
+    grouping_keys = {"dims", "norm", "embedding", "attention", "mhc", "residuals", "positional_encoding_parameters"}
     for key, value in model_data.items():
         if key not in grouping_keys:
             out[key] = value
@@ -308,6 +361,13 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
     attn = model_data.get("attention")
     if isinstance(attn, dict):
         _flatten_attention(attn, out)
+
+    if "positional_encoding" in model_data:
+        out["positional_encoding"] = model_data["positional_encoding"]
+
+    pe_params = model_data.get("positional_encoding_parameters")
+    if isinstance(pe_params, dict):
+        _flatten_pe_parameters(pe_params, out)
 
     # mhc.* — Manifold-Constrained Hyper-Connections (arXiv:2512.24880).
     mhc = model_data.get("mhc")

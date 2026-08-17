@@ -187,8 +187,127 @@ class FrankensteinModelConfig:
         use_hope: Legacy toggle for HoPE. Automatically aligned with
             ``positional_encoding`` in ``__post_init__``. Default: True.
         positional_encoding: Explicit positional encoding scheme. One of
-            ``"hope"`` or ``"rope"``. If None, inferred from ``use_hope``.
-            Default: None.
+            ``"rope"`` (Rotary Position Embedding), ``"hope"`` (Hybrid
+            Positional Encoding), ``"nope"`` (No Position Embedding),
+            ``"alibi"`` (Attention with Linear Biases), ``"pape"``
+            (Parabola Attention Positional Encoding), ``"pape_efficient"``
+            (efficient PaPE variant), ``"pape_ri"`` (rotation-invariant
+            PaPE), ``"sinusoidal_absolute"`` (absolute sinusoidal), 
+            ``"sinusoidal_rotary"`` (rotary sinusoidal),
+            ``"learned_absolute"`` (learned absolute position embedding), or
+            ``"none"`` (explicitly disabled). If None, inferred from
+            ``use_hope``. Default: None.
+        alibi_num_heads: Number of heads used by ALiBi biases. Defaults to
+            ``num_heads`` in ``__post_init__`` when None. Default: None.
+        pape_num_parabolas: Number of parabola segments used by PaPE and
+            its variants (``pape``, ``pape_efficient``, ``pape_ri``). Must
+            be >= 1. Default: 4.
+        pape_num_positions: Number of positional dimensions for PaPE. Use
+            ``1`` for 1-D language sequences and ``2`` for 2-D vision
+            (row/column). Must be >= 1. Default: 1.
+        pape_rotation_invariant: If True, use the rotation-invariant PaPE
+            variant regardless of the ``positional_encoding`` value.
+            Default: False.
+        sinusoidal_max_len: Maximum sequence length for precomputed
+            sinusoidal positional encodings. Default: 512.
+        sinusoidal_base: Base wavelength of the sinusoidal encoding
+            (``10000`` in the original Transformer paper). Default: 10000.0.
+        sinusoidal_scale: Global scaling factor applied to sinusoidal
+            frequencies. Default: 1.0.
+        learned_max_len: Maximum sequence length for the learned absolute
+            positional embedding table. Default: 512.
+        learned_init_std: Initialisation standard deviation for the
+            learned absolute positional embedding. Default: 0.02.
+        standard_attn_use_pe: Whether ``standard_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        titan_attn_use_pe: Whether ``titan_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        sigmoid_attn_use_pe: Whether ``sigmoid_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        gated_softmax_attn_use_pe: Whether ``gated_softmax_attn`` layers
+            consume the model-wide positional encoding. Default: True.
+        gqa_attn_use_pe: Whether ``gqa_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        mla_attn_use_pe: Whether ``mla_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        gqla_attn_use_pe: Whether ``gqla_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        mlra_attn_use_pe: Whether ``mlra_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        tucker_attn_use_pe: Whether ``tucker_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        iha_attn_use_pe: Whether ``iha_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        gta_attn_use_pe: Whether ``gta_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        mtla_attn_use_pe: Whether ``mtla_attn`` layers consume the
+            model-wide positional encoding. Disabled by default because
+            MTLA is a recurrent/decay mixer. Default: False.
+        cca_attn_use_pe: Whether ``cca_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        ccgqa_attn_use_pe: Whether ``ccgqa_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        msa_attn_use_pe: Whether ``msa_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        sparda_attn_use_pe: Whether ``sparda_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        gma_attn_use_pe: Whether ``gma_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        longformer_attn_use_pe: Whether ``longformer_attn`` layers consume
+            the model-wide positional encoding. Default: True.
+        bigbird_attn_use_pe: Whether ``bigbird_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        sparse_transformer_attn_use_pe: Whether ``sparse_transformer_attn``
+            layers consume the model-wide positional encoding.
+            Default: True.
+        sparsek_attn_use_pe: Whether ``sparsek_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        nsa_attn_use_pe: Whether ``nsa_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        fasa_attn_use_pe: Whether ``fasa_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        sparge_attn_use_pe: Whether ``sparge_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        engram_attn_use_pe: Whether ``engram_attn`` layers consume the
+            model-wide positional encoding. Default: True.
+        retnet_use_pe: Whether ``retnet`` layers consume the model-wide
+            positional encoding. Disabled by default because RetNet uses
+            decay-based positional information. Default: False.
+        retnet_attn_use_pe: Whether ``retnet_attn`` layers consume the
+            model-wide positional encoding. Disabled by default because
+            RetNet-Attn uses decay-based positional information.
+            Default: False.
+        mamba_use_pe: Whether ``mamba`` layers consume the model-wide
+            positional encoding. Disabled by default because Mamba is a
+            state-space mixer with implicit positional information.
+            Default: False.
+        ode_use_pe: Whether ``ode`` layers consume the model-wide
+            positional encoding. Disabled by default because ODE layers
+            integrate over the hidden state directly. Default: False.
+        gla_attn_use_pe: Whether ``gla_attn`` layers consume the
+            model-wide positional encoding. Disabled by default because
+            GLA is a gated linear attention mixer. Default: False.
+        deltanet_attn_use_pe: Whether ``deltanet_attn`` layers consume
+            the model-wide positional encoding. Disabled by default
+            because DeltaNet is a gated linear attention mixer.
+            Default: False.
+        gated_deltanet_attn_use_pe: Whether ``gated_deltanet_attn``
+            layers consume the model-wide positional encoding. Disabled
+            by default because gated DeltaNet is a gated linear attention
+            mixer. Default: False.
+        gated_deltanet2_attn_use_pe: Whether ``gated_deltanet2_attn``
+            layers consume the model-wide positional encoding. Disabled
+            by default because gated DeltaNet-2 is a gated linear
+            attention mixer. Default: False.
+        hgrn2_attn_use_pe: Whether ``hgrn2_attn`` layers consume the
+            model-wide positional encoding. Disabled by default because
+            HGRN-2 is a gated linear attention mixer. Default: False.
+        fox_attn_use_pe: Whether ``fox_attn`` layers consume the
+            model-wide positional encoding. Disabled by default because
+            Fox is a gated linear attention mixer. Default: False.
+        kda_attn_use_pe: Whether ``kda_attn`` layers consume the
+            model-wide positional encoding. Disabled by default because
+            KDA is a gated linear attention mixer. Default: False.
         use_moe: If True, replace the dense FFN with a Mixture-of-Experts
             FFN block. Default: True.
         use_mixture_of_depths: If True, apply per-layer token routing where
@@ -230,11 +349,18 @@ class FrankensteinModelConfig:
         engram_seed: RNG seed for Engram hash multipliers. Default: 42.
 
     Raises:
-        ValueError: If ``positional_encoding`` is not ``"hope"`` or
-            ``"rope"``.
+        ValueError: If ``positional_encoding`` is not one of
+            ``"rope"``, ``"hope"``, ``"nope"``, ``"alibi"``, ``"pape"``,
+            ``"pape_efficient"``, ``"pape_ri"``, ``"sinusoidal_absolute"``,
+            ``"sinusoidal_rotary"``, ``"learned_absolute"``, or ``"none"``.
+        ValueError: If ``pape_num_parabolas`` or ``pape_num_positions`` is
+            less than 1.
         ValueError: If ``mode`` is not ``"encoder"`` or ``"decoder"``.
         ValueError: If ``mixture_of_depths_capacity_ratio`` is not in (0, 1].
         ValueError: If ``mixture_of_depths_router_aux_loss_weight`` is < 0.
+        ValueError: If ``pos_embedding_type`` is not one of the legacy
+            values (``"learned_1d"``, ``"none"``) or the unified positional
+            encoding enum values.
     """
 
     vocab_size: int = 50000
@@ -270,7 +396,58 @@ class FrankensteinModelConfig:
     rope_scaling: float = 1.0
 
     use_hope: bool = True
-    positional_encoding: Optional[str] = None
+    positional_encoding: Optional[str] = None  # defaults to "rope" in __post_init__
+
+    alibi_num_heads: Optional[int] = None
+
+    pape_num_parabolas: int = 4
+    pape_num_positions: int = 1
+    pape_rotation_invariant: bool = False
+
+    sinusoidal_max_len: int = 512
+    sinusoidal_base: float = 10000.0
+    sinusoidal_scale: float = 1.0
+
+    learned_max_len: int = 512
+    learned_init_std: float = 0.02
+
+    standard_attn_use_pe: bool = True
+    titan_attn_use_pe: bool = True
+    sigmoid_attn_use_pe: bool = True
+    gated_softmax_attn_use_pe: bool = True
+    gqa_attn_use_pe: bool = True
+    mla_attn_use_pe: bool = True
+    gqla_attn_use_pe: bool = True
+    mlra_attn_use_pe: bool = True
+    tucker_attn_use_pe: bool = True
+    iha_attn_use_pe: bool = True
+    gta_attn_use_pe: bool = True
+    mtla_attn_use_pe: bool = False
+    cca_attn_use_pe: bool = True
+    ccgqa_attn_use_pe: bool = True
+    msa_attn_use_pe: bool = True
+    sparda_attn_use_pe: bool = True
+    gma_attn_use_pe: bool = True
+    longformer_attn_use_pe: bool = True
+    bigbird_attn_use_pe: bool = True
+    sparse_transformer_attn_use_pe: bool = True
+    sparsek_attn_use_pe: bool = True
+    nsa_attn_use_pe: bool = True
+    fasa_attn_use_pe: bool = True
+    sparge_attn_use_pe: bool = True
+    engram_attn_use_pe: bool = True
+    retnet_use_pe: bool = False
+    retnet_attn_use_pe: bool = False
+    mamba_use_pe: bool = False
+    ode_use_pe: bool = False
+    gla_attn_use_pe: bool = False
+    deltanet_attn_use_pe: bool = False
+    gated_deltanet_attn_use_pe: bool = False
+    gated_deltanet2_attn_use_pe: bool = False
+    hgrn2_attn_use_pe: bool = False
+    fox_attn_use_pe: bool = False
+    kda_attn_use_pe: bool = False
+
     use_moe: bool = True
     use_mixture_of_depths: bool = False
     mixture_of_depths_capacity_ratio: float = 0.5
@@ -539,14 +716,29 @@ class FrankensteinModelConfig:
                 f"gma_sigma_eps must be > 0, got {self.gma_sigma_eps}"
             )
 
+        _VALID_POSITIONAL_ENCODINGS = {
+            "rope", "hope", "nope", "alibi", "pape", "pape_efficient", "pape_ri",
+            "sinusoidal_absolute", "sinusoidal_rotary", "learned_absolute", "none",
+        }
         if self.positional_encoding is None:
             self.positional_encoding = "hope" if bool(self.use_hope) else "rope"
         else:
             self.positional_encoding = str(self.positional_encoding).lower()
-            if self.positional_encoding not in {"hope", "rope"}:
-                raise ValueError("positional_encoding must be one of {'hope', 'rope'}")
+            if self.positional_encoding not in _VALID_POSITIONAL_ENCODINGS:
+                raise ValueError(
+                    f"positional_encoding must be one of {sorted(_VALID_POSITIONAL_ENCODINGS)}, "
+                    f"got {self.positional_encoding!r}"
+                )
 
         self.use_hope = self.positional_encoding == "hope"
+
+        if self.alibi_num_heads is None:
+            self.alibi_num_heads = self.num_heads
+
+        if self.pape_num_parabolas < 1:
+            raise ValueError(f"pape_num_parabolas must be >= 1, got {self.pape_num_parabolas}")
+        if self.pape_num_positions < 1:
+            raise ValueError(f"pape_num_positions must be >= 1, got {self.pape_num_positions}")
 
         if self.mode not in {"encoder", "decoder"}:
             raise ValueError("mode must be one of {'encoder', 'decoder'}")
@@ -610,11 +802,18 @@ class FrankensteinModelConfig:
             _validate_ffn_activation_config(self.ffn_activation, self.ffn_activation_config)
 
         # ---- Validate Vision Transformer fields ----
-        if self.pos_embedding_type not in {"learned_1d", "none"}:
+        _VALID_VIT_PE = {
+            "learned_1d", "none",
+            "learned_absolute", "sinusoidal_absolute", "sinusoidal_rotary",
+            "rope", "hope", "nope", "alibi", "pape", "pape_efficient", "pape_ri",
+        }
+        if self.pos_embedding_type not in _VALID_VIT_PE:
             raise ValueError(
-                "pos_embedding_type must be 'learned_1d' or 'none', "
+                f"pos_embedding_type must be one of {sorted(_VALID_VIT_PE)}, "
                 f"got {self.pos_embedding_type!r}"
             )
+        if self.pos_embedding_type == "learned_1d":
+            self.pos_embedding_type = "learned_absolute"
         if self.pooling_mode not in {"cls", "gap"}:
             raise ValueError(
                 f"pooling_mode must be 'cls' or 'gap', got {self.pooling_mode!r}"

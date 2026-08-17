@@ -13,6 +13,8 @@ Reference:
     arXiv:2406.16747.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import math
@@ -21,7 +23,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..common import BitLinear
+from ..common import BitLinear, apply_pe_to_qk
 
 
 class SparseKOperator(torch.autograd.Function):
@@ -124,7 +126,7 @@ class SparseKAttention(nn.Module):
         arXiv:2406.16747.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         """Initialize SparseKAttention.
 
         Args:
@@ -138,6 +140,7 @@ class SparseKAttention(nn.Module):
                     Defaults to 128.
                 mode (str, optional): ``"encoder"`` or ``"decoder"``.
                     Defaults to ``"encoder"``.
+            pos_encoder: Optional shared positional encoding module.
 
         Raises:
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
@@ -168,7 +171,11 @@ class SparseKAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "sparsek_attn_use_pe", True))
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute SparseK attention with differentiable top-k selection.
 
         Projects queries, keys, and values. Scores each key position using
@@ -184,15 +191,21 @@ class SparseKAttention(nn.Module):
             logical_layer_idx (Optional[int]): Logical layer index for
                 potential layer-specific behavior. Not used by this
                 implementation.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, hidden = x.shape
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         kv_scores = self.score_net(k).squeeze(-1)
         selection = SparseKOperator.apply(kv_scores, self.k)

@@ -1,0 +1,279 @@
+\section{Codificaciones Posicionales de Todo el Modelo}
+\label{sec:annex-codificaciones-posicionales}
+
+Este anexo documenta el subsistema unificado de codificación posicional
+(PE) que aplica una única elección de \texttt{model.positional\_encoding}
+a todos los mezcladores de atención de la red. El contrato del esquema es:
+\[
+\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{pape},\ \texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\ \texttt{learned\_absolute},\ \texttt{none}\}
+\]
+La implementación reside en \texttt{src/model/embeddings/} y los
+ayudantes de inyección compartidos en
+\texttt{src/model/attention/common.py}. Las claves bibliográficas citadas
+aquí se resuelven contra \texttt{docs/bibliography/}.
+
+\subsection{Arquitectura: Un Módulo Compartido, Exclusión Por Mezclador}
+
+Un único módulo de PE se construye una vez en el codificador
+(\texttt{FrankensteinEncoder} o \texttt{FrankensteinViT}) mediante
+\texttt{build\_pos\_encoder(config)} y se inyecta en cada
+\texttt{HybridLayer}, que lo reenvía a cada mezclador en
+\texttt{\_\_init\_\_(config, pos\_encoder=None)} y
+\texttt{forward(..., pos\_encoder=None)}.
+
+Cada mezclador lleva una bandera \texttt{use\_pe} por mezclador
+(\texttt{<mezclador>\_attn\_use\_pe}, por defecto \texttt{True} para
+mezcladores de atención, \texttt{False} para mezcladores
+recurrentes/de decaimiento como \texttt{retnet}, \texttt{mamba},
+\texttt{ode}, \texttt{gla\_attn}, \texttt{deltanet\_attn},
+\texttt{mtla\_attn}). Cuando \texttt{use\_pe} es \texttt{False}, el
+mezclador ignora completamente el módulo inyectado.
+
+La PE se aplica en dos fases mediante los ayudantes compartidos
+\texttt{apply\_pe\_to\_qk()} (llamado antes del cálculo de puntuaciones de
+atención) y \texttt{apply\_pe\_to\_scores()} (llamado después). El
+ayudante despacha según el tipo de PE y se convierte en una operación
+nula cuando la bandera \texttt{use\_pe} del mezclador es \texttt{False}.
+
+\subsection{Estilos de Inyección}
+
+Los 11 valores del enum se agrupan en cuatro estilos de inyección:
+
+\begin{enumerate}
+\item \textbf{Rotación} (\texttt{rope}, \texttt{hope},
+   \texttt{sinusoidal\_rotary}): rota los tensores de consulta y clave
+   antes del cálculo de puntuaciones. El producto interno
+   $\mathbf{q}_i^\top\mathbf{k}_j$ se convierte en función del
+   desplazamiento relativo $i-j$.
+\item \textbf{Sesgo de puntuación} (\texttt{alibi}): añade un sesgo
+   proporcional a la distancia a la matriz de puntuaciones de atención
+   \emph{después} de que se calcule.
+\item \textbf{Aumentación de Q/K} (\texttt{pape}, \texttt{pape\_efficient},
+   \texttt{pape\_ri}): concatena dimensiones posicionales adicionales a
+   los vectores de consulta y clave antes del producto punto, aumentando
+   la dimensión efectiva de la cabeza.
+\item \textbf{Aditivo a nivel de embedding} (\texttt{sinusoidal\_absolute},
+   \texttt{learned\_absolute}): se añade directamente a los embeddings de
+   tokens antes de la primera capa; ninguna acción por mezclador se
+   realiza en el bloque de atención.
+\end{enumerate}
+
+\texttt{nope} y \texttt{none} son ambos operaciones nulas: \texttt{nope}
+desactiva explícitamente la codificación posicional (el modelo debe
+aprender la posición implícitamente), mientras que \texttt{none} es el
+módulo nulo devuelto por la fábrica cuando no se desea ninguna PE.
+
+\subsection{Formulaciones Matemáticas}
+
+\subsubsection{RoPE --- Codificación Posicional Rotatoria}
+
+RoPE \citep{su_rope_2024} rota la consulta y clave de cada cabeza un
+ángulo proporcional al índice del token. Para dimensión de cabeza
+$d_h$ y posición de token $m$, la matriz de rotación
+$\mathbf{R}_m \in \mathbb{R}^{d_h \times d_h}$ actúa sobre sub-espacios
+2-D $(x_{2i}, x_{2i+1})$:
+\[
+\mathbf{R}_m = \operatorname{diag}\!\left(
+\begin{bmatrix}\cos m\theta_0 & -\sin m\theta_0 \\ \sin m\theta_0 & \cos m\theta_0\end{bmatrix},
+\dots,
+\begin{bmatrix}\cos m\theta_{d_h/2-1} & -\sin m\theta_{d_h/2-1} \\ \sin m\theta_{d_h/2-1} & \cos m\theta_{d_h/2-1}\end{bmatrix}
+\right),
+\]
+con frecuencias $\theta_i = \texttt{rope\_base}^{-2i/d_h}$. La puntuación
+de atención se convierte en
+$\mathbf{q}_m^\top \mathbf{R}_{m-n} \mathbf{k}_n$, función del
+desplazamiento relativo $m{-}n$. Un factor \texttt{rope\_scaling} $s$
+reescala la posición efectiva a $m/s$ para modos de extrapolación de
+longitud.
+
+\subsubsection{HoPE --- Codificación Posicional Rotatoria Hiperbólica}
+
+HoPE \citep{dai_hope_2025} generaliza RoPE a la geometría hiperbólica del
+modelo de Lorentz. En lugar de rotaciones euclidianas, HoPE aplica
+rotaciones de Lorentz construidas a partir de funciones hiperbólicas,
+imponiendo un \emph{decaimiento monótono} de los pesos de atención con
+el aumento de la distancia entre tokens --- una propiedad que RoPE carece
+porque su patrón de atención oscilatorio puede re-surgir en rangos largos.
+RoPE se recupera como caso especial. Las perillas \texttt{hope\_base} y
+\texttt{hope\_damping} controlan la frecuencia hiperbólica y la tasa de
+decaimiento.
+
+\subsubsection{NoPE --- Sin Codificación Posicional}
+
+NoPE \citep{kazemnejad_nope_2023} es la ausencia explícita de cualquier
+inyección posicional. El modelo debe descubrir la posición implícitamente
+a partir de la máscara causal (decodificador) o de los datos mismos. El
+trabajo citado muestra que NoPE supera a los métodos explícitos de PE
+(incluyendo RoPE y ALiBi) en benchmarks de generalización de longitud sin
+requerir cómputo adicional, porque un decodificador con atención causal
+puede codificar implícitamente la posición relativa a través de sus
+patrones de atención.
+
+\subsubsection{ALiBi --- Atención con Sesgos Lineales}
+
+ALiBi \citep{press_alibi_2022} no modifica los embeddings ni los vectores
+de consulta/clave. En su lugar añade un sesgo lineal estático específico
+por cabeza a la matriz de puntuaciones de atención:
+\[
+\text{puntuación}_{i,j}^{(h)} = \frac{\mathbf{q}_i^{(h)\top}\mathbf{k}_j^{(h)}}{\sqrt{d_h}} - m_h \cdot (i - j), \qquad m_h = \frac{1}{2^{\lfloor h / \lceil H/8 \rceil \rfloor}},
+\]
+donde $m_h$ es una pendiente geométrica por cabeza $h$ y el sesgo penaliza
+las claves distantes. La perilla \texttt{alibi\_num\_heads} controla el
+número de cabezas del calendario de pendientes. ALiBi habilita la
+extrapolación de longitud: un modelo entrenado en 1024 tokens generaliza
+a 2048 sin reentrenamiento.
+
+\subsubsection{PaPE --- Codificación Posicional Parabólica}
+
+PaPE \citep{ohrstrom_pape_2026} es una codificación centrada en visión que
+aumenta la consulta y clave con dimensiones posicionales extra construidas
+a partir de funciones base parabólicas. Dados $P$ parábolas
+(\texttt{pape\_num\_parabolas}) y $S$ posiciones
+(\texttt{pape\_num\_positions}), la característica posicional para la
+coordenada $\mathbf{p} \in \mathbb{R}^D$ es
+\[
+\phi_k(\mathbf{p}) = \sum_{j=1}^{S} \alpha_{k,j}\, f_j(\mathbf{p}), \qquad
+f_j(\mathbf{p}) = -\|\mathbf{p} - \mathbf{c}_j\|^2 + b_j,
+\]
+una suma de $S$ paraboloides centrados en $\mathbf{c}_j$ con
+desplazamiento $b_j$. Las $P \cdot S$ dimensiones extra se concatenan a
+la consulta y clave antes del producto punto, por lo que la dimensión
+efectiva de la cabeza crece de $d_h$ a $d_h + P \cdot S$. Se proveen tres
+variantes:
+
+\begin{itemize}
+\item \texttt{pape} --- la implementación de referencia.
+\item \texttt{pape\_efficient} --- una reformulación en PyTorch puro que
+   evita kernels Triton personalizados preservando la misma matemática.
+\item \texttt{pape\_ri} --- la variante invariante a rotación
+   (PaPE-RI en el paper), que satisface invariancia rotacional por
+   construcción y se controla con \texttt{pape\_rotation\_invariant}.
+\end{itemize}
+
+PaPE está diseñado para tokens de visión $n$-D (imágenes, video, cámaras
+de eventos, nubes de puntos) y es la PE recomendada para la ruta ViT.
+
+\subsubsection{Sinusoidal Absoluta}
+
+La codificación absoluta original del Transformer
+\citep{vaswani_attention_2017} añade un vector sinusoidal fijo al
+embedding del token:
+\[
+\text{PE}_{(m,2i)} = \sin\!\left(\frac{m}{\texttt{sinusoidal\_base}^{2i/d}}\right), \quad
+\text{PE}_{(m,2i+1)} = \cos\!\left(\frac{m}{\texttt{sinusoidal\_base}^{2i/d}}\right),
+\]
+con \texttt{sinusoidal\_max\_len} limitando la tabla precomputada y
+\texttt{sinusoidal\_scale} multiplicando el embedding. Esta es una PE
+aditiva: se aplica una vez a nivel de embedding y los mezcladores no
+aplican ninguna PE por capa.
+
+\subsubsection{Sinusoidal Rotatoria}
+
+Una variante rotatoria de la codificación sinusoidal: las mismas
+frecuencias sinusoidales se usan para construir una matriz de rotación
+aplicada a la consulta y clave (como en RoPE), pero con las perillas
+\texttt{sinusoidal\_base} y \texttt{sinusoidal\_scale}. Esta es una PE
+de estilo rotacional aplicada por capa mediante
+\texttt{apply\_pe\_to\_qk}.
+
+\subsubsection{Absoluta Aprendida}
+
+Una codificación absoluta aprendible: una matriz de parámetros de
+$\texttt{learned\_max\_len} \times d$ se añade a los embeddings de
+tokens a nivel de embedding. La desviación estándar de inicialización se
+controla con \texttt{learned\_init\_std}. Al igual que la sinusoidal
+absoluta, los mezcladores no realizan ninguna acción por capa.
+
+\subsection{Banderas \texttt{use\_pe} Por Mezclador}
+
+Cada mezclador expone un campo de configuración
+\texttt{<mezclador>\_attn\_use\_pe} (p.\,ej.\
+\texttt{standard\_attn\_use\_pe}, \texttt{titan\_attn\_use\_pe}). Los
+valores por defecto son:
+
+\begin{itemize}
+\item \textbf{True} (mezcladores de atención): \texttt{standard\_attn},
+  \texttt{titan\_attn}, \texttt{sigmoid\_attn},
+  \texttt{gated\_softmax\_attn}, \texttt{gqa\_attn}, todos los
+  mezcladores latentes (\texttt{mla\_attn}, \texttt{gqla\_attn},
+  \texttt{mlra\_attn}, \texttt{tucker\_attn}, \texttt{iha\_attn},
+  \texttt{gta\_attn}, \texttt{cca\_attn}, \texttt{ccgqa\_attn},
+  \texttt{gma\_attn}), todos los mezcladores dispersos
+  (\texttt{longformer\_attn}, \texttt{bigbird\_attn},
+  \texttt{sparse\_transformer\_attn}, \texttt{sparsek\_attn},
+  \texttt{nsa\_attn}, \texttt{msa\_attn}, \texttt{sparda\_attn},
+  \texttt{fasa\_attn}, \texttt{sparge\_attn}), y
+  \texttt{engram\_attn}.
+\item \textbf{False} (mezcladores recurrentes/de decaimiento):
+  \texttt{retnet}, \texttt{retnet\_attn}, \texttt{mamba}, \texttt{ode},
+  \texttt{gla\_attn}, \texttt{deltanet\_attn},
+  \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn},
+  \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{kda\_attn},
+  \texttt{mtla\_attn}.
+\end{itemize}
+
+El valor por defecto \texttt{False} para mezcladores recurrentes/de
+decaimiento refleja que estas arquitecturas incorporan su propio sesgo
+inductivo temporal/posicional en su recurrencia (p.\,ej.\ la rotación
+compleja de RetNet, el barrido selectivo de Mamba). Sobrescribir
+\texttt{use\_pe=True} está permitido pero es típicamente redundante.
+
+\subsection{Unificación del Transformer de Visión}
+
+La ruta ViT (\texttt{FrankensteinViT}) usaba previamente su propio campo
+\texttt{pos\_embedding\_type} con valores \texttt{learned\_1d},
+\texttt{none}. Esto se ha unificado con el enum de todo el modelo:
+\texttt{learned\_1d} se migra a \texttt{learned\_absolute}, y
+\texttt{none} se mapea a \texttt{none}. El ViT construye el mismo módulo
+\texttt{build\_pos\_encoder(config)} y lo inyecta en sus HybridLayers,
+por lo que un ViT ahora puede usar RoPE, HoPE, ALiBi, PaPE, o cualquier
+otra PE del enum.
+
+\subsection{Compatibilidad con Legado}
+
+La bandera booleana legada \texttt{use\_hope} está deprecada y mapeada al
+nuevo enum: \texttt{use\_hope=True} $\to$
+\texttt{positional\_encoding=hope}, \texttt{use\_hope=False} $\to$
+\texttt{positional\_encoding=rope}. La sobrescritura
+\texttt{positional\_encoding} por mezclador que previamente existía solo
+en \texttt{titan\_attn} es ahora una operación nula: el enum de todo el
+modelo es la única fuente de verdad, y la lista de permitidos de
+TitanAttention que restringía PE a \texttt{\{hope, rope, none, nope\}} se
+ha eliminado --- los 11 valores ahora funcionan con cada mezclador.
+
+\subsection{Perfil Arquitectónico: Codificaciones Posicionales}
+
+La Tabla~\ref{tab:all-pos-enc} resume las 11 codificaciones posicionales
+soportadas.
+
+\footnotesize
+\begin{longtable}{p{2.4cm}p{1.7cm}p{4.2cm}p{2.0cm}p{2.0cm}}
+\toprule
+\textbf{Nombre} & \textbf{Estilo} & \textbf{Idea Clave} & \textbf{Parámetros} & \textbf{Referencia} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Nombre} & \textbf{Estilo} & \textbf{Idea Clave} & \textbf{Parámetros} & \textbf{Referencia} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{5}{r}{\textit{continúa en la siguiente página}} \\
+\endfoot
+\bottomrule
+\caption{Catálogo de codificaciones posicionales. ``Estilo'' es el mecanismo de inyección (rotación, sesgo de puntuación, aumentación de Q/K, aditivo). ``Parámetros'' lista las perillas principales de configuración.}
+\label{tab:all-pos-enc}
+\endlastfoot
+rope & Rotación & Rotación basada en frecuencia de Q/K; posición relativa mediante geometría de producto interno & \texttt{rope\_base}, \texttt{rope\_scaling} & \citep{su_rope_2024} \\
+hope & Rotación & Rotación de Lorentz hiperbólica; decaimiento monótono de atención con distancia & \texttt{hope\_base}, \texttt{hope\_damping} & \citep{dai_hope_2025} \\
+nope & Ninguno & Sin PE explícita; el modelo aprende posición implícitamente de la máscara causal & --- & \citep{kazemnejad_nope_2023} \\
+alibi & Sesgo de puntuación & Penalización lineal estática de distancia añadida a puntuaciones de atención; extrapolación de longitud & \texttt{alibi\_num\_heads} & \citep{press_alibi_2022} \\
+pape & Aum.\ Q/K & Funciones base parabólicas concatenadas a Q/K; centrada en visión, $n$-D & \texttt{pape\_num\_parabolas}, \texttt{pape\_num\_posiciones} & \citep{ohrstrom_pape_2026} \\
+pape\_efficient & Aum.\ Q/K & PaPE en PyTorch puro; sin kernels Triton personalizados & igual que pape & \citep{ohrstrom_pape_2026} \\
+pape\_ri & Aum.\ Q/K & PaPE invariante a rotación (PaPE-RI) & \texttt{pape\_rotation\_invariant} & \citep{ohrstrom_pape_2026} \\
+sinusoidal\_absolute & Aditivo & Sinusoidal fijo añadido a embeddings (Transformer original) & \texttt{sinusoidal\_base}, \texttt{sinusoidal\_max\_len}, \texttt{sinusoidal\_scale} & \citep{vaswani_attention_2017} \\
+sinusoidal\_rotary & Rotación & Frecuencias sinusoidales como matriz de rotación en Q/K & igual que sinusoidal & \citep{vaswani_attention_2017} \\
+learned\_absolute & Aditivo & Matriz de parámetros aprendible añadida a embeddings & \texttt{learned\_max\_len}, \texttt{learned\_init\_std} & \citep{vaswani_attention_2017} \\
+none & Ninguno & Módulo nulo; ninguna información posicional inyectada & --- & --- \\
+\bottomrule
+\end{longtable}
+\normalsize

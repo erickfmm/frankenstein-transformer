@@ -29,6 +29,12 @@ from src.model.attention import (
     TitanAttention,
 )
 from src.model.config import FrankensteinModelConfig
+from src.model.embeddings.alibi import ALiBi
+from src.model.embeddings.factory import build_pos_encoder
+from src.model.embeddings.hope import HoPE
+from src.model.embeddings.nope import NoPE
+from src.model.embeddings.pape import PaPE
+from src.model.embeddings.rope import RoPE
 from src.model.hybrid_layer import HybridLayer
 from src.model.frankenstein_encoder import FrankensteinEncoder
 
@@ -100,18 +106,27 @@ class AttentionRefactorTests(unittest.TestCase):
         self.assertEqual(y.shape, (2, 8, config.vocab_size))
 
     def test_legacy_use_hope_false_maps_to_rope(self):
+        from src.model.embeddings.factory import build_pos_encoder
         config = self._build_config(["titan_attn"])
         config.use_hope = False
         config.positional_encoding = None
-        attn = TitanAttention(config)
-        self.assertIsInstance(attn.pos_encoder, RoPE)
+        config.__post_init__()
+        pe = build_pos_encoder(config)
+        attn = TitanAttention(config, pos_encoder=pe)
+        from src.model.embeddings.rope import RoPE
+        self.assertIsInstance(pe, RoPE)
 
     def test_positional_encoding_override(self):
+        from src.model.embeddings.factory import build_pos_encoder
+        from src.model.embeddings.hope import HoPE
+        from src.model.embeddings.rope import RoPE
         base = self._build_config(["titan_attn"])
         cfg_hope = FrankensteinModelConfig(**{**base.__dict__, "positional_encoding": "hope"})
         cfg_rope = FrankensteinModelConfig(**{**base.__dict__, "positional_encoding": "rope"})
-        self.assertIsInstance(TitanAttention(cfg_hope).pos_encoder, HoPE)
-        self.assertIsInstance(TitanAttention(cfg_rope).pos_encoder, RoPE)
+        pe_hope = build_pos_encoder(cfg_hope)
+        pe_rope = build_pos_encoder(cfg_rope)
+        self.assertIsInstance(pe_hope, HoPE)
+        self.assertIsInstance(pe_rope, RoPE)
 
     def test_invalid_positional_encoding_raises(self):
         with self.assertRaisesRegex(ValueError, "positional_encoding"):

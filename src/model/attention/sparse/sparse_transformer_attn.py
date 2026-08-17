@@ -13,6 +13,8 @@ Reference:
     arXiv:1904.10509.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import math
@@ -21,7 +23,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..common import BitLinear
+from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
 
 class SparseTransformerAttention(nn.Module):
@@ -60,7 +62,7 @@ class SparseTransformerAttention(nn.Module):
         arXiv:1904.10509.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         """Initialize SparseTransformerAttention.
 
         Args:
@@ -76,6 +78,7 @@ class SparseTransformerAttention(nn.Module):
                     columns per stride block. Defaults to 1.
                 mode (str, optional): ``"encoder"`` or ``"decoder"``.
                     Defaults to ``"encoder"``.
+            pos_encoder: Optional shared positional encoding module.
 
         Raises:
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
@@ -99,6 +102,10 @@ class SparseTransformerAttention(nn.Module):
         self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
+
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "sparse_transformer_attn_use_pe", True))
 
     def _resolved_stride(self, seq_len: int) -> int:
         """Resolve the effective stride for the current sequence length.
@@ -173,7 +180,7 @@ class SparseTransformerAttention(nn.Module):
                 mask[i, torch.tensor(sorted(set(indices)), device=device)] = True
         return mask
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute factorized sparse attention.
 
         Projects queries, keys, and values, then applies strided and fixed
@@ -186,16 +193,22 @@ class SparseTransformerAttention(nn.Module):
             logical_layer_idx (Optional[int]): Logical layer index for
                 potential layer-specific behavior. Not used by this
                 implementation.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, hidden = x.shape
         stride = self._resolved_stride(seq_len)
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         scores = (q @ k.transpose(-2, -1)) * self.scale
 
@@ -210,6 +223,7 @@ class SparseTransformerAttention(nn.Module):
         scores[:, :half] = scores[:, :half].masked_fill(~strided_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
         scores[:, half:] = scores[:, half:].masked_fill(~fixed_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
 
+        scores = apply_pe_to_scores(pe, self.pe_type, scores, q, self.use_pe)
         attn = F.softmax(scores, dim=-1)
         attn = self.dropout(attn)
         out = (attn @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)

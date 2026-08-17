@@ -11,12 +11,15 @@ Reference:
     Large Language Models", arXiv:2307.08621.
 """
 
+from __future__ import annotations
+
 import math
+from typing import Optional
 
 import torch
 import torch.nn as nn
 
-from .common import BitLinear
+from .common import BitLinear, apply_pe_to_qk
 from ..norm import get_norm
 
 
@@ -59,7 +62,7 @@ class MultiScaleRetention(nn.Module):
         mode: ``"encoder"`` for bidirectional, ``"decoder"`` for causal.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
         self.dim = config.hidden_size
         self.heads = config.retention_heads
@@ -78,6 +81,10 @@ class MultiScaleRetention(nn.Module):
         self.register_buffer("decay_mask", self._build_decay_mask(config.hidden_size, 2048))
         self.mode = getattr(config, "mode", "encoder")
 
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "retnet_use_pe", False))
+
     def _build_decay_mask(self, dim, max_len=2048):
         """Build per-head gamma decay rates for the exponential decay matrix.
 
@@ -95,20 +102,27 @@ class MultiScaleRetention(nn.Module):
         gammas = 1 - torch.exp(torch.linspace(math.log(1 / 32), math.log(1 / 512), self.heads))
         return gammas.view(self.heads, 1, 1)
 
-    def forward(self, x):
+    def forward(self, x, logical_layer_idx: Optional[int] = None, pos_encoder=None):
         """Compute multi-scale retention in parallel mode.
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
+            logical_layer_idx: Logical layer index for layer-dependent PE.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, dim = x.shape
 
         q = self.q_proj(x).view(bsz, seq_len, self.heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.heads, self.head_dim).transpose(1, 2)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
 

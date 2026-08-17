@@ -19,13 +19,15 @@ Reference:
     All You Need? arXiv:2505.06708. NeurIPS 2025 Best Paper.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..common import BitLinear
+from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
 
 class GatedSoftmaxAttention(nn.Module):
@@ -76,12 +78,13 @@ class GatedSoftmaxAttention(nn.Module):
         All You Need? arXiv:2505.06708. NeurIPS 2025 Best Paper.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         """Initialize GatedSoftmaxAttention.
 
         Args:
             config: Model configuration object. See class docstring for
                 required attributes.
+            pos_encoder: Optional shared positional encoding module.
 
         Raises:
             ValueError: If hidden_size is not divisible by num_heads.
@@ -105,7 +108,11 @@ class GatedSoftmaxAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "gated_softmax_attn_use_pe", True))
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute gated softmax attention over the input sequence.
 
         Computes standard scaled dot-product attention, then applies a
@@ -116,20 +123,27 @@ class GatedSoftmaxAttention(nn.Module):
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
             logical_layer_idx: Unused; accepted for interface
                 compatibility with other attention mixers.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, _ = x.shape
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
         attn = (q @ k.transpose(-2, -1)) * self.scale
         if self.mode == "decoder":
             causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1)
             attn = attn.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+        attn = apply_pe_to_scores(pe, self.pe_type, attn, q, self.use_pe)
         attn = F.softmax(attn, dim=-1)
         attn = self.dropout(attn)
 

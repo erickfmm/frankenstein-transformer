@@ -77,18 +77,35 @@ properties:
     description: |-
       Positional encoding for the ViT. `learned_1d` adds a learnable
       `nn.Parameter` of shape `(1, N+cls, D)` after patch embedding
-      (faithful to the ViT paper, arXiv:2010.11929). `none` disables the
-      absolute positional embedding and relies on the existing RoPE/HoPE
-      rotary positional encodings applied inside the attention mixers
-      (treats patches as a sequence).
+      (faithful to the ViT paper, arXiv:2010.11929); it is a legacy alias for
+      `learned_absolute`. `none` disables the absolute positional embedding
+      and relies on the existing RoPE/HoPE rotary positional encodings applied
+      inside the attention mixers (treats patches as a sequence). The unified
+      model-level enum values (`learned_absolute`, `sinusoidal_absolute`,
+      `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`,
+      `nope`, `alibi`) are also accepted and align with `model.positional_encoding`.
     description_es: |-
       Codificación posicional para el ViT. `learned_1d` añade un
       `nn.Parameter` aprendible de forma `(1, N+cls, D)` después del patch
-      embedding (fiel al paper ViT). `none` desactiva el embedding posicional
-      absoluto y confía en las codificaciones rotacionales RoPE/HoPE existentes.
+      embedding (fiel al paper ViT); es un alias legado de `learned_absolute`.
+      `none` desactiva el embedding posicional absoluto y confía en las
+      codificaciones rotacionales RoPE/HoPE existentes. Los valores unificados
+      a nivel de modelo (`learned_absolute`, `sinusoidal_absolute`,
+      `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`,
+      `nope`, `alibi`) también se aceptan y se alinean con `model.positional_encoding`.
     enum:
       - learned_1d
       - none
+      - learned_absolute
+      - sinusoidal_absolute
+      - sinusoidal_rotary
+      - pape
+      - pape_efficient
+      - pape_ri
+      - rope
+      - hope
+      - nope
+      - alibi
     default: learned_1d
   cls_token:
     type: boolean

@@ -22,7 +22,7 @@ from .config import FrankensteinModelConfig
 from .hybrid_layer import HybridLayer
 from .attention.common import BitLinear
 from .norm import get_norm
-from .embeddings import FactorizedEmbedding
+from .embeddings import FactorizedEmbedding, build_pos_encoder
 from .residuals import ResidualBase, build_residual
 
 
@@ -99,9 +99,11 @@ class FrankensteinEncoder(nn.Module):
             self.emb = nn.Embedding(config.vocab_size, config.hidden_size)
         self.dropout = nn.Dropout(config.dropout)
 
+        self.pos_encoder = build_pos_encoder(config)
+
         self.layers = nn.ModuleList(
             [
-                HybridLayer(config, layer_type=config.layer_pattern[i % len(config.layer_pattern)])
+                HybridLayer(config, layer_type=config.layer_pattern[i % len(config.layer_pattern)], pos_encoder=self.pos_encoder)
                 for i in range(config.num_layers)
             ]
         )
@@ -151,6 +153,8 @@ class FrankensteinEncoder(nn.Module):
             (``classification_head=True``).
         """
         x = self.emb(input_ids)
+        if self.pos_encoder is not None and hasattr(self.pos_encoder, "add"):
+            x = self.pos_encoder.add(x)
         x = self.dropout(x)
 
         if self.use_mhc:

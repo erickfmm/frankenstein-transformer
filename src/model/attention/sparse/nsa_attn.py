@@ -15,6 +15,8 @@ Reference:
     arXiv:2502.11089.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import math
@@ -23,7 +25,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..common import BitLinear
+from ..common import BitLinear, apply_pe_to_qk
 
 
 class NSAAttention(nn.Module):
@@ -73,7 +75,7 @@ class NSAAttention(nn.Module):
         arXiv:2502.11089.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         """Initialize NSAAttention.
 
         Args:
@@ -95,6 +97,7 @@ class NSAAttention(nn.Module):
                     Defaults to 512.
                 mode (str, optional): ``"encoder"`` or ``"decoder"``.
                     Defaults to ``"encoder"``.
+            pos_encoder: Optional shared positional encoding module.
 
         Raises:
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
@@ -126,6 +129,10 @@ class NSAAttention(nn.Module):
         self.gate = nn.Sequential(router_cls(self.head_dim, 3), nn.Sigmoid())
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
+
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "nsa_attn_use_pe", True))
 
     def _compress(self, k: torch.Tensor, v: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Compress keys and values into coarse-grained blocks.
@@ -174,7 +181,7 @@ class NSAAttention(nn.Module):
         comp_v = torch.stack(comp_v_list, dim=2)
         return comp_k, comp_v
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute three-branch native sparse attention.
 
         Executes all three branches in parallel:
@@ -197,15 +204,21 @@ class NSAAttention(nn.Module):
             logical_layer_idx (Optional[int]): Logical layer index for
                 potential layer-specific behavior. Not used by this
                 implementation.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, hidden = x.shape
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         comp_k, comp_v = self._compress(k, v)
         comp_scores = torch.matmul(q, comp_k.transpose(-2, -1)) * self.scale

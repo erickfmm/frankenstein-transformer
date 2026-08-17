@@ -50,12 +50,14 @@ class GQLAAttention(nn.Module):
     for shape correctness.
 
     Args:
-        config: Configuration object. Relevant attributes:
-            hidden_size, num_heads, dropout, use_bitnet, mode, and the
-            optional ``gqla_latent_rank`` (default ``hidden_size // 2``),
+        config: Configuration object. Relevant attributes: hidden_size,
+            num_heads, dropout, use_bitnet, mode, and the optional
+            ``gqla_latent_rank`` (default ``hidden_size // 2``),
             ``gqla_num_groups`` (default ``num_heads // 4``, must divide
             ``num_heads``), and ``gqla_decode_path`` (``"mqa_absorb"`` or
             ``"gqa"``; default ``"gqa"``).
+        pos_encoder: Shared positional encoding module applied to query
+            and key tensors. If ``None``, no PE is applied.
 
     Attributes:
         hidden_size: Input dimensionality.
@@ -71,13 +73,16 @@ class GQLAAttention(nn.Module):
         out_proj: Output projection.
         dropout: Dropout layer.
         mode: ``"encoder"`` or ``"decoder"``.
+        pos_encoder: Shared positional encoding module (or ``None``).
+        pe_type: Positional encoding type string (lowercased).
+        use_pe: Whether PE is enabled for this mixer.
 
     Raises:
         ValueError: If ``hidden_size`` not divisible by ``num_heads``;
             if ``gqla_num_groups`` does not divide ``num_heads``.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -105,22 +110,32 @@ class GQLAAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
         self.scale = self.head_dim ** -0.5
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "gqla_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute GQLA attention.
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
-            logical_layer_idx: Unused; accepted for interface compatibility.
+            logical_layer_idx: Logical layer index passed to the positional
+                encoder. Defaults to ``0`` if ``None``.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder`` for this forward call.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
         bsz, seq_len, _ = x.shape
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
         c_kv = self.dkv_proj(x)
         k = self.uk_proj(c_kv).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.uv_proj(c_kv).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        from ..common import apply_pe_to_qk, apply_pe_to_scores
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         if self.decode_path == "gqa" and self.num_groups < self.num_heads:
             kv_groups = k.view(bsz, self.num_groups, self.group_size, seq_len, self.head_dim)
@@ -135,6 +150,7 @@ class GQLAAttention(nn.Module):
             )
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
         if self.mode == "decoder":
             causal_mask = torch.triu(
                 torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1

@@ -105,19 +105,23 @@ class HybridLayer(nn.Module):
 
     TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}
 
-    def __init__(self, config: FrankensteinModelConfig, layer_type: str):
+    def __init__(self, config: FrankensteinModelConfig, layer_type: str, pos_encoder=None):
         """Initialize a hybrid layer for the given mixer type.
 
         Args:
             config: :class:`FrankensteinModelConfig` instance with model hyperparameters.
             layer_type: String identifying the attention mixer. Must be one
                 of the keys in the internal mixer registry or ``"mamba"``.
+            pos_encoder: Optional shared positional encoding module forwarded
+                to attention mixers that accept it. ``None`` leaves mixers
+                to build/use their own PE.
 
         Raises:
             ValueError: If ``layer_type`` is not recognized.
         """
         super().__init__()
         self.layer_type = layer_type
+        self.pos_encoder = pos_encoder
         self.use_mhc = bool(getattr(config, "use_mhc", False))
         self.use_mixture_of_depths = bool(getattr(config, "use_mixture_of_depths", False))
         if self.use_mhc and self.use_mixture_of_depths:
@@ -195,7 +199,7 @@ class HybridLayer(nn.Module):
         if layer_type == "mamba":
             self.mixer = proj_cls(config.hidden_size, config.hidden_size)
         elif layer_type in mixer_registry:
-            self.mixer = mixer_registry[layer_type](config)
+            self.mixer = mixer_registry[layer_type](config, pos_encoder=pos_encoder)
         else:
             supported_layers = sorted(list(mixer_registry.keys()) + ["mamba"])
             raise ValueError(
@@ -341,9 +345,9 @@ class HybridLayer(nn.Module):
         elif self.layer_type in {"ode", "retnet"}:
             x = self.mixer(x)
         elif self.layer_type == "engram_attn":
-            x = self.mixer(x, input_ids=input_ids, logical_layer_idx=logical_layer_idx)
+            x = self.mixer(x, input_ids=input_ids, logical_layer_idx=logical_layer_idx, pos_encoder=self.pos_encoder)
         else:
-            x = self.mixer(x, logical_layer_idx=logical_layer_idx)
+            x = self.mixer(x, logical_layer_idx=logical_layer_idx, pos_encoder=self.pos_encoder)
 
         # Residual merge: standard adds the input, none drops it,
         # AttnRes variants receive the attended ``x`` from the encoder
@@ -432,9 +436,10 @@ class HybridLayer(nn.Module):
                 attn_in,
                 input_ids=input_ids,
                 logical_layer_idx=logical_layer_idx,
+                pos_encoder=self.pos_encoder,
             )
         else:
-            attn_out = self.mixer(attn_in, logical_layer_idx=logical_layer_idx)
+            attn_out = self.mixer(attn_in, logical_layer_idx=logical_layer_idx, pos_encoder=self.pos_encoder)
         x = self.mhc_attn.recombine(x, attn_out)
 
         # FFN sub-function.

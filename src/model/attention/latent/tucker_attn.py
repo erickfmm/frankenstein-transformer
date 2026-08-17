@@ -45,6 +45,8 @@ class TuckerAttention(nn.Module):
             ``tucker_query_rank``, ``tucker_key_rank``,
             ``tucker_value_rank`` (default ``hidden_size // 2`` for K
             and V, ``hidden_size`` for Q).
+        pos_encoder: Shared positional encoding module applied to query
+            and key tensors. If ``None``, no PE is applied.
 
     Attributes:
         hidden_size: Input dimensionality.
@@ -58,12 +60,15 @@ class TuckerAttention(nn.Module):
             num_heads * head_dim``.
         out_proj: Output projection.
         dropout, mode: As in the rest of the family.
+        pos_encoder: Shared positional encoding module (or ``None``).
+        pe_type: Positional encoding type string (lowercased).
+        use_pe: Whether PE is enabled for this mixer.
 
     Raises:
         ValueError: If ``hidden_size`` not divisible by ``num_heads``.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -85,23 +90,34 @@ class TuckerAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
         self.scale = self.head_dim ** -0.5
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "tucker_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute Tucker-factorised attention.
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
-            logical_layer_idx: Unused; accepted for interface compatibility.
+            logical_layer_idx: Logical layer index passed to the positional
+                encoder. Defaults to ``0`` if ``None``.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder`` for this forward call.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
         bsz, seq_len, _ = x.shape
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
         q = self.q_core(self.q_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_core(self.k_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_core(self.v_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
+        from ..common import apply_pe_to_qk, apply_pe_to_scores
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
         if self.mode == "decoder":
             causal_mask = torch.triu(
                 torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1

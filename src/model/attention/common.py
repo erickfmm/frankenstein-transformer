@@ -11,6 +11,8 @@ References:
     1.58 Bits", arXiv:2402.17764.
 """
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -229,6 +231,83 @@ def is_bitlinear_module(module: nn.Module) -> bool:
         Whether the module performs BitNet b1.58 ternary quantization.
     """
     return isinstance(module, (BitLinear, BitConv1d))
+
+
+def apply_pe_to_qk(
+    pos_encoder,
+    pe_type: str,
+    q: "torch.Tensor",
+    k: "torch.Tensor",
+    hidden: "torch.Tensor",
+    logical_layer_idx: int,
+    use_pe: bool,
+) -> tuple:
+    """Apply positional encoding to query/key tensors (rotation or augmentation).
+
+    Call this AFTER q/k projection and BEFORE computing attention scores.
+    Handles rope, hope, sinusoidal_rotary (rotation) and pape, pape_efficient,
+    pape_ri (q/k augmentation). No-op for alibi, nope, none,
+    sinusoidal_absolute, learned_absolute.
+
+    Args:
+        pos_encoder: PE module or ``None``.
+        pe_type: PE type string (lowercased).
+        q: Query tensor of shape ``(B, H, S, D)``.
+        k: Key tensor of shape ``(B, H, S, D)``.
+        hidden: Hidden state of shape ``(B, S, H_hidden)`` used by
+            content-dependent PEs (PaPE).
+        logical_layer_idx: Logical layer index for layer-dependent PE.
+        use_pe: Whether PE is enabled for this mixer.
+
+    Returns:
+        Tuple ``(q, k)`` with PE applied.
+    """
+    if not use_pe or pos_encoder is None:
+        return q, k
+
+    pe_type = str(pe_type).lower()
+    if pe_type in ("rope", "hope", "sinusoidal_rotary"):
+        q = pos_encoder(q, logical_layer_idx=logical_layer_idx)
+        k = pos_encoder(k, logical_layer_idx=logical_layer_idx)
+    elif pe_type in ("pape", "pape_efficient", "pape_ri"):
+        bsz, seq_len, _ = hidden.shape
+        positions = pos_encoder.default_positions(bsz, seq_len, hidden.device, hidden.dtype)
+        q, k = pos_encoder.encode_qk(hidden, q, k, positions)
+    # alibi, nope, none, sinusoidal_absolute, learned_absolute: no-op here
+    return q, k
+
+
+def apply_pe_to_scores(
+    pos_encoder,
+    pe_type: str,
+    attn_scores: "torch.Tensor",
+    q: "torch.Tensor",
+    use_pe: bool,
+) -> "torch.Tensor":
+    """Apply positional encoding bias to attention scores (ALiBi only).
+
+    Call this AFTER computing attention scores and BEFORE softmax/causal mask.
+
+    Args:
+        pos_encoder: PE module or ``None``.
+        pe_type: PE type string (lowercased).
+        attn_scores: Attention scores of shape ``(B, H, S, S)``.
+        q: Query tensor of shape ``(B, H, S, D)`` used to infer
+            sequence length, device and dtype.
+        use_pe: Whether PE is enabled for this mixer.
+
+    Returns:
+        Attention scores with PE bias applied (or unchanged).
+    """
+    if not use_pe or pos_encoder is None:
+        return attn_scores
+
+    pe_type = str(pe_type).lower()
+    if pe_type == "alibi":
+        seq_len = q.size(-2)
+        bias = pos_encoder.bias(seq_len, device=q.device, dtype=q.dtype)
+        attn_scores = attn_scores + bias
+    return attn_scores
 
 
 

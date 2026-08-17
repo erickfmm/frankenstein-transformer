@@ -169,6 +169,26 @@ class YamlExamplesContentTests(unittest.TestCase):
         self.assertEqual(cfg.model_config.mode, "decoder")
         self.assertEqual(cfg.model_class, "frankensteindecoder")
 
+    def test_pe_rope_config(self):
+        cfg = self._load("pe_rope.yaml")
+        self.assertEqual(cfg.model_config.positional_encoding, "rope")
+
+    def test_pe_nope_config(self):
+        cfg = self._load("pe_nope.yaml")
+        self.assertEqual(cfg.model_config.positional_encoding, "nope")
+
+    def test_pe_alibi_config(self):
+        cfg = self._load("pe_alibi.yaml")
+        self.assertEqual(cfg.model_config.positional_encoding, "alibi")
+
+    def test_pe_pape_config(self):
+        cfg = self._load("pe_pape.yaml")
+        self.assertEqual(cfg.model_config.positional_encoding, "pape")
+
+    def test_pe_mixed_use_pe_config(self):
+        cfg = self._load("pe_mixed_use_pe.yaml")
+        self.assertEqual(cfg.model_config.positional_encoding, "rope")
+
 
 if __name__ == "__main__":
     unittest.main()

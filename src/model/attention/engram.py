@@ -15,6 +15,8 @@ architecture:
   - Plugs in as a standard `layer_type` in HybridLayer.
 """
 
+from __future__ import annotations
+
 import math
 from typing import List, Optional
 
@@ -235,7 +237,7 @@ class EngramLayer(nn.Module):
       - engram_seed (int, default 42): RNG seed for hash multipliers.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(self, config, pos_encoder=None) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -285,18 +287,26 @@ class EngramLayer(nn.Module):
         self._scale = math.sqrt(self.hidden_size)
         self._total_heads = total_heads
 
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "engram_attn_use_pe", True))
+
     # ------------------------------------------------------------------
     def forward(
         self,
         x: torch.Tensor,
         input_ids: Optional[torch.Tensor] = None,
         logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
     ) -> torch.Tensor:
         """
         Args:
             x:              (B, T, hidden_size) – incoming hidden states
             input_ids:      (B, T) int64 – token indices (required for lookup)
             logical_layer_idx: ignored, kept for HybridLayer interface parity
+            pos_encoder:    optional positional encoding module overriding
+                ``self.pos_encoder`` (accepted for interface parity; not
+                applied by this lookup-based mixer).
 
         Returns:
             (B, T, hidden_size) – Engram-corrected hidden states

@@ -1,0 +1,256 @@
+type: object
+additionalProperties: false
+properties:
+  positional_encoding:
+    type: string
+    title: "Positional Encoding"
+    title_es: "Codificación Posicional"
+    description: |-
+      Model-wide positional encoding method applied to attention mixers.
+      Controls how position information is injected into the attention computation.
+      - `rope`: Rotary Position Embedding (arXiv:2104.09864). Rotates q/k vectors by position-dependent angles. Standard in Llama, GPT-3.5, Mistral.
+      - `hope`: Higher-Order Position Encoding (arXiv:2503.0). Hyperbolic rotation with exponential damping. HoPE enforces monotonic attention decay with distance.
+      - `nope`: No Position Encoding (arXiv:2305.19466). Identity — lets the model learn position implicitly via causal masking. Works well for decoder-only models.
+      - `alibi`: Attention with Linear Biases (arXiv:2108.12409). Adds a distance-proportional negative bias to attention scores. Enables length extrapolation without retraining.
+      - `pape`: Parabolic Position Encoding (arXiv:2602.01418). Augments q/k with learnable parabola terms (distance + direction + semantics). Vision-centric, supports nD positions.
+      - `pape_efficient`: Efficient PaPE (arXiv:2602.01418). Same math as `pape` but with a pre-computed layout for faster eval. Pure-PyTorch (no Triton).
+      - `pape_ri`: Rotation-Invariant PaPE (arXiv:2602.01418). Distance-only parabola terms; rotation-invariant for 3D vision tasks (point clouds).
+      - `sinusoidal_absolute`: Sinusoidal absolute PE (arXiv:1706.03762). Fixed sin/cos added to token embeddings before the first layer.
+      - `sinusoidal_rotary`: Sinusoidal rotary PE. Absolute-position sin/cos rotation applied to q/k (like RoPE but with absolute angles).
+      - `learned_absolute`: Learnable absolute PE (arXiv:2010.11929). nn.Parameter added to token embeddings. Standard in BERT and ViT.
+      - `none`: No positional encoding. Explicitly disables PE.
+
+      **Per-mixer control:** Each mixer has a `<mixer>_use_pe` flag (default True for attention mixers, False for recurrent/decay mixers like retnet, mamba, ode, gla, deltanet, hgrn2, fox, kda, mtla). Set to False to opt a specific mixer out of the model-wide PE.
+    description_es: |-
+      Método de codificación posicional a nivel de modelo aplicado a los mezcladores de atención.
+      Controla cómo se inyecta la información de posición en el cálculo de atención.
+      - `rope`: Embedding Posicional Rotatorio (arXiv:2104.09864). Rota vectores q/k por ángulos dependientes de posición. Estándar en Llama, GPT-3.5, Mistral.
+      - `hope`: Codificación Posicional de Orden Superior (arXiv:2503.0). Rotación hiperbólica con amortiguación exponencial.
+      - `nope`: Sin Codificación Posicional (arXiv:2305.19466). Identidad — el modelo aprende posición implícitamente vía máscara causal.
+      - `alibi`: Atención con Sesgos Lineales (arXiv:2108.12409). Añade sesgo negativo proporcional a la distancia a las puntuaciones de atención.
+      - `pape`: Codificación Posicional Parabólica (arXiv:2602.01418). Augmenta q/k con términos parabólicos aprendibles. Céntrica en visión, soporta posiciones nD.
+      - `pape_efficient`: PaPE Eficiente (arXiv:2602.01418). Misma matemática que `pape` con layout pre-calculado para evaluación más rápida.
+      - `pape_ri`: PaPE Invariante a Rotación (arXiv:2602.01418). Términos de distancia únicamente; invariante a rotación para tareas de visión 3D.
+      - `sinusoidal_absolute`: PE sinusoidal absoluta (arXiv:1706.03762). sin/cos fijo añadido a embeddings de tokens.
+      - `sinusoidal_rotary`: PE sinusoidal rotatoria. Rotación sin/cos de posición absoluta aplicada a q/k.
+      - `learned_absolute`: PE absoluta aprendible (arXiv:2010.11929). nn.Parameter añadido a embeddings. Estándar en BERT y ViT.
+      - `none`: Sin codificación posicional. Desactiva PE explícitamente.
+    enum:
+      - rope
+      - hope
+      - nope
+      - alibi
+      - pape
+      - pape_efficient
+      - pape_ri
+      - sinusoidal_absolute
+      - sinusoidal_rotary
+      - learned_absolute
+      - none
+    default: rope
+    examples: [rope, hope, alibi, pape, nope]
+  positional_encoding_parameters:
+    type: object
+    additionalProperties: false
+    title: "Positional Encoding Parameters"
+    title_es: "Parámetros de Codificación Posicional"
+    description: |-
+      Configuration parameters for each positional encoding method. Only the
+      sub-object matching the selected `positional_encoding` is used; others are ignored.
+    description_es: |-
+      Parámetros de configuración para cada método de codificación posicional.
+      Solo se usa el sub-objeto que coincide con el `positional_encoding` seleccionado.
+    properties:
+      rope:
+        type: object
+        additionalProperties: false
+        title: "RoPE Parameters"
+        title_es: "Parámetros RoPE"
+        properties:
+          base:
+            type: number
+            minimum: 0
+            title: "RoPE Base"
+            title_es: "Base RoPE"
+            description: "Base frequency for RoPE. Standard: 10000 (Llama). Extended: 100000-1000000 for longer contexts."
+            description_es: "Frecuencia base para RoPE. Estándar: 10000. Extendido: 100000-1000000."
+            examples: [10000.0]
+          scaling:
+            type: number
+            minimum: 0
+            title: "RoPE Scaling"
+            title_es: "Escalado RoPE"
+            description: "Multiplier for RoPE position indices for context extrapolation. Typical: 1.0 (none), 2-8 (moderate), 16+ (aggressive)."
+            description_es: "Multiplicador para índices de posición RoPE. Típico: 1.0, 2-8, 16+."
+            examples: [1.0]
+      hope:
+        type: object
+        additionalProperties: false
+        title: "HoPE Parameters"
+        title_es: "Parámetros HoPE"
+        properties:
+          base:
+            type: number
+            minimum: 0
+            title: "HoPE Base"
+            title_es: "Base HoPE"
+            description: "Base frequency scale for HoPE. Typical: 10000 (standard), 100000 (long-range)."
+            description_es: "Escala de frecuencia base para HoPE. Típico: 10000, 100000."
+            examples: [10000.0]
+          damping:
+            type: number
+            minimum: 0
+            title: "HoPE Damping"
+            title_es: "Amortiguación HoPE"
+            description: "Damping coefficient for HoPE attention decay. Typical: 0.01 (strong/local), 0.5 (mild/long-range)."
+            description_es: "Coeficiente de amortiguación para HoPE. Típico: 0.01, 0.5."
+            examples: [0.01]
+      alibi:
+        type: object
+        additionalProperties: false
+        title: "ALiBi Parameters"
+        title_es: "Parámetros ALiBi"
+        description: ALiBi is parameter-free; slopes are derived from num_heads. This sub-object is reserved for future extensions.
+        description_es: ALiBi es libre de parámetros; las pendientes se derivan de num_heads. Reservado para extensiones futuras.
+        properties: {}
+      pape:
+        type: object
+        additionalProperties: false
+        title: "PaPE Parameters"
+        title_es: "Parámetros PaPE"
+        description: Parameters shared by pape, pape_efficient, and pape_ri.
+        description_es: Parámetros compartidos por pape, pape_efficient y pape_ri.
+        properties:
+          num_parabolas:
+            type: integer
+            minimum: 1
+            title: "Number of Parabolas"
+            title_es: "Número de Parábolas"
+            description: "Number of learnable parabola terms per head. Controls expressiveness of the distance/direction decomposition. Typical: 4-8."
+            description_es: "Número de términos parabólicos aprendibles por cabeza. Típico: 4-8."
+            default: 4
+            examples: [4, 8]
+          num_positions:
+            type: integer
+            minimum: 1
+            title: "Number of Position Dimensions"
+            title_es: "Número de Dimensiones de Posición"
+            description: Dimensionality of position vectors. 1 for language (token index), 2 for vision (row/col), 3 for point clouds.
+            description_es: Dimensionalidad de los vectores de posición. 1 para lenguaje, 2 para visión, 3 para nubes de puntos.
+            default: 1
+            examples: [1, 2, 3]
+          rotation_invariant:
+            type: boolean
+            title: "Rotation Invariant"
+            title_es: "Invariante a Rotación"
+            description: If true, use the rotation-invariant PaPE-RI formulation (distance-only parabola terms). Recommended for 3D vision tasks.
+            description_es: Si verdadero, usar formulación PaPE-RI invariante a rotación. Recomendado para visión 3D.
+            default: false
+            examples: [false]
+      sinusoidal:
+        type: object
+        additionalProperties: false
+        title: "Sinusoidal Parameters"
+        title_es: "Parámetros Sinusoidal"
+        properties:
+          max_len:
+            type: integer
+            minimum: 1
+            title: "Maximum Length"
+            title_es: "Longitud Máxima"
+            description: Maximum sequence length for precomputed sin/cos tables. Sequences longer than this will fail.
+            description_es: Longitud máxima de secuencia para tablas sin/cos pre-calculadas.
+            default: 512
+            examples: [512, 1024]
+          base:
+            type: number
+            minimum: 0
+            title: "Sinusoidal Base"
+            title_es: "Base Sinusoidal"
+            description: "Base frequency for the geometric progression of wavelengths. Standard: 10000."
+            description_es: "Frecuencia base para la progresión geométrica de longitudes de onda. Estándar: 10000."
+            default: 10000.0
+            examples: [10000.0]
+          scale:
+            type: number
+            title: "Sinusoidal Scale"
+            title_es: "Escala Sinusoidal"
+            description: Scaling factor applied to position indices. Useful for length extrapolation.
+            description_es: Factor de escalado aplicado a índices de posición. Útil para extrapolación.
+            default: 1.0
+            examples: [1.0]
+      learned:
+        type: object
+        additionalProperties: false
+        title: "Learned Absolute Parameters"
+        title_es: "Parámetros Absoluta Aprendible"
+        properties:
+          max_len:
+            type: integer
+            minimum: 1
+            title: "Maximum Length"
+            title_es: "Longitud Máxima"
+            description: Maximum sequence length for the learnable positional embedding parameter.
+            description_es: Longitud máxima de secuencia para el embedding posicional aprendible.
+            default: 512
+            examples: [512, 1024]
+          init_std:
+            type: number
+            minimum: 0
+            title: "Init Std"
+            title_es: "Std de Inicialización"
+            description: "Standard deviation for truncated normal initialization of the learnable positional embedding. Typical: 0.02."
+            description_es: "Desviación estándar para inicialización truncada normal. Típico: 0.02."
+            default: 0.02
+            examples: [0.02]
+      use_pe:
+        type: object
+        additionalProperties: false
+        title: "Per-Mixer PE Toggle"
+        title_es: "Conmutador PE por Mixer"
+        description: |-
+          Per-mixer boolean flags to enable/disable the model-wide positional encoding
+          for specific mixers. Defaults: True for attention mixers, False for
+          recurrent/decay mixers (retnet, mamba, ode, gla, deltanet, gated_deltanet,
+          gated_deltanet2, hgrn2, fox, kda, mtla). Override to force PE on/off per mixer.
+        description_es: |-
+          Banderas booleanas por mixer para habilitar/deshabilitar la codificación
+          posicional a nivel de modelo para mixers específicos. Por defecto: True para
+          mixers de atención, False para mixers recurrentes/de decaimiento.
+        properties:
+          standard_attn: { type: boolean, default: true }
+          titan_attn: { type: boolean, default: true }
+          sigmoid_attn: { type: boolean, default: true }
+          gated_softmax_attn: { type: boolean, default: true }
+          gqa_attn: { type: boolean, default: true }
+          mla_attn: { type: boolean, default: true }
+          gqla_attn: { type: boolean, default: true }
+          mlra_attn: { type: boolean, default: true }
+          tucker_attn: { type: boolean, default: true }
+          iha_attn: { type: boolean, default: true }
+          gta_attn: { type: boolean, default: true }
+          mtla_attn: { type: boolean, default: false }
+          cca_attn: { type: boolean, default: true }
+          ccgqa_attn: { type: boolean, default: true }
+          msa_attn: { type: boolean, default: true }
+          sparda_attn: { type: boolean, default: true }
+          gma_attn: { type: boolean, default: true }
+          longformer_attn: { type: boolean, default: true }
+          bigbird_attn: { type: boolean, default: true }
+          sparse_transformer_attn: { type: boolean, default: true }
+          sparsek_attn: { type: boolean, default: true }
+          nsa_attn: { type: boolean, default: true }
+          fasa_attn: { type: boolean, default: true }
+          sparge_attn: { type: boolean, default: true }
+          engram_attn: { type: boolean, default: true }
+          retnet: { type: boolean, default: false }
+          retnet_attn: { type: boolean, default: false }
+          mamba: { type: boolean, default: false }
+          ode: { type: boolean, default: false }
+          gla_attn: { type: boolean, default: false }
+          deltanet_attn: { type: boolean, default: false }
+          gated_deltanet_attn: { type: boolean, default: false }
+          gated_deltanet2_attn: { type: boolean, default: false }
+          hgrn2_attn: { type: boolean, default: false }
+          fox_attn: { type: boolean, default: false }
+          kda_attn: { type: boolean, default: false }

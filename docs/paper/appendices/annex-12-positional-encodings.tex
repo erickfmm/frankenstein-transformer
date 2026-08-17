@@ -1,0 +1,265 @@
+\section{Model-Wide Positional Encodings}
+\label{sec:annex-positional-encodings}
+
+This annex documents the unified positional-encoding (PE) subsystem that
+applies a single \texttt{model.positional\_encoding} choice to every
+attention mixer in the network. The schema contract is:
+\[
+\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{pape},\ \texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\ \texttt{learned\_absolute},\ \texttt{none}\}
+\]
+The implementation lives in \texttt{src/model/embeddings/} and the shared
+injection helpers in \texttt{src/model/attention/common.py}. Bibliography
+keys cited here resolve against \texttt{docs/bibliography/}.
+
+\subsection{Architecture: One Shared Module, Per-Mixer Opt-Out}
+
+A single PE module is built once in the encoder
+(\texttt{FrankensteinEncoder} or \texttt{FrankensteinViT}) via
+\texttt{build\_pos\_encoder(config)} and injected into every
+\texttt{HybridLayer}, which forwards it to each mixer's
+\texttt{\_\_init\_\_(config, pos\_encoder=None)} and
+\texttt{forward(..., pos\_encoder=None)}.
+
+Each mixer carries a per-mixer \texttt{use\_pe} flag
+(\texttt{<mixer>\_attn\_use\_pe}, default \texttt{True} for attention
+mixers, \texttt{False} for recurrent/decay mixers such as
+\texttt{retnet}, \texttt{mamba}, \texttt{ode}, \texttt{gla\_attn},
+\texttt{deltanet\_attn}, \texttt{mtla\_attn}). When \texttt{use\_pe} is
+\texttt{False} the mixer ignores the injected module entirely.
+
+The PE is applied in two phases via the shared helpers
+\texttt{apply\_pe\_to\_qk()} (called before the attention-score
+computation) and \texttt{apply\_pe\_to\_scores()} (called after). The
+helper dispatches on the PE type and falls through to a no-op when the
+mixer's \texttt{use\_pe} flag is \texttt{False}.
+
+\subsection{Injection Styles}
+
+The 11 enum values fall into four injection styles:
+
+\begin{enumerate}
+\item \textbf{Rotation} (\texttt{rope}, \texttt{hope},
+   \texttt{sinusoidal\_rotary}): rotates the query and key tensors
+   before the score computation. The inner product
+   $\mathbf{q}_i^\top\mathbf{k}_j$ becomes a function of the relative
+   offset $i-j$.
+\item \textbf{Score bias} (\texttt{alibi}): adds a distance-proportional
+   bias to the attention-score matrix \emph{after} it is computed.
+\item \textbf{Q/K augmentation} (\texttt{pape}, \texttt{pape\_efficient},
+   \texttt{pape\_ri}): concatenates extra positional dimensions onto the
+   query and key vectors before the dot product, increasing the
+   effective head dimension.
+\item \textbf{Additive at embedding level} (\texttt{sinusoidal\_absolute},
+   \texttt{learned\_absolute}): added directly to the token embeddings
+   before the first layer; no per-mixer action is taken in the
+   attention block.
+\end{enumerate}
+
+\texttt{nope} and \texttt{none} are both no-ops: \texttt{nope} explicitly
+disables positional encoding (the model must learn position implicitly),
+while \texttt{none} is the null module returned by the factory when no
+PE is desired.
+
+\subsection{Mathematical Formulations}
+
+\subsubsection{RoPE --- Rotary Position Embedding}
+
+RoPE \citep{su_rope_2024} rotates each head's query and key by an angle
+proportional to the token index. For head dimension $d_h$ and token
+position $m$, the rotation matrix $\mathbf{R}_m \in \mathbb{R}^{d_h \times d_h}$
+acts on 2-D sub-spaces $(x_{2i}, x_{2i+1})$:
+\[
+\mathbf{R}_m = \operatorname{diag}\!\left(
+\begin{bmatrix}\cos m\theta_0 & -\sin m\theta_0 \\ \sin m\theta_0 & \cos m\theta_0\end{bmatrix},
+\dots,
+\begin{bmatrix}\cos m\theta_{d_h/2-1} & -\sin m\theta_{d_h/2-1} \\ \sin m\theta_{d_h/2-1} & \cos m\theta_{d_h/2-1}\end{bmatrix}
+\right),
+\]
+with frequencies $\theta_i = \texttt{rope\_base}^{-2i/d_h}$. The
+attention score becomes
+$\mathbf{q}_m^\top \mathbf{R}_{m-n} \mathbf{k}_n$, a function of the
+relative offset $m{-}n$. A \texttt{rope\_scaling} factor $s$ rescales
+the effective position to $m/s$ for length-extrapolation modes.
+
+\subsubsection{HoPE --- Hyperbolic Rotary Positional Encoding}
+
+HoPE \citep{dai_hope_2025} generalises RoPE to the hyperbolic geometry of
+the Lorentz model. Instead of Euclidean rotations, HoPE applies
+Lorentz rotations built from hyperbolic functions, enforcing a
+\emph{monotonic decay} of attention weights with increasing token
+distance --- a property RoPE lacks because its oscillatory attention
+pattern can re-spike at long ranges. RoPE is recovered as a special
+case. The \texttt{hope\_base} and \texttt{hope\_damping} knobs control
+the hyperbolic frequency and the decay rate.
+
+\subsubsection{NoPE --- No Positional Encoding}
+
+NoPE \citep{kazemnejad_nope_2023} is the explicit absence of any
+positional injection. The model must discover position implicitly from
+the causal mask (decoder) or from the data itself. The cited work shows
+that NoPE outperforms explicit PE methods (including RoPE and ALiBi) on
+length-generalisation benchmarks while requiring no additional
+computation, because a causal-attention decoder can implicitly encode
+relative position through its attention patterns.
+
+\subsubsection{ALiBi --- Attention with Linear Biases}
+
+ALiBi \citep{press_alibi_2022} does not modify the embeddings or the
+query/key vectors. Instead it adds a static, head-specific linear bias
+to the attention-score matrix:
+\[
+\text{score}_{i,j}^{(h)} = \frac{\mathbf{q}_i^{(h)\top}\mathbf{k}_j^{(h)}}{\sqrt{d_h}} - m_h \cdot (i - j), \qquad m_h = \frac{1}{2^{\lfloor h / \lceil H/8 \rceil \rfloor}},
+\]
+where $m_h$ is a geometric slope per head $h$ and the bias penalises
+distant keys. The \texttt{alibi\_num\_heads} knob controls the slope
+schedule's head count. ALiBi enables length extrapolation: a model
+trained on 1024 tokens generalises to 2048 without retraining.
+
+\subsubsection{PaPE --- Parabolic Position Encoding}
+
+PaPE \citep{ohrstrom_pape_2026} is a vision-centric encoding that
+augments the query and key with extra positional dimensions built from
+parabolic basis functions. Given $P$ parabolas
+(\texttt{pape\_num\_parabolas}) and $S$ positions
+(\texttt{pape\_num\_positions}), the positional feature for coordinate
+$\mathbf{p} \in \mathbb{R}^D$ is
+\[
+\phi_k(\mathbf{p}) = \sum_{j=1}^{S} \alpha_{k,j}\, f_j(\mathbf{p}), \qquad
+f_j(\mathbf{p}) = -\|\mathbf{p} - \mathbf{c}_j\|^2 + b_j,
+\]
+a sum of $S$ paraboloids centred at $\mathbf{c}_j$ with offset $b_j$.
+The $P \cdot S$ extra dimensions are concatenated to the query and key
+before the dot product, so the effective head dimension grows from
+$d_h$ to $d_h + P \cdot S$. Three variants are provided:
+
+\begin{itemize}
+\item \texttt{pape} --- the reference implementation.
+\item \texttt{pape\_efficient} --- a pure-PyTorch reformulation that
+   avoids custom Triton kernels while preserving the same math.
+\item \texttt{pape\_ri} --- the rotation-invariant variant
+   (PaPE-RI in the paper), which satisfies rotation invariance by
+   construction and is controlled by \texttt{pape\_rotation\_invariant}.
+\end{itemize}
+
+PaPE is designed for $n$-D vision tokens (images, video, event cameras,
+point clouds) and is the recommended PE for the ViT path.
+
+\subsubsection{Sinusoidal Absolute}
+
+The original Transformer absolute encoding \citep{vaswani_attention_2017}
+adds a fixed sinusoidal vector to the token embedding:
+\[
+\text{PE}_{(m,2i)} = \sin\!\left(\frac{m}{\texttt{sinusoidal\_base}^{2i/d}}\right), \quad
+\text{PE}_{(m,2i+1)} = \cos\!\left(\frac{m}{\texttt{sinusoidal\_base}^{2i/d}}\right),
+\]
+with \texttt{sinusoidal\_max\_len} capping the precomputed table and
+\texttt{sinusoidal\_scale} multiplying the embedding. This is an
+additive PE: it is applied once at the embedding level and the mixers
+do not apply any per-layer PE.
+
+\subsubsection{Sinusoidal Rotary}
+
+A rotary variant of the sinusoidal encoding: the same sinusoidal
+frequencies are used to build a rotation matrix applied to the query
+and key (as in RoPE), but with the \texttt{sinusoidal\_base} and
+\texttt{sinusoidal\_scale} knobs. This is a rotation-style PE applied
+per-layer via \texttt{apply\_pe\_to\_qk}.
+
+\subsubsection{Learned Absolute}
+
+A learnable absolute encoding: an
+$\texttt{learned\_max\_len} \times d$ parameter matrix is added to the
+token embeddings at the embedding level. Initialisation standard
+deviation is controlled by \texttt{learned\_init\_std}. As with
+sinusoidal absolute, the mixers take no per-layer action.
+
+\subsection{Per-Mixer \texttt{use\_pe} Flags}
+
+Each mixer exposes a \texttt{<mixer>\_attn\_use\_pe} config field
+(e.g.\ \texttt{standard\_attn\_use\_pe}, \texttt{titan\_attn\_use\_pe}).
+The defaults are:
+
+\begin{itemize}
+\item \textbf{True} (attention mixers): \texttt{standard\_attn},
+  \texttt{titan\_attn}, \texttt{sigmoid\_attn},
+  \texttt{gated\_softmax\_attn}, \texttt{gqa\_attn}, all latent mixers
+  (\texttt{mla\_attn}, \texttt{gqla\_attn}, \texttt{mlra\_attn},
+  \texttt{tucker\_attn}, \texttt{iha\_attn}, \texttt{gta\_attn},
+  \texttt{cca\_attn}, \texttt{ccgqa\_attn}, \texttt{gma\_attn}), all
+  sparse mixers (\texttt{longformer\_attn}, \texttt{bigbird\_attn},
+  \texttt{sparse\_transformer\_attn}, \texttt{sparsek\_attn},
+  \texttt{nsa\_attn}, \texttt{msa\_attn}, \texttt{sparda\_attn},
+  \texttt{fasa\_attn}, \texttt{sparge\_attn}), and
+  \texttt{engram\_attn}.
+\item \textbf{False} (recurrent/decay mixers): \texttt{retnet},
+  \texttt{retnet\_attn}, \texttt{mamba}, \texttt{ode},
+  \texttt{gla\_attn}, \texttt{deltanet\_attn},
+  \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn},
+  \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{kda\_attn},
+  \texttt{mtla\_attn}.
+\end{itemize}
+
+The \texttt{False} default for recurrent/decay mixers reflects that
+these architectures bake their own temporal/positional inductive bias
+into their recurrence (e.g.\ RetNet's complex rotation, Mamba's
+selective scan). Overriding \texttt{use\_pe=True} is allowed but is
+typically redundant.
+
+\subsection{Vision Transformer Unification}
+
+The ViT path (\texttt{FrankensteinViT}) previously used its own
+\texttt{pos\_embedding\_type} field with values
+\texttt{learned\_1d}, \texttt{none}. This has been unified with the
+model-wide enum: \texttt{learned\_1d} is migrated to
+\texttt{learned\_absolute}, and \texttt{none} maps to \texttt{none}.
+The ViT builds the same \texttt{build\_pos\_encoder(config)} module and
+injects it into its HybridLayers, so a ViT can now use RoPE, HoPE, ALiBi,
+PaPE, or any other PE in the enum.
+
+\subsection{Legacy Compatibility}
+
+The legacy \texttt{use\_hope} boolean flag is deprecated and mapped to
+the new enum: \texttt{use\_hope=True} $\to$ \texttt{positional\_encoding=hope},
+\texttt{use\_hope=False} $\to$ \texttt{positional\_encoding=rope}. The
+per-mixer \texttt{positional\_encoding} override that previously
+existed only on \texttt{titan\_attn} is now a no-op: the model-wide
+enum is the single source of truth, and the TitanAttention allow-list
+that restricted PE to \texttt{\{hope, rope, none, nope\}} has been
+removed --- all 11 values now work with every mixer.
+
+\subsection{Architectural Profile: Positional Encodings}
+
+Table~\ref{tab:all-pos-enc} summarises the 11 supported positional
+encodings.
+
+\footnotesize
+\begin{longtable}{p{2.4cm}p{1.7cm}p{4.2cm}p{2.0cm}p{2.0cm}}
+\toprule
+\textbf{Name} & \textbf{Style} & \textbf{Key Idea} & \textbf{Params} & \textbf{Reference} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Name} & \textbf{Style} & \textbf{Key Idea} & \textbf{Params} & \textbf{Reference} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{5}{r}{\textit{continued on next page}} \\
+\endfoot
+\bottomrule
+\caption{Positional encoding catalog. ``Style'' is the injection mechanism (rotation, score-bias, Q/K-augmentation, additive). ``Params'' lists the principal config knobs.}
+\label{tab:all-pos-enc}
+\endlastfoot
+rope & Rotation & Frequency-based rotation of Q/K; relative position via inner-product geometry & \texttt{rope\_base}, \texttt{rope\_scaling} & \citep{su_rope_2024} \\
+hope & Rotation & Hyperbolic Lorentz rotation; monotonic attention decay with distance & \texttt{hope\_base}, \texttt{hope\_damping} & \citep{dai_hope_2025} \\
+nope & None & Explicit no-PE; model learns position implicitly from causal mask & --- & \citep{kazemnejad_nope_2023} \\
+alibi & Score bias & Static linear distance penalty added to attention scores; length extrapolation & \texttt{alibi\_num\_heads} & \citep{press_alibi_2022} \\
+pape & Q/K aug. & Parabolic basis functions concatenated to Q/K; vision-centric, $n$-D & \texttt{pape\_num\_parabolas}, \texttt{pape\_num\_positions} & \citep{ohrstrom_pape_2026} \\
+pape\_efficient & Q/K aug. & Pure-PyTorch PaPE; no custom Triton kernels & same as pape & \citep{ohrstrom_pape_2026} \\
+pape\_ri & Q/K aug. & Rotation-invariant PaPE (PaPE-RI) & \texttt{pape\_rotation\_invariant} & \citep{ohrstrom_pape_2026} \\
+sinusoidal\_absolute & Additive & Fixed sinusoidal added to embeddings (original Transformer) & \texttt{sinusoidal\_base}, \texttt{sinusoidal\_max\_len}, \texttt{sinusoidal\_scale} & \citep{vaswani_attention_2017} \\
+sinusoidal\_rotary & Rotation & Sinusoidal frequencies as a rotation matrix on Q/K & same as sinusoidal & \citep{vaswani_attention_2017} \\
+learned\_absolute & Additive & Learnable parameter matrix added to embeddings & \texttt{learned\_max\_len}, \texttt{learned\_init\_std} & \citep{vaswani_attention_2017} \\
+none & None & Null module; no positional information injected & --- & --- \\
+\bottomrule
+\end{longtable}
+\normalsize

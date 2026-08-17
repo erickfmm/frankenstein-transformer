@@ -11,6 +11,8 @@ Reference:
     Token Competition", arXiv:2409.04431.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import torch
@@ -57,7 +59,7 @@ class SigmoidAttention(nn.Module):
         ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -75,25 +77,35 @@ class SigmoidAttention(nn.Module):
         self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "sigmoid_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute sigmoid attention with L1 normalization.
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
             logical_layer_idx: Logical layer index (unused; accepted for
                 interface compatibility with other attention modules).
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder`` for this forward call.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
         bsz, seq_len, hidden = x.shape
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
+        from .common import apply_pe_to_qk, apply_pe_to_scores
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
         if self.mode == "decoder":
             causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1)
             attn_scores = attn_scores.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))

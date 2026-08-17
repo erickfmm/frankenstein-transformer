@@ -37,6 +37,7 @@ import torch.nn.functional as F
 from .config import FrankensteinModelConfig
 from .hybrid_layer import HybridLayer
 from .attention.common import BitLinear
+from .embeddings import build_pos_encoder, LearnedAbsolutePE, SinusoidalAbsolute
 from .norm import get_norm
 from .residuals import ResidualBase, build_residual
 
@@ -106,8 +107,9 @@ class FrankensteinViT(nn.Module):
         patch_embed: :class:`PatchEmbed` module.
         cls_token: Learnable [CLS] token (if ``config.cls_token`` and
             ``config.pooling_mode == "cls"``).
-        pos_embed: Learnable 1D positional embedding (if
-            ``config.pos_embedding_type == "learned_1d"``).
+        pos_encoder: Shared positional encoding module (if
+            ``config.pos_embedding_type`` resolves to a learned/sinusoidal
+            absolute PE), built via :func:`build_pos_encoder`.
         mask_token: Learnable mask token (for ``patch_prediction`` task).
         dropout: Embedding dropout.
         layers: ModuleList of :class:`HybridLayer` blocks.
@@ -145,11 +147,14 @@ class FrankensteinViT(nn.Module):
             _trunc_normal_(self.cls_token, std=0.02)
 
         # ---- Learnable 1D positional embedding ----
-        self.use_pos_embed = cfg.pos_embedding_type == "learned_1d"
-        if self.use_pos_embed:
-            num_pos = self.num_patches + (1 if self.use_cls_token else 0)
-            self.pos_embed = nn.Parameter(torch.zeros(1, num_pos, cfg.hidden_size))
-            _trunc_normal_(self.pos_embed, std=0.02)
+        pe_type = str(getattr(cfg, "pos_embedding_type", "learned_1d"))
+        if pe_type == "learned_1d":
+            pe_type = "learned_absolute"
+        original_pe = getattr(cfg, "positional_encoding", None)
+        cfg.positional_encoding = pe_type
+        self.pos_encoder = build_pos_encoder(cfg)
+        cfg.positional_encoding = original_pe
+        self.use_pos_embed = pe_type in ("learned_absolute", "sinusoidal_absolute")
 
         # ---- Mask token (for patch_prediction) ----
         self.mask_token = nn.Parameter(torch.zeros(1, 1, cfg.hidden_size))
@@ -158,7 +163,7 @@ class FrankensteinViT(nn.Module):
         # ---- HybridLayer stack (reused — all 34 mixers) ----
         self.layers = nn.ModuleList(
             [
-                HybridLayer(cfg, layer_type=cfg.layer_pattern[i % len(cfg.layer_pattern)])
+                HybridLayer(cfg, layer_type=cfg.layer_pattern[i % len(cfg.layer_pattern)], pos_encoder=self.pos_encoder)
                 for i in range(cfg.num_layers)
             ]
         )
@@ -413,8 +418,8 @@ class FrankensteinViT(nn.Module):
             x = torch.cat([cls, x], dim=1)
 
         # ---- Positional embedding ----
-        if self.use_pos_embed:
-            x = x + self.pos_embed
+        if self.pos_encoder is not None and hasattr(self.pos_encoder, "add"):
+            x = self.pos_encoder.add(x)
 
         x = self.dropout(x)
 
@@ -454,6 +459,11 @@ class FrankensteinViT(nn.Module):
         else:
             raise ValueError(f"Unknown task: {task!r}")
 
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        if (prefix + "pos_embed") in state_dict and (prefix + "pos_encoder.pos_embed") not in state_dict:
+            state_dict[prefix + "pos_encoder.pos_embed"] = state_dict.pop(prefix + "pos_embed")
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+
     def configure_optimizers(self) -> List[Dict[str, Any]]:
         """Return named parameter groups for :func:`build_optimizer`.
 
@@ -467,7 +477,7 @@ class FrankensteinViT(nn.Module):
             if not param.requires_grad:
                 continue
             if any(k in name for k in
-                   ["patch_embed", "pos_embed", "cls_token", "mask_token"]):
+                   ["patch_embed", "pos_encoder", "pos_embed", "cls_token", "mask_token"]):
                 groups["embeddings"].append(param)
             elif "norm" in name or "final_norm" in name:
                 groups["norms"].append(param)

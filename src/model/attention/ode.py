@@ -15,11 +15,15 @@ Reference:
     Inspired Transformer", ACL 2022.
 """
 
+from __future__ import annotations
+
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import BitLinear
+from .common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 from ..norm import get_norm
 
 
@@ -54,7 +58,7 @@ class ODEFunc(nn.Module):
         mode: ``"encoder"`` for bidirectional, ``"decoder"`` for causal.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
         self.dim = config.hidden_size
         self.num_heads = config.num_heads
@@ -68,28 +72,40 @@ class ODEFunc(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
 
-    def forward(self, t, x):
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "ode_use_pe", False))
+
+    def forward(self, t, x, logical_layer_idx: Optional[int] = None, pos_encoder=None):
         """Evaluate the derivative function at time ``t``.
 
         Args:
             t: Current integration time (float; unused in the attention
                 computation but accepted for ODE solver interface).
             x: State tensor of shape ``(batch_size, seq_len, dim)``.
+            logical_layer_idx: Logical layer index for layer-dependent PE.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             Derivative tensor ``dx/dt`` of shape
             ``(batch_size, seq_len, dim)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, dim = x.shape
 
         h = self.norm(x)
         qkv = self.qkv(h).reshape(bsz, seq_len, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
 
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
         attn = (q @ k.transpose(-2, -1)) * self.scale
         if self.mode == "decoder":
             causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1)
             attn = attn.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+        attn = apply_pe_to_scores(pe, self.pe_type, attn, q, self.use_pe)
         attn = attn.softmax(dim=-1)
         attn = self.dropout(attn)
 
@@ -125,36 +141,45 @@ class ODEAttentionBlock(nn.Module):
         steps: Number of integration steps from ``t=0`` to ``t=1``.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
-        self.ode_func = ODEFunc(config)
+        self.ode_func = ODEFunc(config, pos_encoder=pos_encoder)
         self.solver = config.ode_solver
         self.steps = config.ode_steps
 
-    def forward(self, x):
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "ode_use_pe", False))
+
+    def forward(self, x, logical_layer_idx: Optional[int] = None, pos_encoder=None):
         """Integrate the ODE from ``t=0`` to ``t=1``.
 
         Args:
             x: Initial state tensor of shape
                 ``(batch_size, seq_len, hidden_size)``.
+            logical_layer_idx: Logical layer index for layer-dependent PE.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             Final state ``z(1)`` of shape
             ``(batch_size, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         dt = 1.0 / self.steps
         t = 0.0
         z = x
 
         for _ in range(self.steps):
             if self.solver == "euler":
-                dz = self.ode_func(t, z)
+                dz = self.ode_func(t, z, logical_layer_idx=logical_layer_idx, pos_encoder=pe)
                 z = z + dz * dt
             elif self.solver == "rk4":
-                k1 = self.ode_func(t, z)
-                k2 = self.ode_func(t + dt / 2, z + k1 * dt / 2)
-                k3 = self.ode_func(t + dt / 2, z + k2 * dt / 2)
-                k4 = self.ode_func(t + dt, z + k3 * dt)
+                k1 = self.ode_func(t, z, logical_layer_idx=logical_layer_idx, pos_encoder=pe)
+                k2 = self.ode_func(t + dt / 2, z + k1 * dt / 2, logical_layer_idx=logical_layer_idx, pos_encoder=pe)
+                k3 = self.ode_func(t + dt / 2, z + k2 * dt / 2, logical_layer_idx=logical_layer_idx, pos_encoder=pe)
+                k4 = self.ode_func(t + dt, z + k3 * dt, logical_layer_idx=logical_layer_idx, pos_encoder=pe)
                 z = z + (k1 + 2 * k2 + 2 * k3 + k4) * (dt / 6.0)
             t += dt
 

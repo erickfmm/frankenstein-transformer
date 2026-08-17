@@ -3,13 +3,15 @@
 Implements the core attention component of the Titans architecture, which
 augments standard multi-head attention with a neural memory module that learns
 to memorize at test time. This module provides the attention pathway that
-interacts with the surprise-driven long-term memory. Uses HoPE or RoPE
-positional encoding on query and key projections.
+interacts with the surprise-driven long-term memory. Uses a shared positional
+encoding module (HoPE or RoPE) applied to query and key projections.
 
 Reference:
     Behrouz et al. (2025), "Titans: Learning to Memorize at Test Time",
     arXiv:2501.00663.
 """
+
+from __future__ import annotations
 
 from typing import Optional
 
@@ -17,9 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import BitLinear
-from ..embeddings.hope import HoPE
-from ..embeddings.rope import RoPE
+from .common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
 
 class TitanAttention(nn.Module):
@@ -38,9 +38,11 @@ class TitanAttention(nn.Module):
     Args:
         config: Model configuration object with attributes ``hidden_size``,
             ``num_heads``, ``dropout``, ``use_bitnet``, ``positional_encoding``
-            (``"hope"`` or ``"rope"``), ``hope_base``, ``hope_damping``,
-            ``rope_base``, ``rope_scaling``, and optionally ``mode``
+            (``"hope"`` or ``"rope"``), and optionally ``mode``
             (``"encoder"`` or ``"decoder"``).
+        pos_encoder: Shared positional encoding module (``HoPE`` or
+            ``RoPE``) to apply to queries and keys. If ``None``, no PE is
+            applied.
 
     Attributes:
         hidden_size: Dimensionality of the input and output embeddings.
@@ -52,17 +54,19 @@ class TitanAttention(nn.Module):
         k_proj: Linear (or BitLinear) projection for keys.
         v_proj: Linear (or BitLinear) projection for values.
         out_proj: Linear (or BitLinear) output projection.
-        pos_encoder: Positional encoding module (``HoPE`` or ``RoPE``).
+        pos_encoder: Shared positional encoding module (``HoPE`` or
+            ``RoPE``), or ``None``.
+        pe_type: Positional encoding type string (lowercased).
+        use_pe: Whether PE is enabled for this mixer.
         dropout: Dropout layer applied to attention weights.
         mode: ``"encoder"`` for bidirectional attention, ``"decoder"`` for
             causal (upper-triangular) masking.
 
     Raises:
-        ValueError: If ``hidden_size`` is not divisible by ``num_heads``, or
-            if ``positional_encoding`` is not one of ``{"hope", "rope"}``.
+        ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -78,28 +82,18 @@ class TitanAttention(nn.Module):
         self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
 
-        positional_encoding = getattr(config, "positional_encoding", None)
+        positional_encoding = str(getattr(config, "positional_encoding", "rope")).lower()
         if positional_encoding is None:
             positional_encoding = "hope" if bool(getattr(config, "use_hope", True)) else "rope"
-        positional_encoding = str(positional_encoding).lower()
 
-        if positional_encoding == "hope":
-            self.pos_encoder = HoPE(self.head_dim, base=config.hope_base, damping=config.hope_damping)
-        elif positional_encoding == "rope":
-            self.pos_encoder = RoPE(
-                self.head_dim,
-                base=getattr(config, "rope_base", 10_000.0),
-                scaling=getattr(config, "rope_scaling", 1.0),
-            )
-        else:
-            raise ValueError(
-                "positional_encoding must be one of {'hope', 'rope'} for TitanAttention"
-            )
+        self.pos_encoder = pos_encoder
+        self.pe_type = positional_encoding
+        self.use_pe = bool(getattr(config, "titan_attn_use_pe", True))
 
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute Titans multi-head attention with positional encoding.
 
         Args:
@@ -107,21 +101,24 @@ class TitanAttention(nn.Module):
             logical_layer_idx: Logical layer index passed to the positional
                 encoder for layer-dependent scaling. Defaults to ``0`` if
                 ``None``.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder`` for this forward call.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
         bsz, seq_len, hidden = x.shape
         logical_layer_idx = logical_layer_idx or 0
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        q = self.pos_encoder(q, logical_layer_idx=logical_layer_idx)
-        k = self.pos_encoder(k, logical_layer_idx=logical_layer_idx)
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx, self.use_pe)
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
         if self.mode == "decoder":
             causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1)
             attn_scores = attn_scores.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))

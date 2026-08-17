@@ -13,6 +13,8 @@ Reference:
     for Large Language Models. arXiv:2307.08621.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import torch
@@ -33,6 +35,8 @@ class RetNetAttention(nn.Module):
         config: Model configuration object forwarded to
             MultiScaleRetention. Must include hidden_size, num_heads,
             dropout, and optionally use_bitnet and mode.
+        pos_encoder: Optional shared positional encoding module forwarded
+            to the inner MultiScaleRetention.
 
     Attributes:
         inner (MultiScaleRetention): The wrapped multi-scale retention
@@ -46,18 +50,19 @@ class RetNetAttention(nn.Module):
         for Large Language Models. arXiv:2307.08621.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         """Initialize RetNetAttention.
 
         Args:
             config: Model configuration object. See class docstring for
                 required attributes.
+            pos_encoder: Optional shared positional encoding module.
         """
         super().__init__()
-        self.inner = MultiScaleRetention(config)
+        self.inner = MultiScaleRetention(config, pos_encoder=pos_encoder)
         self.mode = getattr(config, "mode", "encoder")
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute multi-scale retention over the input sequence.
 
         Delegates to the inner MultiScaleRetention module.
@@ -66,8 +71,10 @@ class RetNetAttention(nn.Module):
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
             logical_layer_idx: Unused; accepted for interface
                 compatibility with other attention mixers.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.inner.pos_encoder``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
-        return self.inner(x)
+        return self.inner(x, logical_layer_idx=logical_layer_idx, pos_encoder=pos_encoder)

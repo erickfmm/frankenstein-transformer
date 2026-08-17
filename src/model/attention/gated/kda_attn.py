@@ -104,12 +104,13 @@ class KDAAttention(nn.Module):
         Attention Architecture". arXiv:2510.26692.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         """Initialize KDAAttention.
 
         Args:
             config: Model configuration object. See class docstring for
                 required attributes.
+            pos_encoder: Optional shared positional encoding module.
 
         Raises:
             ValueError: If hidden_size is not divisible by num_heads.
@@ -136,7 +137,11 @@ class KDAAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "kda_attn_use_pe", False))
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute KDA attention over the input sequence.
 
         Processes the sequence token-by-token with a gated delta-rule
@@ -152,10 +157,14 @@ class KDAAttention(nn.Module):
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
             logical_layer_idx: Unused; accepted for interface
                 compatibility with other attention mixers.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, _ = x.shape
 
         q = F.normalize(
@@ -166,6 +175,11 @@ class KDAAttention(nn.Module):
         )
         v = F.silu(self.v_proj(x)).view(bsz, seq_len, self.num_heads, self.head_dim)
         beta = torch.sigmoid(self.beta_proj(x))
+
+        if self.use_pe and pe is not None:
+            from ..common import apply_pe_to_qk
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+            k = F.normalize(k, dim=-1)
 
         log_decay = (
             self.log_decay_base - F.softplus(self.log_decay_delta)

@@ -44,7 +44,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..common import BitLinear
+from ..common import BitLinear, apply_pe_to_qk
 
 
 class MSAAttention(nn.Module):
@@ -79,7 +79,7 @@ class MSAAttention(nn.Module):
             ``num_heads`` not divisible by ``num_kv_heads``.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -109,6 +109,10 @@ class MSAAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.idx_scale = self.index_dim ** -0.5
         self.last_kl_alignment_loss: Optional[torch.Tensor] = None
+
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "msa_attn_use_pe", True))
 
     def _block_max_scores(self, q_idx: torch.Tensor, k_idx: torch.Tensor, num_blocks: int) -> torch.Tensor:
         """Compute per-block max-pooled index scores (causal).
@@ -223,16 +227,20 @@ class MSAAttention(nn.Module):
             out = torch.where(sel_b, out_blk, out)
         return out
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute MiniMax Sparse Attention.
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
             logical_layer_idx: Unused; accepted for interface compatibility.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, _ = x.shape
         bs = self.block_size
         num_blocks = (seq_len + bs - 1) // bs
@@ -240,6 +248,8 @@ class MSAAttention(nn.Module):
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         with torch.no_grad():
             x_detached = x.detach()

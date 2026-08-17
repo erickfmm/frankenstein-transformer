@@ -12,13 +12,15 @@ Reference:
     arXiv:2004.05150.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..common import BitLinear
+from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
 
 class LongformerAttention(nn.Module):
@@ -52,7 +54,7 @@ class LongformerAttention(nn.Module):
         arXiv:2004.05150.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         """Initialize LongformerAttention.
 
         Args:
@@ -68,6 +70,7 @@ class LongformerAttention(nn.Module):
                     tokens. Defaults to ``[0]`` (e.g., CLS token).
                 mode (str, optional): ``"encoder"`` or ``"decoder"``.
                     Defaults to ``"encoder"``.
+            pos_encoder: Optional shared positional encoding module.
 
         Raises:
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
@@ -92,6 +95,10 @@ class LongformerAttention(nn.Module):
         self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
+
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "longformer_attn_use_pe", True))
 
     def _build_mask(self, seq_len: int, device: torch.device) -> torch.Tensor:
         """Build the sliding-window plus global-token attention mask.
@@ -122,7 +129,7 @@ class LongformerAttention(nn.Module):
 
         return mask
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute sliding-window attention with global tokens.
 
         Projects queries, keys, and values, then applies the combined
@@ -134,15 +141,21 @@ class LongformerAttention(nn.Module):
             logical_layer_idx (Optional[int]): Logical layer index for
                 potential layer-specific behavior. Not used by this
                 implementation.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, hidden = x.shape
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         scores = (q @ k.transpose(-2, -1)) * self.scale
         mask = self._build_mask(seq_len, x.device)
@@ -151,6 +164,7 @@ class LongformerAttention(nn.Module):
             mask = mask & causal
         scores = scores.masked_fill(~mask.unsqueeze(0).unsqueeze(0), float("-inf"))
 
+        scores = apply_pe_to_scores(pe, self.pe_type, scores, q, self.use_pe)
         attn = F.softmax(scores, dim=-1)
         attn = self.dropout(attn)
         out = (attn @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)

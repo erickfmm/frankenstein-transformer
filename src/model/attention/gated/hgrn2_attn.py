@@ -17,6 +17,8 @@ Reference:
     arXiv:2404.07904. COLM 2024.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import torch
@@ -78,12 +80,13 @@ class HGRN2Attention(nn.Module):
         arXiv:2404.07904. COLM 2024.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         """Initialize HGRN2Attention.
 
         Args:
             config: Model configuration object. See class docstring for
                 required attributes.
+            pos_encoder: Optional shared positional encoding module.
 
         Raises:
             ValueError: If hidden_size is not divisible by num_heads.
@@ -110,7 +113,11 @@ class HGRN2Attention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "hgrn2_attn_use_pe", False))
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute HGRN2 attention over the input sequence.
 
         Processes the sequence token-by-token with a lower-bounded
@@ -122,10 +129,14 @@ class HGRN2Attention(nn.Module):
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
             logical_layer_idx: Unused; accepted for interface
                 compatibility with other attention mixers.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
         bsz, seq_len, _ = x.shape
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim)
@@ -133,6 +144,10 @@ class HGRN2Attention(nn.Module):
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim)
         fg = torch.sigmoid(self.forget_proj(x)).view(bsz, seq_len, self.num_heads, self.head_dim)
         fg = self.lower_bound + (1 - self.lower_bound) * fg
+
+        if self.use_pe and pe is not None:
+            from ..common import apply_pe_to_qk
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         state = torch.zeros(
             bsz,

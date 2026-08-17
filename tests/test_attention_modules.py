@@ -127,7 +127,10 @@ class SigmoidAttentionTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class TitanAttentionTests(unittest.TestCase):
     def _make(self, **kw):
-        return TitanAttention(_cfg(**kw))
+        from src.model.embeddings.factory import build_pos_encoder
+        cfg = _cfg(**kw)
+        pe = build_pos_encoder(cfg)
+        return TitanAttention(cfg, pos_encoder=pe)
 
     def _x(self):
         return torch.randn(BSZ, SEQ, DIM)
@@ -156,9 +159,7 @@ class TitanAttentionTests(unittest.TestCase):
 
     def test_invalid_positional_encoding_raises(self):
         with self.assertRaises(ValueError):
-            cfg = _cfg()
-            cfg.__dict__["positional_encoding"] = "absolute"
-            TitanAttention(cfg)
+            FrankensteinModelConfig(**{**_cfg().__dict__, "positional_encoding": "absolute"})
 
     def test_invalid_hidden_size_raises(self):
         with self.assertRaises(ValueError):
@@ -172,6 +173,21 @@ class TitanAttentionTests(unittest.TestCase):
 
     def test_with_bitnet_and_hope(self):
         attn = TitanAttention(_cfg(use_bitnet=True, positional_encoding="hope"))
+        y = attn(self._x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_titan_with_nope(self):
+        attn = self._make(positional_encoding="nope")
+        y = attn(self._x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_titan_with_alibi(self):
+        attn = self._make(positional_encoding="alibi")
+        y = attn(self._x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_titan_with_pape(self):
+        attn = self._make(positional_encoding="pape", pape_num_parabolas=4, pape_num_positions=1)
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 

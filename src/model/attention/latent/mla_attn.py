@@ -35,29 +35,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..common import BitLinear
-
-
-def _apply_rope(x: torch.Tensor, base: float = 10000.0) -> torch.Tensor:
-    """Apply rotary positional embeddings to the last dimension of ``x``.
-
-    Args:
-        x: Tensor of shape ``(B, H, S, D)`` with ``D`` even.
-        base: RoPE base frequency. Default: 10000.0.
-
-    Returns:
-        Tensor of the same shape as ``x`` with RoPE applied.
-    """
-    bsz, heads, seq, dim = x.shape
-    half = dim // 2
-    pos = torch.arange(seq, device=x.device, dtype=torch.float32)
-    inv_freq = 1.0 / (base ** (torch.arange(0, half, device=x.device, dtype=torch.float32) * 2.0 / dim))
-    freqs = torch.outer(pos, inv_freq)
-    cos = torch.cos(freqs).view(1, 1, seq, half)
-    sin = torch.sin(freqs).view(1, 1, seq, half)
-    x1, x2 = x[..., :half], x[..., half:]
-    rotated = torch.cat([x1 * cos - x2 * sin, x1 * sin + x2 * cos], dim=-1)
-    return rotated.to(x.dtype)
+from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
 
 class MLAAttention(nn.Module):
@@ -73,14 +51,20 @@ class MLAAttention(nn.Module):
         config: Model configuration object with attributes ``hidden_size``,
             ``num_heads``, ``dropout``, ``use_bitnet``, ``mode`` and the
             optional ``mla_latent_rank`` (default ``hidden_size // 2``)
-            and ``rope_base`` (default 10000.0).
+            and ``rope_base`` (default 10000.0, kept for backward compat).
+        pos_encoder: Shared positional encoding module applied to the
+            decompressed query and key tensors. If ``None``, no PE is
+            applied.
 
     Attributes:
         hidden_size: Input embedding dimensionality.
         num_heads: Number of attention heads.
         head_dim: Dimensionality per head (``hidden_size // num_heads``).
         latent_rank: Rank ``r_kv`` of the joint key-value latent.
-        rope_base: RoPE base frequency.
+        rope_base: RoPE base frequency (kept for backward compat).
+        pos_encoder: Shared positional encoding module (or ``None``).
+        pe_type: Positional encoding type string (lowercased).
+        use_pe: Whether PE is enabled for this mixer.
         dkv_proj: Down-projection ``hidden_size -> r_kv`` (latent).
         uk_proj: Key up-projection ``r_kv -> num_heads*head_dim``.
         uv_proj: Value up-projection ``r_kv -> num_heads*head_dim``.
@@ -93,7 +77,7 @@ class MLAAttention(nn.Module):
         ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, pos_encoder=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -112,26 +96,33 @@ class MLAAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
         self.scale = self.head_dim ** -0.5
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "mla_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute latent attention with RoPE on decompressed Q/K.
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
-            logical_layer_idx: Unused; accepted for interface compatibility.
+            logical_layer_idx: Logical layer index passed to the positional
+                encoder. Defaults to ``0`` if ``None``.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder`` for this forward call.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
         bsz, seq_len, _ = x.shape
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
         c_kv = self.dkv_proj(x)
         k = self.uk_proj(c_kv).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.uv_proj(c_kv).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        q = _apply_rope(q, self.rope_base)
-        k = _apply_rope(k, self.rope_base)
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
         if self.mode == "decoder":
             causal_mask = torch.triu(
                 torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1

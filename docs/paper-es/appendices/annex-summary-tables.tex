@@ -293,9 +293,9 @@ reglu & Compuerta & $\text{ReLU}(xW_g)\odot(xW_u)\,W_d$ & \textbf{sí} & \citep{
 
 \subsection{Variantes de Embedding}
 
-La Tabla~\ref{tab:all-embeddings} cataloga los cuatro métodos de embedding soportados por el código base: dos esquemas de codificación posicional y dos optimizaciones estructurales de embedding.
+La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y optimizaciones estructurales de embedding soportadas por el código base. Las 11 codificaciones posicionales se configuran mediante el campo \texttt{positional\_encoding} de todo el modelo (ver Anexo~12 para las formulaciones completas); las dos optimizaciones estructurales se controlan con sus propias banderas.
 
-\small
+\footnotesize
 \begin{longtable}{p{3.0cm}p{7.5cm}p{3.5cm}}
 \toprule
 \textbf{Método} & \textbf{Descripción} & \textbf{Referencia} \\
@@ -309,11 +309,25 @@ La Tabla~\ref{tab:all-embeddings} cataloga los cuatro métodos de embedding sopo
 \multicolumn{3}{r}{\textit{continúa en la página siguiente}} \\
 \endfoot
 \bottomrule
-\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada.}
+\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada. Las primeras 11 filas son codificaciones posicionales (Anexo~12); las últimas dos son optimizaciones estructurales de embedding.}
 \label{tab:all-embeddings}
 \endlastfoot
-RoPE & Embedding Posicional Rotatorio; aplica rotación basada en frecuencia a vectores de consulta y clave, codificando la posición relativa mediante geometría de producto interno & \citep{su_rope_2024} \\
-HoPE & Codificación Posicional Rotatoria Hiperbólica; rotación inspirada en Lorentz usando funciones hiperbólicas; impone decaimiento monótono de atención con la distancia; RoPE es un caso especial & \citep{dai_hope_2025} \\
+\multicolumn{3}{c}{\textbf{Codificaciones Posicionales (11)}} \\
+\midrule
+RoPE & Embedding Posicional Rotatorio; rotación basada en frecuencia de Q/K, codificando posición relativa mediante geometría de producto interno & \citep{su_rope_2024} \\
+HoPE & Codificación Posicional Rotatoria Hiperbólica; rotación inspirada en Lorentz usando funciones hiperbólicas; decaimiento monótono de atención con la distancia; RoPE es un caso especial & \citep{dai_hope_2025} \\
+NoPE & Sin Codificación Posicional; el modelo aprende posición implícitamente de la máscara causal; supera a PE explícita en generalización de longitud & \citep{kazemnejad_nope_2023} \\
+ALiBi & Atención con Sesgos Lineales; penalización estática proporcional a distancia en puntuaciones de atención; habilita extrapolación de longitud & \citep{press_alibi_2022} \\
+PaPE & Codificación Posicional Parabólica; funciones base parabólicas concatenadas a Q/K; centrada en visión, $n$-D, extrapolatable & \citep{ohrstrom_pape_2026} \\
+PaPE-Eficiente & PaPE en PyTorch puro; sin kernels Triton personalizados, misma matemática & \citep{ohrstrom_pape_2026} \\
+PaPE-RI & PaPE invariante a rotación (PaPE-RI) & \citep{ohrstrom_pape_2026} \\
+Sinusoidal Absoluta & Sinusoidal fijo añadido a embeddings (Transformer original) & \citep{vaswani_attention_2017} \\
+Sinusoidal Rotatoria & Frecuencias sinusoidales como matriz de rotación en Q/K & \citep{vaswani_attention_2017} \\
+Absoluta Aprendida & Matriz de parámetros aprendible añadida a embeddings & \citep{vaswani_attention_2017} \\
+None & Módulo nulo; ninguna información posicional inyectada & --- \\
+\midrule
+\multicolumn{3}{c}{\textbf{Optimizaciones Estructurales de Embedding (2)}} \\
+\midrule
 Embeddings Factorizados & Descompone la matriz de embedding $V \times H$ en factores $V \times R$ y $R \times H$; reduce parámetros de $\mathcal{O}(VH)$ a $\mathcal{O}(V R + R H)$; controlado por \texttt{factorized\_embedding\_dim} & (interno) \\
 Convolución de Embedding & Conv1d depthwise aplicada sobre el flujo de embeddings antes del primer bloque transformer; proporciona filtrado ligero de contexto local; controlado por \texttt{embedding\_conv\_kernel} & (interno) \\
 \bottomrule

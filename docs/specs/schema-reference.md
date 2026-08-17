@@ -42,17 +42,28 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 | `factorized_embedding_dim` | int | Yes | ≥ 1 | — | Reduced embedding dimension |
 | `use_embedding_conv` | bool | Yes | — | — | Enable Conv1d over embeddings |
 | `embedding_conv_kernel` | int | Yes | ≥ 1 | — | Conv1d kernel size |
-| `use_hope` | bool | Yes | — | — | **Deprecated** legacy HoPE flag |
+| `use_hope` | bool | Yes | — | — | **Deprecated** legacy HoPE flag (mapped to `positional_encoding`) |
 | `use_moe` | bool | Yes | — | — | Enable MoE FFN routing |
 | `ffn_hidden_size` | int | Yes | ≥ 1 | — | FFN intermediate width |
 | `ffn_activation` | enum | Yes | 43 values (see [Activations](activations.md)) | `silu` | FFN non-linearity |
 | `ffn_activation_config` | object | No | `additionalProperties: false` | — | Learnable-activation params (RAF degrees/version, PReLU init, parametric alphas) |
 | `mode` | enum | No | `encoder`, `decoder` | — | Attention masking mode |
-| `positional_encoding` | enum | No | `hope`, `rope` | — | Positional encoding for `titan_attn` |
+| `positional_encoding` | enum | No | `rope`, `hope`, `nope`, `alibi`, `pape`, `pape_efficient`, `pape_ri`, `sinusoidal_absolute`, `sinusoidal_rotary`, `learned_absolute`, `none` | `rope` | Model-wide positional encoding (see [PE annex](../paper/appendices/annex-12-positional-encodings.tex)) |
 | `hope_base` | number | No | ≥ 0 | — | HoPE base frequency |
 | `hope_damping` | number | No | ≥ 0 | — | HoPE damping coefficient |
 | `rope_base` | number | No | ≥ 0 | — | RoPE base frequency |
 | `rope_scaling` | number | No | ≥ 0 | — | RoPE scaling factor |
+| `alibi_num_heads` | int | No | ≥ 1 | `num_heads` | ALiBi slope-schedule head count |
+| `pape_num_parabolas` | int | No | ≥ 1 | 4 | PaPE number of parabolas |
+| `pape_num_positions` | int | No | ≥ 1 | 1 | PaPE number of positions per parabola |
+| `pape_rotation_invariant` | bool | No | — | `false` | PaPE-RI rotation-invariant flag |
+| `sinusoidal_max_len` | int | No | ≥ 1 | 512 | Sinusoidal precomputed table length |
+| `sinusoidal_base` | number | No | > 0 | 10000 | Sinusoidal base frequency |
+| `sinusoidal_scale` | number | No | ≥ 0 | 1.0 | Sinusoidal embedding scale |
+| `learned_max_len` | int | No | ≥ 1 | 512 | Learned-absolute max sequence length |
+| `learned_init_std` | number | No | ≥ 0 | 0.02 | Learned-absolute init std |
+| `positional_encoding_parameters` | object | No | `additionalProperties: false` | — | Nested PE sub-config (`rope`, `hope`, `alibi`, `pape`, `sinusoidal`, `learned`, `use_pe`) |
+| `<mixer>_attn_use_pe` | bool | No | — | `True`/`False` | Per-mixer PE opt-out (see [PE annex](../paper/appendices/annex-12-positional-encodings.tex)); `False` default for recurrent/decay mixers |
 | `use_mixture_of_depths` | bool | No | — | — | Enable MoD token routing |
 | `mixture_of_depths_capacity_ratio` | number | No | (0, 1] | — | MoD token update fraction |
 | `mixture_of_depths_router_aux_loss_weight` | number | No | ≥ 0 | — | MoD router aux loss weight |
