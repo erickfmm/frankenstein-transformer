@@ -88,8 +88,16 @@ IDs) and is not usable for images.
   positional encoding, masking, segmentation head).
 - `dataset:` — Dataset config (source, columns, rescaling, augmentations).
 - `training.task` — `patch_prediction`, `classification`, or `segmentation`.
-- `training.<task>:` — Task-specific sub-block (batch_size, epochs, LR,
-  optimizer).
+- `training.<task>:` — Optional task-specific sub-block. General training
+  fields (`batch_size`, `num_epochs`, `optimizer`, `scheduler_type`,
+  `grad_clip_max_norm`, checkpointing, etc.) are read from the top-level
+  `training:` block — the same fields used by `mlm` and `causal_lm`. The
+  task sub-block only carries task-specific knobs:
+  - `classification`: `label_smoothing`.
+  - `segmentation`: `seg_loss_bce_weight`, `seg_loss_dice_weight`,
+    `seg_loss_ce_weight`, `mask_annealing_factor` (EoMT only).
+  - `patch_prediction`: no task-specific knobs (empty sub-block, kept for
+    schema consistency).
 
 ### Required fields
 - `model_class: frankenstein_vit` (enforced by conditional rules).
@@ -173,13 +181,14 @@ image:
   num_classes: 10          # required for classification
 training:
   task: classification
+  batch_size: 32
+  num_epochs: 10
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_other: 3e-4
   classification:
-    batch_size: 32
-    epochs: 10
-    optimizer:
-      optimizer_class: adamw
-      parameters:
-        adamw-lr_other: 3e-4
+    label_smoothing: 0.1   # optional task-specific knob
 ```
 
 ## CLI usage

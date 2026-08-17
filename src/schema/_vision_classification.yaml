@@ -6,76 +6,27 @@ description: |-
   classification, arXiv:2010.11929). The model predicts a multiclass Y
   objective via a classification head (Linear or MLP) applied to the pooled
   image representation ([CLS] token or GAP).
+
+  General training fields (batch_size, num_epochs, optimizer, scheduler,
+  gradient clipping, checkpointing, etc.) are read from the top-level
+  `training:` block — the same fields used by `mlm` and `causal_lm` tasks.
+  This sub-block only carries classification-specific knobs.
 description_es: |-
   Configuración específica de tarea para `training.task: classification`
   (clasificación de imágenes).
+
+  Los campos generales de entrenamiento (batch_size, num_epochs, optimizer,
+  scheduler, gradient clipping, checkpointing, etc.) se leen del bloque
+  top-level `training:` — los mismos campos usados por `mlm` y `causal_lm`.
+  Este sub-bloque solo contiene parámetros específicos de clasificación.
 additionalProperties: false
 properties:
-  batch_size:
-    type: integer
-    minimum: 1
-    title: Batch Size
-    title_es: Tamaño de Batch
-    default: 512
-  num_epochs:
-    type: integer
-    minimum: 1
-    title: Epochs
-    title_es: Épocas
-    default: 90
-  learning_rate:
-    type: number
-    exclusiveMinimum: 0
-    title: Learning Rate
-    title_es: Tasa de Aprendizaje
-    default: 0.001
-  weight_decay:
-    type: number
-    minimum: 0
-    title: Weight Decay
-    title_es: Decaimiento de Peso
-    default: 0.1
-  warmup_steps:
-    type: integer
-    minimum: 0
-    title: Warmup Steps
-    title_es: Pasos de Calentamiento
-    default: 1000
-  scheduler_type:
-    type: string
-    enum:
-      - cosine
-      - linear
-    title: Scheduler Type
-    title_es: Tipo de Scheduler
-    default: cosine
-  grad_clip_max_norm:
-    type: number
-    minimum: 0
-    title: Gradient Clip Max Norm
-    title_es: Norma Máxima de Clip de Gradiente
-    default: 1.0
-  evaluation_steps:
-    type: integer
-    minimum: 0
-    title: Evaluation Steps
-    title_es: Pasos de Evaluación
-    default: 5000
-  checkpoint_save_steps:
-    type: integer
-    minimum: 0
-    title: Checkpoint Save Steps
-    title_es: Pasos de Guardado de Checkpoint
-    default: 10000
-  output_dir:
-    type: string
-    title: Output Directory
-    title_es: Directorio de Salida
-    default: ./checkpoints/vit_classification
   label_smoothing:
     type: number
     minimum: 0
     maximum: 1
     title: Label Smoothing
     title_es: Suavizado de Etiquetas
+    description: "Label smoothing factor for the classification cross-entropy loss. 0.0 disables smoothing (hard labels); 0.1 is a common default for image classification. Applied only to the classification head loss."
+    description_es: "Factor de suavizado de etiquetas para la pérdida de cross-entropy de clasificación. 0.0 deshabilita el suavizado (etiquetas duras); 0.1 es un valor por defecto común para clasificación de imágenes. Se aplica solo a la pérdida de la cabeza de clasificación."
     default: 0

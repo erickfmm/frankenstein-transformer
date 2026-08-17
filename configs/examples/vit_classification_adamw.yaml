@@ -40,7 +40,3 @@ training:
     parameters:
       adamw-lr_other: 0.001
       adamw-wd_other: 0.1
-  classification:
-    batch_size: 8
-    num_epochs: 1
-    learning_rate: 0.001

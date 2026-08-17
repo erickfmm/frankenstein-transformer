@@ -97,13 +97,27 @@ vision field reference see [Vision](vision.md):
 
 All of these enforce `additionalProperties: false`.
 
+### Vision Task Sub-Blocks
+
+Vision tasks (`patch_prediction`, `classification`, `segmentation`) reuse the
+top-level `training:` fields (`batch_size`, `num_epochs`, `optimizer`,
+`scheduler_type`, `grad_clip_max_norm`, checkpointing, etc.) — the same fields
+used by `mlm` and `causal_lm`. The optional `training.<task>:` sub-block only
+carries task-specific knobs:
+
+| Sub-block | Fields | Description |
+|---|---|---|
+| `training.classification` | `label_smoothing` (float, default 0) | Label smoothing for the classification cross-entropy loss |
+| `training.segmentation` | `seg_loss_bce_weight` (default 5), `seg_loss_dice_weight` (default 5), `seg_loss_ce_weight` (default 2), `mask_annealing_factor` (default 0.9) | EoMT loss weights and mask annealing decay factor |
+| `training.patch_prediction` | _(none)_ | Empty sub-block kept for schema consistency |
+
 ## Training Fields
 
 | Field | Type | Required | Range/Enum | Default | Description |
 |---|---|---|---|---|---|
 | `task` | enum | **Yes** | `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation` | — | Training objective |
-| `num_epochs` | int | No | ≥ 1 | — | Training epochs (MLM only) |
-| `batch_size` | int | No | ≥ 1 | — | Loader batch size |
+| `num_epochs` | int | No | ≥ 1 | — | Training epochs (MLM, causal_lm, and vision tasks) |
+| `batch_size` | int | No | ≥ 1 | — | Loader batch size (MLM, causal_lm, and vision tasks) |
 | `dataloader_workers` | int | No | ≥ 0 | — | PyTorch dataloader workers |
 | `max_length` | int | No | ≥ 1 | — | Sequence length cap |
 | `mlm_probability` | float | No | [0, 1] | — | MLM masking probability |

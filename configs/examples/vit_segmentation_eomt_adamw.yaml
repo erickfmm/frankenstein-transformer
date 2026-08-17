@@ -44,6 +44,7 @@ training:
       adamw-lr_other: 0.0001
       adamw-wd_other: 0.1
   segmentation:
-    batch_size: 4
-    num_epochs: 1
-    learning_rate: 0.0001
+    seg_loss_bce_weight: 5
+    seg_loss_dice_weight: 5
+    seg_loss_ce_weight: 2
+    mask_annealing_factor: 0.9

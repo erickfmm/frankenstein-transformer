@@ -7,72 +7,22 @@ description: |-
   for 1D grayscale or multicolor non-overlapping segmentation, or EoMT
   query-based head (`seg_head_type: eomt`, arXiv:2503.19108) with Hungarian
   matching, BCE+Dice+CE loss, and mask annealing.
+
+  General training fields (batch_size, num_epochs, optimizer, scheduler,
+  gradient clipping, checkpointing, etc.) are read from the top-level
+  `training:` block — the same fields used by `mlm` and `causal_lm` tasks.
+  This sub-block only carries segmentation-specific loss/annealing knobs.
 description_es: |-
   Configuración específica de tarea para `training.task: segmentation`
   (segmentación de imágenes).
+
+  Los campos generales de entrenamiento (batch_size, num_epochs, optimizer,
+  scheduler, gradient clipping, checkpointing, etc.) se leen del bloque
+  top-level `training:` — los mismos campos usados por `mlm` y `causal_lm`.
+  Este sub-bloque solo contiene parámetros específicos de pérdida/annealing
+  de segmentación.
 additionalProperties: false
 properties:
-  batch_size:
-    type: integer
-    minimum: 1
-    title: Batch Size
-    title_es: Tamaño de Batch
-    default: 64
-  num_epochs:
-    type: integer
-    minimum: 1
-    title: Epochs
-    title_es: Épocas
-    default: 50
-  learning_rate:
-    type: number
-    exclusiveMinimum: 0
-    title: Learning Rate
-    title_es: Tasa de Aprendizaje
-    default: 0.0001
-  weight_decay:
-    type: number
-    minimum: 0
-    title: Weight Decay
-    title_es: Decaimiento de Peso
-    default: 0.1
-  warmup_steps:
-    type: integer
-    minimum: 0
-    title: Warmup Steps
-    title_es: Pasos de Calentamiento
-    default: 1500
-  scheduler_type:
-    type: string
-    enum:
-      - cosine
-      - linear
-    title: Scheduler Type
-    title_es: Tipo de Scheduler
-    default: cosine
-  grad_clip_max_norm:
-    type: number
-    minimum: 0
-    title: Gradient Clip Max Norm
-    title_es: Norma Máxima de Clip de Gradiente
-    default: 1.0
-  evaluation_steps:
-    type: integer
-    minimum: 0
-    title: Evaluation Steps
-    title_es: Pasos de Evaluación
-    default: 5000
-  checkpoint_save_steps:
-    type: integer
-    minimum: 0
-    title: Checkpoint Save Steps
-    title_es: Pasos de Guardado de Checkpoint
-    default: 10000
-  output_dir:
-    type: string
-    title: Output Directory
-    title_es: Directorio de Salida
-    default: ./checkpoints/vit_segmentation
   seg_loss_bce_weight:
     type: number
     minimum: 0

@@ -56,6 +56,4 @@ training:
       adamw-lr_other: 0.001
       adamw-wd_other: 0.01
   classification:
-    batch_size: 128
-    num_epochs: 10
-    learning_rate: 0.001
+    label_smoothing: 0.1

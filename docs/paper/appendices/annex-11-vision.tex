@@ -89,6 +89,7 @@ Because the \texttt{HybridLayer} stack is modality-agnostic and operates purely 
     \item \textbf{Residuals:} all 4 residual variants.
     \item \textbf{Activations:} all 42 activation functions (including GLU gated FFN units).
     \item \textbf{Optimizers:} all 23 optimizer families with prefixed per-parameter-group hyperparameter control.
+    \item \textbf{Training configuration:} the three vision tasks read \texttt{batch\_size}, \texttt{num\_epochs}, \texttt{optimizer}, \texttt{scheduler\_type}, \texttt{grad\_clip\_max\_norm}, and checkpointing from the same top-level \texttt{training:} block as \texttt{mlm} and \texttt{causal\_lm}. The optional \texttt{training.<task>:} sub-block carries only task-specific knobs: \texttt{label\_smoothing} for classification, and \texttt{seg\_loss\_bce\_weight} / \texttt{seg\_loss\_dice\_weight} / \texttt{seg\_loss\_ce\_weight} / \texttt{mask\_annealing\_factor} for EoMT segmentation.
 \end{itemize}
 
 The \texttt{FrankensteinViT} class mirrors the \texttt{FrankensteinDecoder} wrapper pattern: it owns a \texttt{PatchEmbed} module, a \texttt{HybridLayer} stack, and a task-specific head, and it forces \texttt{mode='encoder'} so that the bidirectional attention pattern required by vision tasks is preserved.

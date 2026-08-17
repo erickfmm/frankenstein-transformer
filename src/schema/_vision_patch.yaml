@@ -7,63 +7,22 @@ description: |-
   Patches are corrupted (50% default) and the model predicts the reconstruction
   target (3-bit mean color, downsampled 3-bit, or full-patch L2) for each
   corrupted patch.
+
+  General training fields (batch_size, num_epochs, optimizer, scheduler,
+  gradient clipping, checkpointing, etc.) are read from the top-level
+  `training:` block — the same fields used by `mlm` and `causal_lm` tasks.
+  This sub-block currently carries no patch-prediction-specific knobs; it
+  exists for forward compatibility and schema consistency with the other
+  vision task sub-blocks.
 description_es: |-
   Configuración específica de tarea para `training.task: patch_prediction`
   (predicción de parches enmascarados / preentrenamiento autosupervisado).
+
+  Los campos generales de entrenamiento (batch_size, num_epochs, optimizer,
+  scheduler, gradient clipping, checkpointing, etc.) se leen del bloque
+  top-level `training:` — los mismos campos usados por `mlm` y `causal_lm`.
+  Este sub-bloque actualmente no contiene parámetros específicos de
+  patch_prediction; existe por compatibilidad hacia adelante y consistencia
+  de esquema con los demás sub-bloques de tareas de visión.
 additionalProperties: false
-properties:
-  batch_size:
-    type: integer
-    minimum: 1
-    title: Batch Size
-    title_es: Tamaño de Batch
-    default: 256
-  num_epochs:
-    type: integer
-    minimum: 1
-    title: Epochs
-    title_es: Épocas
-    default: 100
-  learning_rate:
-    type: number
-    exclusiveMinimum: 0
-    title: Learning Rate
-    title_es: Tasa de Aprendizaje
-    default: 0.0002
-  weight_decay:
-    type: number
-    minimum: 0
-    title: Weight Decay
-    title_es: Decaimiento de Peso
-    default: 0.1
-  warmup_steps:
-    type: integer
-    minimum: 0
-    title: Warmup Steps
-    title_es: Pasos de Calentamiento
-    default: 10000
-  scheduler_type:
-    type: string
-    enum:
-      - cosine
-      - linear
-    title: Scheduler Type
-    title_es: Tipo de Scheduler
-    default: cosine
-  evaluation_steps:
-    type: integer
-    minimum: 0
-    title: Evaluation Steps
-    title_es: Pasos de Evaluación
-    default: 5000
-  checkpoint_save_steps:
-    type: integer
-    minimum: 0
-    title: Checkpoint Save Steps
-    title_es: Pasos de Guardado de Checkpoint
-    default: 10000
-  output_dir:
-    type: string
-    title: Output Directory
-    title_es: Directorio de Salida
-    default: ./checkpoints/vit_patch_prediction
+properties: {}

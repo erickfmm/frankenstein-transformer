@@ -80,7 +80,6 @@
       training:
         required:
         - optimizer
-        - patch_prediction
       model_class:
         const: frankenstein_vit
       image:
@@ -103,7 +102,6 @@
       training:
         required:
         - optimizer
-        - classification
       model_class:
         const: frankenstein_vit
       image:
@@ -127,7 +125,6 @@
       training:
         required:
         - optimizer
-        - segmentation
       model_class:
         const: frankenstein_vit
       image:

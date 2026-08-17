@@ -651,12 +651,11 @@ def _run_vision_task(loaded, resolved_device, training_config, args):
     config = loaded.model_config
     model = FrankensteinViT(config)
 
-    # Determine task-specific config from the training sub-block.
-    task_config = loaded.training_runtime.get(loaded.task, {})
-    if not isinstance(task_config, dict):
-        task_config = {}
-    batch_size = task_config.get("batch_size", args.batch_size or 32)
-    num_epochs = task_config.get("num_epochs", training_config.num_epochs or 1)
+    # Vision tasks reuse the top-level training.batch_size / training.num_epochs
+    # (same fields as mlm / causal_lm). The task sub-block (e.g. training.classification)
+    # only carries task-specific knobs (label_smoothing, seg_loss_* weights, etc.).
+    batch_size = training_runtime.get("batch_size", args.batch_size or 32)
+    num_epochs = training_runtime.get("num_epochs", 1)
 
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

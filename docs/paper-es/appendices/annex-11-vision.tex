@@ -65,6 +65,8 @@ Basado en EoMT \citep{kerssies2025eomt}:
 
 Los 34 mezcladores de atención (excepto \texttt{engram\_attn}, que requiere IDs de tokens), 6 normas, 4 residuales, 42 activaciones y 23 optimizadores se reutilizan sin cambios mediante \texttt{HybridLayer}, que es agnóstica de modalidad y opera sobre tensores de forma $(B, S, D)$.
 
+Las tres tareas de visión leen \texttt{batch\_size}, \texttt{num\_epochs}, \texttt{optimizer}, \texttt{scheduler\_type}, \texttt{grad\_clip\_max\_norm} y el checkpointing del mismo bloque \texttt{training:} top-level que \texttt{mlm} y \texttt{causal\_lm}. El sub-bloque opcional \texttt{training.<task>:} solo contiene parámetros específicos de tarea: \texttt{label\_smoothing} para clasificación, y \texttt{seg\_loss\_bce\_weight} / \texttt{seg\_loss\_dice\_weight} / \texttt{seg\_loss\_ce\_weight} / \texttt{mask\_annealing\_factor} para segmentación EoMT.
+
 La clase \texttt{FrankensteinViT} refleja el patrón envoltorio de \texttt{FrankensteinDecoder}: posee un \texttt{PatchEmbed} + una pila de \texttt{HybridLayer} + una cabeza específica de tarea, y fuerza \texttt{mode='encoder'} en tiempo de ejecución.
 
 \subsection{Pseudocódigo en PyTorch}
