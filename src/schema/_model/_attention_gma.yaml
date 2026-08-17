@@ -1,0 +1,189 @@
+type: object
+additionalProperties: false
+properties:
+  gma:
+    type: object
+    additionalProperties: false
+    properties:
+      num_components:
+        type: integer
+        title: "GMA Mixture Components"
+        title_es: "Componentes de Mezcla GMA"
+        description: |-
+          Number `K` of learned Gaussian mixture components per head for
+          `gma_attn` (Gaussian Mixture Attention, arXiv:2606.18283). Each
+          component routes values into one latent memory slot, so `K`
+          controls the routing capacity of the layer. The dominant
+          activation storage scales as `O(NK)` for fixed `K`, which is
+          linear in the sequence length `N`. Only applies when `gma_attn`
+          appears in `layer_pattern`.
+
+          **Examples explained:**
+          - `gma_num_components=8`: default. Good balance of routing
+            capacity and parameter cost for small/medium models. Per head
+            adds `K * d_r` mean + covariance parameters.
+          - `gma_num_components=16`: richer routing. More latent memory
+            slots, finer-grained probabilistic routing. Doubles the
+            responsibility storage but keeps the `O(NK)` linear scaling.
+          - `gma_num_components=4`: aggressive compression. Fewer
+            routing components, stronger bottleneck. Faster but may
+            degrade quality on tasks requiring many distinct routing
+            patterns.
+        description_es: |-
+          Número `K` de componentes de mezcla Gaussianos aprendidos por
+          cabeza para `gma_attn` (Gaussian Mixture Attention,
+          arXiv:2606.18283). Cada componente enruta valores a un slot de
+          memoria latente, por lo que `K` controla la capacidad de
+          enrutamiento de la capa. El almacenamiento de activaciones
+          dominante escala como `O(NK)` para `K` fijo, lineal en la
+          longitud de secuencia `N`. Solo aplica cuando `gma_attn`
+          aparece en `layer_pattern`.
+
+          **Ejemplos explicados:**
+          - `gma_num_components=8`: por defecto. Buen balance entre
+            capacidad de enrutamiento y costo de parámetros para modelos
+            pequeños/medianos. Por cabeza añade `K * d_r` parámetros de
+            media + covarianza.
+          - `gma_num_components=16`: enrutamiento más rico. Más slots de
+            memoria latente, enrutamiento probabilístico más fino.
+            Duplica el almacenamiento de responsabilidades pero mantiene
+            el escalado lineal `O(NK)`.
+          - `gma_num_components=4`: compresión agresiva. Menos componentes
+            de enrutamiento, cuello de botella más fuerte. Más rápido
+            pero puede degradar calidad en tareas que requieren muchos
+            patrones de enrutamiento distintos.
+        examples: [8]
+      routing_dim:
+        type: integer
+        title: "GMA Routing Dimension"
+        title_es: "Dimensión de Enrutamiento GMA"
+        description: |-
+          Routing dimension `d_r` used to compute Gaussian
+          responsibilities for `gma_attn` (arXiv:2606.18283). Queries and
+          keys are projected from `hidden_size` into `num_heads * d_r`
+          before being mapped to posterior responsibilities over the `K`
+          mixture components. `null` defaults to the per-head dimension
+          `hidden_size // num_heads`. Decoupled from the value dimension
+          `d_v` (which equals `head_dim`). Only applies when `gma_attn`
+          is in `layer_pattern`.
+
+          **Impact:** Larger `d_r` gives finer-grained Gaussian
+          posteriors and richer routing at the cost of `O(NK d_r)`
+          responsibility compute. Smaller `d_r` compresses the routing
+          space, trading expressivity for speed. The paper recommends
+          `d_r = head_dim` as a reasonable default.
+        description_es: |-
+          Dimensión de enrutamiento `d_r` usada para calcular las
+          responsabilidades Gaussianas para `gma_attn` (arXiv:2606.18283).
+          Queries y keys se proyectan de `hidden_size` a
+          `num_heads * d_r` antes de mapearse a responsabilidades
+          posteriores sobre los `K` componentes de mezcla. `null` por
+          defecto es la dimensión por cabeza `hidden_size // num_heads`.
+          Desacoplada de la dimensión de valor `d_v` (que es igual a
+          `head_dim`). Solo aplica cuando `gma_attn` está en
+          `layer_pattern`.
+
+          **Impacto:** `d_r` mayor da posteriores Gaussianos más finos y
+          enrutamiento más rico a costa de cómputo de responsabilidades
+          `O(NK d_r)`. `d_r` menor comprime el espacio de enrutamiento,
+          intercambiando expresividad por velocidad. El paper recomienda
+          `d_r = head_dim` como valor por defecto razonable.
+        examples: [64]
+      epsilon:
+        type: number
+        title: "GMA Read Normalizer Epsilon"
+        title_es: "Épsilon Normalizador de Lectura GMA"
+        description: |-
+          Numerical-stability constant `epsilon` added to the read-step
+          denominator `Gamma^Q Z + epsilon` of `gma_attn`
+          (arXiv:2606.18283). Prevents division by zero when a mixture
+          component receives negligible key-responsibility mass. Must be
+          strictly positive. Only applies when `gma_attn` is in
+          `layer_pattern`.
+
+          **Impact:** Smaller values (e.g. 1e-8) preserve the row-stochastic
+          interpretation of the induced attention weights but risk
+          numerical instability on rare empty components. Larger values
+          (e.g. 1e-4) improve stability at the cost of slightly biasing the
+          row sums below 1. Default 1e-6 is a safe middle ground.
+        description_es: |-
+          Constante de estabilidad numérica `epsilon` añadida al
+          denominador del paso de lectura `Gamma^Q Z + epsilon` de
+          `gma_attn` (arXiv:2606.18283). Previene división por cero cuando
+          un componente de mezcla recibe masa de responsabilidad de clave
+          despreciable. Debe ser estrictamente positivo. Solo aplica
+          cuando `gma_attn` está en `layer_pattern`.
+
+          **Impacto:** Valores menores (e.g. 1e-8) preservan la
+          interpretación estocástica por fila de los pesos de atención
+          inducidos pero arriesgan inestabilidad numérica en componentes
+          vacíos raros. Valores mayores (e.g. 1e-4) mejoran la
+          estabilidad a costa de sesgar las sumas por fila por debajo de
+          1. El valor por defecto 1e-6 es un punto medio seguro.
+        examples: [1.0e-6]
+      sigma_eps:
+        type: number
+        title: "GMA Covariance Floor"
+        title_es: "Piso de Covarianza GMA"
+        description: |-
+          Lower bound `epsilon_sigma` for the diagonal variances of the
+          Gaussian mixture components of `gma_attn` (arXiv:2606.18283).
+          Variances are reparameterised as
+          `sigma^2 = softplus(omega) + epsilon_sigma`, which guarantees
+          strict positive-definiteness during gradient-based training.
+          Must be strictly positive. Only applies when `gma_attn` is in
+          `layer_pattern`.
+
+          **Impact:** Smaller values allow sharper, more peaked
+          components but risk singular covariances and exploding
+          Mahalanobis distances. Larger values enforce broader, more
+          overlapping components, improving numerical stability at the
+          cost of routing sharpness. Default 1e-4 follows the paper.
+        description_es: |-
+          Cota inferior `epsilon_sigma` para las varianzas diagonales de
+          los componentes de la mezcla Gaussiana de `gma_attn`
+          (arXiv:2606.18283). Las varianzas se reparametrizan como
+          `sigma^2 = softplus(omega) + epsilon_sigma`, lo que garantiza
+          definida-positividad estricta durante el entrenamiento basado
+          en gradientes. Debe ser estrictamente positivo. Solo aplica
+          cuando `gma_attn` está en `layer_pattern`.
+
+          **Impacto:** Valores menores permiten componentes más afilados
+          y picudos pero arriesgan covarianzas singulares y distancias
+          de Mahalanobis explosivas. Valores mayores imponen componentes
+          más anchos y superpuestos, mejorando la estabilidad numérica a
+          costa de la nitidez del enrutamiento. El valor por defecto 1e-4
+          sigue el paper.
+        examples: [1.0e-4]
+      init_mean_std:
+        type: number
+        title: "GMA Mean Init Std"
+        title_es: "Desviación de Inicialización de Medias GMA"
+        description: |-
+          Standard deviation of the zero-mean Gaussian used to initialise
+          the mixture component means `mu` of `gma_attn`
+          (arXiv:2606.18283). Means are drawn as `mu ~ N(0,
+          init_mean_std^2)`. Only applies when `gma_attn` is in
+          `layer_pattern`.
+
+          **Impact:** Larger values spread the initial components across
+          a wider region of the routing space, encouraging diverse
+          routing early in training. Smaller values cluster the
+          components near the origin, relying on optimisation to spread
+          them. Default 1.0 matches the scale of typical normalised
+          projections.
+        description_es: |-
+          Desviación estándar de la Gaussiana de media cero usada para
+          inicializar las medias de los componentes de mezcla `mu` de
+          `gma_attn` (arXiv:2606.18283). Las medias se extraen como
+          `mu ~ N(0, init_mean_std^2)`. Solo aplica cuando `gma_attn`
+          está en `layer_pattern`.
+
+          **Impacto:** Valores mayores dispersan los componentes iniciales
+          a lo largo de una región más amplia del espacio de
+          enrutamiento, fomentando enrutamiento diverso temprano en el
+          entrenamiento. Valores menores agrupan los componentes cerca del
+          origen, confiando en la optimización para dispersarlos. El
+          valor por defecto 1.0 coincide con la escala de proyecciones
+          normalizadas típicas.
+        examples: [1.0]

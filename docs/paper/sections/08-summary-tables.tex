@@ -16,6 +16,7 @@ ODE-style block & $\frac{dh}{dt}=f_\theta(h,t)$ & solver-dependent & solver-depe
 Titans memory & $M_t=(1-\alpha_t)M_{t-1}+S_t$ & approx.\ $\mathcal{O}(nd)$ & retrieval-centric & Test-time memory updates with surprise-driven dynamics \citep{behrouz_titans_2025}. \\
 CCA & $\text{softmax}(\hat Q\hat K^\top/\sqrt{d_h})\tilde V$ in latent & $\mathcal{O}(n^2d/C)$ & $\mathcal{O}(n)$/step & Attention fully in compressed latent; convs + qk-mean + value-shift; $C{\times}$ fewer FLOPs+params+cache \citep{figliola_cca_2025}. \\
 CCGQA & Same as CCA + decoupled GQA & $\mathcal{O}(n^2d/C_1)$ & $\mathcal{O}(n)$/step & CCA with $C_2\geq C_1$ KV compression and group-shared latent heads; best loss at $8{\times}$ cache cut \citep{figliola_cca_2025}. \\
+GMA & $\frac{\Gamma^Q(\Gamma^K)^\top}{\Gamma^Q Z+\epsilon}V$ & $\mathcal{O}(nKd_r+nKd_v)$ & $\mathcal{O}(K)$/step & Gaussian Mixture Attention; probabilistic latent routing through $K$ learned GMM components per head; linear-time for fixed $K$; causal via prefix cumsums \citep{huang_gma_2026}. \\
 \bottomrule
 \end{longtable}
 \normalsize

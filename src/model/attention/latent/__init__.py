@@ -42,6 +42,14 @@ generalising Grouped-Query Attention (GQA) along complementary axes:
 * :class:`CCGQAAttention` -- Compressed Convolutional Grouped Query
   Attention, arXiv:2510.04476. Extends CCA with GQA-style head sharing
   inside the latent and decoupled query/KV compression rates.
+* :class:`GaussianMixtureAttention` -- Gaussian Mixture Attention (GMA),
+  arXiv:2606.18283. Replaces explicit pairwise ``Q K^T`` interaction with
+  probabilistic routing through ``K`` learned Gaussian-mixture components
+  per head. Values are written into a ``K``-slot latent memory via key
+  responsibilities and read back via query responsibilities, giving
+  ``O(NK)`` activation storage for fixed ``K`` (linear-time sequence
+  mixing). Supports bidirectional (encoder) and causal (decoder, via
+  prefix cumsums) variants.
 
 All modules follow the project attention-mixer interface:
 ``forward(x: torch.Tensor, logical_layer_idx: Optional[int] = None) ->
@@ -59,6 +67,7 @@ from .iha_attn import IHAAttention
 from .gta_attn import GTAAttention
 from .mtla_attn import MTLAAttention
 from .cca_attn import CCAAttention, CCGQAAttention
+from .gma_attn import GaussianMixtureAttention
 
 __all__ = [
     "MLAAttention",
@@ -70,4 +79,5 @@ __all__ = [
     "MTLAAttention",
     "CCAAttention",
     "CCGQAAttention",
+    "GaussianMixtureAttention",
 ]

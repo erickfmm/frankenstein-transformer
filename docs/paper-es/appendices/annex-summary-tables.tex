@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 35 mezcladores de secuencia en seis familias, 23 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 36 mezcladores de secuencia en seis familias, 23 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -77,6 +77,7 @@ gta\_attn & Latente & $\mathcal{O}(n^2 \cdot G \cdot d_h)$ & $\mathcal{O}(r_v \c
 mtla\_attn & Latente & $\mathcal{O}(n^2 d / m)$ & $\mathcal{O}(r_{\text{kv}} \cdot n / m)$ & Fusión temporal; aceleración de decodificación de $5.3\times$ & \citep{deng_mtla_2025} \\
 cca\_attn & Latente & $\mathcal{O}(n^2 d / C)$ & $\mathcal{O}(\tilde{e} \cdot n)$ & Atención completa en latente comprimido; $C\times$ menos FLOPs & \citep{figliola_cca_2025} \\
 ccgqa\_attn & Latente & $\mathcal{O}(n^2 d / C_1)$ & $\mathcal{O}(\tilde{e}_{\text{kv}} \cdot n)$ & CCA + GQA desacoplada; mejor pérdida a $8\times$ reducción de caché & \citep{figliola_cca_2025} \\
+gma\_attn & Latente & $\mathcal{O}(nK d_r + nK d_v)$ & $\mathcal{O}(K)$/paso & Atención de Mezcla Gaussiana; enrutamiento latente probabilístico a través de $K$ componentes GMM aprendidos por cabeza; tiempo lineal para $K$ fijo; causal vía cumsums de prefijo & \citep{huang_gma_2026} \\
 \bottomrule
 \end{longtable}
 \normalsize

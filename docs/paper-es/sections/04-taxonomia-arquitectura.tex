@@ -4,14 +4,14 @@
 \subsection{Familias de Atención y Mezcladores de Secuencias}
 \label{sec:attention-families}
 
-Este sistema implementa treinta y cinco variantes de mezcladores de secuencia organizadas en seis categorías funcionales que reflejan las tendencias de investigación en el diseño de modelado de secuencias. La organización taxonómica refleja la comprensión evolutiva de cómo equilibrar expresividad, eficiencia computacional y restricciones de memoria.
+Este sistema implementa treinta y seis variantes de mezcladores de secuencia organizadas en seis categorías funcionales que reflejan las tendencias de investigación en el diseño de modelado de secuencias. La organización taxonómica refleja la comprensión evolutiva de cómo equilibrar expresividad, eficiencia computacional y restricciones de memoria.
 
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Líneas Base de Atención Densas} (3): La atención softmax estándar, la atención sigmoide y la Atención por Consultas Agrupadas (GQA) proporcionan contextualización global completa a costo computacional cuadrático, sirviendo como líneas base de referencia para comparación con alternativas más eficientes.
     \item \textbf{Arquitecturas Recurrentes y Retentivas} (5): RetNet, Mamba, bloques estilo ODE, Titans y Engram mantienen representaciones de estado que permiten un costo de inferencia $\mathcal{O}(1)$ mientras preservan la expresividad mediante dinámicas recurrentes, parámetros selectivos o adaptación de memoria en tiempo de prueba.
     \item \textbf{Patrones de Atención Dispersa} (9): Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA y SparDA reducen la complejidad cuadrática mediante dispersión estructurada, selección de tokens o estrategias de poda sin entrenamiento.
     \item \textbf{Mecanismos de Memoria con Compuerta} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax y KDA introducen control dependiente de datos sobre la retención de memoria, el olvido y la fuerza de actualización.
-    \item \textbf{Compresión Latente y de Rango Bajo} (9): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA y CCGQA comprimen las representaciones clave--valor en cuellos de botella latentes de rango bajo, intercambiando un pequeño error de reconstrucción por ahorros sustanciales de memoria y cómputo.
+    \item \textbf{Compresión Latente y de Rango Bajo} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA y GMA comprimen las representaciones clave--valor en cuellos de botella latentes de rango bajo (o, para GMA, enrutan a través de una memoria latente de mezcla Gaussiana aprendida), intercambiando un pequeño error de reconstrucción por ahorros sustanciales de memoria y cómputo.
     \item \textbf{Memoria Condicional} (1): Engram proporciona memoria en tiempo de prueba mediante operaciones de lectura/escritura aprendidas sobre un banco de memoria externo.
 \end{enumerate}
 
@@ -30,7 +30,7 @@ Este sistema implementa treinta y cinco variantes de mezcladores de secuencia or
 \node[box, fill=green!10, below left=1.0cm and 4.5cm of root, minimum width=2.0cm] (recur) {\textbf{Recurrentes (5)}};
 \node[box, fill=yellow!12, below left=1.0cm and 1.5cm of root, minimum width=2.0cm] (sparse) {\textbf{Dispersas (9)}};
 \node[box, fill=purple!12, below right=1.0cm and 1.5cm of root, minimum width=2.0cm] (gated) {\textbf{Con Compuerta (8)}};
-\node[box, fill=cyan!12, below right=1.0cm and 4.5cm of root, minimum width=2.0cm] (latent) {\textbf{Latentes (9)}};
+\node[box, fill=cyan!12, below right=1.0cm and 4.5cm of root, minimum width=2.0cm] (latent) {\textbf{Latentes (10)}};
 \node[box, fill=orange!12, below right=1.0cm and 7.5cm of root, minimum width=2.0cm] (memory) {\textbf{Memoria (1)}};
 
 % Dense column (3)
@@ -135,7 +135,7 @@ Este sistema implementa treinta y cinco variantes de mezcladores de secuencia or
 % Category-to-list links — Memory
 \draw[line] (memory) -- (m1);
 \end{tikzpicture}}
-\caption{Taxonomía completa de treinta y cinco variantes de mezcladores de secuencia en seis categorías funcionales. Las líneas base densas proporcionan enrutamiento global completo a costo cuadrático. Las arquitecturas recurrentes permiten inferencia en tiempo constante mediante compresión de estado. Las variantes dispersas reducen la complejidad mediante patrones estructurados o selección de tokens. Los mecanismos con compuerta introducen control dependiente de datos sobre la retención y el olvido de memoria. Los métodos latentes comprimen representaciones clave--valor en cuellos de botella de rango bajo. La memoria condicional proporciona lectura/escritura en tiempo de prueba sobre un banco de memoria externo.}
+\caption{Taxonomía completa de treinta y seis variantes de mezcladores de secuencia en seis categorías funcionales. Las líneas base densas proporcionan enrutamiento global completo a costo cuadrático. Las arquitecturas recurrentes permiten inferencia en tiempo constante mediante compresión de estado. Las variantes dispersas reducen la complejidad mediante patrones estructurados o selección de tokens. Los mecanismos con compuerta introducen control dependiente de datos sobre la retención y el olvido de memoria. Los métodos latentes comprimen representaciones clave--valor en cuellos de botella de rango bajo o enrutan a través de latentes probabilísticos de mezcla Gaussiana. La memoria condicional proporciona lectura/escritura en tiempo de prueba sobre un banco de memoria externo.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -143,7 +143,7 @@ Este sistema implementa treinta y cinco variantes de mezcladores de secuencia or
 Las líneas base densas (softmax estándar \citep{vaswani_attention_2017} y sigmoide \citep{ramapuram_theory_2024}) y la familia recurrente/retentiva (RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, bloques continuos estilo ODE \citep{zhang_continuous_2021} y memoria en tiempo de prueba Titans \citep{behrouz_titans_2025}) proporcionan la compensación fundamental entre expresividad y eficiencia. Las formulaciones matemáticas, las formas paralela y recurrente, el pseudocódigo algorítmico y una tabla comparativa arquitectónica se recopilan en el Apéndice~\ref{sec:annex-transformer}. El algoritmo de despacho de mezclador guiado por patrón (incluyendo la política de cumplimiento sin entrenamiento para \texttt{fasa\_attn} y \texttt{sparge\_attn}) se detalla igualmente allí.
 
 \subsection{Familia de Atención Latente y de Rango Bajo}
-Una familia complementaria comprime el estado clave--valor por token en un latente de rango bajo: Atención Latente Multi-Cabeza (MLA), Atención Latente por Consultas Agrupadas (GQLA), Atención Multi-Cabeza de Rango Bajo (MLRA), Atención Tucker, Atención de Cabezas Entrelazadas (IHA), Atención laTenT por Cabezas Agrupadas (GTA) y Atención Latente Temporal Multi-Cabeza (MTLA). Estos métodos unifican diseños de consulta agrupada, latente, factorizado y latente temporal bajo un cuello de botella de rango bajo común. Las formulaciones completas, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-latent}.
+Una familia complementaria comprime el estado clave--valor por token en un latente de rango bajo: Atención Latente Multi-Cabeza (MLA), Atención Latente por Consultas Agrupadas (GQLA), Atención Multi-Cabeza de Rango Bajo (MLRA), Atención Tucker, Atención de Cabezas Entrelazadas (IHA), Atención laTenT por Cabezas Agrupadas (GTA) y Atención Latente Temporal Multi-Cabeza (MTLA). Estos métodos unifican diseños de consulta agrupada, latente, factorizado y latente temporal bajo un cuello de botella de rango bajo común. La Atención de Mezcla Gaussiana (GMA) toma una ruta diferente: reemplaza la interacción pareada $QK^\top$ con enrutamiento probabilístico a través de $K$ componentes de mezcla Gaussiana aprendidos por cabeza, escribiendo valores en una memoria latente de $K$ slots y leyendo de vuelta mediante responsabilidades posteriores, dando un almacenamiento de activaciones $\mathcal{O}(NK)$ para $K$ fijo. Las formulaciones completas, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-latent}.
 
 \subsection{Extensiones de Atención Dispersa}
 El registro de mezcladores incluye nueve bloques dispersos: \texttt{sparse\_transformer\_attn}, \texttt{longformer\_attn}, \texttt{bigbird\_attn}, \texttt{sparsek\_attn}, \texttt{nsa\_attn}, \texttt{sparge\_attn}, \texttt{fasa\_attn}, \texttt{msa\_attn} y \texttt{sparda\_attn} \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}. La implementación impone una política de ejecución explícita para métodos dispersos sin entrenamiento: \texttt{fasa\_attn} y \texttt{sparge\_attn} son solo para evaluación/inferencia y generan errores en tiempo de ejecución si se usan mientras el modelo está en modo de entrenamiento. Las formulaciones matemáticas, el pseudocódigo algorítmico, las características por bloque y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-sparse}.
@@ -203,7 +203,7 @@ El registro de mezcladores incluye nueve bloques dispersos: \texttt{sparse\_tran
 \draw[line] (up) -- (attn);
 \node[group, fit=(kv)(down)(latent)(up)(attn), label=right:{\small Factor de compresión: $r \ll d$}] {};
 \end{tikzpicture}}
-\caption{Concepto de atención latente y de rango bajo. Los pares clave--valor se comprimen mediante una proyección descendente a un espacio latente de rango bajo ($r \ll d$), donde la atención se calcula a costo reducido, y luego se proyectan de vuelta. Las variantes difieren en la estructura de factorización (MLA, GQLA, MLRA, Tucker), entrelazado de cabezas (IHA, GTA), compresión temporal (MTLA) y formulaciones de covarianza cruzada (CCA, CCGQA).}
+\caption{Concepto de atención latente y de rango bajo. Los pares clave--valor se comprimen mediante una proyección descendente a un espacio latente de rango bajo ($r \ll d$), donde la atención se calcula a costo reducido, y luego se proyectan de vuelta. Las variantes difieren en la estructura de factorización (MLA, GQLA, MLRA, Tucker), entrelazado de cabezas (IHA, GTA), compresión temporal (MTLA), formulaciones de covarianza cruzada (CCA, CCGQA) y enrutamiento probabilístico de mezcla Gaussiana (GMA).}
 \label{fig:latent-map}
 \end{figure}
 

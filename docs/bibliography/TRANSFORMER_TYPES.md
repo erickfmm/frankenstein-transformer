@@ -589,7 +589,49 @@ Training time scales as $\mathcal{O}(n^2 \cdot d / C_1)$, reflecting the query-s
 | **Cons** | Still quadratic in $S^2$; fused kernel required; $C_2/C_1$ must equal $\text{num\_heads}/\text{num\_kv\_heads}$. |
 | **Features** | CCA + GQA head-sharing in latent; decoupled compression ($C_1$, $C_2$); $B_{group}$/$E_{group}$ grouped qk-mean; smooth Pareto over cache budgets. |
 
-## 17. Synthesis and Systemic Insights: The Future of Sequence Architectures
+## 17. Gaussian Mixture Attention (GMA): Linear-Time Mixing via Probabilistic Latent Routing
+
+Gaussian Mixture Attention (GMA) [arXiv:2606.18283, Huang & Raza 2026] replaces the explicit pairwise $QK^\top$ interaction of standard dot-product attention with probabilistic routing through $K$ learned Gaussian-mixture components per head. Queries and keys are mapped to posterior *responsibility* vectors over a shared latent routing space; their overlap defines an implicit responsibility-space affinity, while values are written into and read from a $K$-slot latent memory. By exploiting the associativity of matrix multiplication, GMA avoids materialising the induced $N \times N$ affinity matrix and instead uses two $N \times K$ responsibility matrices whose dominant activation storage scales as $\mathcal{O}(NK)$ rather than $\mathcal{O}(N^2)$ for fixed $K$.
+
+The Gaussian mixture parameters — component means $\mu$, diagonal covariances (reparameterised via $\sigma^2 = \text{softplus}(\omega) + \epsilon_\sigma$) and mixture-prior logits $\alpha$ (with $\pi = \text{softmax}(\alpha)$) — are fully differentiable learnable parameters optimised by standard backpropagation, with no EM loop or auxiliary clustering loss. This makes GMA a *Mixture Density Network*-style routing component shaped end-to-end by the predictive objective rather than a standalone maximum-likelihood GMM.
+
+### 17.1 Mathematical Formulation
+
+Per head, with routing dimension $d_r$ and value dimension $d_v$:
+
+$$Q_X = X W_Q \in \mathbb{R}^{N \times d_r}, \quad K_X = X W_K \in \mathbb{R}^{N \times d_r}, \quad V_X = X W_V \in \mathbb{R}^{N \times d_v}.$$
+
+The posterior responsibility of component $k$ for a routing vector $x_i$ is
+
+$$\gamma_{i,k} = p(z{=}k \mid x_i) = \frac{\pi_k\, \mathcal{N}(x_i \mid \mu_k, \Sigma_k)}{\sum_{\ell=1}^{K} \pi_\ell\, \mathcal{N}(x_i \mid \mu_\ell, \Sigma_\ell)}, \qquad \Sigma_k = \mathrm{diag}(\sigma_{k,1}^2, \dots, \sigma_{k,d_r}^2),$$
+
+yielding responsibility matrices $\Gamma^Q, \Gamma^K \in \mathbb{R}^{N \times K}$. The bidirectional output is the associative write–read pair
+
+$$\tilde V = (\Gamma^K)^\top V_X \in \mathbb{R}^{K \times d_v}, \qquad Z = (\Gamma^K)^\top \mathbf{1}_N \in \mathbb{R}^{K}, \qquad O = \frac{\Gamma^Q \tilde V}{\Gamma^Q Z + \epsilon},$$
+
+which never materialises the implicit normalised affinity $A^{\text{GMA}}_{ij} = \frac{\sum_k \gamma^Q_{i,k} \gamma^K_{j,k}}{\sum_\ell \sum_k \gamma^Q_{i,k} \gamma^K_{\ell,k} + \epsilon}$. For autoregressive modelling the global write statistics are replaced by prefix-restricted cumulative sums $\tilde V^{(i)}_k = \sum_{j \le i} \gamma^K_{j,k} V_{X,j}$ and $Z^{(i)}_k = \sum_{j \le i} \gamma^K_{j,k}$, enforcing causality while preserving the fixed-$K$ linear scaling.
+
+### 17.2 Computational Complexity
+
+The attention-specific routing cost is
+
+$$\mathcal{C}_{\text{GMA}} \approx 2 N K d_r + 2 N K d_v + 4 N K + N d_v = \mathcal{O}(N K d_r + N K d_v),$$
+
+linear in the sequence length $N$ for fixed $K$, $d_r$, and $d_v$. Activation storage is $\mathcal{O}(NK + K d_v + N d_v)$, dominated by the two $N \times K$ responsibility matrices for fixed $K$ and $d_v$. Including the standard projections adds $\mathcal{O}(N d_{\text{model}} (2 d_r + d_v))$.
+
+### 17.3 Architectural Profile: GMA
+
+| Attribute | Value |
+|---|---|
+| **Nomenclature** | Gaussian Mixture Attention (GMA) |
+| **Paper / DOI** | [Gaussian Mixture Attention: Linear-Time Sequence Mixing via Probabilistic Latent Routing](https://arxiv.org/abs/2606.18283) / 10.48550/arXiv.2606.18283 |
+| **Training Complexity** | $\mathcal{O}(N K d_r + N K d_v)$ — linear in $N$ for fixed $K$ |
+| **Inference Complexity** | $\mathcal{O}(K)$ per step, $\mathcal{O}(NK)$ activation storage |
+| **Pros** | Fixed-$K$ linear-time sequence mixing; probabilistic interpretable routing; non-negative low-rank affinity interpretation; bidirectional + causal variants; fully differentiable GMM params (no EM). |
+| **Cons** | Quality depends on $K$ and $d_r$; causal GMA trails optimised SDPA and state-space models on WikiText-103 in the paper's current implementation; not a universal softmax-attention replacement. |
+| **Features** | Per-head learned GMM ($\mu, \omega, \alpha$); responsibility-space affinity $\langle \gamma^Q_i, \gamma^K_j \rangle$; $K$-slot latent memory via associative $(\Gamma^K)^\top V_X$; causal via prefix cumsums; reparameterised softplus covariances and softmax priors. |
+
+## 18. Synthesis and Systemic Insights: The Future of Sequence Architectures
 
 The architectural diversity detailed above provides a unique vantage point from which to analyze the underlying trajectories driving sequence modeling. By evaluating the mechanical differences between these models, several profound third-order implications regarding hardware interplay, information theory, and network dynamics become apparent.
 

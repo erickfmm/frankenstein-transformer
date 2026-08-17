@@ -301,4 +301,52 @@ La Atención Convolucional Comprimida por Consultas Agrupadas (CCGQA, por sus si
     \item \textbf{Limitaciones}: Misma cuadrática $S^2$ (sólo reducida por $C_1$); se necesita kernel fusionado; dos proyecciones de valor añaden complejidad.
 \end{itemize}
 
-La familia latente muestra una progresión clara a lo largo de dos ejes: (i) \textbf{compresión de rango}, pasando de cabezas completas (MHA) a un latente compartido (MLA) a sub-cabezas latentes particionadas (MLRA), y (ii) \textbf{adaptividad de despliegue}, pasando de una sola ruta de decodificación a despacho adaptativo al hardware (GQLA) y fusión temporal de caché (MTLA). La Atención Tucker proporciona el marco algebraico unificador: MHA, GQA y MLA son todos casos especiales de una factorización Tucker con elecciones de rango apropiadas. CCA y CCGQA toman un enfoque fundamentalmente diferente: en lugar de comprimir el caché KV y luego up-proyectar para atención a ancho completo (MLA/GQLA/MLRA), realizan atención \emph{completamente dentro} del espacio latente comprimido, reduciendo no sólo el caché sino también los FLOPs de atención por el factor de compresión. CCGQA además desacopla las tasas de compresión de query y KV, logrando la mejor pérdida reportada a 8$\times$ reducción de caché KV.
+La familia latente muestra una progresión clara a lo largo de dos ejes: (i) \textbf{compresión de rango}, pasando de cabezas completas (MHA) a un latente compartido (MLA) a sub-cabezas latentes particionadas (MLRA), y (ii) \textbf{adaptividad de despliegue}, pasando de una sola ruta de decodificación a despacho adaptativo al hardware (GQLA) y fusión temporal de caché (MTLA). La Atención Tucker proporciona el marco algebraico unificador: MHA, GQA y MLA son todos casos especiales de una factorización Tucker con elecciones de rango apropiadas. CCA y CCGQA toman un enfoque fundamentalmente diferente: en lugar de comprimir el caché KV y luego up-proyectar para atención a ancho completo (MLA/GQLA/MLRA), realizan atención \emph{completamente dentro} del espacio latente comprimido, reduciendo no sólo el caché sino también los FLOPs de atención por el factor de compresión. CCGQA además desacopla las tasas de compresión de query y KV, logrando la mejor pérdida reportada a 8$\times$ reducción de caché KV. La Atención de Mezcla Gaussiana (GMA) cambia la filosofía de enrutamiento por completo: en lugar de un cuello de botella lineal de rango bajo, enruta a través de $K$ componentes Gaussianos probabilísticos aprendidos, logrando mezcla de secuencias en tiempo lineal $\mathcal{O}(NK)$ para $K$ fijo manteniendo una interpretación de atención normalizada.
+
+\subsection{Atención de Mezcla Gaussiana (GMA)}
+La Atención de Mezcla Gaussiana (GMA, por sus siglas en inglés) \citep{huang_gma_2026} reemplaza la interacción pareada explícita $QK^\top$ de la atención de producto punto estándar con enrutamiento probabilístico a través de $K$ componentes de mezcla Gaussiana aprendidos por cabeza. Las consultas y claves se mapean a vectores de \emph{responsabilidad} posteriores sobre un espacio de enrutamiento latente compartido; su solapamiento define una afinidad implícita en el espacio de responsabilidades, mientras que los valores se escriben y leen de una memoria latente de $K$ slots. Al explotar la asociatividad de la multiplicación matricial, GMA evita materializar la matriz de afinidad $N \times N$ inducida y en su lugar usa dos matrices de responsabilidad $N \times K$ cuyo almacenamiento de activaciones dominante escala como $\mathcal{O}(NK)$ en lugar de $\mathcal{O}(N^2)$ para $K$ fijo. Los parámetros de la mezcla Gaussiana---medias de componentes $\mu$, covarianzas diagonales (reparametrizadas vía $\sigma^2 = \text{softplus}(\omega) + \epsilon_\sigma$) y logits de prior de mezcla $\alpha$ (con $\pi = \text{softmax}(\alpha)$)---son parámetros aprendibles totalmente diferenciables optimizados por retropropagación estándar, sin bucle EM ni pérdida auxiliar de clustering.
+
+\subsubsection{Formulación Matemática}
+Por cabeza, con dimensión de enrutamiento $d_r$ y dimensión de valor $d_v$:
+\[
+Q_X = X W_Q \in \mathbb{R}^{N \times d_r}, \quad
+K_X = X W_K \in \mathbb{R}^{N \times d_r}, \quad
+V_X = X W_V \in \mathbb{R}^{N \times d_v}.
+\]
+La responsabilidad posterior del componente $k$ para un vector de enrutamiento $x_i$ es
+\[
+\gamma_{i,k} = p(z{=}k \mid x_i) = \frac{\pi_k\, \mathcal{N}(x_i \mid \mu_k, \Sigma_k)}{\sum_{\ell=1}^{K} \pi_\ell\, \mathcal{N}(x_i \mid \mu_\ell, \Sigma_\ell)},
+\qquad \Sigma_k = \mathrm{diag}(\sigma_{k,1}^2, \dots, \sigma_{k,d_r}^2),
+\]
+produciendo las matrices de responsabilidad $\Gamma^Q, \Gamma^K \in \mathbb{R}^{N \times K}$. La salida bidireccional se calcula mediante el par asociativo de escritura--lectura
+\[
+\tilde V = (\Gamma^K)^\top V_X \in \mathbb{R}^{K \times d_v}, \qquad
+Z = (\Gamma^K)^\top \mathbf{1}_N \in \mathbb{R}^{K}, \qquad
+O = \frac{\Gamma^Q \tilde V}{\Gamma^Q Z + \epsilon},
+\]
+que nunca materializa la afinidad normalizada implícita $A^{\text{GMA}}_{ij} = \frac{\sum_k \gamma^Q_{i,k} \gamma^K_{j,k}}{\sum_\ell \sum_k \gamma^Q_{i,k} \gamma^K_{\ell,k} + \epsilon}$. Para modelado autorregresivo, las estadísticas de escritura globales se reemplazan por sumas acumuladas restringidas al prefijo $\tilde V^{(i)}_k = \sum_{j \le i} \gamma^K_{j,k} V_{X,j}$ y $Z^{(i)}_k = \sum_{j \le i} \gamma^K_{j,k}$, imponiendo causalidad preservando el escalado lineal de $K$ fijo.
+
+\subsubsection{Pseudocódigo Algorítmico}
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} estado oculto $X \in \mathbb{R}^{N \times d}$, $K$ componentes, dim. de enrutamiento $d_r$, dim. de valor $d_v$, params $\{\mu_k, \omega_k, \alpha_k\}_{k=1}^{K}$
+\State $Q_X \gets X W_Q$, \quad $K_X \gets X W_K$, \quad $V_X \gets X W_V$ \Comment{proyecciones por cabeza}
+\State $\sigma^2_k \gets \text{softplus}(\omega_k) + \epsilon_\sigma$, \quad $\pi_k \gets \text{softmax}(\alpha)_k$ \Comment{reparametrizar}
+\State $\Gamma^Q \gets \texttt{softmax}_k\!\left(\log \pi_k - \tfrac{d_r}{2}\log 2\pi - \tfrac{1}{2}\sum_m \log \sigma^2_{k,m} - \tfrac{1}{2}\sum_m \frac{(q_{i,m}-\mu_{k,m})^2}{\sigma^2_{k,m}}\right)$
+\State $\Gamma^K \gets$ igual que $\Gamma^Q$ aplicado a $K_X$
+\If{causal}
+    \State $\tilde V \gets \texttt{cumsum}_n(\Gamma^K \otimes V_X)$, \quad $Z \gets \texttt{cumsum}_n(\Gamma^K)$ \Comment{restringido al prefijo}
+\Else
+    \State $\tilde V \gets (\Gamma^K)^\top V_X$, \quad $Z \gets (\Gamma^K)^\top \mathbf{1}_N$ \Comment{escritura global}
+\EndIf
+\State $O \gets \Gamma^Q \tilde V \,/\, (\Gamma^Q Z + \epsilon)$ \Comment{lectura normalizada}
+\State \textbf{Salida:} $\mathbf{Y} = O W_O$
+\end{algorithmic}
+
+\subsubsection{Características Clave}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(N K d_r + N K d_v)$ para $K$ fijo, lineal en la longitud de secuencia $N$.
+    \item \textbf{Complejidad de inferencia}: $\mathcal{O}(K)$ por token (responsabilidades + lectura latente), almacenamiento de activaciones $\mathcal{O}(NK)$.
+    \item \textbf{Entrenable}: parámetros GMM totalmente diferenciables $\{\mu, \omega, \alpha\}$ por cabeza, optimizados end-to-end sin EM.
+    \item \textbf{Fortalezas}: Mezcla de secuencias en tiempo lineal con $K$ fijo; enrutamiento probabilístico interpretable; variantes bidireccional y causal; interpretación de afinidad de rango bajo no negativa $A^{\text{GMA}} = \mathrm{diag}(d)^{-1} \Gamma^Q (\Gamma^K)^\top$.
+    \item \textbf{Limitaciones}: La calidad depende de $K$ y la dimensión de enrutamiento $d_r$; la GMA causal queda por debajo de SDPA optimizada y modelos de espacio de estados en WikiText-103 en la implementación actual del paper; no es un reemplazo universal para la atención softmax.
+\end{itemize}

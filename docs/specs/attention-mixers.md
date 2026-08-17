@@ -4,12 +4,12 @@
 
 ## Taxonomy Overview
 
-The system implements **36 sequence mixer architectures** (the full
+The system implements **37 sequence mixer architectures** (the full
 `layer_pattern` enum) organized into five functional categories. The taxonomy
 figure from the paper:
 
 ```
-Sequence Mixer Registry (36 variants)
+Sequence Mixer Registry (37 variants)
 ├── Dense (2): standard_attn, sigmoid_attn
 ├── GQA (1): gqa_attn
 ├── Recurrent / Retentive (6): retnet/retnet_attn, mamba, ode, titan_attn,
@@ -20,13 +20,13 @@ Sequence Mixer Registry (36 variants)
 ├── Gated (8): gla_attn, deltanet_attn, gated_deltanet_attn,
 │              gated_deltanet2_attn, hgrn2_attn, fox_attn, gated_softmax_attn,
 │              kda_attn
-└── Latent / KV-compression (9): mla_attn, gqla_attn, mlra_attn, tucker_attn,
-                                 iha_attn, gta_attn, mtla_attn, cca_attn,
-                                 ccgqa_attn
+└── Latent / KV-compression (10): mla_attn, gqla_attn, mlra_attn, tucker_attn,
+                                  iha_attn, gta_attn, mtla_attn, cca_attn,
+                                  ccgqa_attn, gma_attn
 ```
 
 > The detailed per-mixer attribute tables below cover the most commonly used
-> and best-documented families. The authoritative list of all 36 names is the
+> and best-documented families. The authoritative list of all 37 names is the
 > `layer_pattern` enum in `src/schema/_model/_dims.yaml`.
 
 ### How to pick a mixer (plain English)
@@ -41,7 +41,7 @@ memory/speed budget do you have?**
 | Linear training + constant inference | `mamba`, `retnet`, `gated` family |
 | >1M-token context / associative recall | `titan_attn`, `engram_attn` |
 | Long-context but want softmax quality | `longformer_attn`, `bigbird_attn`, `nsa_attn`, `sparsek_attn` |
-| Shrink KV cache / params in latent space | `mla_attn`, `cca_attn`, `ccgqa_attn` |
+| Shrink KV cache / params in latent space | `mla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn` |
 | Inference-only speedup (no training) | `sparge_attn`, `fasa_attn` (eval-only) |
 
 You can mix families freely within a `layer_pattern` — the dispatcher routes
@@ -330,7 +330,7 @@ Previous state S_{t−1} → Gate(s) α_t, β_t, G_t, f_t → New key/value or S
 | Pros | Eliminates attention sink; improves training stability; <2% latency overhead; drop-in improvement |
 | Cons | Still O(n²) quadratic; marginal benefit for short-context tasks |
 
-## Latent Attention Mechanisms (9)
+## Latent Attention Mechanisms (10)
 
 ### `cca_attn` — Compressed Convolutional Attention
 
@@ -357,6 +357,19 @@ Previous state S_{t−1} → Gate(s) α_t, β_t, G_t, f_t → New key/value or S
 | Config Knobs | `query_compression` (C₁), `kv_compression` (C₂), `num_kv_heads` (must satisfy C₂/C₁ = num_heads/num_kv_heads), `cca_qk_mean`, `cca_value_shift`, `cca_learnable_temp`, `cca_conv_kernel_size`, `cca_conv_groups` |
 | Pros | Decoupled compression; smooth Pareto; same arithmetic intensity as GQA; best loss at 8× cache reduction |
 | Cons | Still quadratic in S²; fused kernel required; C₂/C₁ ratio constraint on num_heads/num_kv_heads |
+
+### `gma_attn` — Gaussian Mixture Attention
+
+| Attribute | Value |
+|---|---|
+| Paper | Huang & Raza (2026) — arXiv:2606.18283 |
+| Core Equation | Γ^Q, Γ^K = posterior responsibilities over K learned Gaussian components; Ṽ = (Γ^K)ᵀ V_X; Z = (Γ^K)ᵀ 1_N; O = Γ^Q Ṽ / (Γ^Q Z + ε); causal via prefix cumsums |
+| Training Complexity | O(NKd_r + NKd_v) — linear in sequence length N for fixed K |
+| Inference Complexity | O(K) per step, O(NK) activation storage |
+| Key Characteristics | Replaces pairwise QKᵀ with probabilistic routing through K per-head Gaussian-mixture components (means μ, diagonal covariances σ²=softplus(ω)+ε_σ, priors π=softmax(α)); writes values into a K-slot latent memory via key responsibilities, reads via query responsibilities; implicit normalised affinity A^GMA = diag(d)⁻¹ Γ^Q (Γ^K)ᵀ never materialised; bidirectional + causal variants; fully differentiable GMM params (no EM loop) |
+| Config Knobs | `num_components` (K ≥ 1), `routing_dim` (d_r, default head_dim), `epsilon` (read normalizer ε > 0), `sigma_eps` (covariance floor ε_σ > 0), `init_mean_std` (μ init std) |
+| Pros | Fixed-K linear-time sequence mixing; probabilistic interpretable routing; non-negative low-rank affinity; bidirectional + causal |
+| Cons | Quality depends on K and d_r; causal GMA trails optimised SDPA and state-space models on WikiText-103 in the paper; not a universal softmax-attention replacement |
 
 ## Comprehensive Comparison Table
 
@@ -385,6 +398,7 @@ Previous state S_{t−1} → Gate(s) α_t, β_t, G_t, f_t → New key/value or S
 | `gated_softmax_attn` | Gated | O(n²d) | O(n)/step | Yes | Post-SDPA sigmoid gating |
 | `cca_attn` | Latent | O(n²d/C) | O(n)/step | Yes | Latent-space attention, C× FLOP reduction |
 | `ccgqa_attn` | Latent | O(n²d/C₁) | O(n)/step | Yes | Decoupled latent compression + GQA head sharing |
+| `gma_attn` | Latent | O(nKd_r+nKd_v) | O(K)/step | Yes | Probabilistic Gaussian-mixture routing, linear-time for fixed K |
 
 ## Config knobs and example assembly
 

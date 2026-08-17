@@ -51,6 +51,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "mtla_attn",
             "cca_attn",
             "ccgqa_attn",
+            "gma_attn",
         }
 
         self.assertTrue(expected.issubset(set(enum_values)))
@@ -96,6 +97,10 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             },
             "msa": {"block_size", "topk_blocks", "index_dim", "kl_loss_weight"},
             "sparda": {"block_size", "topk_blocks", "forecast_dim"},
+            "gma": {
+                "num_components", "routing_dim", "epsilon", "sigma_eps",
+                "init_mean_std",
+            },
         }
 
         for mixer, expected_leaves in expected_per_mixer.items():

@@ -226,6 +226,7 @@ properties:
       | `mtla_attn` | Multi-head Temporal Latent Attention — temporal KV merge (arXiv:2505.13544) | ✅ | ✅ |
       | `cca_attn` | Compressed Convolutional Attention — latent-space attention + convs (arXiv:2510.04476) | ✅ | ✅ |
       | `ccgqa_attn` | Compressed Convolutional Grouped Query Attention — CCA + GQA in latent (arXiv:2510.04476) | ✅ | ✅ |
+      | `gma_attn` | Gaussian Mixture Attention — probabilistic latent routing, O(NK) linear-time (arXiv:2606.18283) | ✅ | ✅ |
 
       **Examples explained:**
       - `[standard_attn]` repeated 12 times: Classic BERT-like encoder. Simplest configuration, serves as a reliable baseline. All layers use full quadratic attention.
@@ -271,6 +272,7 @@ properties:
       | `mtla_attn` | Multi-head Temporal Latent Attention — fusión temporal de KV (arXiv:2505.13544) | ✅ | ✅ |
       | `cca_attn` | Compressed Convolutional Attention — atención en espacio latente + convoluciones (arXiv:2510.04476) | ✅ | ✅ |
       | `ccgqa_attn` | Compressed Convolutional Grouped Query Attention — CCA + GQA en latente (arXiv:2510.04476) | ✅ | ✅ |
+      | `gma_attn` | Gaussian Mixture Attention — enrutamiento latente probabilístico, O(NK) en tiempo lineal (arXiv:2606.18283) | ✅ | ✅ |
       **Ejemplos explicados:**
       - `[standard_attn]` repetido 12 veces: Encoder clásico tipo BERT. Configuración más simple, sirve como línea base confiable. Todas las capas usan atención cuadrática completa.
       - `[retnet, titan_attn, retnet, mamba, titan_attn, ode]` con `num_layers=6`: Arquitectura mixta que combina retención recurrente (largo alcance eficiente), atención Titan con codificación posicional (atención local precisa), Mamba SSM (modelado de secuencias en tiempo lineal) y ODE de profundidad continua. Cada posición recibe un tipo diferente de cómputo, permitiendo representaciones diversas.
@@ -312,6 +314,7 @@ properties:
         - mtla_attn
         - cca_attn
         - ccgqa_attn
+        - gma_attn
         - msa_attn
         - sparda_attn
         - kda_attn

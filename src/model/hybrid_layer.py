@@ -59,6 +59,7 @@ from .attention.latent import (
     CCGQAAttention,
     GTAAttention,
     GQLAAttention,
+    GaussianMixtureAttention,
     IHAAttention,
     MLAAttention,
     MLRAAttention,
@@ -188,6 +189,7 @@ class HybridLayer(nn.Module):
             "ccgqa_attn": CCGQAAttention,
             "msa_attn": MSAAttention,
             "sparda_attn": SparDAAttention,
+            "gma_attn": GaussianMixtureAttention,
         }
 
         if layer_type == "mamba":

@@ -49,7 +49,7 @@ dims.num\_loops & int $\ge 1$ & Número de bucles lógicos. Cada capa en \texttt
 dims.num\_heads & int $\ge 1$ (obligatorio) & Número de cabezas de atención paralelas. Debe dividir \texttt{hidden\_size} exactamente. \\
 dims.retention\_heads & int $\ge 1$ & Número de cabezas para capas RetNet. Debe dividir \texttt{hidden\_size} exactamente. \\
 dims.dropout & float [0,1] & Tasa de dropout global. Típico: 0.1 (estándar BERT). \\
-dims.layer\_pattern & array of enum (obligatorio) & Secuencia ordenada de tipos de capa. La longitud debe igualar \texttt{num\_layers}. Más de 35 tipos de mezclador disponibles (ver Tabla~\ref{tab:layer-pattern}). \\
+dims.layer\_pattern & array of enum (obligatorio) & Secuencia ordenada de tipos de capa. La longitud debe igualar \texttt{num\_layers}. Más de 36 tipos de mezclador disponibles (ver Tabla~\ref{tab:layer-pattern}). \\
 \midrule
 \multicolumn{3}{l}{\textit{model.norm.*}} \\
 \midrule
@@ -184,7 +184,7 @@ Los campos se agrupan bajo sub-objetos jerárquicos (\texttt{dims}, \texttt{norm
 \subsubsection{Enumeración del Patrón de Capas}
 \label{tab:layer-pattern}
 
-El array \texttt{model.dims.layer\_pattern} acepta los siguientes 35 tipos de mezclador. Cada elemento define una capa física en la pila del modelo. La Tabla~\ref{tab:layer-pattern-enum} enumera todos los tipos disponibles con su soporte de entrenamiento e inferencia.
+El array \texttt{model.dims.layer\_pattern} acepta los siguientes 36 tipos de mezclador. Cada elemento define una capa física en la pila del modelo. La Tabla~\ref{tab:layer-pattern-enum} enumera todos los tipos disponibles con su soporte de entrenamiento e inferencia.
 
 \begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{5.5cm}cc}
 \toprule
@@ -235,6 +235,7 @@ gta\_attn & Atención laTenT por Cabezas Agrupadas --- mapa compartido + valores
 mtla\_attn & Atención Latente Temporal Multi-Cabeza --- fusión temporal KV & \checkmark & \checkmark \\
 cca\_attn & Atención Convolucional Comprimida --- atención en espacio latente + convs & \checkmark & \checkmark \\
 ccgqa\_attn & Atención Convolucional Comprimida por Consultas Agrupadas --- CCA + GQA en latente & \checkmark & \checkmark \\
+gma\_attn & Atención de Mezcla Gaussiana --- enrutamiento latente probabilístico, $\mathcal{O}(NK)$ tiempo lineal & \checkmark & \checkmark \\
 \end{longtable}
 
 \subsection{Configuración de Entrenamiento}

@@ -61,6 +61,11 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 | `engram_embed_dim_per_head` | int | No | ≥ 1 | — | Embed dim per hash head |
 | `engram_kernel_size` | int | No | ≥ 1 | — | ShortConv kernel width |
 | `engram_seed` | int | No | — | — | Hash seed |
+| `gma_num_components` | int | No | ≥ 1 | 8 | Number K of Gaussian mixture components per head (GMA) |
+| `gma_routing_dim` | int | No | ≥ 1 | head_dim | Routing dimension d_r for GMA responsibilities |
+| `gma_epsilon` | number | No | > 0 | 1e-6 | Read-normalizer ε for GMA |
+| `gma_sigma_eps` | number | No | > 0 | 1e-4 | Diagonal covariance floor ε_σ for GMA |
+| `gma_init_mean_std` | number | No | — | 1.0 | Init std for GMA component means μ |
 | `use_mhc` | bool | No | — | `false` | Enable the mHC n-stream residual (see [mHC](mhc.md)) |
 | `mhc_expansion_rate` | int | No | ≥ 1 | `4` | Stream expansion factor `n` |
 | `mhc_sinkhorn_iters` | int | No | ≥ 1 | `20` | Sinkhorn-Knopp normalisation rounds |
@@ -71,7 +76,7 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 
 ### Layer Pattern Valid Values
 
-`retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`, `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn`, `engram_attn`, `gqa_attn`, `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn`, `msa_attn`, `sparda_attn`
+`retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`, `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn`, `engram_attn`, `gqa_attn`, `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn`, `msa_attn`, `sparda_attn`
 
 > **Eval-only:** `sparge_attn` and `fasa_attn` cannot be used during training.
 

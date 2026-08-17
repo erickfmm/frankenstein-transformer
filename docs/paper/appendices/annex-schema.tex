@@ -184,7 +184,7 @@ Fields are grouped under hierarchical sub-objects (\texttt{dims}, \texttt{norm},
 \subsubsection{Layer Pattern Enumeration}
 \label{tab:layer-pattern}
 
-The \texttt{model.dims.layer\_pattern} array accepts the following 35 mixer types. Each element defines one physical layer in the model stack. Table~\ref{tab:layer-pattern-enum} lists all available types with their training and inference support.
+The \texttt{model.dims.layer\_pattern} array accepts the following 36 mixer types. Each element defines one physical layer in the model stack. Table~\ref{tab:layer-pattern-enum} lists all available types with their training and inference support.
 
 \begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{5.5cm}cc}
 \toprule
@@ -235,6 +235,7 @@ gta\_attn & Grouped-head laTenT Attention --- shared map + latent values & \chec
 mtla\_attn & Multi-head Temporal Latent Attention --- temporal KV merge & \checkmark & \checkmark \\
 cca\_attn & Compressed Convolutional Attention --- latent-space attention + convs & \checkmark & \checkmark \\
 ccgqa\_attn & Compressed Convolutional Grouped Query Attention --- CCA + GQA in latent & \checkmark & \checkmark \\
+gma\_attn & Gaussian Mixture Attention --- probabilistic latent routing, $\mathcal{O}(NK)$ linear-time & \checkmark & \checkmark \\
 \end{longtable}
 
 \subsection{Training Configuration}

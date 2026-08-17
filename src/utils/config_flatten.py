@@ -34,6 +34,8 @@ The hierarchical schema groups keys as:
         sparda:     {block_size, topk_blocks, forecast_dim}
         engram:     {max_ngram_size, n_heads_per_ngram, embed_dim_per_head,
                     kernel_size, seed}
+        gma:        {num_components, routing_dim, epsilon, sigma_eps,
+                    init_mean_std}
       # flat keys that were never moved (use_moe, use_bitnet, ffn_*, ode_*, ...)
 
 The flattener is tolerant: if the input ``model_data`` is already flat
@@ -110,6 +112,13 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
         "embed_dim_per_head": "engram_embed_dim_per_head",
         "kernel_size": "engram_kernel_size",
         "seed": "engram_seed",
+    },
+    "gma": {
+        "num_components": "gma_num_components",
+        "routing_dim": "gma_routing_dim",
+        "epsilon": "gma_epsilon",
+        "sigma_eps": "gma_sigma_eps",
+        "init_mean_std": "gma_init_mean_std",
     },
 }
 

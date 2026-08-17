@@ -32,6 +32,7 @@ from .latent import (
     CCGQAAttention,
     GTAAttention,
     GQLAAttention,
+    GaussianMixtureAttention,
     IHAAttention,
     MLAAttention,
     MLRAAttention,
@@ -77,4 +78,5 @@ __all__ = [
     "MTLAAttention",
     "CCAAttention",
     "CCGQAAttention",
+    "GaussianMixtureAttention",
 ]

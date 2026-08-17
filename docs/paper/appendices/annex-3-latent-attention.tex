@@ -332,4 +332,52 @@ Same pipeline as CCA, with decoupled latents:
     \item \textbf{Limitations}: Same quadratic $S^2$ (only reduced by $C_1$); fused kernel needed; two value projections add complexity.
 \end{itemize}
 
-The latent family shows a clear progression along two axes: (i) \textbf{rank compression}, moving from full heads (MHA) to a shared latent (MLA) to partitioned sub-head latents (MLRA), and (ii) \textbf{deployment adaptivity}, moving from a single decode path to hardware-adaptive dispatch (GQLA) and temporal cache merging (MTLA). Tucker Attention provides the unifying algebraic frame: MHA, GQA, and MLA are all special cases of a Tucker factorisation with appropriate rank choices. CCA and CCGQA take a fundamentally different approach: rather than compressing the KV-cache and then up-projecting for full-width attention (MLA/GQLA/MLRA), they perform attention \emph{entirely inside} the compressed latent space, reducing not just the cache but also the attention FLOPs by the compression factor. CCGQA further decouples query and KV compression rates, achieving the best reported loss at 8$\times$ KV-cache compression.
+The latent family shows a clear progression along two axes: (i) \textbf{rank compression}, moving from full heads (MHA) to a shared latent (MLA) to partitioned sub-head latents (MLRA), and (ii) \textbf{deployment adaptivity}, moving from a single decode path to hardware-adaptive dispatch (GQLA) and temporal cache merging (MTLA). Tucker Attention provides the unifying algebraic frame: MHA, GQA, and MLA are all special cases of a Tucker factorisation with appropriate rank choices. CCA and CCGQA take a fundamentally different approach: rather than compressing the KV-cache and then up-projecting for full-width attention (MLA/GQLA/MLRA), they perform attention \emph{entirely inside} the compressed latent space, reducing not just the cache but also the attention FLOPs by the compression factor. CCGQA further decouples query and KV compression rates, achieving the best reported loss at 8$\times$ KV-cache compression. Gaussian Mixture Attention (GMA) changes the routing philosophy entirely: instead of a low-rank linear bottleneck, it routes through $K$ learned probabilistic Gaussian components, achieving linear-time $\mathcal{O}(NK)$ sequence mixing for fixed $K$ while retaining a normalised attention-style interpretation.
+
+\subsection{Gaussian Mixture Attention (GMA)}
+Gaussian Mixture Attention (GMA) \citep{huang_gma_2026} replaces the explicit pairwise $QK^\top$ interaction of standard dot-product attention with probabilistic routing through $K$ learned Gaussian-mixture components per head. Queries and keys are mapped to posterior \emph{responsibility} vectors over a shared latent routing space; their overlap defines an implicit responsibility-space affinity, while values are written into and read from a $K$-slot latent memory. By exploiting the associativity of matrix multiplication, GMA avoids materialising the induced $N \times N$ affinity matrix and instead uses two $N \times K$ responsibility matrices whose dominant activation storage scales as $\mathcal{O}(NK)$ rather than $\mathcal{O}(N^2)$ for fixed $K$. The Gaussian mixture parameters---component means $\mu$, diagonal covariances (reparameterised via $\sigma^2 = \text{softplus}(\omega) + \epsilon_\sigma$) and mixture-prior logits $\alpha$ (with $\pi = \text{softmax}(\alpha)$)---are fully differentiable learnable parameters optimised by standard backpropagation, with no EM loop or auxiliary clustering loss.
+
+\subsubsection{Mathematical Formulation}
+Per head, with routing dimension $d_r$ and value dimension $d_v$:
+\[
+Q_X = X W_Q \in \mathbb{R}^{N \times d_r}, \quad
+K_X = X W_K \in \mathbb{R}^{N \times d_r}, \quad
+V_X = X W_V \in \mathbb{R}^{N \times d_v}.
+\]
+The posterior responsibility of component $k$ for a routing vector $x_i$ is
+\[
+\gamma_{i,k} = p(z{=}k \mid x_i) = \frac{\pi_k\, \mathcal{N}(x_i \mid \mu_k, \Sigma_k)}{\sum_{\ell=1}^{K} \pi_\ell\, \mathcal{N}(x_i \mid \mu_\ell, \Sigma_\ell)},
+\qquad \Sigma_k = \mathrm{diag}(\sigma_{k,1}^2, \dots, \sigma_{k,d_r}^2),
+\]
+yielding responsibility matrices $\Gamma^Q, \Gamma^K \in \mathbb{R}^{N \times K}$. The bidirectional output is computed by the associative write--read pair
+\[
+\tilde V = (\Gamma^K)^\top V_X \in \mathbb{R}^{K \times d_v}, \qquad
+Z = (\Gamma^K)^\top \mathbf{1}_N \in \mathbb{R}^{K}, \qquad
+O = \frac{\Gamma^Q \tilde V}{\Gamma^Q Z + \epsilon},
+\]
+which never materialises the implicit normalised affinity $A^{\text{GMA}}_{ij} = \frac{\sum_k \gamma^Q_{i,k} \gamma^K_{j,k}}{\sum_\ell \sum_k \gamma^Q_{i,k} \gamma^K_{\ell,k} + \epsilon}$. For autoregressive modelling the global write statistics are replaced by prefix-restricted cumulative sums $\tilde V^{(i)}_k = \sum_{j \le i} \gamma^K_{j,k} V_{X,j}$ and $Z^{(i)}_k = \sum_{j \le i} \gamma^K_{j,k}$, enforcing causality while preserving the fixed-$K$ linear scaling.
+
+\subsubsection{Algorithmic Pseudocode}
+\begin{algorithmic}[1]
+\State \textbf{Input:} hidden state $X \in \mathbb{R}^{N \times d}$, $K$ components, routing dim $d_r$, value dim $d_v$, params $\{\mu_k, \omega_k, \alpha_k\}_{k=1}^{K}$
+\State $Q_X \gets X W_Q$, \quad $K_X \gets X W_K$, \quad $V_X \gets X W_V$ \Comment{head projections}
+\State $\sigma^2_k \gets \text{softplus}(\omega_k) + \epsilon_\sigma$, \quad $\pi_k \gets \text{softmax}(\alpha)_k$ \Comment{reparameterise}
+\State $\Gamma^Q \gets \texttt{softmax}_k\!\left(\log \pi_k - \tfrac{d_r}{2}\log 2\pi - \tfrac{1}{2}\sum_m \log \sigma^2_{k,m} - \tfrac{1}{2}\sum_m \frac{(q_{i,m}-\mu_{k,m})^2}{\sigma^2_{k,m}}\right)$
+\State $\Gamma^K \gets$ same as $\Gamma^Q$ applied to $K_X$
+\If{causal}
+    \State $\tilde V \gets \texttt{cumsum}_n(\Gamma^K \otimes V_X)$, \quad $Z \gets \texttt{cumsum}_n(\Gamma^K)$ \Comment{prefix-restricted}
+\Else
+    \State $\tilde V \gets (\Gamma^K)^\top V_X$, \quad $Z \gets (\Gamma^K)^\top \mathbf{1}_N$ \Comment{global write}
+\EndIf
+\State $O \gets \Gamma^Q \tilde V \,/\, (\Gamma^Q Z + \epsilon)$ \Comment{normalised read}
+\State \textbf{Output:} $\mathbf{Y} = O W_O$
+\end{algorithmic}
+
+\subsubsection{Key Characteristics}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(N K d_r + N K d_v)$ for fixed $K$, linear in the sequence length $N$.
+    \item \textbf{Inference complexity}: $\mathcal{O}(K)$ per token (responsibilities + latent read), $\mathcal{O}(NK)$ activation storage.
+    \item \textbf{Trainable}: fully differentiable GMM parameters $\{\mu, \omega, \alpha\}$ per head, optimised end-to-end without EM.
+    \item \textbf{Strengths}: Fixed-$K$ linear-time sequence mixing; probabilistic interpretable routing; bidirectional and causal variants; non-negative low-rank affinity interpretation $A^{\text{GMA}} = \mathrm{diag}(d)^{-1} \Gamma^Q (\Gamma^K)^\top$.
+    \item \textbf{Limitations}: Quality depends on $K$ and the routing dimension $d_r$; causal GMA trails optimised SDPA and state-space models on WikiText-103 in the paper's current implementation; not a universal replacement for softmax attention.
+\end{itemize}

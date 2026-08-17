@@ -359,6 +359,22 @@ class FrankensteinModelConfig:
     mtla_merge_factor: int = 2
     mtla_stride: Optional[int] = None
 
+    # ---- GMA / Gaussian Mixture Attention (arXiv:2606.18283) ----
+    # Number K of learned Gaussian mixture components per head. Each
+    # component routes values into one latent memory slot.
+    gma_num_components: int = 8
+    # Routing dimension d_r used to compute Gaussian responsibilities.
+    # None -> head_dim (hidden_size // num_heads). Decoupled from d_v.
+    gma_routing_dim: Optional[int] = None
+    # Numerical-stability constant for the read-step normaliser
+    # Gamma^Q Z + epsilon. Must be > 0.
+    gma_epsilon: float = 1e-6
+    # Lower bound for the diagonal variances: sigma^2 = softplus(omega)
+    # + sigma_eps. Guarantees strict positive-definiteness. Must be > 0.
+    gma_sigma_eps: float = 1e-4
+    # Initialisation std for the component means mu ~ N(0, init_mean_std^2).
+    gma_init_mean_std: float = 1.0
+
     # ---- CCA / CCGQA (arXiv:2510.04476) ----
     cca_latent_rank: Optional[int] = None
     cca_num_conv_layers: int = 2
@@ -499,6 +515,29 @@ class FrankensteinModelConfig:
             self.ccgqa_kv_latent_rank = max(1, self.hidden_size // 8)
         if self.ccgqa_num_kv_heads is None:
             self.ccgqa_num_kv_heads = max(1, self.num_heads // 4)
+
+        # ---- Resolve GMA / Gaussian Mixture Attention defaults ----
+        # routing_dim d_r defaults to the per-head dimension.
+        if self.gma_routing_dim is None:
+            self.gma_routing_dim = max(1, self.hidden_size // self.num_heads)
+        else:
+            self.gma_routing_dim = int(self.gma_routing_dim)
+            if self.gma_routing_dim < 1:
+                raise ValueError(
+                    f"gma_routing_dim must be >= 1, got {self.gma_routing_dim}"
+                )
+        if self.gma_num_components < 1:
+            raise ValueError(
+                f"gma_num_components must be >= 1, got {self.gma_num_components}"
+            )
+        if self.gma_epsilon <= 0:
+            raise ValueError(
+                f"gma_epsilon must be > 0, got {self.gma_epsilon}"
+            )
+        if self.gma_sigma_eps <= 0:
+            raise ValueError(
+                f"gma_sigma_eps must be > 0, got {self.gma_sigma_eps}"
+            )
 
         if self.positional_encoding is None:
             self.positional_encoding = "hope" if bool(self.use_hope) else "rope"

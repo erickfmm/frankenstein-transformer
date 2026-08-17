@@ -16,6 +16,7 @@ Bloque estilo EDO & $\frac{dh}{dt}=f_\theta(h,t)$ & depende del solver & depende
 Memoria Titans & $M_t=(1-\alpha_t)M_{t-1}+S_t$ & aprox.\ $\mathcal{O}(nd)$ & centrado en recuperación & Actualizaciones de memoria en tiempo de prueba con dinámica impulsada por sorpresa \citep{behrouz_titans_2025}. \\
 CCA & $\text{softmax}(\hat Q\hat K^\top/\sqrt{d_h})\tilde V$ en latente & $\mathcal{O}(n^2d/C)$ & $\mathcal{O}(n)$/paso & Atención completa en latente comprimido; convs + qk-mean + value-shift; $C{\times}$ menos FLOPs+params+caché \citep{figliola_cca_2025}. \\
 CCGQA & Igual que CCA + GQA desacoplada & $\mathcal{O}(n^2d/C_1)$ & $\mathcal{O}(n)$/paso & CCA con compresión KV $C_2\geq C_1$ y cabezas latentes compartidas por grupo; mejor pérdida a $8{\times}$ reducción de caché \citep{figliola_cca_2025}. \\
+GMA & $\frac{\Gamma^Q(\Gamma^K)^\top}{\Gamma^Q Z+\epsilon}V$ & $\mathcal{O}(nKd_r+nKd_v)$ & $\mathcal{O}(K)$/paso & Gaussian Mixture Attention; enrutamiento latente probabilístico a través de $K$ componentes GMM aprendidos por cabeza; tiempo lineal para $K$ fijo; causal vía cumsums de prefijo \citep{huang_gma_2026}. \\
 \bottomrule
 \end{longtable}
 \normalsize

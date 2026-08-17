@@ -4,14 +4,14 @@
 \subsection{Attention and Sequence-Mixer Families}
 \label{sec:attention-families}
 
-This system implements thirty-five sequence mixer variants organized into six functional categories reflecting research trends in sequence modeling design. The taxonomical organization reflects evolving understanding of how to balance expressivity, computational efficiency, and memory constraints.
+This system implements thirty-six sequence mixer variants organized into six functional categories reflecting research trends in sequence modeling design. The taxonomical organization reflects evolving understanding of how to balance expressivity, computational efficiency, and memory constraints.
 
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Dense Attention Baselines} (3): Standard softmax attention, sigmoid attention, and Grouped-Query Attention (GQA) provide full global contextualization at quadratic computational cost, serving as reference baselines for comparison with more efficient alternatives.
     \item \textbf{Recurrent and Retentive Architectures} (5): RetNet, Mamba, ODE-style blocks, Titans, and Engram maintain state representations enabling $\mathcal{O}(1)$ inference cost while preserving expressivity through recurrent dynamics, selective parameters, or test-time memory adaptation.
     \item \textbf{Sparse Attention Patterns} (9): Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA, and SparDA reduce quadratic complexity through structured sparsity, token selection, or training-free pruning strategies.
     \item \textbf{Gated Memory Mechanisms} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, and KDA introduce data-dependent control over memory retention, forgetting, and update strength.
-    \item \textbf{Latent and Low-Rank Compression} (9): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, and CCGQA compress key--value representations into low-rank latent bottlenecks, trading a small reconstruction error for substantial memory and compute savings.
+    \item \textbf{Latent and Low-Rank Compression} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA, and GMA compress key--value representations into low-rank latent bottlenecks (or, for GMA, route through a learned Gaussian-mixture latent memory), trading a small reconstruction error for substantial memory and compute savings.
     \item \textbf{Conditional Memory} (1): Engram provides test-time memory through learned read/write operations over an external memory bank.
 \end{enumerate}
 
@@ -30,7 +30,7 @@ This system implements thirty-five sequence mixer variants organized into six fu
 \node[box, fill=green!10, below left=1.0cm and 4.5cm of root, minimum width=2.0cm] (recur) {\textbf{Recurrent (5)}};
 \node[box, fill=yellow!12, below left=1.0cm and 1.5cm of root, minimum width=2.0cm] (sparse) {\textbf{Sparse (9)}};
 \node[box, fill=purple!12, below right=1.0cm and 1.5cm of root, minimum width=2.0cm] (gated) {\textbf{Gated (8)}};
-\node[box, fill=cyan!12, below right=1.0cm and 4.5cm of root, minimum width=2.0cm] (latent) {\textbf{Latent (9)}};
+\node[box, fill=cyan!12, below right=1.0cm and 4.5cm of root, minimum width=2.0cm] (latent) {\textbf{Latent (10)}};
 \node[box, fill=orange!12, below right=1.0cm and 7.5cm of root, minimum width=2.0cm] (memory) {\textbf{Memory (1)}};
 
 % Dense column (3)
@@ -135,7 +135,7 @@ This system implements thirty-five sequence mixer variants organized into six fu
 % Category-to-list links — Memory
 \draw[line] (memory) -- (m1);
 \end{tikzpicture}}
-\caption{Comprehensive taxonomy of thirty-five sequence mixer variants across six functional categories. Dense baselines provide full global routing at quadratic cost. Recurrent architectures enable constant-time inference through state compression. Sparse variants reduce complexity through structured patterns or token selection. Gated mechanisms introduce data-dependent control over memory retention and forgetting. Latent methods compress key--value representations into low-rank bottlenecks. Conditional memory provides test-time read/write over an external memory bank.}
+\caption{Comprehensive taxonomy of thirty-six sequence mixer variants across six functional categories. Dense baselines provide full global routing at quadratic cost. Recurrent architectures enable constant-time inference through state compression. Sparse variants reduce complexity through structured patterns or token selection. Gated mechanisms introduce data-dependent control over memory retention and forgetting. Latent methods compress key--value representations into low-rank bottlenecks or route through probabilistic Gaussian-mixture latents. Conditional memory provides test-time read/write over an external memory bank.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -143,7 +143,7 @@ This system implements thirty-five sequence mixer variants organized into six fu
 The dense baselines (standard softmax \citep{vaswani_attention_2017} and sigmoid \citep{ramapuram_theory_2024}) and the recurrent/retentive family (RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, ODE-style continuous blocks \citep{zhang_continuous_2021}, and Titans test-time memory \citep{behrouz_titans_2025}) provide the foundational expressiveness-versus-efficiency tradeoff. Mathematical formulations, parallel and recurrent forms, algorithmic pseudocode, and an architectural comparison table are collected in Appendix~\ref{sec:annex-transformer}. The pattern-driven mixer dispatch algorithm (including the training-free enforcement policy for \texttt{fasa\_attn} and \texttt{sparge\_attn}) is likewise detailed there.
 
 \subsection{Latent and Low-Rank Attention Family}
-A complementary family compresses the per-token key--value state into a low-rank latent: Multi-Head Latent Attention (MLA), Group-Query Latent Attention (GQLA), Multi-Head Low-Rank Attention (MLRA), Tucker Attention, Interleaved Head Attention (IHA), Grouped-head laTenT Attention (GTA), and Multi-head Temporal Latent Attention (MTLA). These methods unify grouped-query, latent, factorised, and temporal-latent designs under a common low-rank bottleneck. Full formulations, pseudocode, and a comparison table are collected in Appendix~\ref{sec:annex-latent}.
+A complementary family compresses the per-token key--value state into a low-rank latent: Multi-Head Latent Attention (MLA), Group-Query Latent Attention (GQLA), Multi-Head Low-Rank Attention (MLRA), Tucker Attention, Interleaved Head Attention (IHA), Grouped-head laTenT Attention (GTA), and Multi-head Temporal Latent Attention (MTLA). These methods unify grouped-query, latent, factorised, and temporal-latent designs under a common low-rank bottleneck. Gaussian Mixture Attention (GMA) takes a different route: it replaces the pairwise $QK^\top$ interaction with probabilistic routing through $K$ learned Gaussian-mixture components per head, writing values into a $K$-slot latent memory and reading back via posterior responsibilities, yielding $\mathcal{O}(NK)$ activation storage for fixed $K$. Full formulations, pseudocode, and a comparison table are collected in Appendix~\ref{sec:annex-latent}.
 
 \subsection{Sparse Attention Extensions}
 The mixer registry includes nine sparse blocks: \texttt{sparse\_transformer\_attn}, \texttt{longformer\_attn}, \texttt{bigbird\_attn}, \texttt{sparsek\_attn}, \texttt{nsa\_attn}, \texttt{sparge\_attn}, \texttt{fasa\_attn}, \texttt{msa\_attn}, and \texttt{sparda\_attn} \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026}. The implementation enforces an explicit execution policy for training-free sparse methods: \texttt{fasa\_attn} and \texttt{sparge\_attn} are eval/inference-only and raise runtime errors if used while the model is in training mode. Mathematical formulations, algorithmic pseudocode, per-block characteristics, and a comparison table are collected in Appendix~\ref{sec:annex-sparse}.
@@ -203,7 +203,7 @@ The mixer registry includes nine sparse blocks: \texttt{sparse\_transformer\_att
 \draw[line] (up) -- (attn);
 \node[group, fit=(kv)(down)(latent)(up)(attn), label=right:{\small Compression factor: $r \ll d$}] {};
 \end{tikzpicture}}
-\caption{Latent and low-rank attention concept. Key--value pairs are compressed through a down-projection into a low-rank latent space ($r \ll d$), where attention is computed at reduced cost, then up-projected back. Variants differ in factorization structure (MLA, GQLA, MLRA, Tucker), head interleaving (IHA, GTA), temporal compression (MTLA), and cross-covariance formulations (CCA, CCGQA).}
+\caption{Latent and low-rank attention concept. Key--value pairs are compressed through a down-projection into a low-rank latent space ($r \ll d$), where attention is computed at reduced cost, then up-projected back. Variants differ in factorization structure (MLA, GQLA, MLRA, Tucker), head interleaving (IHA, GTA), temporal compression (MTLA), cross-covariance formulations (CCA, CCGQA), and probabilistic Gaussian-mixture routing (GMA).}
 \label{fig:latent-map}
 \end{figure}
 

@@ -60,6 +60,7 @@ def _make(bitnet_routers: bool, mode: str = "encoder"):
             "tucker_attn",
             "iha_attn",
             "gta_attn",
+            "gma_attn",
         ],
     )
 
