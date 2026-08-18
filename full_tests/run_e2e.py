@@ -6,7 +6,11 @@ SentencePiece tokenizer, exercising:
 * every trainable attention mixer in unordered pairs,
 * every optimizer,
 * every normalization type,
-* major transversal toggles (BitNet, MoE, MoD, mHC, embeddings, residuals, etc.),
+* every model-level positional encoding (rope, hope, nope, alibi, pape, pape_efficient,
+  pape_ri, sinusoidal_absolute, sinusoidal_rotary, learned_absolute, none),
+* every ViT `pos_embedding_type` across all 3 vision tasks (classification,
+  patch_prediction, segmentation),
+* major transversal toggles (BitNet, MoE, MoD, mHC, embeddings, residuals/AttnRes, etc.),
 * encoder/MLM and decoder/causal-LM tasks,
 * vision tasks (frankenstein_vit: patch_prediction, classification, segmentation),
 * deploy, inference, quantization, transformers-export and bitnet-gguf smoke tests.
@@ -63,7 +67,22 @@ ATTENTIONS = [
     "gated_deltanet2_attn", "hgrn2_attn", "fox_attn", "gated_softmax_attn",
     "engram_attn", "gqa_attn", "mla_attn", "gqla_attn", "mlra_attn",
     "tucker_attn", "iha_attn", "gta_attn", "mtla_attn", "cca_attn", "ccgqa_attn",
-    "msa_attn", "sparda_attn", "kda_attn",
+    "msa_attn", "sparda_attn", "kda_attn", "gma_attn",
+]
+
+# Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).
+# Each is exercised on a fixed baseline layer_pattern — no cross product with mixers.
+POSITIONAL_ENCODINGS = [
+    "rope", "hope", "nope", "alibi", "pape", "pape_efficient", "pape_ri",
+    "sinusoidal_absolute", "sinusoidal_rotary", "learned_absolute", "none",
+]
+
+# ViT image positional embedding types (src/schema/_image.yaml pos_embedding_type enum).
+# Exercised across all 3 vision tasks — no cross product with mixers.
+VISION_PE_TYPES = [
+    "learned_1d", "none", "learned_absolute", "sinusoidal_absolute",
+    "sinusoidal_rotary", "pape", "pape_efficient", "pape_ri",
+    "rope", "hope", "nope", "alibi",
 ]
 
 OPTIMIZERS = [
@@ -204,6 +223,41 @@ def make_norm_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     return configs
 
 
+def make_positional_encoding_configs(vocab_size: int) -> List[Tuple[str, dict]]:
+    """One config per model-wide ``positional_encoding`` value.
+
+    Uses a fixed baseline ``[standard_attn, titan_attn]`` pattern — no cross
+    product with mixers.  Only the schema-defined ``positional_encoding`` and
+    ``positional_encoding_parameters`` keys are touched.
+    """
+    configs: List[Tuple[str, dict]] = []
+    for pe in POSITIONAL_ENCODINGS:
+        model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
+        model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
+        overrides: Dict[str, Any] = {"positional_encoding": pe}
+        # PaPE family shares the ``pape`` parameters sub-object (num_parabolas,
+        # num_positions, rotation_invariant).  Provide sane toy values.
+        if pe in {"pape", "pape_efficient", "pape_ri"}:
+            overrides["positional_encoding_parameters"] = {
+                "pape": {"num_parabolas": 4, "num_positions": 1, "rotation_invariant": pe == "pape_ri"},
+            }
+        if pe == "sinusoidal_absolute":
+            overrides["positional_encoding_parameters"] = {
+                "sinusoidal": {"max_len": 64, "base": 10000.0, "scale": 1.0},
+            }
+        if pe == "learned_absolute":
+            overrides["positional_encoding_parameters"] = {
+                "learned": {"max_len": 64, "init_std": 0.02},
+            }
+        if pe in {"rope", "hope"}:
+            overrides["positional_encoding_parameters"] = {
+                pe: {"base": 10000.0, "scaling": 1.0} if pe == "rope" else {"base": 10000.0, "damping": 0.01},
+            }
+        model = _deep_update(model, overrides)
+        configs.append((f"pe_{pe}", {"model_class": "frankenstein", "model": model, "training": training}))
+    return configs
+
+
 def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     configs: List[Tuple[str, dict]] = []
 
@@ -261,46 +315,50 @@ def make_batch_size_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     return configs
 
 
+def _vit_model(vocab_size: int) -> dict:
+    """Minimal ``model:`` block for a frankenstein_vit (Vision Transformer)."""
+    return {
+        "dims": {
+            "hidden_size": 64, "num_layers": 2, "num_heads": 4, "num_loops": 1,
+            "layer_pattern": ["standard_attn"], "mode": "encoder", "dropout": 0.0,
+            "vocab_size": vocab_size,
+        },
+        "norm": {"type": "layer_norm"},
+        "embedding": {},
+        "attention": {},
+        "use_moe": False,
+        "use_bitnet": False,
+        "ffn_activation": "gelu",
+        "ffn_hidden_size": 256,
+    }
+
+
+def _vit_training(task: str) -> dict:
+    """Minimal ``training:`` block for a frankenstein_vit task."""
+    return {
+        "task": task,
+        "batch_size": 2,
+        "num_epochs": 1,
+        "optimizer": {
+            "optimizer_class": "adamw",
+            "parameters": {
+                "adamw-lr_embeddings": 1e-4,
+                "adamw-lr_norms": 1e-4,
+                "adamw-lr_attention": 1e-4,
+                "adamw-lr_other": 1e-4,
+                "adamw-wd_embeddings": 0.0,
+                "adamw-wd_norms": 0.0,
+                "adamw-wd_attention": 0.0,
+                "adamw-wd_other": 0.0,
+            },
+        },
+        task: {"batch_size": 2, "num_epochs": 1, "learning_rate": 1e-4},
+    }
+
+
 def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     """Build frankenstein_vit (Vision Transformer) e2e configs for all 3 tasks."""
     configs: List[Tuple[str, dict]] = []
-
-    def _vit_model() -> dict:
-        return {
-            "dims": {
-                "hidden_size": 64, "num_layers": 2, "num_heads": 4, "num_loops": 1,
-                "layer_pattern": ["standard_attn"], "mode": "encoder", "dropout": 0.0,
-                "vocab_size": vocab_size,
-            },
-            "norm": {"type": "layer_norm"},
-            "embedding": {},
-            "attention": {},
-            "use_moe": False,
-            "use_bitnet": False,
-            "ffn_activation": "gelu",
-            "ffn_hidden_size": 256,
-        }
-
-    def _vit_training(task: str) -> dict:
-        return {
-            "task": task,
-            "batch_size": 2,
-            "num_epochs": 1,
-            "optimizer": {
-                "optimizer_class": "adamw",
-                "parameters": {
-                    "adamw-lr_embeddings": 1e-4,
-                    "adamw-lr_norms": 1e-4,
-                    "adamw-lr_attention": 1e-4,
-                    "adamw-lr_other": 1e-4,
-                    "adamw-wd_embeddings": 0.0,
-                    "adamw-wd_norms": 0.0,
-                    "adamw-wd_attention": 0.0,
-                    "adamw-wd_other": 0.0,
-                },
-            },
-            task: {"batch_size": 2, "num_epochs": 1, "learning_rate": 1e-4},
-        }
 
     base_image = {
         "image_size": {"height": 32, "width": 32},
@@ -312,7 +370,7 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # Classification
     image = dict(base_image, num_classes=10)
     configs.append(("vit_classification", {
-        "model_class": "frankenstein_vit", "model": _vit_model(),
+        "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
         "image": image, "dataset": base_dataset,
         "training": _vit_training("classification"),
     }))
@@ -321,7 +379,7 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     image = dict(base_image, mask_ratio=0.5, mask_token_strategy="bert",
                  prediction_target="mean_color_3bit")
     configs.append(("vit_patch_prediction", {
-        "model_class": "frankenstein_vit", "model": _vit_model(),
+        "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
         "image": image, "dataset": base_dataset,
         "training": _vit_training("patch_prediction"),
     }))
@@ -329,11 +387,41 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # Segmentation (pixel head)
     image = dict(base_image, seg_head_type="pixel", num_seg_classes=5)
     configs.append(("vit_segmentation_pixel", {
-        "model_class": "frankenstein_vit", "model": _vit_model(),
+        "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
         "image": image, "dataset": base_dataset,
         "training": _vit_training("segmentation"),
     }))
 
+    return configs
+
+
+def make_vision_pe_configs(vocab_size: int) -> List[Tuple[str, dict]]:
+    """Sweep every ViT ``pos_embedding_type`` across all 3 vision tasks.
+
+    No cross product with mixers — each combo is one (task, PE) pair using the
+    default ``standard_attn`` ViT layer pattern.  Mirrors the strategy of
+    ``make_positional_encoding_configs`` but for the vision image block.
+    """
+    configs: List[Tuple[str, dict]] = []
+    base_image = {
+        "image_size": {"height": 32, "width": 32},
+        "patch_size": 16, "in_channels": 3, "cls_token": True, "pooling_mode": "cls",
+    }
+    base_dataset = {"rescale": {"height": 32, "width": 32}}
+
+    for task, image_extras in [
+        ("classification", {"num_classes": 10}),
+        ("patch_prediction", {"mask_ratio": 0.5, "mask_token_strategy": "bert",
+                             "prediction_target": "mean_color_3bit"}),
+        ("segmentation", {"seg_head_type": "pixel", "num_seg_classes": 5}),
+    ]:
+        for pe in VISION_PE_TYPES:
+            image = dict(base_image, pos_embedding_type=pe, **image_extras)
+            configs.append((f"vit_pe_{task}_{pe}", {
+                "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
+                "image": image, "dataset": base_dataset,
+                "training": _vit_training(task),
+            }))
     return configs
 
 
@@ -346,7 +434,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--category",
-        choices=["all", "attn", "opt", "norm", "transversal", "task", "batch_size", "vision", "deploy"],
+        choices=["all", "attn", "opt", "norm", "pe", "transversal", "task", "batch_size", "vision", "vision_pe", "deploy"],
         default="all",
         help="Which sweep to run (default: all).",
     )
@@ -479,6 +567,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         combos.extend(make_optimizer_configs(args.vocab_size))
     if args.category in {"all", "norm"}:
         combos.extend(make_norm_configs(args.vocab_size))
+    if args.category in {"all", "pe"}:
+        combos.extend(make_positional_encoding_configs(args.vocab_size))
     if args.category in {"all", "transversal"}:
         combos.extend(make_transversal_configs(args.vocab_size))
     if args.category in {"all", "task"}:
@@ -487,6 +577,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         combos.extend(make_batch_size_configs(args.vocab_size))
     if args.category in {"all", "vision"}:
         combos.extend(make_vision_configs(args.vocab_size))
+    if args.category in {"all", "vision_pe"}:
+        combos.extend(make_vision_pe_configs(args.vocab_size))
 
     if args.limit is not None:
         combos = combos[: args.limit]
