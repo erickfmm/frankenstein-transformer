@@ -10,9 +10,9 @@ Esta carpeta contiene un harness independiente que entrena modelos **reales pero
 - **Cada atención sola**: una capa con cada mezclador entrenable.
 - **Todos los optimizadores** del schema (`src/schema/_optimizer.yaml`).
 - **Todas las normas** (`layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`).
-- **Todas las codificaciones posicionales** a nivel de modelo (`rope`, `hope`, `nope`, `alibi`, `pape`, `pape_efficient`, `pape_ri`, `sinusoidal_absolute`, `sinusoidal_rotary`, `learned_absolute`, `none`) — una config cada una sobre un patrón base fijo `[standard_attn, titan_attn]` (sin cross product).
-- **Todas las `pos_embedding_type` del ViT** (`learned_1d`, `none`, `learned_absolute`, `sinusoidal_absolute`, `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`, `nope`, `alibi`) a través de las 3 tareas de visión (classification, patch_prediction, segmentation) — 36 configs, sin cross product con mixers.
-- **Transversales**: BitNet (incluido routers/conv), embeddings factorizados/conv, MoE, MoD, mHC, residuos/AttnRes (`standard`/`none`/`full_attn`/`block_attn`), RoPE vs HoPE, loops duplicados, activaciones de FFN, etc.
+- **Todas las codificaciones posicionales** a nivel de modelo (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape`, `pape_efficient`, `pape_ri`, `sinusoidal_absolute`, `sinusoidal_rotary`, `learned_absolute`, `none`) — una config cada una sobre un patrón base fijo `[standard_attn, titan_attn]` (sin cross product).
+- **Todas las `pos_embedding_type` del ViT** (`learned_1d`, `none`, `learned_absolute`, `sinusoidal_absolute`, `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`, `nope`, `alibi`, `bam`) a través de las 3 tareas de visión (classification, patch_prediction, segmentation) — 39 configs, sin cross product con mixers.
+- **Transversales**: BitNet (incluido routers/conv), embeddings factorizados/conv, MoE, MoD, mHC, residuos/AttnRes (`standard`/`none`/`full_attn`/`block_attn`), RoPE vs HoPE, SSMax (`use_ssmax`), loops duplicados, activaciones de FFN, etc.
 - **Tareas**: `mlm`/encoder y `causal_lm`/decoder; visión (`classification`, `patch_prediction`, `segmentation`).
 - **Deploy / infer / cuantización / transformers-export / bitnet-gguf** (smoke tests sobre el primer entrenamiento exitoso).
 

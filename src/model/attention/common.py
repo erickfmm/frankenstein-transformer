@@ -246,8 +246,9 @@ def apply_pe_to_qk(
 
     Call this AFTER q/k projection and BEFORE computing attention scores.
     Handles rope, hope, sinusoidal_rotary (rotation) and pape, pape_efficient,
-    pape_ri (q/k augmentation). No-op for alibi, nope, none,
-    sinusoidal_absolute, learned_absolute.
+    pape_ri (q/k augmentation). No-op for alibi, bam, nope, none,
+    sinusoidal_absolute, learned_absolute (these inject via
+    ``apply_pe_to_scores`` as additive biases).
 
     Args:
         pos_encoder: PE module or ``None``.
@@ -273,7 +274,7 @@ def apply_pe_to_qk(
         bsz, seq_len, _ = hidden.shape
         positions = pos_encoder.default_positions(bsz, seq_len, hidden.device, hidden.dtype)
         q, k = pos_encoder.encode_qk(hidden, q, k, positions)
-    # alibi, nope, none, sinusoidal_absolute, learned_absolute: no-op here
+    # alibi, bam, nope, none, sinusoidal_absolute, learned_absolute: no-op here
     return q, k
 
 
@@ -284,9 +285,14 @@ def apply_pe_to_scores(
     q: "torch.Tensor",
     use_pe: bool,
 ) -> "torch.Tensor":
-    """Apply positional encoding bias to attention scores (ALiBi only).
+    """Apply positional encoding bias to attention scores (ALiBi / BAM + SSMax).
 
     Call this AFTER computing attention scores and BEFORE softmax/causal mask.
+
+    Handles two additive-bias positional encodings (``alibi``, ``bam``) and
+    the transversal Scalable Softmax (SSMax) logit rescale, which is
+    independent of the PE type and applies whenever ``pos_encoder.ssmax`` is
+    not None.
 
     Args:
         pos_encoder: PE module or ``None``.
@@ -303,10 +309,18 @@ def apply_pe_to_scores(
         return attn_scores
 
     pe_type = str(pe_type).lower()
-    if pe_type == "alibi":
-        seq_len = q.size(-2)
+    seq_len = q.size(-2)
+    if pe_type in ("alibi", "bam"):
         bias = pos_encoder.bias(seq_len, device=q.device, dtype=q.dtype)
         attn_scores = attn_scores + bias
+
+    # Transversal Scalable Softmax (SSMax) logit rescale. Applies to every PE
+    # type when ``use_ssmax=True`` (the factory attaches ``pos_encoder.ssmax``
+    # as a child submodule). Rescales logits by ``s * ln(seq_len)``.
+    ssmax = getattr(pos_encoder, "ssmax", None)
+    if ssmax is not None:
+        attn_scores = attn_scores * ssmax.scale(seq_len, device=q.device, dtype=q.dtype)
+
     return attn_scores
 
 

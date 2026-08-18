@@ -1,6 +1,6 @@
 # Positional Encoding Bibliography
 
-This document collects the bibliographic references for the 11 positional
+This document collects the bibliographic references for the 12 positional
 encodings supported by the model-wide `positional_encoding` enum. The
 BibTeX entries live in `docs/bibliography/other.bib`. Full mathematical
 formulations are in
@@ -14,6 +14,7 @@ formulations are in
 | `hope` | `dai_hope_2025` | 2509.05218 | 2025 | Dai et al. |
 | `nope` | `kazemnejad_nope_2023` | 2305.19466 | 2023 | Kazemnejad et al. |
 | `alibi` | `press_alibi_2022` | 2108.12409 | 2022 | Press, Smith, Lewis |
+| `bam` | `bianchessi_bam_2025` | 2505.22842 | 2025 | Bianchessi et al. |
 | `pape` / `pape_efficient` / `pape_ri` | `ohrstrom_pape_2026` | 2602.01418 | 2026 | Øhrstrøm et al. |
 | `sinusoidal_absolute` / `sinusoidal_rotary` / `learned_absolute` | `vaswani_attention_2017` | 1706.03762 | 2017 | Vaswani et al. (Transformer) |
 | `none` | — | — | — | — |
@@ -68,6 +69,24 @@ extrapolates to 2048 tokens, matching the perplexity of a sinusoidal
 model trained on 2048 tokens while training 11% faster and using 11%
 less memory.
 
+### BAM — Bayesian Attention Mechanism
+**Bianchessi, Arthur S.; Aguirre, Yasmin C.; Barros, Rodrigo C.; Kupssinskü,
+Lucas S.** "Bayesian Attention Mechanism: A Probabilistic Framework for
+Positional Encoding and Context Length Extrapolation."
+arXiv:2505.22842 (2025).
+[arXiv](https://arxiv.org/abs/2505.22842) · `bianchessi_bam_2025`
+
+Reframes positional encoding as a probabilistic prior over positions and
+unifies existing methods: NoPE = Uniform prior, ALiBi = Uniform × Laplace
+prior. Introduces a Generalized-Gaussian positional prior with a learnable
+per-head shape parameter (β): β=1 recovers ALiBi, β=2 gives a Normal prior,
+0<β<1 yields heavier-than-Laplace tails, and β<0 produces long-range
+"retrieval heads". Initialised at θ=0 (Uniform prior), the per-head shape
+and scale are trained from scratch. Paired with Scalable Softmax (SSMax),
+a transversal logit rescale `s·ln(n)` that counteracts attention fading
+and is composable with any PE, BAM SSMax achieves accurate information
+retrieval at 500× the training context length.
+
 ### PaPE — Parabolic Position Encoding
 **Øhrstrøm, Christoffer Koo et al.** "Parabolic Position Encoding:
 Vision-Centric, Principled, Extrapolatable, General." arXiv:2602.01418
@@ -102,5 +121,6 @@ All entries are in [`docs/bibliography/other.bib`](other.bib):
 - `dai_hope_2025` — HoPE
 - `kazemnejad_nope_2023` — NoPE
 - `press_alibi_2022` — ALiBi
+- `bianchessi_bam_2025` — BAM
 - `ohrstrom_pape_2026` — PaPE (all three variants)
 - `vaswani_attention_2017` — sinusoidal + learned absolute

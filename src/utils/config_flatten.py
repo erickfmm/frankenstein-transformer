@@ -277,6 +277,17 @@ def _flatten_pe_parameters(pe_params: Dict[str, Any], out: Dict[str, Any]) -> No
         if "init_std" in learned:
             out["learned_init_std"] = learned["init_std"]
 
+    bam = pe_params.get("bam")
+    if isinstance(bam, dict):
+        if "learn_mu" in bam:
+            out["bam_learn_mu"] = bam["learn_mu"]
+        if "theta_init" in bam:
+            out["bam_theta_init"] = bam["theta_init"]
+        if "eps" in bam:
+            out["bam_eps"] = bam["eps"]
+        if "mu_init" in bam:
+            out["bam_mu_init"] = bam["mu_init"]
+
     use_pe = pe_params.get("use_pe")
     if isinstance(use_pe, dict):
         for mixer_name, flag in use_pe.items():

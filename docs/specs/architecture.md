@@ -188,7 +188,7 @@ When `use_embedding_conv=true`, a 1D convolution is applied over token embedding
 
 ## Positional Encodings
 
-The model-wide `positional_encoding` enum selects one of 11 positional
+The model-wide `positional_encoding` enum selects one of 12 positional
 encodings (PE) applied to **all** attention mixers via a single shared
 module built in the encoder and injected into every `HybridLayer`. The
 per-mixer `<mixer>_attn_use_pe` flag (default `True` for attention
@@ -202,6 +202,7 @@ mixers to opt out.
 | Hyperbolic Rotary PE | `hope` | Rotation | Lorentz rotations with hyperbolic functions; monotonic attention decay with distance; RoPE is a special case | `hope_base` (10000), `hope_damping` (0.01) |
 | No Positional Encoding | `nope` | None | Explicit no-PE; model learns position implicitly from causal mask; outperforms explicit PE on length generalization | — |
 | Attention with Linear Biases | `alibi` | Score bias | Static distance-proportional penalty on attention scores; enables length extrapolation | `alibi_num_heads` (= `num_heads`) |
+| Bayesian Attention Mechanism | `bam` | Score bias | Generalized-Gaussian relative-position bias; learnable per-head shape (β) and scale (α); recovers ALiBi at β=1; optional SSMax logit rescale | `bam_theta_init` (0.0), `bam_learn_mu` (false), `bam_eps` (1e-5), `use_ssmax` (false), `ssmax_s_init` (1.0) |
 | Parabolic Position Encoding | `pape` | Q/K aug. | Parabolic basis functions concatenated to Q/K; vision-centric, $n$-D, extrapolatable | `pape_num_parabolas` (4), `pape_num_positions` (1) |
 | PaPE Efficient | `pape_efficient` | Q/K aug. | Pure-PyTorch PaPE; no custom Triton kernels, same math | same as `pape` |
 | PaPE Rotation-Invariant | `pape_ri` | Q/K aug. | Rotation-invariant PaPE (PaPE-RI) | `pape_rotation_invariant` (false) |
@@ -213,6 +214,9 @@ mixers to opt out.
 The legacy `use_hope` boolean is deprecated and mapped to the new enum
 (`use_hope=True` → `hope`, `False` → `rope`). The ViT `pos_embedding_type`
 field is unified with this enum (`learned_1d` → `learned_absolute`).
+The top-level `use_ssmax` flag enables Scalable Softmax (SSMax), a transversal
+logit rescale `s·ln(n)` (learnable per-head `s`, init `ssmax_s_init`) that
+counteracts attention fading and composes with any PE in the enum.
 Full mathematical formulations are in
 [Annex 12](../paper/appendices/annex-12-positional-encodings.tex).
 

@@ -108,6 +108,10 @@ properties:
     $ref: "_model/_model_flat.yaml#/properties/mixture_of_depths_capacity_ratio"
   mixture_of_depths_router_aux_loss_weight:
     $ref: "_model/_model_flat.yaml#/properties/mixture_of_depths_router_aux_loss_weight"
+  use_ssmax:
+    $ref: "_model/_model_flat.yaml#/properties/use_ssmax"
+  ssmax_s_init:
+    $ref: "_model/_model_flat.yaml#/properties/ssmax_s_init"
   ffn_hidden_size:
     $ref: "_model/_model_flat.yaml#/properties/ffn_hidden_size"
   ffn_activation:

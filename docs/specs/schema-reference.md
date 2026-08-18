@@ -48,12 +48,18 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 | `ffn_activation` | enum | Yes | 43 values (see [Activations](activations.md)) | `silu` | FFN non-linearity |
 | `ffn_activation_config` | object | No | `additionalProperties: false` | — | Learnable-activation params (RAF degrees/version, PReLU init, parametric alphas) |
 | `mode` | enum | No | `encoder`, `decoder` | — | Attention masking mode |
-| `positional_encoding` | enum | No | `rope`, `hope`, `nope`, `alibi`, `pape`, `pape_efficient`, `pape_ri`, `sinusoidal_absolute`, `sinusoidal_rotary`, `learned_absolute`, `none` | `rope` | Model-wide positional encoding (see [PE annex](../paper/appendices/annex-12-positional-encodings.tex)) |
+| `positional_encoding` | enum | No | `rope`, `hope`, `nope`, `alibi`, `bam`, `pape`, `pape_efficient`, `pape_ri`, `sinusoidal_absolute`, `sinusoidal_rotary`, `learned_absolute`, `none` | `rope` | Model-wide positional encoding (see [PE annex](../paper/appendices/annex-12-positional-encodings.tex)) |
 | `hope_base` | number | No | ≥ 0 | — | HoPE base frequency |
 | `hope_damping` | number | No | ≥ 0 | — | HoPE damping coefficient |
 | `rope_base` | number | No | ≥ 0 | — | RoPE base frequency |
 | `rope_scaling` | number | No | ≥ 0 | — | RoPE scaling factor |
 | `alibi_num_heads` | int | No | ≥ 1 | `num_heads` | ALiBi slope-schedule head count |
+| `use_ssmax` | bool | No | — | `false` | Enable Scalable Softmax (SSMax) transversal logit rescale (arXiv:2505.22842) |
+| `ssmax_s_init` | number | No | > 0 | `1.0` | Initial value for per-head SSMax scalar `s` |
+| `bam_learn_mu` | bool | No | — | `false` | If true, BAM location θ_µ is learnable |
+| `bam_theta_init` | number | No | — | `0.0` | Initial value for BAM θ_α/θ_β (0=Uniform prior, 1=Laplace) |
+| `bam_eps` | number | No | > 0 | `1e-5` | BAM numerical-stability floor for `β < 0` |
+| `bam_mu_init` | number | No | — | `0.0` | Initial value for BAM θ_µ (used only when `bam_learn_mu=true`) |
 | `pape_num_parabolas` | int | No | ≥ 1 | 4 | PaPE number of parabolas |
 | `pape_num_positions` | int | No | ≥ 1 | 1 | PaPE number of positions per parabola |
 | `pape_rotation_invariant` | bool | No | — | `false` | PaPE-RI rotation-invariant flag |
@@ -62,7 +68,7 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 | `sinusoidal_scale` | number | No | ≥ 0 | 1.0 | Sinusoidal embedding scale |
 | `learned_max_len` | int | No | ≥ 1 | 512 | Learned-absolute max sequence length |
 | `learned_init_std` | number | No | ≥ 0 | 0.02 | Learned-absolute init std |
-| `positional_encoding_parameters` | object | No | `additionalProperties: false` | — | Nested PE sub-config (`rope`, `hope`, `alibi`, `pape`, `sinusoidal`, `learned`, `use_pe`) |
+| `positional_encoding_parameters` | object | No | `additionalProperties: false` | — | Nested PE sub-config (`rope`, `hope`, `alibi`, `bam`, `pape`, `sinusoidal`, `learned`, `use_pe`) |
 | `<mixer>_attn_use_pe` | bool | No | — | `True`/`False` | Per-mixer PE opt-out (see [PE annex](../paper/appendices/annex-12-positional-encodings.tex)); `False` default for recurrent/decay mixers |
 | `use_mixture_of_depths` | bool | No | — | — | Enable MoD token routing |
 | `mixture_of_depths_capacity_ratio` | number | No | (0, 1] | — | MoD token update fraction |

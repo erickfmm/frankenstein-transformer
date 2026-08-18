@@ -293,7 +293,7 @@ reglu & Compuerta & $\text{ReLU}(xW_g)\odot(xW_u)\,W_d$ & \textbf{sí} & \citep{
 
 \subsection{Variantes de Embedding}
 
-La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y optimizaciones estructurales de embedding soportadas por el código base. Las 11 codificaciones posicionales se configuran mediante el campo \texttt{positional\_encoding} de todo el modelo (ver Anexo~12 para las formulaciones completas); las dos optimizaciones estructurales se controlan con sus propias banderas.
+La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y optimizaciones estructurales de embedding soportadas por el código base. Las 12 codificaciones posicionales se configuran mediante el campo \texttt{positional\_encoding} de todo el modelo (ver Anexo~12 para las formulaciones completas); las dos optimizaciones estructurales se controlan con sus propias banderas.
 
 \footnotesize
 \begin{longtable}{p{3.0cm}p{7.5cm}p{3.5cm}}
@@ -309,15 +309,16 @@ La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y opt
 \multicolumn{3}{r}{\textit{continúa en la página siguiente}} \\
 \endfoot
 \bottomrule
-\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada. Las primeras 11 filas son codificaciones posicionales (Anexo~12); las últimas dos son optimizaciones estructurales de embedding.}
+\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada. Las primeras 12 filas son codificaciones posicionales (Anexo~12); las últimas dos son optimizaciones estructurales de embedding.}
 \label{tab:all-embeddings}
 \endlastfoot
-\multicolumn{3}{c}{\textbf{Codificaciones Posicionales (11)}} \\
+\multicolumn{3}{c}{\textbf{Codificaciones Posicionales (12)}} \\
 \midrule
 RoPE & Embedding Posicional Rotatorio; rotación basada en frecuencia de Q/K, codificando posición relativa mediante geometría de producto interno & \citep{su_rope_2024} \\
 HoPE & Codificación Posicional Rotatoria Hiperbólica; rotación inspirada en Lorentz usando funciones hiperbólicas; decaimiento monótono de atención con la distancia; RoPE es un caso especial & \citep{dai_hope_2025} \\
 NoPE & Sin Codificación Posicional; el modelo aprende posición implícitamente de la máscara causal; supera a PE explícita en generalización de longitud & \citep{kazemnejad_nope_2023} \\
 ALiBi & Atención con Sesgos Lineales; penalización estática proporcional a distancia en puntuaciones de atención; habilita extrapolación de longitud & \citep{press_alibi_2022} \\
+BAM & Mecanismo de Atención Bayesiana; sesgo de posición relativa con Gaussiana Generalizada, forma ($\beta$) y escala ($\alpha$) aprendibles por cabeza; recupera ALiBi en $\beta=1$; reescalado SSMax vía \texttt{use\_ssmax} & \citep{bianchessi_bam_2025} \\
 PaPE & Codificación Posicional Parabólica; funciones base parabólicas concatenadas a Q/K; centrada en visión, $n$-D, extrapolatable & \citep{ohrstrom_pape_2026} \\
 PaPE-Eficiente & PaPE en PyTorch puro; sin kernels Triton personalizados, misma matemática & \citep{ohrstrom_pape_2026} \\
 PaPE-RI & PaPE invariante a rotación (PaPE-RI) & \citep{ohrstrom_pape_2026} \\

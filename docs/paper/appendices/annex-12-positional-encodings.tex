@@ -5,7 +5,7 @@ This annex documents the unified positional-encoding (PE) subsystem that
 applies a single \texttt{model.positional\_encoding} choice to every
 attention mixer in the network. The schema contract is:
 \[
-\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{pape},\ \texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\ \texttt{learned\_absolute},\ \texttt{none}\}
+\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{bam},\ \texttt{pape},\ \texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\ \texttt{learned\_absolute},\ \texttt{none}\}
 \]
 The implementation lives in \texttt{src/model/embeddings/} and the shared
 injection helpers in \texttt{src/model/attention/common.py}. Bibliography
@@ -114,6 +114,30 @@ where $m_h$ is a geometric slope per head $h$ and the bias penalises
 distant keys. The \texttt{alibi\_num\_heads} knob controls the slope
 schedule's head count. ALiBi enables length extrapolation: a model
 trained on 1024 tokens generalises to 2048 without retraining.
+
+\subsubsection{BAM --- Bayesian Attention Mechanism}
+
+BAM \citep{bianchessi_bam_2025} reframes positional encoding as a
+probabilistic prior over positions and unifies existing methods: NoPE
+corresponds to a Uniform prior, ALiBi to a Uniform$\times$Laplace prior.
+The practical instantiation, GGD-BAM, adds a Generalized-Gaussian
+relative-position bias matrix $\mathbf{B}$ to the attention logits,
+exactly like ALiBi but with a non-linear, learnable shape:
+\[
+B_{i,j}^{(h)} = -\bigl(|j - \alpha_h \, i - \mu_h| + \varepsilon\bigr)^{\beta_h}, \qquad \alpha_h = e^{-\theta_\beta^{(h)}\,\theta_\alpha^{(h)}} \ge 0,
+\]
+with per-head learnable $\theta_\alpha, \theta_\beta$ (init \texttt{bam\_theta\_init}=0,
+the Uniform prior) and optional location $\theta_\mu$ (fixed to 0 by default
+via \texttt{bam\_learn\_mu=false}). The floor $\varepsilon$
+(\texttt{bam\_eps}, default $10^{-5}$) stabilises the exponentiation when
+$\beta < 0$, a relaxed regime that suppresses local context and acts as a
+long-range ``retrieval head''. Special cases: $\beta=1, \mu=0$ recovers
+ALiBi; $\beta=2$ gives a Normal prior; $0<\beta<1$ yields heavier tails than
+Laplace. The paper pairs BAM with Scalable Softmax (SSMax), a transversal
+logit rescale $s\cdot\ln(n)$ (learnable per-head $s$) that counteracts
+``attention fading'' and is composable with any PE via the top-level
+\texttt{use\_ssmax} flag. BAM SSMax achieves accurate information retrieval
+at $500\times$ the training context length.
 
 \subsubsection{PaPE --- Parabolic Position Encoding}
 
@@ -225,11 +249,11 @@ per-mixer \texttt{positional\_encoding} override that previously
 existed only on \texttt{titan\_attn} is now a no-op: the model-wide
 enum is the single source of truth, and the TitanAttention allow-list
 that restricted PE to \texttt{\{hope, rope, none, nope\}} has been
-removed --- all 11 values now work with every mixer.
+removed --- all 12 values now work with every mixer.
 
 \subsection{Architectural Profile: Positional Encodings}
 
-Table~\ref{tab:all-pos-enc} summarises the 11 supported positional
+Table~\ref{tab:all-pos-enc} summarises the 12 supported positional
 encodings.
 
 \footnotesize
@@ -253,6 +277,7 @@ rope & Rotation & Frequency-based rotation of Q/K; relative position via inner-p
 hope & Rotation & Hyperbolic Lorentz rotation; monotonic attention decay with distance & \texttt{hope\_base}, \texttt{hope\_damping} & \citep{dai_hope_2025} \\
 nope & None & Explicit no-PE; model learns position implicitly from causal mask & --- & \citep{kazemnejad_nope_2023} \\
 alibi & Score bias & Static linear distance penalty added to attention scores; length extrapolation & \texttt{alibi\_num\_heads} & \citep{press_alibi_2022} \\
+bam & Score bias & Generalized-Gaussian relative-position bias; learnable per-head shape ($\beta$) and scale ($\alpha$); recovers ALiBi at $\beta=1$; SSMax rescale via \texttt{use\_ssmax} & \texttt{bam\_theta\_init}, \texttt{bam\_learn\_mu}, \texttt{bam\_eps}, \texttt{use\_ssmax}, \texttt{ssmax\_s\_init} & \citep{bianchessi_bam_2025} \\
 pape & Q/K aug. & Parabolic basis functions concatenated to Q/K; vision-centric, $n$-D & \texttt{pape\_num\_parabolas}, \texttt{pape\_num\_positions} & \citep{ohrstrom_pape_2026} \\
 pape\_efficient & Q/K aug. & Pure-PyTorch PaPE; no custom Triton kernels & same as pape & \citep{ohrstrom_pape_2026} \\
 pape\_ri & Q/K aug. & Rotation-invariant PaPE (PaPE-RI) & \texttt{pape\_rotation\_invariant} & \citep{ohrstrom_pape_2026} \\

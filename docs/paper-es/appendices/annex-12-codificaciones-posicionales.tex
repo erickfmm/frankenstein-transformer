@@ -5,7 +5,7 @@ Este anexo documenta el subsistema unificado de codificación posicional
 (PE) que aplica una única elección de \texttt{model.positional\_encoding}
 a todos los mezcladores de atención de la red. El contrato del esquema es:
 \[
-\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{pape},\ \texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\ \texttt{learned\_absolute},\ \texttt{none}\}
+\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{bam},\ \texttt{pape},\ \texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\ \texttt{learned\_absolute},\ \texttt{none}\}
 \]
 La implementación reside en \texttt{src/model/embeddings/} y los
 ayudantes de inyección compartidos en
@@ -37,7 +37,7 @@ nula cuando la bandera \texttt{use\_pe} del mezclador es \texttt{False}.
 
 \subsection{Estilos de Inyección}
 
-Los 11 valores del enum se agrupan en cuatro estilos de inyección:
+Los 12 valores del enum se agrupan en cuatro estilos de inyección:
 
 \begin{enumerate}
 \item \textbf{Rotación} (\texttt{rope}, \texttt{hope},
@@ -122,6 +122,32 @@ las claves distantes. La perilla \texttt{alibi\_num\_heads} controla el
 número de cabezas del calendario de pendientes. ALiBi habilita la
 extrapolación de longitud: un modelo entrenado en 1024 tokens generaliza
 a 2048 sin reentrenamiento.
+
+\subsubsection{BAM --- Mecanismo de Atención Bayesiana}
+
+BAM \citep{bianchessi_bam_2025} reformula la codificación posicional como
+un prior probabilístico sobre posiciones y unifica métodos existentes:
+NoPE corresponde a un prior Uniforme, ALiBi a un prior
+Uniforme$\times$Laplace. La instanciación práctica, GGD-BAM, añade una
+matriz de sesgo de posición relativa con Gaussiana Generalizada
+$\mathbf{B}$ a los logits de atención, exactamente como ALiBi pero con
+una forma no lineal y aprendible:
+\[
+B_{i,j}^{(h)} = -\bigl(|j - \alpha_h \, i - \mu_h| + \varepsilon\bigr)^{\beta_h}, \qquad \alpha_h = e^{-\theta_\beta^{(h)}\,\theta_\alpha^{(h)}} \ge 0,
+\]
+con parámetros aprendibles por cabeza $\theta_\alpha, \theta_\beta$ (init
+\texttt{bam\_theta\_init}=0, el prior Uniforme) y localización opcional
+$\theta_\mu$ (fijado a 0 por defecto vía \texttt{bam\_learn\_mu=false}). El
+piso $\varepsilon$ (\texttt{bam\_eps}, por defecto $10^{-5}$) estabiliza la
+exponenciación cuando $\beta < 0$, un régimen relajado que suprime el
+contexto local y actúa como ``cabeza de recuperación'' de largo alcance.
+Casos especiales: $\beta=1, \mu=0$ recupera ALiBi; $\beta=2$ da un prior
+Normal; $0<\beta<1$ produce colas más pesadas que Laplace. El paper
+aparea BAM con Scalable Softmax (SSMax), un reescalado transversal de
+logits $s\cdot\ln(n)$ (con $s$ aprendible por cabeza) que contrarresta el
+``attention fading'' y es componible con cualquier PE vía la bandera
+\texttt{use\_ssmax} de nivel superior. BAM SSMax logra recuperación precisa
+de información a $500\times$ la longitud de contexto de entrenamiento.
 
 \subsubsection{PaPE --- Codificación Posicional Parabólica}
 
@@ -239,11 +265,11 @@ nuevo enum: \texttt{use\_hope=True} $\to$
 en \texttt{titan\_attn} es ahora una operación nula: el enum de todo el
 modelo es la única fuente de verdad, y la lista de permitidos de
 TitanAttention que restringía PE a \texttt{\{hope, rope, none, nope\}} se
-ha eliminado --- los 11 valores ahora funcionan con cada mezclador.
+ha eliminado --- los 12 valores ahora funcionan con cada mezclador.
 
 \subsection{Perfil Arquitectónico: Codificaciones Posicionales}
 
-La Tabla~\ref{tab:all-pos-enc} resume las 11 codificaciones posicionales
+La Tabla~\ref{tab:all-pos-enc} resume las 12 codificaciones posicionales
 soportadas.
 
 \footnotesize
@@ -267,6 +293,7 @@ rope & Rotación & Rotación basada en frecuencia de Q/K; posición relativa med
 hope & Rotación & Rotación de Lorentz hiperbólica; decaimiento monótono de atención con distancia & \texttt{hope\_base}, \texttt{hope\_damping} & \citep{dai_hope_2025} \\
 nope & Ninguno & Sin PE explícita; el modelo aprende posición implícitamente de la máscara causal & --- & \citep{kazemnejad_nope_2023} \\
 alibi & Sesgo de puntuación & Penalización lineal estática de distancia añadida a puntuaciones de atención; extrapolación de longitud & \texttt{alibi\_num\_heads} & \citep{press_alibi_2022} \\
+bam & Sesgo de puntuación & Sesgo de posición relativa con Gaussiana Generalizada; forma ($\beta$) y escala ($\alpha$) aprendibles por cabeza; recupera ALiBi en $\beta=1$; reescalado SSMax vía \texttt{use\_ssmax} & \texttt{bam\_theta\_init}, \texttt{bam\_learn\_mu}, \texttt{bam\_eps}, \texttt{use\_ssmax}, \texttt{ssmax\_s\_init} & \citep{bianchessi_bam_2025} \\
 pape & Aum.\ Q/K & Funciones base parabólicas concatenadas a Q/K; centrada en visión, $n$-D & \texttt{pape\_num\_parabolas}, \texttt{pape\_num\_posiciones} & \citep{ohrstrom_pape_2026} \\
 pape\_efficient & Aum.\ Q/K & PaPE en PyTorch puro; sin kernels Triton personalizados & igual que pape & \citep{ohrstrom_pape_2026} \\
 pape\_ri & Aum.\ Q/K & PaPE invariante a rotación (PaPE-RI) & \texttt{pape\_rotation\_invariant} & \citep{ohrstrom_pape_2026} \\

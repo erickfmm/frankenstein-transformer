@@ -73,7 +73,7 @@ ATTENTIONS = [
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).
 # Each is exercised on a fixed baseline layer_pattern — no cross product with mixers.
 POSITIONAL_ENCODINGS = [
-    "rope", "hope", "nope", "alibi", "pape", "pape_efficient", "pape_ri",
+    "rope", "hope", "nope", "alibi", "bam", "pape", "pape_efficient", "pape_ri",
     "sinusoidal_absolute", "sinusoidal_rotary", "learned_absolute", "none",
 ]
 
@@ -82,7 +82,7 @@ POSITIONAL_ENCODINGS = [
 VISION_PE_TYPES = [
     "learned_1d", "none", "learned_absolute", "sinusoidal_absolute",
     "sinusoidal_rotary", "pape", "pape_efficient", "pape_ri",
-    "rope", "hope", "nope", "alibi",
+    "rope", "hope", "nope", "alibi", "bam",
 ]
 
 OPTIMIZERS = [
@@ -249,6 +249,10 @@ def make_positional_encoding_configs(vocab_size: int) -> List[Tuple[str, dict]]:
             overrides["positional_encoding_parameters"] = {
                 "learned": {"max_len": 64, "init_std": 0.02},
             }
+        if pe == "bam":
+            overrides["positional_encoding_parameters"] = {
+                "bam": {"learn_mu": False, "theta_init": 0.0, "mu_init": 0.0, "eps": 1e-5},
+            }
         if pe in {"rope", "hope"}:
             overrides["positional_encoding_parameters"] = {
                 pe: {"base": 10000.0, "scaling": 1.0} if pe == "rope" else {"base": 10000.0, "damping": 0.01},
@@ -278,6 +282,7 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     add("trans_residuals_full_attn", {"residuals": {"type": "full_attn", "full_attn": {"init_query_zero": True, "use_rmsnorm_keys": True}}})
     add("trans_residuals_block_attn", {"residuals": {"type": "block_attn", "block_attn": {"num_blocks": 2, "init_query_zero": True, "use_rmsnorm_keys": True}}})
     add("trans_pos_rope", {"attention": {"titan": {"positional_encoding": "rope"}}})
+    add("trans_ssmax", {"use_ssmax": True, "ssmax_s_init": 1.0})
     add("trans_num_loops_2", {"dims": {"num_layers": 1, "num_loops": 2, "layer_pattern": ["standard_attn"]}})
     add("trans_ffn_relu", {"ffn_activation": "relu"})
     add("trans_ffn_swiglu", {"ffn_activation": "swiglu"})

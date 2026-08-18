@@ -12,6 +12,8 @@ if TORCH_AVAILABLE:
     from src.model.embeddings.hope import HoPE
     from src.model.embeddings.nope import NoPE
     from src.model.embeddings.alibi import ALiBi
+    from src.model.embeddings.bam import BAM
+    from src.model.embeddings.ssmax import SSMax
     from src.model.embeddings.pape import PaPE
     from src.model.embeddings.pape_efficient import PaPEEfficient
     from src.model.embeddings.pape_ri import PaPERI
@@ -207,6 +209,112 @@ class ALiBiTests(unittest.TestCase):
         self.assertEqual(alibi.slopes.shape, (1, 6, 1, 1))
         bias = alibi.bias(seq_len=8)
         self.assertEqual(bias.shape, (1, 6, 8, 8))
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BAMTests(unittest.TestCase):
+    def test_bias_shape(self):
+        bam = BAM(num_heads=4)
+        bias = bam.bias(seq_len=16)
+        self.assertEqual(bias.shape, (1, 4, 16, 16))
+
+    def test_uniform_init_bias_is_zero(self):
+        # theta_init=0 -> beta=0, alpha=exp(0)=1, |.|^0 = 1, so bias = -1.
+        # Actually with beta=0: (|contrib|+eps)^0 = 1 (for any nonzero base),
+        # so B = -1 everywhere. That's a constant offset, which softmax
+        # normalises away — effectively the Uniform prior (no positional info).
+        bam = BAM(num_heads=4, theta_init=0.0)
+        bias = bam.bias(seq_len=8)
+        # All entries should be -1 (since x^0 = 1 for x > 0)
+        self.assertTrue(torch.allclose(bias, -torch.ones_like(bias), atol=1e-6))
+
+    def test_forward_returns_identity(self):
+        bam = BAM(num_heads=4)
+        x = torch.randn(2, 4, 8, 16)
+        y = bam(x)
+        self.assertTrue(torch.equal(y, x))
+
+    def test_gradient_flows_through_theta(self):
+        bam = BAM(num_heads=4, theta_init=0.5)
+        bias = bam.bias(seq_len=8)
+        bias.sum().backward()
+        self.assertIsNotNone(bam.theta_alpha.grad)
+        self.assertIsNotNone(bam.theta_beta.grad)
+
+    def test_beta_negative_no_nan(self):
+        # beta < 0 regime (long-range retrieval heads) must not produce NaN
+        # thanks to the eps floor.
+        bam = BAM(num_heads=4, theta_init=-0.5)
+        bias = bam.bias(seq_len=8)
+        self.assertFalse(torch.isnan(bias).any())
+        self.assertFalse(torch.isinf(bias).any())
+
+    def test_recovers_alibi_at_beta1_mu0_alpha_slope(self):
+        # With beta=1, mu=0, alpha = slope_h, BAM and ALiBi share the
+        # distance-decay property: positions farther apart get more-negative
+        # biases. We verify both produce non-positive biases and that farther
+        # positions are <= closer positions for the same query.
+        import math as _math
+        H = 4
+        alibi = ALiBi(num_heads=H)
+        slopes = alibi.slopes.view(H).tolist()
+        bam = BAM(num_heads=H, theta_init=0.0)
+        with torch.no_grad():
+            bam.theta_beta.fill_(1.0)
+            bam.theta_alpha.copy_(torch.tensor([-_math.log(s) for s in slopes]))
+        S = 16
+        bam_bias = bam.bias(seq_len=S).detach()  # [1, H, S, S]
+        alibi_bias = alibi.bias(seq_len=S)  # [1, H, S, S]
+        # Both must be non-positive (distance penalties).
+        self.assertTrue((bam_bias <= 0).all())
+        self.assertTrue((alibi_bias <= 0).all())
+        # Distance-decay: for a fixed query i, increasing |i-j| must not
+        # increase the bias (monotonic non-increasing in distance).
+        for h in range(H):
+            for i in range(S - 2):
+                d1 = abs(i - (i + 1))
+                d2 = abs(i - (i + 2))
+                self.assertGreaterEqual(float(bam_bias[0, h, i, i + 1]),
+                                         float(bam_bias[0, h, i, i + 2]))
+
+    def test_learn_mu_flag_makes_theta_mu_learnable(self):
+        bam_fixed = BAM(num_heads=4, learn_mu=False)
+        self.assertFalse(isinstance(bam_fixed.theta_mu, torch.nn.Parameter))
+
+        bam_learn = BAM(num_heads=4, learn_mu=True)
+        self.assertTrue(isinstance(bam_learn.theta_mu, torch.nn.Parameter))
+
+    def test_dtype_preserved(self):
+        bam = BAM(num_heads=4)
+        bias = bam.bias(seq_len=8, dtype=torch.float64)
+        self.assertEqual(bias.dtype, torch.float64)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class SSMaxTests(unittest.TestCase):
+    def test_scale_shape(self):
+        ssmax = SSMax(num_heads=4)
+        scale = ssmax.scale(seq_len=16)
+        self.assertEqual(scale.shape, (1, 4, 1, 1))
+
+    def test_scale_value_is_s_times_log_n(self):
+        import math as _math
+        ssmax = SSMax(num_heads=4, s_init=2.0)
+        scale = ssmax.scale(seq_len=8)
+        expected = 2.0 * _math.log(8)
+        self.assertAlmostEqual(float(scale[0, 0, 0, 0]), expected, places=5)
+
+    def test_gradient_flows_through_s(self):
+        ssmax = SSMax(num_heads=4, s_init=1.0)
+        scale = ssmax.scale(seq_len=8)
+        scale.sum().backward()
+        self.assertIsNotNone(ssmax.s.grad)
+
+    def test_forward_returns_identity(self):
+        ssmax = SSMax(num_heads=4)
+        x = torch.randn(2, 4, 8, 16)
+        y = ssmax(x)
+        self.assertTrue(torch.equal(y, x))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -453,6 +561,24 @@ class BuildPosEncoderFactoryTests(unittest.TestCase):
         from src.model.embeddings.alibi import ALiBi
         pe = build_pos_encoder(self._cfg("alibi"))
         self.assertIsInstance(pe, ALiBi)
+
+    def test_build_bam(self):
+        from src.model.embeddings.bam import BAM
+        pe = build_pos_encoder(self._cfg("bam"))
+        self.assertIsInstance(pe, BAM)
+
+    def test_ssmax_none_when_use_ssmax_false(self):
+        pe = build_pos_encoder(self._cfg("rope"))
+        self.assertIsNone(pe.ssmax)
+
+    def test_ssmax_attached_when_use_ssmax_true(self):
+        from src.model.embeddings.ssmax import SSMax
+        cfg = self._cfg("rope")
+        cfg.__dict__["use_ssmax"] = True
+        cfg.__dict__["ssmax_s_init"] = 1.5
+        pe = build_pos_encoder(cfg)
+        self.assertIsInstance(pe.ssmax, SSMax)
+        self.assertAlmostEqual(float(pe.ssmax.s[0]), 1.5, places=5)
 
     def test_build_pape(self):
         from src.model.embeddings.pape import PaPE

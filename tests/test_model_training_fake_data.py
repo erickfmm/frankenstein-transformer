@@ -398,6 +398,12 @@ class MixedPatternTrainingTests(unittest.TestCase):
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
+    def test_bam_positional_encoding_training(self):
+        cfg = _cfg(["standard_attn"], positional_encoding="bam")
+        model = FrankensteinEncoder(cfg)
+        losses = _train_steps(model, n=3)
+        self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
+
 
 # ---------------------------------------------------------------------------
 # TitanTrainer.compute_causal_lm_loss (CLM next-token objective)

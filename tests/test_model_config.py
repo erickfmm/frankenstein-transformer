@@ -87,6 +87,26 @@ class FrankensteinModelConfigDefaultsTests(unittest.TestCase):
         self.assertEqual(cfg.positional_encoding, "alibi")
         self.assertEqual(cfg.alibi_num_heads, cfg.num_heads)
 
+    def test_bam_positional_encoding_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="bam"))
+        self.assertEqual(cfg.positional_encoding, "bam")
+        self.assertFalse(cfg.bam_learn_mu)
+        self.assertAlmostEqual(cfg.bam_theta_init, 0.0)
+        self.assertAlmostEqual(cfg.bam_eps, 1e-5)
+
+    def test_bam_eps_validation(self):
+        with self.assertRaises(ValueError):
+            FrankensteinModelConfig(**_minimal_dict(positional_encoding="bam", bam_eps=0.0))
+
+    def test_use_ssmax_accepted(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(use_ssmax=True, ssmax_s_init=1.5))
+        self.assertTrue(cfg.use_ssmax)
+        self.assertAlmostEqual(cfg.ssmax_s_init, 1.5)
+
+    def test_ssmax_s_init_validation_when_use_ssmax_true(self):
+        with self.assertRaises(ValueError):
+            FrankensteinModelConfig(**_minimal_dict(use_ssmax=True, ssmax_s_init=0.0))
+
     def test_pape_positional_encoding_accepted(self):
         cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="pape"))
         self.assertEqual(cfg.positional_encoding, "pape")

@@ -12,6 +12,7 @@ properties:
       - `hope`: Higher-Order Position Encoding (arXiv:2503.0). Hyperbolic rotation with exponential damping. HoPE enforces monotonic attention decay with distance.
       - `nope`: No Position Encoding (arXiv:2305.19466). Identity — lets the model learn position implicitly via causal masking. Works well for decoder-only models.
       - `alibi`: Attention with Linear Biases (arXiv:2108.12409). Adds a distance-proportional negative bias to attention scores. Enables length extrapolation without retraining.
+      - `bam`: Bayesian Attention Mechanism (arXiv:2505.22842). Generalized-Gaussian relative-position bias added to attention scores; learnable per-head shape (β) and scale (α) parameters. Recovers ALiBi at β=1, Normal prior at β=2, heavy tails at 0<β<1, and long-range retrieval heads at β<0. Uniform-prior init (θ=0). Optional Scalable Softmax rescale via the top-level `use_ssmax` flag.
       - `pape`: Parabolic Position Encoding (arXiv:2602.01418). Augments q/k with learnable parabola terms (distance + direction + semantics). Vision-centric, supports nD positions.
       - `pape_efficient`: Efficient PaPE (arXiv:2602.01418). Same math as `pape` but with a pre-computed layout for faster eval. Pure-PyTorch (no Triton).
       - `pape_ri`: Rotation-Invariant PaPE (arXiv:2602.01418). Distance-only parabola terms; rotation-invariant for 3D vision tasks (point clouds).
@@ -28,6 +29,7 @@ properties:
       - `hope`: Codificación Posicional de Orden Superior (arXiv:2503.0). Rotación hiperbólica con amortiguación exponencial.
       - `nope`: Sin Codificación Posicional (arXiv:2305.19466). Identidad — el modelo aprende posición implícitamente vía máscara causal.
       - `alibi`: Atención con Sesgos Lineales (arXiv:2108.12409). Añade sesgo negativo proporcional a la distancia a las puntuaciones de atención.
+      - `bam`: Mecanismo de Atención Bayesiana (arXiv:2505.22842). Sesgo de posición relativa con Gaussiana Generalizada añadido a las puntuaciones de atención; parámetros de forma (β) y escala (α) aprendibles por cabeza. Recupera ALiBi en β=1, prior Normal en β=2, colas pesadas en 0<β<1, y cabezas de recuperación de largo alcance en β<0. Inicialización con prior Uniforme (θ=0). Scalable Softmax opcional vía la bandera `use_ssmax`.
       - `pape`: Codificación Posicional Parabólica (arXiv:2602.01418). Augmenta q/k con términos parabólicos aprendibles. Céntrica en visión, soporta posiciones nD.
       - `pape_efficient`: PaPE Eficiente (arXiv:2602.01418). Misma matemática que `pape` con layout pre-calculado para evaluación más rápida.
       - `pape_ri`: PaPE Invariante a Rotación (arXiv:2602.01418). Términos de distancia únicamente; invariante a rotación para tareas de visión 3D.
@@ -40,6 +42,7 @@ properties:
       - hope
       - nope
       - alibi
+      - bam
       - pape
       - pape_efficient
       - pape_ri
@@ -48,7 +51,7 @@ properties:
       - learned_absolute
       - none
     default: rope
-    examples: [rope, hope, alibi, pape, nope]
+    examples: [rope, hope, alibi, bam, pape, nope]
   positional_encoding_parameters:
     type: object
     additionalProperties: false
@@ -113,6 +116,62 @@ properties:
         description: ALiBi is parameter-free; slopes are derived from num_heads. This sub-object is reserved for future extensions.
         description_es: ALiBi es libre de parámetros; las pendientes se derivan de num_heads. Reservado para extensiones futuras.
         properties: {}
+      bam:
+        type: object
+        additionalProperties: false
+        title: "BAM Parameters"
+        title_es: "Parámetros BAM"
+        description: |-
+          Bayesian Attention Mechanism per-head learnable parameters. BAM adds a
+          Generalized-Gaussian relative-position bias to attention scores. The per-head
+          shape (β) and scale (α) parameters are trained; the location (µ) is fixed to
+          0 by default but can be made learnable via `learn_mu`. Initialisation with
+          `theta_init=0` yields the Uniform prior (zero bias at init), which the paper's
+          ablation H.1 found best. The `eps` floor guards the `|·|^β` exponentiation
+          when β < 0 (long-range retrieval-head regime).
+        description_es: |-
+          Parámetros aprendibles por cabeza del Mecanismo de Atención Bayesiana. BAM
+          añade un sesgo de posición relativa con Gaussiana Generalizada a las
+          puntuaciones de atención. Los parámetros de forma (β) y escala (α) por cabeza
+          se entrenan; la localización (µ) se fija a 0 por defecto pero puede hacerse
+          aprendible con `learn_mu`. La inicialización con `theta_init=0` produce el
+          prior Uniforme (sesgo cero en init), que la ablation H.1 del paper encontró
+          óptima. El piso `eps` protege la exponenciación `|·|^β` cuando β < 0
+          (régimen de cabezas de recuperación de largo alcance).
+        properties:
+          learn_mu:
+            type: boolean
+            title: "Learn Mu"
+            title_es: "Aprender Mu"
+            description: "If true, the location parameter θ_µ is learnable. Default false (µ=0) per the paper's ablation H.1."
+            description_es: "Si verdadero, el parámetro de localización θ_µ es aprendible. Por defecto falso (µ=0) según ablation H.1 del paper."
+            default: false
+            examples: [false]
+          theta_init:
+            type: number
+            title: "Theta Init"
+            title_es: "Init Theta"
+            description: "Initial value for θ_α and θ_β. 0.0 = Uniform prior (paper's best). 1.0 = Laplace/ALiBi-like prior."
+            description_es: "Valor inicial para θ_α y θ_β. 0.0 = prior Uniforme (óptimo del paper). 1.0 = prior Laplace/ALiBi."
+            default: 0.0
+            examples: [0.0]
+          mu_init:
+            type: number
+            title: "Mu Init"
+            title_es: "Init Mu"
+            description: "Initial value for θ_µ. Typically 0.0 (no shift). Only used when learn_mu=true."
+            description_es: "Valor inicial para θ_µ. Típicamente 0.0 (sin desplazamiento). Solo se usa cuando learn_mu=true."
+            default: 0.0
+            examples: [0.0]
+          eps:
+            type: number
+            exclusiveMinimum: 0
+            title: "Epsilon"
+            title_es: "Epsilon"
+            description: "Numerical stability floor added to |·| before exponentiation when β < 0. Default 1e-5."
+            description_es: "Piso de estabilidad numérica añadido a |·| antes de la exponenciación cuando β < 0. Por defecto 1e-5."
+            default: 0.00001
+            examples: [0.00001]
       pape:
         type: object
         additionalProperties: false

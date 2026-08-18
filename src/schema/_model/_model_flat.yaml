@@ -272,6 +272,48 @@ properties:
       collapse where all layers select the same tokens.
     minimum: 0
     examples: [0.0]
+  use_ssmax:
+    type: boolean
+    title: "Enable Scalable Softmax (SSMax)"
+    title_es: "Habilitar Scalable Softmax (SSMax)"
+    description: |-
+      Enable Scalable Softmax (SSMax), a transversal logit rescale that applies to
+      every positional encoding. SSMax multiplies the pre-softmax attention logits
+      by `s · ln(n)` where `s` is a learnable per-head scalar (init `ssmax_s_init`)
+      and `n` is the sequence length. This counteracts "attention fading" — the
+      softmax flattening that occurs as context grows — and improves length
+      extrapolation across all PEs (most impactful when paired with `bam` or
+      `alibi`). Adds `num_heads` extra learnable parameters.
+
+      **Impact:** Composable with any `positional_encoding`. Off by default. See
+      arXiv:2505.22842 (Bayesian Attention Mechanism, §Scalable Softmax).
+    description_es: |-
+      Habilita Scalable Softmax (SSMax), un reescalado transversal de logits que se
+      aplica a toda codificación posicional. SSMax multiplica los logits de atención
+      pre-softmax por `s · ln(n)` donde `s` es un escalar aprendible por cabeza (init
+      `ssmax_s_init`) y `n` es la longitud de secuencia. Contrarresta el "attention
+      fading" — el aplanamiento del softmax al crecer el contexto — y mejora la
+      extrapolación de longitud en todas las PEs (más impactante con `bam` o
+      `alibi`). Añade `num_heads` parámetros aprendibles extra.
+
+      **Impacto:** Componible con cualquier `positional_encoding`. Desactivado por
+      defecto. Ver arXiv:2505.22842 (Mecanismo de Atención Bayesiana, §Scalable Softmax).
+    examples: [false]
+  ssmax_s_init:
+    type: number
+    title: "SSMax s Init"
+    title_es: "Init s de SSMax"
+    description: |-
+      Initial value for the per-head learnable scalar `s` of Scalable Softmax. The
+      post-training distribution in the paper peaks around `s ≈ 1.5–3` across
+      scales; `1.0` is a neutral start. Only used when `use_ssmax=true`.
+    description_es: |-
+      Valor inicial del escalar aprendible por cabeza `s` de Scalable Softmax. La
+      distribución post-entrenamiento en el paper se sitúa en `s ≈ 1.5–3`; `1.0` es
+      un inicio neutral. Solo se usa cuando `use_ssmax=true`.
+    exclusiveMinimum: 0
+    default: 1.0
+    examples: [1.0]
   ffn_hidden_size:
     type: integer
     title: "FFN Hidden Dimension"

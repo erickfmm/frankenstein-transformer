@@ -189,7 +189,8 @@ class FrankensteinModelConfig:
         positional_encoding: Explicit positional encoding scheme. One of
             ``"rope"`` (Rotary Position Embedding), ``"hope"`` (Hybrid
             Positional Encoding), ``"nope"`` (No Position Embedding),
-            ``"alibi"`` (Attention with Linear Biases), ``"pape"``
+            ``"alibi"`` (Attention with Linear Biases), ``"bam"`` (Bayesian
+            Attention Mechanism, Generalized-Gaussian bias), ``"pape"``
             (Parabola Attention Positional Encoding), ``"pape_efficient"``
             (efficient PaPE variant), ``"pape_ri"`` (rotation-invariant
             PaPE), ``"sinusoidal_absolute"`` (absolute sinusoidal), 
@@ -199,6 +200,20 @@ class FrankensteinModelConfig:
             ``use_hope``. Default: None.
         alibi_num_heads: Number of heads used by ALiBi biases. Defaults to
             ``num_heads`` in ``__post_init__`` when None. Default: None.
+        use_ssmax: Enable Scalable Softmax (SSMax, arXiv:2505.22842), a
+            transversal logit rescale ``s · ln(n)`` applicable to every
+            positional encoding. Adds ``num_heads`` learnable scalars.
+            Default: False.
+        ssmax_s_init: Initial value for the per-head SSMax scalar ``s``.
+            Only used when ``use_ssmax=True``. Default: 1.0.
+        bam_learn_mu: If True, the BAM location parameter ``theta_mu`` is
+            learnable. Default False (mu=0) per the paper's ablation H.1.
+        bam_theta_init: Initial value for BAM ``theta_alpha``/``theta_beta``.
+            ``0.0`` = Uniform prior (paper's best); ``1.0`` = Laplace/ALiBi.
+        bam_eps: Numerical stability floor for BAM ``|·|^β`` when ``β < 0``.
+            Default: 1e-5.
+        bam_mu_init: Initial value for BAM ``theta_mu``. Only used when
+            ``bam_learn_mu=True``. Default: 0.0.
         pape_num_parabolas: Number of parabola segments used by PaPE and
             its variants (``pape``, ``pape_efficient``, ``pape_ri``). Must
             be >= 1. Default: 4.
@@ -410,6 +425,24 @@ class FrankensteinModelConfig:
 
     learned_max_len: int = 512
     learned_init_std: float = 0.02
+
+    # ---- Scalable Softmax (SSMax, arXiv:2505.22842 §Scalable Softmax) ----
+    # Transversal logit rescale `s · ln(n)` applicable to every positional
+    # encoding. When ``use_ssmax=True`` the pos-encoder module carries an
+    # ``ssmax`` submodule whose per-head learnable scalar ``s`` (init
+    # ``ssmax_s_init``) rescales the attention logits before softmax.
+    use_ssmax: bool = False
+    ssmax_s_init: float = 1.0
+
+    # ---- BAM: Bayesian Attention Mechanism (arXiv:2505.22842) ----
+    # Generalized-Gaussian relative-position bias added to attention scores
+    # (ALiBi-family). Per-head learnable ``theta_alpha``/``theta_beta`` (init
+    # ``bam_theta_init``); ``theta_mu`` fixed to 0 unless ``bam_learn_mu=True``.
+    # ``bam_eps`` guards the ``|·|^β`` exponentiation when β < 0.
+    bam_learn_mu: bool = False
+    bam_theta_init: float = 0.0
+    bam_eps: float = 1e-5
+    bam_mu_init: float = 0.0
 
     standard_attn_use_pe: bool = True
     titan_attn_use_pe: bool = True
@@ -717,7 +750,7 @@ class FrankensteinModelConfig:
             )
 
         _VALID_POSITIONAL_ENCODINGS = {
-            "rope", "hope", "nope", "alibi", "pape", "pape_efficient", "pape_ri",
+            "rope", "hope", "nope", "alibi", "bam", "pape", "pape_efficient", "pape_ri",
             "sinusoidal_absolute", "sinusoidal_rotary", "learned_absolute", "none",
         }
         if self.positional_encoding is None:
@@ -739,6 +772,12 @@ class FrankensteinModelConfig:
             raise ValueError(f"pape_num_parabolas must be >= 1, got {self.pape_num_parabolas}")
         if self.pape_num_positions < 1:
             raise ValueError(f"pape_num_positions must be >= 1, got {self.pape_num_positions}")
+
+        # ---- Validate BAM / SSMax (arXiv:2505.22842) ----
+        if float(self.bam_eps) <= 0.0:
+            raise ValueError(f"bam_eps must be > 0, got {self.bam_eps}")
+        if self.use_ssmax and float(self.ssmax_s_init) <= 0.0:
+            raise ValueError(f"ssmax_s_init must be > 0 when use_ssmax=True, got {self.ssmax_s_init}")
 
         if self.mode not in {"encoder", "decoder"}:
             raise ValueError("mode must be one of {'encoder', 'decoder'}")
@@ -805,7 +844,7 @@ class FrankensteinModelConfig:
         _VALID_VIT_PE = {
             "learned_1d", "none",
             "learned_absolute", "sinusoidal_absolute", "sinusoidal_rotary",
-            "rope", "hope", "nope", "alibi", "pape", "pape_efficient", "pape_ri",
+            "rope", "hope", "nope", "alibi", "bam", "pape", "pape_efficient", "pape_ri",
         }
         if self.pos_embedding_type not in _VALID_VIT_PE:
             raise ValueError(

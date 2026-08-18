@@ -279,6 +279,14 @@ The `model` block is organized into hierarchical sub-objects: `dims`, `norm`,
 - `ffn_hidden_size`: FFN intermediate dimension.
 - `ffn_activation`: `silu` or `gelu` (or any of the 43 supported activations).
 - `ffn_activation_config`: nested object for learnable/parametric activations.
+- `use_ssmax`: enable Scalable Softmax (SSMax, arXiv:2505.22842), a transversal
+  logit rescale `s·ln(n)` applicable to every `positional_encoding`. Adds
+  `num_heads` learnable scalars (init `ssmax_s_init`). Default `false`.
+- `ssmax_s_init`: initial value for the per-head SSMax scalar `s` (default `1.0`).
+- `bam_learn_mu`: if true, BAM location θ_µ is learnable (default `false`).
+- `bam_theta_init`: initial value for BAM θ_α/θ_β (default `0.0` = Uniform prior).
+- `bam_eps`: BAM numerical-stability floor for `β < 0` (default `1e-5`).
+- `bam_mu_init`: initial value for BAM θ_µ (default `0.0`; used only when `bam_learn_mu=true`).
 
 ### Latent / KV-compression family (model.attention.*)
 

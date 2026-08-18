@@ -1,0 +1,45 @@
+model_class: frankenstein
+model:
+  dims:
+    vocab_size: 100
+    hidden_size: 64
+    num_layers: 2
+    num_heads: 4
+    layer_pattern:
+    - standard_attn
+    mode: encoder
+  positional_encoding: bam
+  positional_encoding_parameters:
+    bam:
+      learn_mu: false
+      theta_init: 0.0
+      mu_init: 0.0
+      eps: 1.0e-5
+  use_bitnet: false
+  use_moe: false
+  ffn_hidden_size: 128
+  ffn_activation: gelu
+training:
+  task: mlm
+  num_epochs: 1
+  batch_size: 2
+  max_length: 64
+  mlm_probability: 0.15
+  max_samples: 1000
+  cache_dir: ./temp_data/pe_bam_cache
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-3
+      adamw-lr_norms: 1e-3
+      adamw-lr_attention: 1e-3
+      adamw-lr_other: 1e-3
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+  scheduler_total_steps: 100
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  max_nan_retries: 3
+  csv_log_path: training_metrics_pe_bam.csv

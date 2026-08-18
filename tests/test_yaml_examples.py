@@ -181,6 +181,21 @@ class YamlExamplesContentTests(unittest.TestCase):
         cfg = self._load("pe_alibi.yaml")
         self.assertEqual(cfg.model_config.positional_encoding, "alibi")
 
+    def test_pe_bam_config(self):
+        cfg = self._load("pe_bam.yaml")
+        self.assertEqual(cfg.model_config.positional_encoding, "bam")
+        self.assertFalse(cfg.model_config.use_ssmax)
+
+    def test_pe_bam_ssmax_config(self):
+        cfg = self._load("pe_bam_ssmax.yaml")
+        self.assertEqual(cfg.model_config.positional_encoding, "bam")
+        self.assertTrue(cfg.model_config.use_ssmax)
+
+    def test_pe_alibi_ssmax_config(self):
+        cfg = self._load("pe_alibi_ssmax.yaml")
+        self.assertEqual(cfg.model_config.positional_encoding, "alibi")
+        self.assertTrue(cfg.model_config.use_ssmax)
+
     def test_pe_pape_config(self):
         cfg = self._load("pe_pape.yaml")
         self.assertEqual(cfg.model_config.positional_encoding, "pape")

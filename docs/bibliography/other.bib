@@ -823,3 +823,17 @@
 	eprinttype   = {arxiv},
 	eprint       = {2602.01418 [cs]},
 }
+
+@misc{bianchessi_bam_2025,
+	title        = {Bayesian Attention Mechanism: A Probabilistic Framework for Positional Encoding and Context Length Extrapolation},
+	url          = {http://arxiv.org/abs/2505.22842},
+	doi          = {10.48550/arXiv.2505.22842},
+	shorttitle   = {{BAM}},
+	abstract     = {Positional encoding (PE) is a fundamental component of modern transformer architectures, yet current methods exhibit limitations in context length extrapolation. We address this gap by introducing the Bayesian Attention Mechanism (BAM), a theoretical framework that formulates PE as a prior within a probabilistic model. BAM unifies existing methods (e.g., NoPE and ALiBi) as specific prior choices and motivates a new Generalized Gaussian positional prior. This prior enables a family of PEs parameterized by a single shape parameter, which can be learned per-head and per-layer. Our analysis reveals that diverse heads naturally specialize into distinct regimes, including some that prioritize local context and others that attend to long-range information. We also introduce Scalable Softmax (SSMax), a simple modification to the softmax function that counteracts attention fading and synergies with all PEs. Extensive experiments show that BAM SSMax achieves accurate information retrieval at 500x the training context length and significantly outperforms existing PEs.},
+	number       = {{arXiv}:2505.22842},
+	author       = {Bianchessi, Arthur S. and Aguirre, Yasmin C. and Barros, Rodrigo C. and Kupssinsk{\"u}, Lucas S.},
+	urldate      = {2026-08-18},
+	date         = {2025-05-28},
+	eprinttype   = {arxiv},
+	eprint       = {2505.22842 [cs]},
+}
