@@ -12,6 +12,8 @@ no behavior is changed — ``supervisor="auto"`` reproduces the legacy CLI path,
 ``supervisor="off"`` runs the loop in the current process.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from dataclasses import dataclass, field

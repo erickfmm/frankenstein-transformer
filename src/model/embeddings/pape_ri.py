@@ -96,11 +96,14 @@ class PaPERI(nn.Module):
         device,
         dtype,
     ) -> torch.Tensor:
-        """Build the default 1D position tensor.
+        """Build the default position tensor.
 
         For ``num_positions == 1`` returns the standard 1D arange replicated
-        across the batch. For higher-dimensional position tensors the caller is
-        expected to provide explicit positions.
+        across the batch. For higher-dimensional position tensors (e.g.
+        ``num_positions == 2`` for the rotation-invariant variant) the 1D
+        arange is broadcast across the trailing position dimension, yielding
+        a tensor of shape ``(batch_size, seq_len, num_positions)`` where each
+        position ``i`` is mapped to ``[i, i, ...]``.
 
         Args:
             batch_size: Batch size.
@@ -109,16 +112,11 @@ class PaPERI(nn.Module):
             dtype: Target data type.
 
         Returns:
-            Tensor of shape ``(batch_size, seq_len, num_positions)`` when
-            ``num_positions == 1``; otherwise raises ``ValueError``.
+            Tensor of shape ``(batch_size, seq_len, num_positions)`` with the
+            1D position arange broadcast across the position dimension.
         """
-        if self.num_positions != 1:
-            raise ValueError(
-                "default_positions is only defined for num_positions=1; pass "
-                "explicit positions for higher-dimensional position tensors."
-            )
         pos = torch.arange(seq_len, device=device, dtype=dtype)
-        return pos.view(1, seq_len, 1).expand(batch_size, -1, -1)
+        return pos.view(1, seq_len, 1).expand(batch_size, seq_len, self.num_positions)
 
     def encode_qk(
         self,

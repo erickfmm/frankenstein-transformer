@@ -170,9 +170,9 @@ class ALiBiTests(unittest.TestCase):
         alibi = ALiBi(num_heads=8)
         self.assertEqual(alibi.slopes.shape, (1, 8, 1, 1))
 
-    def test_slopes_are_negative(self):
+    def test_slopes_are_positive(self):
         alibi = ALiBi(num_heads=4)
-        self.assertTrue((alibi.slopes < 0).all())
+        self.assertTrue((alibi.slopes > 0).all())
 
     def test_bias_shape(self):
         alibi = ALiBi(num_heads=4)
@@ -313,7 +313,7 @@ class PaPERITests(unittest.TestCase):
         return q, k
 
     def test_encode_qk_output_shape(self):
-        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_parabolas=4, num_positions=2)
+        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_positions=2)
         q, k = self._make_qk(heads=4, head_dim=12)
         hidden = torch.randn(2, 8, 48)
         positions = pape.default_positions(2, 8, hidden.device, hidden.dtype)
@@ -324,7 +324,7 @@ class PaPERITests(unittest.TestCase):
         self.assertGreaterEqual(q_aug.shape[3], q.shape[3])
 
     def test_encode_qk_padded_to_multiple_of_8(self):
-        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_parabolas=4, num_positions=2)
+        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_positions=2)
         q, k = self._make_qk(heads=4, head_dim=12)
         hidden = torch.randn(2, 8, 48)
         positions = pape.default_positions(2, 8, hidden.device, hidden.dtype)
@@ -333,18 +333,18 @@ class PaPERITests(unittest.TestCase):
         self.assertEqual(k_aug.shape[3] % 8, 0)
 
     def test_forward_returns_identity(self):
-        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_parabolas=4, num_positions=2)
+        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_positions=2)
         x = torch.randn(2, 4, 8, 12)
         y = pape(x)
         self.assertTrue(torch.equal(y, x))
 
     def test_default_positions_2d(self):
-        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_parabolas=4, num_positions=2)
+        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_positions=2)
         positions = pape.default_positions(2, 8, torch.device("cpu"), torch.float32)
         self.assertEqual(positions.shape, (2, 8, 2))
 
     def test_gradient_flows(self):
-        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_parabolas=4, num_positions=2)
+        pape = PaPERI(hidden_size=48, num_heads=4, head_dim=12, num_positions=2)
         q, k = self._make_qk(heads=4, head_dim=12, seq=4)
         hidden = torch.randn(2, 4, 48, requires_grad=True)
         positions = pape.default_positions(2, 4, hidden.device, hidden.dtype)
