@@ -25,6 +25,7 @@ from src.model.attention import (
     SparseKAttention,
     SparseTransformerAttention,
     SpargeAttention,
+    SSOGAttention,
     StandardAttention,
     TitanAttention,
 )
@@ -96,6 +97,7 @@ class AttentionRefactorTests(unittest.TestCase):
         self.assertTrue(callable(GatedSoftmaxAttention))
         self.assertTrue(callable(GroupedQueryAttention))
         self.assertTrue(callable(GaussianMixtureAttention))
+        self.assertTrue(callable(SSOGAttention))
 
     def test_default_forward_compat(self):
         config = self._build_config(["titan_attn", "standard_attn"])
@@ -156,9 +158,15 @@ class AttentionRefactorTests(unittest.TestCase):
             "engram_attn",
             "gqa_attn",
             "gma_attn",
+            "ssog_attn",
         ]
         for layer_type in layer_types:
             config = self._build_config([layer_type])
+            if layer_type == "ssog_attn":
+                # SSOG needs the seq len to match its grid: use a 1x6
+                # degenerate grid for the 6-token smoke input.
+                config.ssog_grid_h = 1
+                config.ssog_grid_w = 6
             model = FrankensteinEncoder(config)
             x = torch.randint(0, config.vocab_size, (1, 6))
             y = model(x)
@@ -261,6 +269,114 @@ class AttentionRefactorTests(unittest.TestCase):
         row_sums = gamma.sum(dim=-1)
         self.assertEqual(gamma.shape, (1, 4, config.num_heads, 5))
         self.assertTrue(torch.allclose(row_sums, torch.ones_like(row_sums), atol=1e-5))
+
+    def test_ssog_forward_shape_2d_and_1d_grids(self):
+        # 2D raster grid and the 1xW degenerate (sequence) grid must both
+        # preserve (B, N, hidden_size) and stay finite, in train and eval.
+        for grid_h, grid_w in ((2, 3), (1, 6)):
+            config = self._build_config(["ssog_attn"])
+            config.ssog_grid_h = grid_h
+            config.ssog_grid_w = grid_w
+            mixer = SSOGAttention(config)
+            n = grid_h * grid_w
+            x = torch.randn(2, n, config.hidden_size)
+            y = mixer(x)
+            self.assertEqual(y.shape, (2, n, config.hidden_size), msg=f"{grid_h}x{grid_w}")
+            self.assertTrue(torch.isfinite(y).all(), msg=f"{grid_h}x{grid_w}")
+            mixer.eval()
+            with torch.no_grad():
+                y_eval = mixer(x)
+            self.assertTrue(torch.isfinite(y_eval).all(), msg=f"{grid_h}x{grid_w}")
+
+    def test_ssog_cold_start_equals_fixed_field(self):
+        # Zero-init probes behind ~0 gates: the steered forward at init
+        # must reproduce the purely fixed geometric field.
+        config = self._build_config(["ssog_attn"])
+        config.ssog_grid_h = 2
+        config.ssog_grid_w = 2
+        config.ssog_num_atoms = 3
+        torch.manual_seed(0)
+        mixer = SSOGAttention(config)
+        mixer.eval()
+        x = torch.randn(2, 4, config.hidden_size)
+        with torch.no_grad():
+            y_steer = mixer(x)
+            mixer.lookat = False
+            y_fixed = mixer(x)
+        self.assertTrue(torch.allclose(y_steer, y_fixed, atol=1e-6))
+
+    def test_ssog_axis_kernels_row_stochastic(self):
+        # Softmaxed kernels must sum to 1 over the key axis.
+        config = self._build_config(["ssog_attn"])
+        config.ssog_grid_h = 3
+        config.ssog_grid_w = 4
+        mixer = SSOGAttention(config)
+        ay, ax = mixer.axis_kernels()
+        self.assertEqual(ay.shape, (config.num_heads, mixer.num_atoms, 3, 3))
+        self.assertEqual(ax.shape, (config.num_heads, mixer.num_atoms, 4, 4))
+        self.assertTrue(torch.allclose(ay.sum(dim=-1), torch.ones_like(ay.sum(dim=-1)), atol=1e-5))
+        self.assertTrue(torch.allclose(ax.sum(dim=-1), torch.ones_like(ax.sum(dim=-1)), atol=1e-5))
+
+    def test_ssog_grid_mismatch_raises(self):
+        config = self._build_config(["ssog_attn"])
+        config.ssog_grid_h = 2
+        config.ssog_grid_w = 2
+        mixer = SSOGAttention(config)
+        x = torch.randn(1, 5, config.hidden_size)
+        with self.assertRaisesRegex(ValueError, "ssog_attn"):
+            mixer(x)
+
+    def test_ssog_decoder_mode_raises(self):
+        base = self._build_config(["ssog_attn"])
+        base.ssog_grid_h = 1
+        base.ssog_grid_w = 6
+        # Config-level check fires at construction time.
+        with self.assertRaisesRegex(ValueError, "encoder-only"):
+            FrankensteinModelConfig(**{**base.__dict__, "mode": "decoder"})
+        # Mixer-level guard also fires (e.g. runtime mode forcing).
+        config = FrankensteinModelConfig(**base.__dict__)
+        config.mode = "decoder"
+        with self.assertRaisesRegex(ValueError, "encoder-only"):
+            SSOGAttention(config)
+
+    def test_ssog_bitnet_and_gradient_flow(self):
+        config = self._build_config(["ssog_attn"])
+        config.ssog_grid_h = 2
+        config.ssog_grid_w = 2
+        config.use_bitnet = True
+        torch.manual_seed(1)
+        mixer = SSOGAttention(config)
+        x = torch.randn(2, 4, config.hidden_size)
+        y = mixer(x)
+        self.assertTrue(torch.isfinite(y).all())
+        y.sum().backward()
+        for param_name in ("mu", "raw_sigma", "log_lambda", "raw_temperature",
+                           "v_proj.weight", "out_proj.weight"):
+            param = dict(mixer.named_parameters())[param_name]
+            self.assertIsNotNone(param.grad, msg=param_name)
+        # Steering probes must also receive gradients once gates open.
+        probe = dict(mixer.named_parameters())["mu_delta.weight"]
+        self.assertIsNotNone(probe.grad)
+        self.assertTrue(torch.isfinite(probe.grad).all())
+
+    def test_ssog_steering_changes_output(self):
+        # With opened gates and non-zero probes, steered output must
+        # diverge from the fixed field.
+        config = self._build_config(["ssog_attn"])
+        config.ssog_grid_h = 2
+        config.ssog_grid_w = 2
+        torch.manual_seed(2)
+        mixer = SSOGAttention(config)
+        mixer.eval()
+        with torch.no_grad():
+            mixer.raw_mu_delta_scale.fill_(2.0)
+            mixer.mu_delta.weight.normal_(0.0, 0.5)
+        x = torch.randn(1, 4, config.hidden_size)
+        with torch.no_grad():
+            y_steer = mixer(x)
+            mixer.lookat = False
+            y_fixed = mixer(x)
+        self.assertFalse(torch.allclose(y_steer, y_fixed, atol=1e-4))
 
 
 if __name__ == "__main__":

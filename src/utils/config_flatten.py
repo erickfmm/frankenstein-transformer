@@ -36,6 +36,8 @@ The hierarchical schema groups keys as:
                     kernel_size, seed}
         gma:        {num_components, routing_dim, epsilon, sigma_eps,
                     init_mean_std}
+        ssog:       {num_atoms, lookat, max_offset, cold_init, sigma_floor,
+                    grid_h, grid_w}
       positional_encoding: string enum (rope, hope, nope, alibi, pape, ...)
       positional_encoding_parameters: {rope: {base, scaling}, hope: {base, damping},
                          pape: {num_parabolas, num_positions, rotation_invariant},
@@ -124,6 +126,15 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
         "epsilon": "gma_epsilon",
         "sigma_eps": "gma_sigma_eps",
         "init_mean_std": "gma_init_mean_std",
+    },
+    "ssog": {
+        "num_atoms": "ssog_num_atoms",
+        "lookat": "ssog_lookat",
+        "max_offset": "ssog_max_offset",
+        "cold_init": "ssog_cold_init",
+        "sigma_floor": "ssog_sigma_floor",
+        "grid_h": "ssog_grid_h",
+        "grid_w": "ssog_grid_w",
     },
 }
 

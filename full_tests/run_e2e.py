@@ -67,7 +67,7 @@ ATTENTIONS = [
     "gated_deltanet2_attn", "hgrn2_attn", "fox_attn", "gated_softmax_attn",
     "engram_attn", "gqa_attn", "mla_attn", "gqla_attn", "mlra_attn",
     "tucker_attn", "iha_attn", "gta_attn", "mtla_attn", "cca_attn", "ccgqa_attn",
-    "msa_attn", "sparda_attn", "kda_attn", "gma_attn",
+    "msa_attn", "sparda_attn", "kda_attn", "gma_attn", "ssog_attn",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).
@@ -120,6 +120,28 @@ def _base_config(vocab_size: int, num_layers: int, num_loops: int) -> Tuple[dict
         helpers.ensure_toy_parquet(), batch_size=1, num_epochs=1
     )
     return model, training
+
+
+def _ensure_ssog_grid(model: dict, training: dict) -> dict:
+    """Give ``ssog_attn`` layers a 1D grid matching the training ``max_length``.
+
+    SSOG requires ``seq_len == grid_h * grid_w``. The toy MLM corpus is padded
+    and truncated to exactly ``max_length`` tokens, so a degenerate
+    ``1 x max_length`` grid fits the NLP runs (vision runs derive the patch
+    grid automatically and must NOT call this).
+    """
+    pattern = model.get("dims", {}).get("layer_pattern", [])
+    if "ssog_attn" not in pattern:
+        return model
+    max_length = int(training.get("max_length", 32))
+    attention = dict(model.get("attention") or {})
+    ssog_block = dict(attention.get("ssog") or {})
+    ssog_block.setdefault("grid_h", 1)
+    ssog_block.setdefault("grid_w", max_length)
+    attention["ssog"] = ssog_block
+    model = dict(model)
+    model["attention"] = attention
+    return model
 
 
 def _with_optimizer(training: dict, optimizer_class: str) -> dict:
@@ -184,6 +206,7 @@ def make_attention_pair_configs(vocab_size: int) -> List[Tuple[str, dict]]:
                 "layer_pattern": [a, b],
             },
         })
+        model = _ensure_ssog_grid(model, training)
         combo_id = f"attn_{a}__{b}"
         configs.append((combo_id, {"model_class": "frankenstein", "model": model, "training": training}))
     return configs
@@ -194,6 +217,7 @@ def make_single_attention_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     for a in ATTENTIONS:
         model, training = _base_config(vocab_size, num_layers=1, num_loops=1)
         model = _deep_update(model, {"dims": {"layer_pattern": [a]}})
+        model = _ensure_ssog_grid(model, training)
         configs.append((f"attn_single_{a}", {"model_class": "frankenstein", "model": model, "training": training}))
     return configs
 
@@ -269,6 +293,7 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
         model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
         model = _deep_update(model, overrides)
+        model = _ensure_ssog_grid(model, training)
         configs.append((cid, {"model_class": "frankenstein", "model": model, "training": training}))
 
     add("trans_bitnet_on", {"use_bitnet": True})
@@ -288,6 +313,15 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     add("trans_ffn_swiglu", {"ffn_activation": "swiglu"})
     add("trans_mhc", {
         "mhc": {"enabled": True, "expansion_rate": 2, "sinkhorn_iters": 5, "gating_init": 0.01, "checkpoint": False, "full_prec_under_bitnet": True},
+    })
+    # SSOG transversals: fixed (content-blind) field, and BitNet-wired SSOG.
+    add("trans_ssog_fixed_field", {
+        "dims": {"layer_pattern": ["ssog_attn", "ssog_attn"]},
+        "attention": {"ssog": {"lookat": False}},
+    })
+    add("trans_ssog_bitnet", {
+        "dims": {"layer_pattern": ["ssog_attn", "ssog_attn"]},
+        "use_bitnet": True,
     })
     return configs
 
@@ -393,6 +427,41 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     image = dict(base_image, seg_head_type="pixel", num_seg_classes=5)
     configs.append(("vit_segmentation_pixel", {
         "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
+        "image": image, "dataset": base_dataset,
+        "training": _vit_training("segmentation"),
+    }))
+
+    # SSOG variants — the Gaussian field needs the raw patch raster, so no
+    # [CLS] token (gap pooling instead). The grid auto-derives from the image:
+    # (32/16)x(32/16) = 2x2.
+    ssog_image = {
+        "image_size": {"height": 32, "width": 32},
+        "patch_size": 16, "in_channels": 3, "pos_embedding_type": "learned_1d",
+        "cls_token": False, "pooling_mode": "gap",
+    }
+    ssog_model = _deep_update(_vit_model(vocab_size), {
+        "dims": {"layer_pattern": ["ssog_attn"]},
+        "attention": {"ssog": {"num_atoms": 2, "max_offset": 1.0}},
+    })
+
+    image = dict(ssog_image, num_classes=10)
+    configs.append(("vit_classification_ssog", {
+        "model_class": "frankenstein_vit", "model": ssog_model,
+        "image": image, "dataset": base_dataset,
+        "training": _vit_training("classification"),
+    }))
+
+    image = dict(ssog_image, mask_ratio=0.5, mask_token_strategy="bert",
+                 prediction_target="mean_color_3bit")
+    configs.append(("vit_patch_prediction_ssog", {
+        "model_class": "frankenstein_vit", "model": ssog_model,
+        "image": image, "dataset": base_dataset,
+        "training": _vit_training("patch_prediction"),
+    }))
+
+    image = dict(ssog_image, seg_head_type="pixel", num_seg_classes=5)
+    configs.append(("vit_segmentation_pixel_ssog", {
+        "model_class": "frankenstein_vit", "model": ssog_model,
         "image": image, "dataset": base_dataset,
         "training": _vit_training("segmentation"),
     }))

@@ -83,6 +83,12 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 | `gma_epsilon` | number | No | > 0 | 1e-6 | Read-normalizer ε for GMA |
 | `gma_sigma_eps` | number | No | > 0 | 1e-4 | Diagonal covariance floor ε_σ for GMA |
 | `gma_init_mean_std` | number | No | — | 1.0 | Init std for GMA component means μ |
+| `ssog_num_atoms` | int | No | ≥ 1 | 4 | Gaussian atoms per head (SSOG) |
+| `ssog_lookat` | bool | No | — | `true` | Content steering on μ/σ/λ (SSOG) |
+| `ssog_max_offset` | number | No | > 0 | 4.0 | Max μ travel in grid cells (SSOG) |
+| `ssog_cold_init` | bool | No | — | `true` | Cold-start steering gates at ≈0 (SSOG) |
+| `ssog_sigma_floor` | number | No | ≥ 0 | 0.25 | Min atom width in grid cells (SSOG) |
+| `ssog_grid_h` / `ssog_grid_w` | int | No | ≥ 1 | image grid | Token grid raster (SSOG; `1×L` for sequences) |
 | `use_mhc` | bool | No | — | `false` | Enable the mHC n-stream residual (see [mHC](mhc.md)) |
 | `mhc_expansion_rate` | int | No | ≥ 1 | `4` | Stream expansion factor `n` |
 | `mhc_sinkhorn_iters` | int | No | ≥ 1 | `20` | Sinkhorn-Knopp normalisation rounds |
@@ -93,9 +99,11 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 
 ### Layer Pattern Valid Values
 
-`retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`, `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn`, `engram_attn`, `gqa_attn`, `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn`, `msa_attn`, `sparda_attn`
+`retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`, `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn`, `engram_attn`, `gqa_attn`, `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn`, `ssog_attn`, `msa_attn`, `sparda_attn`
 
 > **Eval-only:** `sparge_attn` and `fasa_attn` cannot be used during training.
+> **Encoder-only:** `ssog_attn` requires `mode: encoder` and a fixed
+> `grid_h × grid_w` raster (ViT: `cls_token: false`).
 
 ### Normalization Valid Values
 

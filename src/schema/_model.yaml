@@ -81,6 +81,8 @@ properties:
         $ref: "_model/_attention_engram.yaml#/properties/engram"
       gma:
         $ref: "_model/_attention_gma.yaml#/properties/gma"
+      ssog:
+        $ref: "_model/_attention_ssog.yaml#/properties/ssog"
   mhc:
     $ref: "_model/_mhc.yaml"
   residuals:

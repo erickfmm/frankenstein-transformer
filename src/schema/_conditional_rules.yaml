@@ -116,6 +116,23 @@
     - dataset
 - if:
     properties:
+      model:
+        properties:
+          dims:
+            properties:
+              layer_pattern:
+                contains:
+                  const: ssog_attn
+  then:
+    properties:
+      model:
+        properties:
+          dims:
+            properties:
+              mode:
+                const: encoder
+- if:
+    properties:
       training:
         properties:
           task:

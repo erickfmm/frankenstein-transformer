@@ -4,12 +4,12 @@
 
 ## Taxonomy Overview
 
-The system implements **37 sequence mixer architectures** (the full
-`layer_pattern` enum) organized into five functional categories. The taxonomy
+The system implements **38 sequence mixer architectures** (the full
+`layer_pattern` enum) organized into six functional categories. The taxonomy
 figure from the paper:
 
 ```
-Sequence Mixer Registry (37 variants)
+Sequence Mixer Registry (38 variants)
 ├── Dense (2): standard_attn, sigmoid_attn
 ├── GQA (1): gqa_attn
 ├── Recurrent / Retentive (6): retnet/retnet_attn, mamba, ode, titan_attn,
@@ -20,13 +20,14 @@ Sequence Mixer Registry (37 variants)
 ├── Gated (8): gla_attn, deltanet_attn, gated_deltanet_attn,
 │              gated_deltanet2_attn, hgrn2_attn, fox_attn, gated_softmax_attn,
 │              kda_attn
-└── Latent / KV-compression (10): mla_attn, gqla_attn, mlra_attn, tucker_attn,
-                                  iha_attn, gta_attn, mtla_attn, cca_attn,
-                                  ccgqa_attn, gma_attn
+├── Latent / KV-compression (10): mla_attn, gqla_attn, mlra_attn, tucker_attn,
+│                                  iha_attn, gta_attn, mtla_attn, cca_attn,
+│                                  ccgqa_attn, gma_attn
+└── Geometric Field (1): ssog_attn
 ```
 
 > The detailed per-mixer attribute tables below cover the most commonly used
-> and best-documented families. The authoritative list of all 37 names is the
+> and best-documented families. The authoritative list of all 38 names is the
 > `layer_pattern` enum in `src/schema/_model/_dims.yaml`.
 
 ### How to pick a mixer (plain English)
@@ -42,6 +43,7 @@ memory/speed budget do you have?**
 | >1M-token context / associative recall | `titan_attn`, `engram_attn` |
 | Long-context but want softmax quality | `longformer_attn`, `bigbird_attn`, `nsa_attn`, `sparsek_attn` |
 | Shrink KV cache / params in latent space | `mla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn` |
+| Vision / grid data, or small-data geometric prior | `ssog_attn` (encoder-only; needs a `grid_h × grid_w` row-major raster) |
 | Inference-only speedup (no training) | `sparge_attn`, `fasa_attn` (eval-only) |
 
 You can mix families freely within a `layer_pattern` — the dispatcher routes
@@ -371,6 +373,27 @@ Previous state S_{t−1} → Gate(s) α_t, β_t, G_t, f_t → New key/value or S
 | Pros | Fixed-K linear-time sequence mixing; probabilistic interpretable routing; non-negative low-rank affinity; bidirectional + causal |
 | Cons | Quality depends on K and d_r; causal GMA trails optimised SDPA and state-space models on WikiText-103 in the paper; not a universal softmax-attention replacement |
 
+## Geometric Field Attention (1)
+
+### `ssog_attn` — SSOG (Separable Sum of Gaussians)
+
+| Attribute | Value |
+|---|---|
+| Paper | Pisoni (2026) — https://www.pisoni.ai/posts/ssog/ |
+| Core Equation | A(p,q) = softmax_q(τ⁻¹ · logsumexp_r(log λ_r + log N(p−q; μ_r, σ_r))); applied as two 1D softmaxed kernel passes per atom (rows × columns) + λ-mix; steering: μ←μ₀+s_μ·max_offset·tanh(W_μx), σ←σ₀·e^{s_σ tanh(W_σx)}, λ←softmax(log λ₀+s_λ tanh(W_λx)) |
+| Training Complexity | O(R·N·√N·d) for R atoms — the N×N matrix never exists |
+| Inference Complexity | O(R·N·√N·d) per forward (no KV cache semantics; encoder-only) |
+| Key Characteristics | No Q/K projections (2d² instead of 4d² per layer); each head owns R Gaussian atoms over *relative position* (5 numbers per atom: μy, μx, σy, σx, λ); same shared field for every input; content only *steers* via zero-init probes behind cold-started softplus gates (softplus(−8) ≈ 3e-4); geometry is the positional encoding (no PE consumed); field lives on coordinates → zero-shot resolution transfer; `grid_h=1` degenerates to a 1D positional field for sequences |
+| Config Knobs | `num_atoms` (R ≥ 1, default 4), `lookat` (bool, default true), `max_offset` (cells, default 4.0), `cold_init` (bool, default true), `sigma_floor` (default 0.25), `grid_h`/`grid_w` (default: derived from image/patch size; set explicitly for non-vision grids) |
+| Pros | Near-linear cost by geometry alone; +17 pts over SDPA on small data (CIFAR-100, matched recipe); beats SDPA on ImageNet-1k at 12M params while 20% smaller / 30% cheaper; fully interpretable (each head is a few plottable blobs); free zero-shot resolution transfer |
+| Cons | Encoder-only (no causal formulation); requires a fixed `grid_h × grid_w` raster (ViT needs `cls_token: false`; NLP needs an explicit 1×L grid); per-query steering kernels add memory in the steered path; language results unproven (content scoring is likely load-bearing there) |
+
+**Constraints** (enforced at config load and runtime):
+- `model.dims.mode` must be `encoder` (`ssog_attn` + decoder raises).
+- Sequence length must equal `grid_h * grid_w` (clear error otherwise).
+- With `frankenstein_vit`: `image.cls_token: false` (a prepended [CLS]
+  token breaks the raster); use `pooling_mode: gap` for pooling.
+
 ## Comprehensive Comparison Table
 
 | Mixer | Category | Train Complexity | Infer Complexity | Trainable | Key Strength |
@@ -399,6 +422,7 @@ Previous state S_{t−1} → Gate(s) α_t, β_t, G_t, f_t → New key/value or S
 | `cca_attn` | Latent | O(n²d/C) | O(n)/step | Yes | Latent-space attention, C× FLOP reduction |
 | `ccgqa_attn` | Latent | O(n²d/C₁) | O(n)/step | Yes | Decoupled latent compression + GQA head sharing |
 | `gma_attn` | Latent | O(nKd_r+nKd_v) | O(K)/step | Yes | Probabilistic Gaussian-mixture routing, linear-time for fixed K |
+| `ssog_attn` | Geometric field | O(R·n√n·d) | O(R·n√n·d)/forward | Yes | Separable Gaussian field; content steers, never scores |
 
 ## Config knobs and example assembly
 
@@ -418,6 +442,7 @@ full list):
 | `longformer_attn` | window size |
 | `cca_attn` | `compression_factor`, `cca_qk_mean`, `cca_value_shift`, `cca_learnable_temp`, `cca_conv_kernel_size`, `cca_conv_groups` |
 | `ccgqa_attn` | `query_compression`, `kv_compression`, `num_kv_heads`, CCA flags |
+| `ssog_attn` | `num_atoms`, `lookat`, `max_offset`, `cold_init`, `sigma_floor`, `grid_h`, `grid_w` |
 
 ### Building a hybrid network
 

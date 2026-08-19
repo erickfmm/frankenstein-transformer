@@ -52,6 +52,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "cca_attn",
             "ccgqa_attn",
             "gma_attn",
+            "ssog_attn",
         }
 
         self.assertTrue(expected.issubset(set(enum_values)))
@@ -100,6 +101,10 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "gma": {
                 "num_components", "routing_dim", "epsilon", "sigma_eps",
                 "init_mean_std",
+            },
+            "ssog": {
+                "num_atoms", "lookat", "max_offset", "cold_init",
+                "sigma_floor", "grid_h", "grid_w",
             },
         }
 

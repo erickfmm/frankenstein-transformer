@@ -1,0 +1,48 @@
+\section{SSOG: Atención Separable Sum of Gaussians}
+\label{sec:annex-ssog}
+
+Este anexo cubre SSOG (Separable Sum of Gaussians), un mixer de atención de campo geométrico. SSOG \citep{pisoni_ssog_2026} reemplaza la interacción puntuada por contenido de la atención de producto escalado por una mezcla aprendida de Gaussianas sobre \emph{posición relativa}: cada cabeza posee un puñado de átomos Gaussianos---cinco números por átomo, un desplazamiento de centro $(\mu_y, \mu_x)$, un ancho por eje $(\sigma_y, \sigma_x)$ y un peso de mezcla $\lambda$---que forman un campo fijo sobre el desplazamiento entre tokens. No hay productos punto consulta--clave en ninguna parte: el contenido nunca puntúa al contenido, solo \emph{dirige} el campo mediante residuos pequeños y acotados.
+
+Dado que una Gaussiana 2D se factoriza en un producto de dos Gaussianas 1D, aplicar el campo son dos pasadas de filtro 1D por átomo (filas y luego columnas de un raster de tokens de $\sqrt{N} \times \sqrt{N}$) seguidas de una contracción de mezcla $\lambda$. La matriz de atención $N \times N$ inducida nunca existe, por lo que el costo específico de atención es $\mathcal{O}(R \cdot N \sqrt{N} \cdot d)$ para $R$ átomos en lugar de $\mathcal{O}(N^2 \cdot d)$. SSOG también omite por completo las proyecciones de consulta y clave, pagando $2d^2$ de proyecciones por capa en lugar de los $4d^2$ de SDPA. En la receta de referencia, el mecanismo completo supera a su gemelo SDPA igualado en ImageNet-1k (65{,}28\% vs 64{,}34\% con $\sim$3M de parámetros; 72{,}02\% vs 71{,}84\% con $\sim$12M) siendo $\sim$20\% más pequeño y $\sim$30\% más barato por pasada, y por +17 puntos en CIFAR-100 con receta igualada.
+
+\subsection{Formulación Matemática}
+Sea el raster row-major de una rejilla $G_h \times G_w$ los tokens. El peso de atención del token $p$ al token $q$ es el log-sum-exp con softmax y temperatura de los log-pesos de los átomos evaluados en su desplazamiento:
+\[
+A(p, q) = \operatorname{softmax}_q\!\left( \tfrac{1}{\tau}\, s(p, q) \right),
+\qquad
+s(p, q) = \operatorname{logsumexp}_r \big( \log \lambda_r + \log \mathcal{N}(p - q;\ \mu_r, \sigma_r) \big),
+\]
+donde $\tau$ es una temperatura aprendible y $\mathcal{N}(\cdot\,;\mu_r, \sigma_r)$ es una Gaussiana 2D con covarianza diagonal. Como la Gaussiana 2D se factoriza, el campo con softmax se aplica de forma separable: por eje, $a_y[i, j] = \operatorname{softmax}_j(\log \mathcal{N}(\Delta y_{ij}; \mu_y, \sigma_y) / \tau)$ y análogamente $a_x$, seguido de
+\[
+Y = \sum_{r=1}^{R} \lambda_r\, \big( a_x^{(r)} \big( a_y^{(r)}\, V \big) \big),
+\qquad V = x W_V,
+\]
+es decir, tres contracciones einsum por capa. Con direccionamiento por contenido (\texttt{lookat}) habilitado, sondas lineales inicializadas en cero predicen residuos por token acotados sobre los parámetros del campo detrás de compuertas softplus de arranque en frío:
+\[
+\mu \leftarrow \mu_0 + s_\mu \cdot m \cdot \tanh(W_\mu x), \qquad
+\sigma \leftarrow \sigma_0 \, e^{s_\sigma \tanh(W_\sigma x)}, \qquad
+\lambda \leftarrow \operatorname{softmax}\big( \log \lambda_0 + s_\lambda \tanh(W_\lambda x) \big),
+\]
+con $m$ el desplazamiento máximo en celdas de rejilla y escalas de compuerta $s_\bullet = \operatorname{softplus}(\cdot)$ inicializadas en $-8$ ($\approx 3 \times 10^{-4}$), de modo que el modelo comienza como un campo geométrico congelado y aprende cuánto abrir cada toma de contenido. Los anchos se reparametrizan como $\sigma = \operatorname{softplus}(\omega) + \epsilon + \sigma_{\text{piso}}$ para mantenerse estrictamente positivos.
+
+\subsection{Pseudocódigo Algorítmico}
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} estado oculto $x \in \mathbb{R}^{B \times N \times d}$ como raster $G_h \times G_w$, átomos $\{\mu_r, \omega_r, \log \lambda_r\}_{r=1}^{R}$ por cabeza, temperatura $\tau$
+\State $V \gets x W_V$ reorganizado a $(B, G_h, G_w, H, d_h)$ \Comment{sin proyecciones Q/K}
+\State $\sigma_r \gets \operatorname{softplus}(\omega_r) + \epsilon + \sigma_{\text{piso}}$ \Comment{anchos positivos}
+\If{direccionamiento (lookat)}
+    \State $\mu, \sigma, \lambda \gets$ residuos por token acotados vía sondas init-cero y compuertas \Comment{el contenido dirige}
+\EndIf
+\State $a_y \gets \operatorname{softmax}\!\big(\log \mathcal{N}(\Delta y; \mu_y, \sigma_y) / \tau\big)$, \quad $a_x \gets$ análogamente \Comment{kernels 1D, uno por átomo}
+\State $Y \gets \sum_r \lambda_r\, a_x^{(r)} \big( a_y^{(r)} V \big)$ \Comment{pasada filas, pasada columnas, mezcla $\lambda$: sin $N \times N$}
+\State \textbf{Salida:} $\mathbf{Y} W_O$ reorganizado a $(B, N, d)$
+\end{algorithmic}
+
+\subsection{Características Clave}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(R \cdot N \sqrt{N} \cdot d)$ para $R$ átomos fijos---casi lineal solo por geometría, no por aproximación de kernels.
+    \item \textbf{Complejidad de inferencia}: mismo costo por pasada; solo encoder (el campo separable no tiene formulación causal), por lo que no hay semánticas de caché KV.
+    \item \textbf{Entrenable}: los átomos $\{\mu, \omega, \log\lambda\}$, la temperatura y las sondas de direccionamiento son completamente diferenciables; las compuertas de arranque en frío se abren durante la optimización.
+    \item \textbf{Fortalezas}: prior geométrico fuerte (+17 pts sobre SDPA en datos pequeños con receta igualada; supera a SDPA en ImageNet-1k con 3M y 12M parámetros con $\sim$20\% menos parámetros y $\sim$30\% menos FLOPs); interpretable por diseño (cada cabeza son unos pocos blobs graficables---las capas tempranas se vuelven convoluciones encubiertas, las intermedias detectores de franjas, las tardes se vuelven globales); el campo vive en coordenadas, lo que otorga transferencia de resolución zero-shot.
+    \item \textbf{Limitaciones}: solo encoder; requiere un raster row-major fijo $G_h \times G_w$ (ViT necesita \texttt{cls\_token=false}; las secuencias necesitan una rejilla $1 \times L$ explícita); los kernels de direccionamiento por query añaden un término de memoria; los resultados en lenguaje no están probados---allí el puntaje por contenido probablemente es estructural.
+\end{itemize}

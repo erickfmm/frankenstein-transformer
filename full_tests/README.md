@@ -6,14 +6,14 @@ Esta carpeta contiene un harness independiente que entrena modelos **reales pero
 
 ## Qué prueba
 
-- **Atenciones de a pares**: `itertools.combinations(ATTENTIONS, 2)` (~561 modelos de 2 capas). Incluye `gma_attn` (Gaussian Mixture Attention). `fasa_attn` y `sparge_attn` se omiten (solo evaluación).
+- **Atenciones de a pares**: `itertools.combinations(ATTENTIONS, 2)` (~595 modelos de 2 capas). Incluye `gma_attn` (Gaussian Mixture Attention) y `ssog_attn` (SSOG — a las configs NLP con `ssog_attn` se les inyecta automáticamente una rejilla `1×max_length`). `fasa_attn` y `sparge_attn` se omiten (solo evaluación).
 - **Cada atención sola**: una capa con cada mezclador entrenable.
 - **Todos los optimizadores** del schema (`src/schema/_optimizer.yaml`).
 - **Todas las normas** (`layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`).
 - **Todas las codificaciones posicionales** a nivel de modelo (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape`, `pape_efficient`, `pape_ri`, `sinusoidal_absolute`, `sinusoidal_rotary`, `learned_absolute`, `none`) — una config cada una sobre un patrón base fijo `[standard_attn, titan_attn]` (sin cross product).
 - **Todas las `pos_embedding_type` del ViT** (`learned_1d`, `none`, `learned_absolute`, `sinusoidal_absolute`, `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`, `nope`, `alibi`, `bam`) a través de las 3 tareas de visión (classification, patch_prediction, segmentation) — 39 configs, sin cross product con mixers.
-- **Transversales**: BitNet (incluido routers/conv), embeddings factorizados/conv, MoE, MoD, mHC, residuos/AttnRes (`standard`/`none`/`full_attn`/`block_attn`), RoPE vs HoPE, SSMax (`use_ssmax`), loops duplicados, activaciones de FFN, etc.
-- **Tareas**: `mlm`/encoder y `causal_lm`/decoder; visión (`classification`, `patch_prediction`, `segmentation`).
+- **Transversales**: BitNet (incluido routers/conv), embeddings factorizados/conv, MoE, MoD, mHC, residuos/AttnRes (`standard`/`none`/`full_attn`/`block_attn`), RoPE vs HoPE, SSMax (`use_ssmax`), SSOG campo fijo (`lookat: false`) y SSOG+BitNet, loops duplicados, activaciones de FFN, etc.
+- **Tareas**: `mlm`/encoder y `causal_lm`/decoder; visión (`classification`, `patch_prediction`, `segmentation`) — cada tarea de visión tiene además una variante `ssog_attn` (`cls_token: false` + `pooling_mode: gap`; la rejilla 2×2 se deriva de la imagen).
 - **Deploy / infer / cuantización / transformers-export / bitnet-gguf** (smoke tests sobre el primer entrenamiento exitoso).
 
 ## Cómo ejecutar

@@ -1,0 +1,229 @@
+type: object
+additionalProperties: false
+properties:
+  ssog:
+    type: object
+    additionalProperties: false
+    properties:
+      num_atoms:
+        type: integer
+        title: "SSOG Gaussian Atoms per Head"
+        title_es: "Atomos Gaussianos SSOG por Cabeza"
+        description: |-
+          Number `R` of Gaussian atoms per head for `ssog_attn`
+          (Separable Sum of Gaussians attention, Pisoni 2026,
+          https://www.pisoni.ai/posts/ssog/). Each atom is five numbers
+          (mu_y, mu_x, sigma_y, sigma_x, lambda) defining a 2D Gaussian
+          over relative position. The field applies as two 1D filter
+          passes per atom, so the `N x N` attention matrix never exists
+          and cost scales as `O(R * N * sqrt(N) * d)`. Only applies when
+          `ssog_attn` appears in `layer_pattern`.
+
+          **Examples explained:**
+          - `num_atoms=4`: default and the recipe's sweet spot at small
+            scale. Four deformable blobs per head; strong accuracy at
+            negligible parameter cost (20 numbers per head).
+          - `num_atoms=1`: the minimal mechanism. A single deformable
+            blob per head loses only ~0.7 points on CIFAR-100 in the
+            reference recipe — a good first ablation.
+          - `num_atoms=8`: more geometric capacity; "showing off" at
+            small scale, but larger models may put more atoms to work.
+        description_es: |-
+          Numero `R` de atomos Gaussianos por cabeza para `ssog_attn`
+          (Separable Sum of Gaussians, Pisoni 2026,
+          https://www.pisoni.ai/posts/ssog/). Cada atomo son cinco
+          numeros (mu_y, mu_x, sigma_y, sigma_x, lambda) que definen una
+          Gaussiana 2D sobre posicion relativa. El campo se aplica como
+          dos pasadas de filtro 1D por atomo, por lo que la matriz de
+          atencion `N x N` nunca existe y el costo escala como
+          `O(R * N * sqrt(N) * d)`. Solo aplica cuando `ssog_attn`
+          aparece en `layer_pattern`.
+
+          **Ejemplos explicados:**
+          - `num_atoms=4`: por defecto y punto optimo de la receta a
+            escala pequena. Cuatro blobs deformables por cabeza; buena
+            precision a costo de parametros insignificante (20 numeros
+            por cabeza).
+          - `num_atoms=1`: el mecanismo minimo. Un solo blob deformable
+            por cabeza pierde solo ~0.7 puntos en CIFAR-100 con la receta
+            de referencia — buena primera ablacion.
+          - `num_atoms=8`: mas capacidad geometrica; "presumir" a escala
+            pequena, aunque modelos mayores pueden aprovechar mas atomos.
+        examples: [4]
+      lookat:
+        type: boolean
+        title: "SSOG Content Steering"
+        title_es: "Direccionamiento por Contenido SSOG"
+        description: |-
+          Enable content-conditioned steering for `ssog_attn`: tiny
+          zero-initialized linear probes predict bounded per-token
+          residuals on the atom centers (mu), widths (sigma) and mixture
+          weights (lambda) behind cold-started gates. Content never
+          scores content — it only deforms the field. `false` gives the
+          purely fixed, content-blind geometric field (still competitive:
+          within ~1 point of SDPA on ImageNet-1k in the reference
+          recipe). Steering closes the gap and beats SDPA at small scale.
+
+          **Impact:** On ImageNet-1k (matched recipe) the fixed field
+          scores ~1 point behind dot-product attention; mu-steering alone
+          matches it; full steering (mu+sigma+lambda) beats it by ~0.9.
+          On small grids (e.g. CIFAR at 16x16) steering is roughly
+          neutral — the fixed field already covers everything worth
+          covering.
+        description_es: |-
+          Habilita el direccionamiento por contenido para `ssog_attn`:
+          pequenas sondas lineales inicializadas en cero predicen
+          residuos acotados por token sobre los centros de los atomos
+          (mu), anchos (sigma) y pesos de mezcla (lambda), detras de
+          compuertas de arranque en frio. El contenido nunca puntua al
+          contenido — solo deforma el campo. `false` da el campo
+          geometrico puro, ciego al contenido (aun competitivo: a ~1
+          punto de SDPA en ImageNet-1k con la receta de referencia). El
+          direccionamiento cierra la brecha y supera a SDPA a escala
+          pequena.
+
+          **Impacto:** En ImageNet-1k (receta igualada) el campo fijo
+          queda ~1 punto por debajo de la atencion de producto punto;
+          solo dirigir mu la iguala; el direccionamiento completo
+          (mu+sigma+lambda) la supera por ~0.9. En rejillas pequenas
+          (p.ej. CIFAR a 16x16) el direccionamiento es casi neutral — el
+          campo fijo ya cubre todo lo relevante.
+        examples: [true, false]
+      max_offset:
+        type: number
+        title: "SSOG Max Steering Offset (grid cells)"
+        title_es: "Desplazamiento Maximo SSOG (celdas de rejilla)"
+        description: |-
+          Bound on per-token mu travel for `ssog_attn` steering, in grid
+          cells. Residuals pass through `tanh`, so centers move at most
+          `+/- max_offset` cells from the shared field. Must be > 0.
+
+          **Impact:** The mechanism knows its regime: small grids want
+          small offsets (+/-1-2 cells won on CIFAR's 32x32 images,
+          nowhere to travel) while 224^2 ImageNet wanted the full +/-4.
+          Zero-shot resolution transfer degrades once the evaluation grid
+          is much larger than the training grid and the offset bound
+          can no longer reach distant content.
+        description_es: |-
+          Cota del desplazamiento por token de mu para el
+          direccionamiento `ssog_attn`, en celdas de rejilla. Los
+          residuos pasan por `tanh`, asi que los centros se mueven como
+          maximo `+/- max_offset` celdas respecto al campo compartido.
+          Debe ser > 0.
+
+          **Impacto:** El mecanismo conoce su regimen: rejillas pequenas
+          quieren offsets pequenos (+/-1-2 celdas ganaron en imagenes
+          32x32 de CIFAR, no hay a donde ir) mientras que ImageNet a
+          224^2 queria el +/-4 completo. La transferencia de resolucion
+          zero-shot degrada cuando la rejilla de evaluacion es mucho
+          mayor que la de entrenamiento y la cota de offset ya no alcanza
+          el contenido lejano.
+        examples: [4.0, 2.0]
+      cold_init:
+        type: boolean
+        title: "SSOG Cold-Start Gates"
+        title_es: "Compuertas de Arranque en Frio SSOG"
+        description: |-
+          Start the `ssog_attn` steering gates at ~0 (softplus(-8) ~=
+          3e-4) so the model begins life as a frozen geometric field and
+          learns how far to open each content tap. `false` warm-starts
+          the gates (softplus(-2) ~= 0.13).
+
+          **Impact:** The cold start matters: warm-init gates lose ~1.1
+          points on CIFAR-100 in the reference recipe. Starting
+          geometric and learning to listen to content beats doing both
+          from scratch.
+        description_es: |-
+          Inicia las compuertas de direccionamiento `ssog_attn` en ~0
+          (softplus(-8) ~= 3e-4) para que el modelo arranque como un
+          campo geometrico congelado y aprenda cuanto abrir cada toma de
+          contenido. `false` arranca las compuertas en caliente
+          (softplus(-2) ~= 0.13).
+
+          **Impacto:** El arranque en frio importa: inicializar las
+          compuertas en caliente pierde ~1.1 puntos en CIFAR-100 con la
+          receta de referencia. Empezar geometrico y aprender a escuchar
+          al contenido supera hacer ambos desde cero.
+        examples: [true, false]
+      sigma_floor:
+        type: number
+        title: "SSOG Minimum Atom Width (grid cells)"
+        title_es: "Ancho Minimo de Atomo SSOG (celdas de rejilla)"
+        description: |-
+          Minimum Gaussian atom width for `ssog_attn`, in grid cells.
+          Widths are reparametrized as `sigma = softplus(raw) + eps +
+          sigma_floor`, guaranteeing strictly positive widths during
+          gradient training. Must be >= 0.
+
+          **Impact:** Larger floors forbid razor-thin atoms (the field
+          stays smooth and translation-invariant); smaller floors allow
+          tight, convolution-like blobs around the query in early
+          layers. Default 0.25 follows the reference recipe.
+        description_es: |-
+          Ancho minimo de los atomos Gaussianos para `ssog_attn`, en
+          celdas de rejilla. Los anchos se reparametrizan como
+          `sigma = softplus(raw) + eps + sigma_floor`, garantizando
+          anchos estrictamente positivos durante el entrenamiento por
+          gradiente. Debe ser >= 0.
+
+          **Impacto:** Pisos mayores prohiben atomos filosos (el campo
+          se mantiene suave e invariante a traslacion); pisos menores
+          permiten blobs ajustados tipo convolucion alrededor del query
+          en capas tempranas. El por defecto 0.25 sigue la receta de
+          referencia.
+        examples: [0.25]
+      grid_h:
+        type: [integer, "null"]
+        title: "SSOG Grid Rows"
+        title_es: "Filas de Rejilla SSOG"
+        description: |-
+          Rows of the token grid the `ssog_attn` field is defined over.
+          Tokens must be the row-major raster of `grid_h x grid_w`.
+          `null` (default) derives `image_height // patch_size` — the
+          right choice for `frankenstein_vit`. For non-vision grids set
+          it explicitly; `grid_h=1` degenerates naturally to a 1D
+          positional-field attention over sequences.
+
+          **Impact:** The field lives on coordinates, not token indices,
+          so SSOG transfers zero-shot to other resolutions — but the
+          sequence length must always equal `grid_h * grid_w` (a
+          mismatch raises a clear runtime error).
+        description_es: |-
+          Filas de la rejilla de tokens sobre la que se define el campo
+          `ssog_attn`. Los tokens deben ser el raster row-major de
+          `grid_h x grid_w`. `null` (por defecto) deriva
+          `image_height // patch_size` — la eleccion correcta para
+          `frankenstein_vit`. Para rejillas no visuales debe fijarse
+          explicitamente; `grid_h=1` degenera naturalmente en una
+          atencion de campo posicional 1D sobre secuencias.
+
+          **Impacto:** El campo vive en coordenadas, no en indices de
+          token, asi que SSOG transfiere zero-shot a otras resoluciones
+          — pero la longitud de secuencia siempre debe igualar
+          `grid_h * grid_w` (un desajuste lanza un error claro en
+          ejecucion).
+        examples: [null, 1]
+      grid_w:
+        type: [integer, "null"]
+        title: "SSOG Grid Columns"
+        title_es: "Columnas de Rejilla SSOG"
+        description: |-
+          Columns of the token grid the `ssog_attn` field is defined
+          over. `null` (default) derives `image_width // patch_size`.
+          For non-vision grids set it explicitly (e.g. the maximum
+          sequence length for a 1D `grid_h=1` configuration).
+
+          **Impact:** Together with `grid_h` this fixes the raster the
+          Gaussian atoms are evaluated on; the per-query steering
+          kernels scale with the grid, not with `N^2`.
+        description_es: |-
+          Columnas de la rejilla de tokens sobre la que se define el
+          campo `ssog_attn`. `null` (por defecto) deriva
+          `image_width // patch_size`. Para rejillas no visuales debe
+          fijarse explicitamente (p.ej. la longitud maxima de secuencia
+          para una configuracion 1D con `grid_h=1`).
+
+          **Impacto:** Junto con `grid_h` fija el raster sobre el que se
+          evaluan los atomos Gaussianos; los kernels de direccionamiento
+          por query escalan con la rejilla, no con `N^2`.
+        examples: [null, 128]

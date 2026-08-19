@@ -1,0 +1,48 @@
+\section{SSOG: Separable Sum of Gaussians Attention}
+\label{sec:annex-ssog}
+
+This annex covers SSOG (Separable Sum of Gaussians), a geometric-field attention mixer. SSOG \citep{pisoni_ssog_2026} replaces the content-scored interaction of scaled dot-product attention with a learned mixture of Gaussians over \emph{relative position}: each head owns a handful of Gaussian atoms---five numbers per atom, a center offset $(\mu_y, \mu_x)$, a width per axis $(\sigma_y, \sigma_x)$ and a mixture weight $\lambda$---forming a fixed field over the displacement between tokens. There are no query--key dot products anywhere: content never scores content, it only \emph{steers} the field through small bounded residuals.
+
+Because a 2D Gaussian factorises into a product of two 1D Gaussians, applying the field is two 1D filter passes per atom (rows, then columns of a $\sqrt{N} \times \sqrt{N}$ token raster) followed by a $\lambda$-mix contraction. The induced $N \times N$ attention matrix never exists, so the attention-specific cost is $\mathcal{O}(R \cdot N \sqrt{N} \cdot d)$ for $R$ atoms instead of $\mathcal{O}(N^2 \cdot d)$. SSOG also skips the query and key projections entirely, paying $2d^2$ of projections per layer instead of the $4d^2$ of SDPA. In the reference recipe the full mechanism beats its matched SDPA twin on ImageNet-1k (65.28\% vs 64.34\% at $\sim$3M params; 72.02\% vs 71.84\% at $\sim$12M) while being $\sim$20\% smaller and $\sim$30\% cheaper per forward, and by +17 points on CIFAR-100 at matched recipe.
+
+\subsection{Mathematical Formulation}
+Let tokens be the row-major raster of a $G_h \times G_w$ grid. The attention weight from token $p$ to token $q$ is the softmax-tempered log-sum-exp of the atom log-weights evaluated at their displacement:
+\[
+A(p, q) = \operatorname{softmax}_q\!\left( \tfrac{1}{\tau}\, s(p, q) \right),
+\qquad
+s(p, q) = \operatorname{logsumexp}_r \big( \log \lambda_r + \log \mathcal{N}(p - q;\ \mu_r, \sigma_r) \big),
+\]
+where $\tau$ is a learnable temperature and $\mathcal{N}(\cdot\,;\mu_r, \sigma_r)$ is a 2D Gaussian with diagonal covariance. Since the 2D Gaussian factorises, the softmaxed field applies separably: per axis, $a_y[i, j] = \operatorname{softmax}_j(\log \mathcal{N}(\Delta y_{ij}; \mu_y, \sigma_y) / \tau)$ and analogously $a_x$, followed by
+\[
+Y = \sum_{r=1}^{R} \lambda_r\, \big( a_x^{(r)} \big( a_y^{(r)}\, V \big) \big),
+\qquad V = x W_V,
+\]
+i.e.\ three einsum contractions per layer. With content steering (\texttt{lookat}) enabled, zero-initialised linear probes predict bounded per-token residuals on the field parameters behind cold-started softplus gates:
+\[
+\mu \leftarrow \mu_0 + s_\mu \cdot m \cdot \tanh(W_\mu x), \qquad
+\sigma \leftarrow \sigma_0 \, e^{s_\sigma \tanh(W_\sigma x)}, \qquad
+\lambda \leftarrow \operatorname{softmax}\big( \log \lambda_0 + s_\lambda \tanh(W_\lambda x) \big),
+\]
+with $m$ the maximum offset in grid cells and gate scales $s_\bullet = \operatorname{softplus}(\cdot)$ initialised at $-8$ ($\approx 3 \times 10^{-4}$), so the model begins as a frozen geometric field and learns how far to open each content tap. Widths are reparameterised as $\sigma = \operatorname{softplus}(\omega) + \epsilon + \sigma_{\text{floor}}$ to stay strictly positive.
+
+\subsection{Algorithmic Pseudocode}
+\begin{algorithmic}[1]
+\State \textbf{Input:} hidden state $x \in \mathbb{R}^{B \times N \times d}$ as a $G_h \times G_w$ raster, atoms $\{\mu_r, \omega_r, \log \lambda_r\}_{r=1}^{R}$ per head, temperature $\tau$
+\State $V \gets x W_V$ reshaped to $(B, G_h, G_w, H, d_h)$ \Comment{no Q/K projections}
+\State $\sigma_r \gets \operatorname{softplus}(\omega_r) + \epsilon + \sigma_{\text{floor}}$ \Comment{positive widths}
+\If{steering (lookat)}
+    \State $\mu, \sigma, \lambda \gets$ bounded per-token residuals via zero-init probes and gates \Comment{content steers}
+\EndIf
+\State $a_y \gets \operatorname{softmax}\!\big(\log \mathcal{N}(\Delta y; \mu_y, \sigma_y) / \tau\big)$, \quad $a_x \gets$ analogously \Comment{1D kernels, one per atom}
+\State $Y \gets \sum_r \lambda_r\, a_x^{(r)} \big( a_y^{(r)} V \big)$ \Comment{row pass, column pass, $\lambda$-mix: no $N \times N$}
+\State \textbf{Output:} $\mathbf{Y} W_O$ reshaped to $(B, N, d)$
+\end{algorithmic}
+
+\subsection{Key Characteristics}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(R \cdot N \sqrt{N} \cdot d)$ for fixed $R$ atoms---near-linear by geometry alone, not by kernel approximation.
+    \item \textbf{Inference complexity}: same per-forward cost; encoder-only (the separable field has no causal formulation), so there are no KV-cache semantics.
+    \item \textbf{Trainable}: atoms $\{\mu, \omega, \log\lambda\}$, temperature, and the steering probes are fully differentiable; cold-started gates open during optimisation.
+    \item \textbf{Strengths}: strong geometric prior (+17 pts over SDPA on small data at matched recipe; beats SDPA on ImageNet-1k at 3M and 12M params with $\sim$20\% fewer parameters and $\sim$30\% fewer FLOPs); inherently interpretable (each head is a few plottable blobs---early layers become convolutions in disguise, middle layers strip detectors, late layers go global); the field lives on coordinates, granting zero-shot resolution transfer.
+    \item \textbf{Limitations}: encoder-only; requires a fixed $G_h \times G_w$ row-major raster (ViT needs \texttt{cls\_token=false}; sequences need an explicit $1 \times L$ grid); the per-query steering kernels add a memory term; language results are unproven---content scoring is likely load-bearing there.
+\end{itemize}

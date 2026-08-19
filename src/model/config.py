@@ -585,6 +585,29 @@ class FrankensteinModelConfig:
     # Initialisation std for the component means mu ~ N(0, init_mean_std^2).
     gma_init_mean_std: float = 1.0
 
+    # ---- SSOG / Separable Sum of Gaussians (Pisoni 2026,
+    # ---- https://www.pisoni.ai/posts/ssog/) ----
+    # Number R of Gaussian atoms per head. Each atom is five numbers
+    # (mu_y, mu_x, sigma_y, sigma_x, lambda) over relative position.
+    ssog_num_atoms: int = 4
+    # Content-conditioned steering: zero-init probes predict bounded
+    # residuals on mu/sigma/lambda behind cold-started gates.
+    ssog_lookat: bool = True
+    # Bound on per-token mu travel, in grid cells (tanh-bounded).
+    ssog_max_offset: float = 4.0
+    # Cold-start the steering gates at softplus(-8) ~= 3e-4 (frozen
+    # geometry at init). Warm-start uses softplus(-2) ~= 0.13.
+    ssog_cold_init: bool = True
+    # Minimum atom width in grid cells. sigma = softplus(raw) + eps
+    # + sigma_floor guarantees strictly positive widths.
+    ssog_sigma_floor: float = 0.25
+    # Token grid the field is defined over (row-major raster). None ->
+    # derived from image_height // patch_size and image_width //
+    # patch_size (ViT). Non-vision grids must set them explicitly;
+    # grid_h=1 degenerates to a 1D positional field.
+    ssog_grid_h: Optional[int] = None
+    ssog_grid_w: Optional[int] = None
+
     # ---- CCA / CCGQA (arXiv:2510.04476) ----
     cca_latent_rank: Optional[int] = None
     cca_num_conv_layers: int = 2
@@ -747,6 +770,41 @@ class FrankensteinModelConfig:
         if self.gma_sigma_eps <= 0:
             raise ValueError(
                 f"gma_sigma_eps must be > 0, got {self.gma_sigma_eps}"
+            )
+
+        # ---- Resolve SSOG / Separable Sum of Gaussians defaults ----
+        # Grid defaults to the ViT patch grid; non-vision configs must
+        # set ssog_grid_h/ssog_grid_w explicitly (grid_h=1 degenerates
+        # to a 1D positional field over the sequence).
+        patch = max(1, int(self.patch_size))
+        if self.ssog_grid_h is None:
+            self.ssog_grid_h = max(1, int(self.image_height) // patch)
+        if self.ssog_grid_w is None:
+            self.ssog_grid_w = max(1, int(self.image_width) // patch)
+        self.ssog_grid_h = int(self.ssog_grid_h)
+        self.ssog_grid_w = int(self.ssog_grid_w)
+        if self.ssog_grid_h < 1 or self.ssog_grid_w < 1:
+            raise ValueError(
+                f"ssog_grid_h/ssog_grid_w must be >= 1, got "
+                f"{self.ssog_grid_h}x{self.ssog_grid_w}"
+            )
+        if self.ssog_num_atoms < 1:
+            raise ValueError(
+                f"ssog_num_atoms must be >= 1, got {self.ssog_num_atoms}"
+            )
+        if float(self.ssog_sigma_floor) < 0.0:
+            raise ValueError(
+                f"ssog_sigma_floor must be >= 0, got {self.ssog_sigma_floor}"
+            )
+        if float(self.ssog_max_offset) <= 0.0:
+            raise ValueError(
+                f"ssog_max_offset must be > 0, got {self.ssog_max_offset}"
+            )
+        if "ssog_attn" in (self.layer_pattern or []) and self.mode == "decoder":
+            raise ValueError(
+                "ssog_attn is encoder-only: the separable Gaussian field has "
+                "no causal formulation. Remove ssog_attn from layer_pattern "
+                "for decoder models."
             )
 
         _VALID_POSITIONAL_ENCODINGS = {

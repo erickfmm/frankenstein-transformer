@@ -631,7 +631,43 @@ linear in the sequence length $N$ for fixed $K$, $d_r$, and $d_v$. Activation st
 | **Cons** | Quality depends on $K$ and $d_r$; causal GMA trails optimised SDPA and state-space models on WikiText-103 in the paper's current implementation; not a universal softmax-attention replacement. |
 | **Features** | Per-head learned GMM ($\mu, \omega, \alpha$); responsibility-space affinity $\langle \gamma^Q_i, \gamma^K_j \rangle$; $K$-slot latent memory via associative $(\Gamma^K)^\top V_X$; causal via prefix cumsums; reparameterised softplus covariances and softmax priors. |
 
-## 18. Synthesis and Systemic Insights: The Future of Sequence Architectures
+## 18. SSOG (Separable Sum of Gaussians): Attention That Steers Instead of Scores
+
+SSOG [Pisoni 2026, https://www.pisoni.ai/posts/ssog/] replaces content-scored attention with a learned geometric field: each head owns $R$ Gaussian atoms over *relative position* on a $\text{grid}_h \times \text{grid}_w$ token raster — five numbers per atom, a center offset $(\mu_y, \mu_x)$, a width per axis $(\sigma_y, \sigma_x)$ and a mixture weight $\lambda$. The attention weight from token $p$ to token $q$ is the softmax-tempered log-sum-exp of the atom log-weights at their displacement. There are no query–key dot products anywhere; content never scores, it only *steers*: zero-initialized linear probes predict bounded per-token residuals on $\mu$ ($\pm$ `max_offset` cells, tanh-capped), $\sigma$ (log-space multiplier) and $\lambda$ (softmax re-weighting) behind cold-started softplus gates ($\text{softplus}(-8) \approx 3\times10^{-4}$), so the model starts as a frozen geometric field and learns how far to open each content tap.
+
+Because a 2D Gaussian factorises, applying the field is two 1D softmaxed filter passes per atom (rows, then columns) plus a $\lambda$-mix contraction — the $N \times N$ attention matrix never exists. SSOG also skips the Q/K projections ($2d^2$ instead of $4d^2$ per layer). The field lives on coordinates rather than token indices, so a model trained at one resolution evaluates zero-shot at another (only the position embedding needs a resize).
+
+### 18.1 Mathematical Formulation
+
+$$A(p, q) = \operatorname{softmax}_q\!\left( \tfrac{1}{\tau}\, \operatorname{logsumexp}_r \big( \log \lambda_r + \log \mathcal{N}(p - q;\ \mu_r, \sigma_r) \big) \right)$$
+
+with learnable temperature $\tau$ and, per axis, separable kernels $a_y = \operatorname{softmax}(\log \mathcal{N}(\Delta y; \mu_y, \sigma_y)/\tau)$, $a_x$ analogously, applied as
+
+$$Y = \sum_{r=1}^{R} \lambda_r\, \big( a_x^{(r)} ( a_y^{(r)} V ) \big), \qquad V = x W_V.$$
+
+Steering residuals (per token, from content $x$):
+
+$$\mu \leftarrow \mu_0 + s_\mu\, m\, \tanh(W_\mu x), \qquad \sigma \leftarrow \sigma_0\, e^{s_\sigma \tanh(W_\sigma x)}, \qquad \lambda \leftarrow \operatorname{softmax}\big( \log \lambda_0 + s_\lambda \tanh(W_\lambda x) \big).$$
+
+### 18.2 Computational Complexity
+
+$$\mathcal{C}_{\text{SSOG}} = \mathcal{O}(R \cdot N \sqrt{N} \cdot d) \quad \text{vs} \quad \mathcal{O}(N^2 \cdot d) \text{ for SDPA},$$
+
+for $R$ atoms on a $\sqrt{N} \times \sqrt{N}$ grid (the per-query steering kernels add a memory term). In the reference recipe at d256: ~1.0 GFLOPs/forward vs SDPA's ~1.5, with ~18% fewer parameters.
+
+### 18.3 Architectural Profile: SSOG
+
+| Attribute | Value |
+|---|---|
+| **Nomenclature** | SSOG — Separable Sum of Gaussians attention |
+| **Paper / URL** | [A Few Gaussians Is All You Need: SSOG-Attention That Steers Instead of Scores](https://www.pisoni.ai/posts/ssog/) (blog post + reference implementation [github.com/4rtemi5/ssog](https://github.com/4rtemi5/ssog), AGPL-3.0; this codebase ships an independent MIT implementation) |
+| **Training Complexity** | $\mathcal{O}(R \cdot N \sqrt{N} \cdot d)$ — near-linear by geometry alone |
+| **Inference Complexity** | Same per forward; encoder-only, no KV-cache semantics |
+| **Pros** | +17 pts over SDPA on CIFAR-100 at matched recipe; beats SDPA on ImageNet-1k at 3M and 12M params with ~20% fewer params and ~30% fewer FLOPs; inherently interpretable (every head is a few plottable blobs: early layers ≈ convolutions, middle ≈ strip detectors, late ≈ global); zero-shot resolution transfer. |
+| **Cons** | Encoder-only (no causal formulation); requires a fixed row-major grid (ViT needs `cls_token=false`; sequences need an explicit 1×L grid); steered per-query kernels add memory; language results unproven — content scoring is likely load-bearing there. |
+| **Features** | Per-head Gaussian atoms $(\mu, \sigma, \lambda)$; cold-started bounded steering on $\mu/\sigma/\lambda$; separable two-pass application (the $N \times N$ matrix never exists); no Q/K projections; `grid_h=1` degenerates to a 1D positional field for sequences. |
+
+## 19. Synthesis and Systemic Insights: The Future of Sequence Architectures
 
 The architectural diversity detailed above provides a unique vantage point from which to analyze the underlying trajectories driving sequence modeling. By evaluating the mechanical differences between these models, several profound third-order implications regarding hardware interplay, information theory, and network dynamics become apparent.
 

@@ -53,6 +53,7 @@ from .attention.sparse import (
     SparDAAttention,
 )
 from .attention.standard import StandardAttention
+from .attention.ssog import SSOGAttention
 from .attention.titan import TitanAttention
 from .attention.latent import (
     CCAAttention,
@@ -194,6 +195,7 @@ class HybridLayer(nn.Module):
             "msa_attn": MSAAttention,
             "sparda_attn": SparDAAttention,
             "gma_attn": GaussianMixtureAttention,
+            "ssog_attn": SSOGAttention,
         }
 
         if layer_type == "mamba":

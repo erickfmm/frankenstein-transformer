@@ -78,6 +78,7 @@ mtla\_attn & Latent & $\mathcal{O}(n^2 d / m)$ & $\mathcal{O}(r_{\text{kv}} \cdo
 cca\_attn & Latent & $\mathcal{O}(n^2 d / C)$ & $\mathcal{O}(\tilde{e} \cdot n)$ & Full attention in compressed latent; $C\times$ fewer FLOPs & \citep{figliola_cca_2025} \\
 ccgqa\_attn & Latent & $\mathcal{O}(n^2 d / C_1)$ & $\mathcal{O}(\tilde{e}_{\text{kv}} \cdot n)$ & CCA + decoupled GQA; best loss at $8\times$ cache reduction & \citep{figliola_cca_2025} \\
 gma\_attn & Latent & $\mathcal{O}(nK d_r + nK d_v)$ & $\mathcal{O}(K)$/step & Gaussian Mixture Attention; probabilistic latent routing through $K$ learned GMM components per head; linear-time for fixed $K$; causal via prefix cumsums & \citep{huang_gma_2026} \\
+ssog\_attn & Geometric field & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$/fwd & SSOG: separable Gaussian field over relative position; content steers (bounded $\mu/\sigma/\lambda$ residuals behind cold-started gates), never scores; encoder-only & \citep{pisoni_ssog_2026} \\
 \bottomrule
 \end{longtable}
 \normalsize

@@ -15,6 +15,7 @@ from .sparse import (
 )
 from .grouped_query_attention import GroupedQueryAttention
 from .standard import StandardAttention
+from .ssog import SSOGAttention
 from .titan import TitanAttention
 from .gated import (
     DeltaNetAttention,
@@ -79,4 +80,5 @@ __all__ = [
     "CCAAttention",
     "CCGQAAttention",
     "GaussianMixtureAttention",
+    "SSOGAttention",
 ]

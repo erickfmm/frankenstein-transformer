@@ -142,6 +142,13 @@ class FrankensteinViT(nn.Module):
 
         # ---- [CLS] token (for classification with cls pooling) ----
         self.use_cls_token = bool(cfg.cls_token and cfg.pooling_mode == "cls")
+        if self.use_cls_token and "ssog_attn" in (cfg.layer_pattern or []):
+            raise ValueError(
+                "ssog_attn requires the raw patch grid: a prepended [CLS] "
+                "token breaks the grid_h x grid_w raster the Gaussian field "
+                "is defined on. Set image.cls_token=false (and "
+                "image.pooling_mode='gap' for global average pooling)."
+            )
         if self.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, cfg.hidden_size))
             _trunc_normal_(self.cls_token, std=0.02)
@@ -160,7 +167,7 @@ class FrankensteinViT(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, 1, cfg.hidden_size))
         _trunc_normal_(self.mask_token, std=0.02)
 
-        # ---- HybridLayer stack (reused — all 34 mixers) ----
+        # ---- HybridLayer stack (reused — every layer_pattern mixer) ----
         self.layers = nn.ModuleList(
             [
                 HybridLayer(cfg, layer_type=cfg.layer_pattern[i % len(cfg.layer_pattern)], pos_encoder=self.pos_encoder)
