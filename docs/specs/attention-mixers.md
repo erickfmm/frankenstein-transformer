@@ -4,12 +4,12 @@
 
 ## Taxonomy Overview
 
-The system implements **38 sequence mixer architectures** (the full
-`layer_pattern` enum) organized into six functional categories. The taxonomy
+The system implements **44 sequence mixer architectures** (the full
+`layer_pattern` enum) organized into seven functional categories. The taxonomy
 figure from the paper:
 
 ```
-Sequence Mixer Registry (38 variants)
+Sequence Mixer Registry (44 variants)
 ├── Dense (2): standard_attn, sigmoid_attn
 ├── GQA (1): gqa_attn
 ├── Recurrent / Retentive (6): retnet/retnet_attn, mamba, ode, titan_attn,
@@ -20,6 +20,8 @@ Sequence Mixer Registry (38 variants)
 ├── Gated (8): gla_attn, deltanet_attn, gated_deltanet_attn,
 │              gated_deltanet2_attn, hgrn2_attn, fox_attn, gated_softmax_attn,
 │              kda_attn
+├── Fast-Weight / Online Learning (6): falcon1_attn, falcon2_attn,
+│              falcon3_attn, falcon1a_attn, falcon2a_attn, falcon3a_attn
 ├── Latent / KV-compression (10): mla_attn, gqla_attn, mlra_attn, tucker_attn,
 │                                  iha_attn, gta_attn, mtla_attn, cca_attn,
 │                                  ccgqa_attn, gma_attn
@@ -27,7 +29,7 @@ Sequence Mixer Registry (38 variants)
 ```
 
 > The detailed per-mixer attribute tables below cover the most commonly used
-> and best-documented families. The authoritative list of all 38 names is the
+> and best-documented families. The authoritative list of all 44 names is the
 > `layer_pattern` enum in `src/schema/_model/_dims.yaml`.
 
 ### How to pick a mixer (plain English)
@@ -42,6 +44,7 @@ memory/speed budget do you have?**
 | Linear training + constant inference | `mamba`, `retnet`, `gated` family |
 | >1M-token context / associative recall | `titan_attn`, `engram_attn` |
 | Long-context but want softmax quality | `longformer_attn`, `bigbird_attn`, `nsa_attn`, `sparsek_attn` |
+| Principled forgetting + length extrapolation | `falcon3a_attn` (windowed additive), `falcon1_attn` (best LM perplexity) |
 | Shrink KV cache / params in latent space | `mla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn` |
 | Vision / grid data, or small-data geometric prior | `ssog_attn` (encoder-only; needs a `grid_h × grid_w` row-major raster) |
 | Inference-only speedup (no training) | `sparge_attn`, `fasa_attn` (eval-only) |
@@ -332,6 +335,106 @@ Previous state S_{t−1} → Gate(s) α_t, β_t, G_t, f_t → New key/value or S
 | Pros | Eliminates attention sink; improves training stability; <2% latency overhead; drop-in improvement |
 | Cons | Still O(n²) quadratic; marginal benefit for short-context tasks |
 
+## Fast-Weight Attention / Online Continual Learning (6)
+
+The Falcon family (arXiv:2608.27763, "Fast Weight Attention for Continual
+Learning", Zhang et al. 2026) treats the recurrent fast-weight state
+transition as an **online continual-learning rule** under read-after-write
+(RAW) autoregressive semantics: the local fast-memory example revealed at
+step `t` is the **prefix-aligned** pair `(x_t, y_t) = (phi(k_{t-1}), v_t)` —
+one step shifted relative to DeltaNet's same-step association. All six
+variants share normalized first-order step sizes
+`eta_t = beta_t / (statistic_t + lambda_t + eps)`, the positive-decay
+renormalization `alpha_t = min(eta_t*lambda_t, 1 - eps_gamma)` (fp32
+`log1p` chunk-local log-prefixes in the chunk-parallel kernels), the
+boundary sentinels `x_1 = 0`, `eta_1 = 0`, `(alpha_1, gamma_1) = (0, 1)`,
+QK-RMSNorm by default, optional causal short convolutions on the
+projections, and a recurrent + chunk-parallel dual implementation
+(gated by `falcon_chunk_size`, `null` = recurrent reference scan).
+Config knobs live under `model.attention.falcon` (shared by all six).
+
+### `falcon1_attn` — Falcon-1 (scalar NLMS regression)
+
+| Attribute | Value |
+|---|---|
+| Paper | Zhang et al. (2026) — arXiv:2608.27763 |
+| Core Equation | S_t = (1 - eta_t*lambda_t) S_{t-1} + eta_t x_t (v_t - S_{t-1}^T x_t)^T, o_t = S_t^T q_t |
+| Step Size | eta_t = beta_t / (\|x_t\|^2 + lambda_t + eps) |
+| Training Complexity | O(Ld²) chunk-parallel (WY triangular solve, Alg. 8) |
+| Inference Complexity | O(d²) constant memory |
+| Key Characteristics | Read-after-write prefix-aligned delta rule with NLMS normalization; with eps = 0, lambda = 0 and the unshifted assignment recovers DeltaNet |
+| Config Knobs | `falcon_chunk_size`, `falcon_qk_norm`, `falcon_beta_mode`, `falcon_lambda_mode`, `falcon_beta`, `falcon_lambda`, `falcon_short_conv`, `falcon_conv_kernel`, `falcon_eps`, `falcon_eps_gamma` |
+| Pros | Best LM perplexity of the paper (Falcon-1.3: FineEdu 17.10, beats Gated DeltaNet); principled forgetting tied to the local objective |
+| Cons | Regression family extrapolates worse on arithmetic than the additive family |
+
+### `falcon2_attn` — Falcon-2 (per-column NLMS regression)
+
+| Attribute | Value |
+|---|---|
+| Paper | Zhang et al. (2026) — arXiv:2608.27763 |
+| Core Equation | S_t = S_{t-1}(I - lambda_t Diag(eta_t)) + x_t (eta_t r_t)^T (per-value-channel step sizes) |
+| Step Size | eta_{j,t} = beta_{j,t} / (\|x_t\|^2 + lambda_t + eps) |
+| Training Complexity | O(Ld²) chunk-parallel (batched per-channel triangular solves, Alg. 1) |
+| Inference Complexity | O(d²) constant memory |
+| Key Characteristics | The ridge loss decomposes across value coordinates — d_v independent scalar-step updates sharing the NLMS normalizer; defined-but-unbenchmarked in the paper |
+| Config Knobs | same shared `falcon.*` block; per-column plasticity gates |
+| Pros | Finer-grained plasticity than Falcon-1 |
+| Cons | Heavier chunk kernels (per-channel triangular systems); unbenchmarked |
+
+### `falcon3_attn` — Falcon-3 (sliding-window minibatch regression)
+
+| Attribute | Value |
+|---|---|
+| Paper | Zhang et al. (2026) — arXiv:2608.27763 |
+| Core Equation | S_t = (1 - eta_t*lambda_t) S_{t-1} + (eta_t/B_t) sum_{j in I_t} x_j (v_j - S_{t-1}^T x_j)^T (all residuals at the pre-update state) |
+| Step Size | eta_t = beta_t / (mu_t^(B) + lambda_t + eps), mu_t = lambda_max(X^T X)/B_t |
+| Training Complexity | O(N·C·B) chunk-parallel (rank-B block forward substitution, Alg. 3) |
+| Inference Complexity | O(d²) constant memory + O(B) FIFO tail |
+| Key Characteristics | Bounded rehearsal: each pair is replayed in B consecutive window-averaged updates (invariant to B); S_t alone is not Markov — exact continuation needs the last B-1 pairs |
+| Config Knobs | same shared `falcon.*` block + `falcon_window` (paper default 4) |
+| Pros | Controlled rehearsal horizon; exact window statistics |
+| Cons | Most complex chunk kernel; eigendecomposition per step in the recurrent scan |
+
+### `falcon1a_attn` — Falcon-1A (scalar inner-product / additive)
+
+| Attribute | Value |
+|---|---|
+| Paper | Zhang et al. (2026) — arXiv:2608.27763 |
+| Core Equation | S_t = gamma_t S_{t-1} + eta_t x_t v_t^T, gamma_t = 1 - min(eta_t lambda_t, 1 - eps_gamma) |
+| Step Size | eta_t = beta_t / (\|x_t\|^2 + lambda_t + eps) |
+| Training Complexity | O(Ld²) chunk-parallel (decay-mask linear attention, Fig. 7B) |
+| Inference Complexity | O(d²) constant memory |
+| Key Characteristics | One gradient step on the negative inner-product objective; with lambda = 0 and the unshifted assignment it is standard linear attention / Mamba-2 accumulation — the shifted stream makes it the next-latent variant |
+| Pros | Simple and stable; competitive LM quality (Falcon-1A.3) |
+| Cons | Purely additive write cannot erase stale associations |
+
+### `falcon2a_attn` — Falcon-2A (per-column inner-product)
+
+| Attribute | Value |
+|---|---|
+| Paper | Zhang et al. (2026) — arXiv:2608.27763 |
+| Core Equation | S_t = S_{t-1} Diag(gamma_t) + x_t (eta_t v_t)^T (per-channel decays) |
+| Step Size | eta_{j,t} = beta_{j,t} / (\|x_t\|^2 + lambda_t + eps) |
+| Training Complexity | O(Ld²) chunk-parallel (per-channel decay masks, Fig. 8B) |
+| Inference Complexity | O(d²) constant memory |
+| Key Characteristics | The per-column analogue of Falcon-1A; value channels carry independent decays |
+| Pros | Channel-wise forgetting granularity |
+| Cons | O(C²·d) chunk masks; unbenchmarked in the paper |
+
+### `falcon3a_attn` — Falcon-3A (sliding-window inner-product)
+
+| Attribute | Value |
+|---|---|
+| Paper | Zhang et al. (2026) — arXiv:2608.27763 |
+| Core Equation | S_t = gamma_t S_{t-1} + eta_t Nbar_t^(B), Nbar = (1/B_t) sum_{j in I_t} x_j v_j^T |
+| Step Size | eta_t = beta_t / (Ebar_t^(B) + lambda_t + eps), Ebar = window mean key energy |
+| Training Complexity | O(N·C) chunk-parallel (window-banded decay mask M = D·Diag(eta)·A over the extended slice, Alg. 4) |
+| Inference Complexity | O(d²) constant memory + O(B) FIFO tail |
+| Key Characteristics | Bounded-rehearsal additive update; the paper's best length extrapolation (Falcon-3A.3: 87.2% mean accuracy on 33-48-digit addition vs 65.8% for a RoPE Transformer) |
+| Config Knobs | same shared `falcon.*` block + `falcon_window` |
+| Pros | Best-in-family length extrapolation; carries arithmetic |
+| Cons | Window statistics add per-step overhead; worse perplexity than Falcon-1 |
+
 ## Latent Attention Mechanisms (10)
 
 ### `cca_attn` — Compressed Convolutional Attention
@@ -419,6 +522,12 @@ Previous state S_{t−1} → Gate(s) α_t, β_t, G_t, f_t → New key/value or S
 | `hgrn2_attn` | Gated | O(Ld²) | O(d²) memory | Yes | Hierarchical forget gates |
 | `fox_attn` | Gated | O(n²d) | O(n)/step | Yes | Forget gate in softmax logits |
 | `gated_softmax_attn` | Gated | O(n²d) | O(n)/step | Yes | Post-SDPA sigmoid gating |
+| `falcon1_attn` | Fast-weight | O(Ld²) | O(d²) memory | Yes | Prefix-aligned NLMS delta rule; best LM ppl of the family |
+| `falcon2_attn` | Fast-weight | O(Ld²) | O(d²) memory | Yes | Per-value-channel NLMS step sizes |
+| `falcon3_attn` | Fast-weight | O(Ld²B) | O(d²) + O(B) tail | Yes | Sliding-window minibatch rehearsal |
+| `falcon1a_attn` | Fast-weight | O(Ld²) | O(d²) memory | Yes | Shifted additive linear attention with ridge decay |
+| `falcon2a_attn` | Fast-weight | O(Ld²) | O(d²) memory | Yes | Per-channel additive decays |
+| `falcon3a_attn` | Fast-weight | O(Ld²) | O(d²) + O(B) tail | Yes | Windowed additive; best length extrapolation |
 | `cca_attn` | Latent | O(n²d/C) | O(n)/step | Yes | Latent-space attention, C× FLOP reduction |
 | `ccgqa_attn` | Latent | O(n²d/C₁) | O(n)/step | Yes | Decoupled latent compression + GQA head sharing |
 | `gma_attn` | Latent | O(nKd_r+nKd_v) | O(K)/step | Yes | Probabilistic Gaussian-mixture routing, linear-time for fixed K |
@@ -443,6 +552,7 @@ full list):
 | `cca_attn` | `compression_factor`, `cca_qk_mean`, `cca_value_shift`, `cca_learnable_temp`, `cca_conv_kernel_size`, `cca_conv_groups` |
 | `ccgqa_attn` | `query_compression`, `kv_compression`, `num_kv_heads`, CCA flags |
 | `ssog_attn` | `num_atoms`, `lookat`, `max_offset`, `cold_init`, `sigma_floor`, `grid_h`, `grid_w` |
+| `falcon{1,2,3,1a,2a,3a}_attn` | shared `falcon.*` block: `chunk_size`, `qk_norm`, `beta_mode`, `lambda_mode`, `beta`, `lambda`, `window`, `short_conv`, `conv_kernel`, `eps`, `eps_gamma` |
 
 ### Building a hybrid network
 

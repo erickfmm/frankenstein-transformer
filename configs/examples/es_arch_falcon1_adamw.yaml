@@ -1,0 +1,79 @@
+model_class: frankenstein
+model:
+  dims:
+    vocab_size: 50000
+    hidden_size: 512
+    num_layers: 10
+    num_loops: 1
+    num_heads: 8
+    num_kv_heads: 4
+    retention_heads: 8
+    layer_pattern:
+    - falcon1_attn
+  use_bitnet: false
+  norm:
+    type: layer_norm
+  embedding:
+    conv:
+      enabled: false
+  use_moe: false
+  ffn_hidden_size: 2048
+  ffn_activation: gelu
+  attention:
+    titan:
+      use_hope: false
+    falcon:
+      chunk_size: 64
+      qk_norm: rms_norm
+      beta_mode: ctx_eta
+      lambda_mode: ctx
+      short_conv: true
+training:
+  task: mlm
+  num_epochs: 4
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 512
+  mlm_probability: 0.15
+  max_samples: 6000000
+  dataset_batch_size: 15000
+  num_workers: 6
+  cache_dir: ./temp_data/v2_dataset_cache
+  local_parquet_dir: /home/erickfmm/.cache/huggingface/hub/datasets--erickfmm--red_pajama_es_hq_35/snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/train/
+  prefer_local_cache: true
+  stream_local_parquet: true
+  join_temp_data_context_window: 0
+  join_temp_data_min_remainder_tokens: 128
+  gradient_accumulation_steps: 8
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-6
+      adamw-lr_norms: 5e-6
+      adamw-lr_attention: 3e-6
+      adamw-lr_other: 2e-6
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_embeddings:
+      - 0.9
+      - 0.95
+      adamw-betas_norms:
+      - 0.9
+      - 0.95
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-eps_embeddings: 1e-8
+      adamw-eps_norms: 1e-8
+      adamw-eps_attention: 1e-8
+      adamw-eps_other: 1e-8
+  scheduler_total_steps: 9000
+  max_nan_retries: 4
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_es_arch_falcon1_adamw.csv
+  telemetry_log_interval: 5

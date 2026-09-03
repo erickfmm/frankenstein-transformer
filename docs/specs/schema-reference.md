@@ -89,6 +89,17 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 | `ssog_cold_init` | bool | No | — | `true` | Cold-start steering gates at ≈0 (SSOG) |
 | `ssog_sigma_floor` | number | No | ≥ 0 | 0.25 | Min atom width in grid cells (SSOG) |
 | `ssog_grid_h` / `ssog_grid_w` | int | No | ≥ 1 | image grid | Token grid raster (SSOG; `1×L` for sequences) |
+| `falcon_chunk_size` | int/null | No | ≥ 1 or `null` | 64 | Chunk size of the Falcon chunk-parallel kernels; `null` = recurrent scan |
+| `falcon_qk_norm` | enum | No | `rms_norm`, `l2_norm` | `rms_norm` | Falcon QK normalization (paper default: QK-RMSNorm in fp32) |
+| `falcon_beta_mode` | enum | No | `static`, `ctx_beta`, `ctx_eta` | `ctx_eta` | Plasticity gate parameterization (NLMS numerator) |
+| `falcon_lambda_mode` | enum | No | `static`, `ctx` | `ctx` | Forgetting (ridge) gate; `ctx` scale-couples with the detached curvature statistic |
+| `falcon_beta` | number | No | (0, 2) | 1.0 | Static NLMS gain (only when `beta_mode=static`) |
+| `falcon_lambda` | number | No | ≥ 0 | 0.0 | Static ridge (only when `lambda_mode=static`) |
+| `falcon_window` | int | No | ≥ 1 | 4 | Sliding window B (`falcon3_attn`/`falcon3a_attn` only) |
+| `falcon_short_conv` | bool | No | — | `true` | Causal depth-wise short convs on q/k/v projections |
+| `falcon_conv_kernel` | int | No | ≥ 1 | 4 | Short-conv kernel size |
+| `falcon_eps` | number | No | > 0 | 1e-6 | Step-size denominator stabilizer |
+| `falcon_eps_gamma` | number | No | (0, 1) | 1e-4 | Positive-decay clamp floor (`alpha ≤ 1 - eps_gamma`) |
 | `use_mhc` | bool | No | — | `false` | Enable the mHC n-stream residual (see [mHC](mhc.md)) |
 | `mhc_expansion_rate` | int | No | ≥ 1 | `4` | Stream expansion factor `n` |
 | `mhc_sinkhorn_iters` | int | No | ≥ 1 | `20` | Sinkhorn-Knopp normalisation rounds |
@@ -99,7 +110,7 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 
 ### Layer Pattern Valid Values
 
-`retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`, `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn`, `engram_attn`, `gqa_attn`, `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn`, `ssog_attn`, `msa_attn`, `sparda_attn`
+`retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`, `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn`, `engram_attn`, `gqa_attn`, `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn`, `ssog_attn`, `msa_attn`, `sparda_attn`, `falcon1_attn`, `falcon2_attn`, `falcon3_attn`, `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn`
 
 > **Eval-only:** `sparge_attn` and `fasa_attn` cannot be used during training.
 > **Encoder-only:** `ssog_attn` requires `mode: encoder` and a fixed

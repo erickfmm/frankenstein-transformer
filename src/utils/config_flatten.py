@@ -136,6 +136,19 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
         "grid_h": "ssog_grid_h",
         "grid_w": "ssog_grid_w",
     },
+    "falcon": {
+        "chunk_size": "falcon_chunk_size",
+        "qk_norm": "falcon_qk_norm",
+        "beta_mode": "falcon_beta_mode",
+        "lambda_mode": "falcon_lambda_mode",
+        "beta": "falcon_beta",
+        "lambda": "falcon_lambda",
+        "window": "falcon_window",
+        "short_conv": "falcon_short_conv",
+        "conv_kernel": "falcon_conv_kernel",
+        "eps": "falcon_eps",
+        "eps_gamma": "falcon_eps_gamma",
+    },
 }
 
 # Sub-mixers that should be skipped entirely (they are grouping containers

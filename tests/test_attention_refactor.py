@@ -159,6 +159,12 @@ class AttentionRefactorTests(unittest.TestCase):
             "gqa_attn",
             "gma_attn",
             "ssog_attn",
+            "falcon1_attn",
+            "falcon2_attn",
+            "falcon3_attn",
+            "falcon1a_attn",
+            "falcon2a_attn",
+            "falcon3a_attn",
         ]
         for layer_type in layer_types:
             config = self._build_config([layer_type])

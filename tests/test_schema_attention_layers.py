@@ -53,6 +53,12 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "ccgqa_attn",
             "gma_attn",
             "ssog_attn",
+            "falcon1_attn",
+            "falcon2_attn",
+            "falcon3_attn",
+            "falcon1a_attn",
+            "falcon2a_attn",
+            "falcon3a_attn",
         }
 
         self.assertTrue(expected.issubset(set(enum_values)))
@@ -105,6 +111,11 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "ssog": {
                 "num_atoms", "lookat", "max_offset", "cold_init",
                 "sigma_floor", "grid_h", "grid_w",
+            },
+            "falcon": {
+                "chunk_size", "qk_norm", "beta_mode", "lambda_mode",
+                "beta", "lambda", "window", "short_conv", "conv_kernel",
+                "eps", "eps_gamma",
             },
         }
 

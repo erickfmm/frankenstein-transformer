@@ -217,6 +217,12 @@ properties:
       | `msa_attn` | MiniMax Sparse Attention — block-sparse on GQA (arXiv:2606.13392) | ✅ | ✅ |
       | `sparda_attn` | SparDA — decoupled sparse attention with a Forecast projection (arXiv:2606.04511) | ✅ | ✅ |
       | `kda_attn` | Kimi Delta Attention — channel-wise decay + scalar write gate (arXiv:2510.26692) | ✅ | ✅ |
+      | `falcon1_attn` | Falcon-1 — scalar NLMS regression (delta-rule) fast-weight update, read-after-write prefix-aligned (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon2_attn` | Falcon-2 — per-column NLMS regression fast-weight update (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon3_attn` | Falcon-3 — sliding-window minibatch regression fast-weight update (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon1a_attn` | Falcon-1A — scalar inner-product (additive) fast-weight update (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon2a_attn` | Falcon-2A — per-column inner-product fast-weight update (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon3a_attn` | Falcon-3A — sliding-window inner-product fast-weight update, best length extrapolation (arXiv:2608.27763) | ✅ | ✅ |
       | `mla_attn` | Multi-Head Latent Attention + RoPE (arXiv:2506.09342) | ✅ | ✅ |
       | `gqla_attn` | Group-Query Latent Attention — two decoding paths (arXiv:2605.15250) | ✅ | ✅ |
       | `mlra_attn` | Multi-Head Low-Rank Attention — partitionable latent (arXiv:2603.02188) | ✅ | ✅ |
@@ -264,6 +270,12 @@ properties:
       | `msa_attn` | MiniMax Sparse Attention — bloques dispersos sobre GQA (arXiv:2606.13392) | ✅ | ✅ |
       | `sparda_attn` | SparDA — atención dispersa desacoplada con proyección Forecast (arXiv:2606.04511) | ✅ | ✅ |
       | `kda_attn` | Kimi Delta Attention — decaimiento canalizado + compuerta escalar (arXiv:2510.26692) | ✅ | ✅ |
+      | `falcon1_attn` | Falcon-1 — actualización fast-weight de regresión NLMS escalar (regla delta), alineada al prefijo read-after-write (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon2_attn` | Falcon-2 — actualización fast-weight de regresión NLMS por columna (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon3_attn` | Falcon-3 — actualización fast-weight de regresión por mini-lote de ventana deslizante (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon1a_attn` | Falcon-1A — actualización fast-weight de producto interno escalar (aditiva) (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon2a_attn` | Falcon-2A — actualización fast-weight de producto interno por columna (arXiv:2608.27763) | ✅ | ✅ |
+      | `falcon3a_attn` | Falcon-3A — actualización fast-weight de producto interno con ventana deslizante, mejor extrapolación de longitud (arXiv:2608.27763) | ✅ | ✅ |
       | `mla_attn` | Multi-Head Latent Attention + RoPE (arXiv:2506.09342) | ✅ | ✅ |
       | `gqla_attn` | Group-Query Latent Attention — dos rutas de decodificación (arXiv:2605.15250) | ✅ | ✅ |
       | `mlra_attn` | Multi-Head Low-Rank Attention — latente particionable (arXiv:2603.02188) | ✅ | ✅ |
@@ -321,6 +333,12 @@ properties:
         - msa_attn
         - sparda_attn
         - kda_attn
+        - falcon1_attn
+        - falcon2_attn
+        - falcon3_attn
+        - falcon1a_attn
+        - falcon2a_attn
+        - falcon3a_attn
     examples:
       - [retnet, titan_attn, retnet, mamba, titan_attn, ode]
       - [standard_attn]

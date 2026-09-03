@@ -1,0 +1,251 @@
+type: object
+additionalProperties: false
+properties:
+  falcon:
+    type: object
+    additionalProperties: false
+    title: "Falcon Fast-Weight Attention"
+    title_es: "Atención Fast-Weight Falcon"
+    description: |-
+      Shared configuration of the Falcon fast-weight attention family
+      (arXiv:2608.27763, "Fast Weight Attention for Continual Learning",
+      Zhang et al. 2026). The six mixers `falcon1_attn`, `falcon2_attn`,
+      `falcon3_attn` (squared-error regression family) and
+      `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn` (negative
+      inner-product / additive family) treat the recurrent fast-weight
+      state transition as an online continual-learning rule under
+      read-after-write autoregressive semantics: the local fast-memory
+      example revealed at step `t` is the prefix-aligned pair
+      `(x_t, y_t) = (phi(k_{t-1}), v_t)`. Knobs are shared by all six
+      variants; `window` only applies to `falcon3_attn`/`falcon3a_attn`.
+
+      **Examples explained:**
+      - `beta_mode=ctx_eta, lambda_mode=ctx, qk_norm=rms_norm`: the
+        paper's Falcon-*.3 configuration (QK-RMSNorm + ctx_eta +
+        ctx_lambda). Best language-model perplexity (Falcon-1.3) and
+        best length extrapolation (Falcon-3A.3).
+      - `chunk_size=null`: force the recurrent reference scan instead of
+        the SSD-style chunk-parallel kernels.
+      - `beta_mode=static, beta=1.0, lambda_mode=static, lambda=0.0`:
+        classical NLMS delta rule with orthogonal projection along the
+        write direction.
+    description_es: |-
+      Configuración compartida de la familia de atención fast-weight
+      Falcon (arXiv:2608.27763, "Fast Weight Attention for Continual
+      Learning", Zhang et al. 2026). Los seis mixers `falcon1_attn`,
+      `falcon2_attn`, `falcon3_attn` (familia de regresión de error
+      cuadrático) y `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn`
+      (familia de producto interno negativo / aditiva) tratan la
+      transición del estado fast-weight recurrente como una regla de
+      aprendizaje continuo en línea bajo semántica autorregresiva
+      read-after-write: el ejemplo local revelado en el paso `t` es el
+      par alineado al prefijo `(x_t, y_t) = (phi(k_{t-1}), v_t)`. Los
+      parámetros son compartidos por las seis variantes; `window` solo
+      aplica a `falcon3_attn`/`falcon3a_attn`.
+
+      **Ejemplos explicados:**
+      - `beta_mode=ctx_eta, lambda_mode=ctx, qk_norm=rms_norm`: la
+        configuración Falcon-*.3 del paper (QK-RMSNorm + ctx_eta +
+        ctx_lambda). Mejor perplexity de LM (Falcon-1.3) y mejor
+        extrapolación de longitud (Falcon-3A.3).
+      - `chunk_size=null`: fuerza el escaneo recurrente de referencia en
+        lugar de los kernels chunk-parallel estilo SSD.
+      - `beta_mode=static, beta=1.0, lambda_mode=static, lambda=0.0`:
+        regla delta NLMS clásica con proyección ortogonal en la
+        dirección de escritura.
+    properties:
+      chunk_size:
+        type: [integer, "null"]
+        title: "Falcon Chunk Size"
+        title_es: "Tamaño de Chunk Falcon"
+        description: |-
+          Chunk size of the SSD-style chunk-parallel kernels (WY
+          triangular solves for the regression family, decay-mask
+          linear attention for the additive family, window-banded masks
+          and rank-B block substitution for the sliding variants).
+          `null` forces the recurrent reference scan (O(N) per-step
+          loop). Typical: 64 or 128. Default: 64.
+        description_es: |-
+          Tamaño de chunk de los kernels chunk-parallel estilo SSD
+          (resoluciones triangulares WY para la familia de regresión,
+          atención lineal con máscara de decaimiento para la familia
+          aditiva, máscaras de banda de ventana y sustitución por
+          bloques de rango B para las variantes deslizantes).
+          `null` fuerza el escaneo recurrente de referencia (bucle
+          O(N) por paso). Típico: 64 o 128. Por defecto: 64.
+        examples: [64, 128]
+      qk_norm:
+        type: string
+        title: "Falcon QK Norm"
+        title_es: "Norm QK Falcon"
+        description: |-
+          Query/key normalization. `rms_norm` (paper default,
+          QK-RMSNorm computed in fp32) keeps `||x_t||^2 ~= d`, which
+          stabilizes the NLMS denominator in mixed precision;
+          `l2_norm` is the DeltaNet-style QK-l2-norm ablation
+          (`||x_t|| = 1`). Default: rms_norm.
+        description_es: |-
+          Normalización de query/key. `rms_norm` (por defecto del
+          paper, QK-RMSNorm calculada en fp32) mantiene `||x_t||^2 ~=
+          d`, lo que estabiliza el denominador NLMS en precisión
+          mixta; `l2_norm` es la ablaación estilo DeltaNet
+          (`||x_t|| = 1`). Por defecto: rms_norm.
+        enum: [rms_norm, l2_norm]
+        examples: [rms_norm]
+      beta_mode:
+        type: string
+        title: "Falcon Beta Mode"
+        title_es: "Modo Beta Falcon"
+        description: |-
+          Plasticity (step-size numerator) gate parameterization.
+          `static` uses the fixed scalar `beta`; `ctx_beta` emits the
+          bounded gain `beta_t = 2*sigmoid(proj)` in the descent-safe
+          interval (0, 2); `ctx_eta` emits an unbounded `softplus`
+          numerator directly (allows the sign-flip regime beta > 2,
+          useful for state tracking). The paper's best configs use
+          ctx_eta. Default: ctx_eta.
+        description_es: |-
+          Parametrización de la compuerta de plasticidad (numerador del
+          tamaño de paso). `static` usa el escalar fijo `beta`;
+          `ctx_beta` emite la ganancia acotada `beta_t = 2*sigmoid(proj)`
+          en el intervalo seguro de descenso (0, 2); `ctx_eta` emite un
+          numerador `softplus` sin cota directamente (permite el régimen
+          de inversión de signo beta > 2, útil para state tracking). Las
+          mejores configuraciones del paper usan ctx_eta. Por defecto:
+          ctx_eta.
+        enum: [static, ctx_beta, ctx_eta]
+        examples: [ctx_eta]
+      lambda_mode:
+        type: string
+        title: "Falcon Lambda Mode"
+        title_es: "Modo Lambda Falcon"
+        description: |-
+          Forgetting (ridge) gate parameterization. `static` uses the
+          fixed scalar `lambda` (must be >= 0); `ctx` emits a per-head
+          base ridge `lam_bar = softplus(proj)` that is scale-coupled
+          with the detached objective statistic (`lambda_t = lam_bar_t *
+          statistic_t`, Sec. 4.1 of the paper). The paper's best configs
+          use ctx. Default: ctx.
+        description_es: |-
+          Parametrización de la compuerta de olvido (ridge). `static`
+          usa el escalar fijo `lambda` (debe ser >= 0); `ctx` emite un
+          ridge base por cabeza `lam_bar = softplus(proj)` acoplado en
+          escala con la estadística objetivo separada del grafo
+          (`lambda_t = lam_bar_t * statistic_t`, Sec. 4.1 del paper).
+          Las mejores configuraciones del paper usan ctx. Por defecto:
+          ctx.
+        enum: [static, ctx]
+        examples: [ctx]
+      beta:
+        type: number
+        title: "Falcon Beta (static)"
+        title_es: "Beta Falcon (estático)"
+        description: |-
+          Static dimensionless NLMS gain used when `beta_mode=static`.
+          Must be in (0, 2); beta = 1 is an orthogonal projection along
+          the write direction. Ignored otherwise. Default: 1.0.
+        description_es: |-
+          Ganancia NLMS adimensional estática usada cuando
+          `beta_mode=static`. Debe estar en (0, 2); beta = 1 es una
+          proyección ortogonal en la dirección de escritura. Se ignora
+          en otro caso. Por defecto: 1.0.
+        exclusiveMinimum: 0
+        exclusiveMaximum: 2
+        examples: [1.0]
+      lambda:
+        type: number
+        title: "Falcon Lambda (static)"
+        title_es: "Lambda Falcon (estático)"
+        description: |-
+          Static ridge coefficient used when `lambda_mode=static`.
+          Must be >= 0; lambda = 0 is the purely additive ablation (no
+          forgetting). Ignored otherwise. Default: 0.0.
+        description_es: |-
+          Coeficiente ridge estático usado cuando `lambda_mode=static`.
+          Debe ser >= 0; lambda = 0 es la ablaación puramente aditiva
+          (sin olvido). Se ignora en otro caso. Por defecto: 0.0.
+        minimum: 0
+        examples: [0.0]
+      window:
+        type: integer
+        title: "Falcon Sliding Window B"
+        title_es: "Ventana Deslizante B Falcon"
+        description: |-
+          Sliding-window size B of the bounded-rehearsal variants
+          `falcon3_attn` / `falcon3a_attn`: each prefix-aligned pair is
+          replayed in B consecutive window-averaged updates
+          (window-averaging keeps the update magnitude invariant to B).
+          Ignored by the non-windowed variants. Paper default: 4.
+        description_es: |-
+          Tamaño de ventana deslizante B de las variantes de ensayo
+          acotado `falcon3_attn` / `falcon3a_attn`: cada par alineado al
+          prefijo se repite en B actualizaciones promediadas por
+          ventana consecutivas (el promediado mantiene la magnitud de
+          actualización invariante a B). Ignorada por las variantes no
+          deslizantes. Por defecto del paper: 4.
+        minimum: 1
+        examples: [4]
+      short_conv:
+        type: boolean
+        title: "Falcon Short Conv"
+        title_es: "Convolución Corta Falcon"
+        description: |-
+          Apply lightweight causal depth-wise short convolutions
+          (H3/SLConv-style) on the q/k/v projections. The paper notes
+          this component is orthogonal to the fast-memory update; it is
+          on by default and can be disabled for ablation. Default: true.
+        description_es: |-
+          Aplica convoluciones cortas causales depth-wise ligeras
+          (estilo H3/SLConv) sobre las proyecciones q/k/v. El paper
+          señala que este componente es ortogonal a la actualización de
+          la memoria rápida; está activado por defecto y puede
+          deshabilitarse para ablación. Por defecto: true.
+        examples: [true]
+      conv_kernel:
+        type: integer
+        title: "Falcon Conv Kernel"
+        title_es: "Kernel Conv Falcon"
+        description: |-
+          Kernel size of the Falcon short convolutions. Only applies
+          when `short_conv=true`. Default: 4.
+        description_es: |-
+          Tamaño de kernel de las convoluciones cortas Falcon. Solo
+          aplica cuando `short_conv=true`. Por defecto: 4.
+        minimum: 1
+        examples: [4]
+      eps:
+        type: number
+        title: "Falcon Epsilon"
+        title_es: "Épsilon Falcon"
+        description: |-
+          Numerical stabilizer in the normalized step-size denominator
+          `eta_t = beta_t / (statistic_t + lambda_t + eps)`. Any eps > 0
+          only decreases eta_t and therefore preserves descent. Must be
+          > 0. Default: 1e-6.
+        description_es: |-
+          Estabilizador numérico en el denominador del tamaño de paso
+          normalizado `eta_t = beta_t / (statistic_t + lambda_t + eps)`.
+          Cualquier eps > 0 solo disminuye eta_t y por lo tanto
+          preserva el descenso. Debe ser > 0. Por defecto: 1e-6.
+        exclusiveMinimum: 0
+        examples: [1.0e-6]
+      eps_gamma:
+        type: number
+        title: "Falcon Decay Floor"
+        title_es: "Piso de Decaimiento Falcon"
+        description: |-
+          Positive-decay clamp floor: the per-step shrinkage obeys
+          `alpha_t = min(eta_t * lambda_t, 1 - eps_gamma)` so the carry
+          `gamma_t = 1 - alpha_t >= eps_gamma` stays strictly positive
+          (the numerically stable positive-decay renormalization of
+          Sec. 4.4). Must be in (0, 1). Default: 1e-4.
+        description_es: |-
+          Piso del recorte de decaimiento positivo: la contracción por
+          paso obedece `alpha_t = min(eta_t * lambda_t, 1 - eps_gamma)`
+          de modo que el arrastre `gamma_t = 1 - alpha_t >= eps_gamma`
+          permanece estrictamente positivo (la renormalización de
+          decaimiento positivo numéricamente estable de la Sec. 4.4).
+          Debe estar en (0, 1). Por defecto: 1e-4.
+        exclusiveMinimum: 0
+        exclusiveMaximum: 1
+        examples: [1.0e-4]

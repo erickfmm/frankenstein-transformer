@@ -313,3 +313,9 @@ properties:
           hgrn2_attn: { type: boolean, default: false }
           fox_attn: { type: boolean, default: false }
           kda_attn: { type: boolean, default: false }
+          falcon1_attn: { type: boolean, default: false }
+          falcon2_attn: { type: boolean, default: false }
+          falcon3_attn: { type: boolean, default: false }
+          falcon1a_attn: { type: boolean, default: false }
+          falcon2a_attn: { type: boolean, default: false }
+          falcon3a_attn: { type: boolean, default: false }

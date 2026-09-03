@@ -116,6 +116,8 @@ class FrankensteinModelConfig:
             ``"gated_deltanet2_attn"``,
             ``"hgrn2_attn"``, ``"fox_attn"``, ``"gated_softmax_attn"``,
             ``"kda_attn"``,
+            ``"falcon1_attn"``, ``"falcon2_attn"``, ``"falcon3_attn"``,
+            ``"falcon1a_attn"``, ``"falcon2a_attn"``, ``"falcon3a_attn"``,
             ``"engram_attn"``, ``"gqa_attn"``,
             ``"mla_attn"``, ``"gqla_attn"``, ``"mlra_attn"``,
             ``"tucker_attn"``, ``"iha_attn"``, ``"gta_attn"``,
@@ -323,6 +325,46 @@ class FrankensteinModelConfig:
         kda_attn_use_pe: Whether ``kda_attn`` layers consume the
             model-wide positional encoding. Disabled by default because
             KDA is a gated linear attention mixer. Default: False.
+        falcon{1,2,3,1a,2a,3a}_attn_use_pe: Whether the corresponding
+            Falcon fast-weight attention layer consumes the model-wide
+            positional encoding. Disabled by default because the Falcon
+            family is a recurrent fast-weight mixer whose one-step-shifted
+            write stream already encodes relative order.
+            Default: False.
+        falcon_chunk_size: Chunk size of the SSD-style chunk-parallel
+            kernels for all Falcon mixers. ``None`` forces the recurrent
+            reference scan. Default: 64.
+        falcon_qk_norm: Query/key normalization: ``"rms_norm"`` (paper
+            default, QK-RMSNorm computed in fp32) or ``"l2_norm"``
+            (DeltaNet-style ablation). Default: ``"rms_norm"``.
+        falcon_beta_mode: Plasticity (step-size numerator) gate
+            parameterization: ``"static"`` (fixed ``falcon_beta``),
+            ``"ctx_beta"`` (bounded gain ``beta = 2*sigmoid(proj)`` in
+            the descent-safe interval (0, 2)) or ``"ctx_eta"``
+            (unbounded ``softplus`` numerator, allows the sign-flip
+            regime; paper default). Default: ``"ctx_eta"``.
+        falcon_lambda_mode: Forgetting (ridge) gate: ``"static"``
+            (fixed ``falcon_lambda``) or ``"ctx"`` (per-head base ridge
+            ``lam_bar = softplus(proj)``, scale-coupled with the
+            detached curvature statistic). Default: ``"ctx"``.
+        falcon_beta: Static NLMS gain used when ``falcon_beta_mode =
+            "static"``. Must be in (0, 2). Default: 1.0.
+        falcon_lambda: Static ridge used when ``falcon_lambda_mode =
+            "static"``. Must be >= 0. Default: 0.0.
+        falcon_window: Sliding window ``B`` for ``falcon3_attn`` /
+            ``falcon3a_attn`` (bounded rehearsal). Must be >= 1.
+            Default: 4.
+        falcon_short_conv: If True, apply causal depth-wise short
+            convolutions (kernel ``falcon_conv_kernel``) on the q/k/v
+            projections (paper default). Default: True.
+        falcon_conv_kernel: Kernel size of the Falcon short convs.
+            Default: 4.
+        falcon_eps: Numerical stabilizer in the normalized step-size
+            denominator. Must be > 0. Default: 1e-6.
+        falcon_eps_gamma: Positive-decay clamp floor: the per-step
+            shrinkage obeys ``alpha = min(eta*lambda, 1 - eps_gamma)``
+            so the carry stays >= eps_gamma. Must be in (0, 1).
+            Default: 1e-4.
         use_moe: If True, replace the dense FFN with a Mixture-of-Experts
             FFN block. Default: True.
         use_mixture_of_depths: If True, apply per-layer token routing where
@@ -480,6 +522,12 @@ class FrankensteinModelConfig:
     hgrn2_attn_use_pe: bool = False
     fox_attn_use_pe: bool = False
     kda_attn_use_pe: bool = False
+    falcon1_attn_use_pe: bool = False
+    falcon2_attn_use_pe: bool = False
+    falcon3_attn_use_pe: bool = False
+    falcon1a_attn_use_pe: bool = False
+    falcon2a_attn_use_pe: bool = False
+    falcon3a_attn_use_pe: bool = False
 
     use_moe: bool = True
     use_mixture_of_depths: bool = False
@@ -624,6 +672,38 @@ class FrankensteinModelConfig:
     ccgqa_conv_kernel_ch: int = 3
     ccgqa_qk_mean: bool = True
     ccgqa_value_shift: bool = True
+
+    # ---- Falcon: Fast Weight Attention for Continual Learning
+    # (arXiv:2608.27763) ----
+    # Shared knobs of the six falcon{1,2,3,1a,2a,3a}_attn mixers: read-
+    # after-write prefix-aligned fast-weight updates with normalized
+    # first-order step sizes and positive-decay renormalization.
+    # ``None`` chunk_size forces the recurrent reference scan.
+    falcon_chunk_size: Optional[int] = 64
+    # QK normalization: "rms_norm" (paper default, QK-RMSNorm) or
+    # "l2_norm" (DeltaNet-style QK-l2-norm ablation).
+    falcon_qk_norm: str = "rms_norm"
+    # Plasticity gate: "static" (fixed falcon_beta), "ctx_beta"
+    # (bounded gain beta = 2*sigmoid(proj) in (0, 2)) or "ctx_eta"
+    # (unbounded softplus numerator; paper default).
+    falcon_beta_mode: str = "ctx_eta"
+    # Forgetting gate: "static" (fixed falcon_lambda ridge) or "ctx"
+    # (per-head base ridge lam_bar = softplus(proj), scale-coupled with
+    # the detached curvature statistic; paper default).
+    falcon_lambda_mode: str = "ctx"
+    falcon_beta: float = 1.0
+    falcon_lambda: float = 0.0
+    # Sliding window B for falcon3_attn / falcon3a_attn (paper: 4).
+    falcon_window: int = 4
+    # Causal depth-wise short convolutions on the attention projections
+    # (paper default: enabled; H3/SLConv-style inductive bias, orthogonal
+    # to the fast-memory update).
+    falcon_short_conv: bool = True
+    falcon_conv_kernel: int = 4
+    # Numerical stabilizers: eps in the NLMS denominator; eps_gamma is
+    # the positive-decay clamp floor (alpha <= 1 - eps_gamma).
+    falcon_eps: float = 1e-6
+    falcon_eps_gamma: float = 1e-4
 
     # ---- MSA / MiniMax Sparse Attention (arXiv:2606.13392) ----
     msa_block_size: int = 128
@@ -882,6 +962,40 @@ class FrankensteinModelConfig:
                 "attnres_mhc_stream_mode must be 'independent' or 'joint', "
                 f"got {self.attnres_mhc_stream_mode!r}"
             )
+
+        # ---- Validate Falcon (arXiv:2608.27763) ----
+        if self.falcon_chunk_size is not None and int(self.falcon_chunk_size) < 1:
+            raise ValueError("falcon_chunk_size must be >= 1 or null")
+        self.falcon_qk_norm = str(self.falcon_qk_norm).lower()
+        if self.falcon_qk_norm not in {"rms_norm", "l2_norm"}:
+            raise ValueError(
+                f"falcon_qk_norm must be 'rms_norm' or 'l2_norm', "
+                f"got {self.falcon_qk_norm!r}"
+            )
+        self.falcon_beta_mode = str(self.falcon_beta_mode).lower()
+        if self.falcon_beta_mode not in {"static", "ctx_beta", "ctx_eta"}:
+            raise ValueError(
+                f"falcon_beta_mode must be 'static', 'ctx_beta' or 'ctx_eta', "
+                f"got {self.falcon_beta_mode!r}"
+            )
+        self.falcon_lambda_mode = str(self.falcon_lambda_mode).lower()
+        if self.falcon_lambda_mode not in {"static", "ctx"}:
+            raise ValueError(
+                f"falcon_lambda_mode must be 'static' or 'ctx', "
+                f"got {self.falcon_lambda_mode!r}"
+            )
+        if not 0.0 < float(self.falcon_beta) < 2.0:
+            raise ValueError("falcon_beta must be in (0, 2)")
+        if float(self.falcon_lambda) < 0.0:
+            raise ValueError("falcon_lambda must be >= 0")
+        if int(self.falcon_window) < 1:
+            raise ValueError("falcon_window must be >= 1")
+        if int(self.falcon_conv_kernel) < 1:
+            raise ValueError("falcon_conv_kernel must be >= 1")
+        if float(self.falcon_eps) <= 0.0:
+            raise ValueError("falcon_eps must be > 0")
+        if not 0.0 < float(self.falcon_eps_gamma) < 1.0:
+            raise ValueError("falcon_eps_gamma must be in (0, 1)")
 
         # ---- Validate FFN activation ----
         ffn_act = str(self.ffn_activation).lower()

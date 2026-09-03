@@ -83,6 +83,8 @@ properties:
         $ref: "_model/_attention_gma.yaml#/properties/gma"
       ssog:
         $ref: "_model/_attention_ssog.yaml#/properties/ssog"
+      falcon:
+        $ref: "_model/_attention_falcon.yaml#/properties/falcon"
   mhc:
     $ref: "_model/_mhc.yaml"
   residuals:

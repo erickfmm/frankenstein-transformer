@@ -1,4 +1,12 @@
 from .deltanet_attn import DeltaNetAttention
+from .falcon_attn import (
+    Falcon1Attention,
+    Falcon1AAttention,
+    Falcon2Attention,
+    Falcon2AAttention,
+    Falcon3Attention,
+    Falcon3AAttention,
+)
 from .fox_attn import ForgettingAttention
 from .gated_deltanet2_attn import GatedDeltaNet2Attention
 from .gated_deltanet_attn import GatedDeltaNetAttention
@@ -18,4 +26,10 @@ __all__ = [
     "ForgettingAttention",
     "GatedSoftmaxAttention",
     "KDAAttention",
+    "Falcon1Attention",
+    "Falcon2Attention",
+    "Falcon3Attention",
+    "Falcon1AAttention",
+    "Falcon2AAttention",
+    "Falcon3AAttention",
 ]
