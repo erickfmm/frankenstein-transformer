@@ -6,7 +6,7 @@ Esta carpeta contiene un harness independiente que entrena modelos **reales pero
 
 ## Qué prueba
 
-- **Atenciones de a pares**: `itertools.combinations(ATTENTIONS, 2)` (~595 modelos de 2 capas). Incluye `gma_attn` (Gaussian Mixture Attention) y `ssog_attn` (SSOG — a las configs NLP con `ssog_attn` se les inyecta automáticamente una rejilla `1×max_length`). `fasa_attn` y `sparge_attn` se omiten (solo evaluación).
+- **Atenciones de a pares**: `itertools.combinations(ATTENTIONS, 2)` (~820 modelos de 2 capas). Incluye `gma_attn` (Gaussian Mixture Attention) y `ssog_attn` (SSOG — a las configs NLP con `ssog_attn` se les inyecta automáticamente una rejilla `1×max_length`) y la familia Falcon de fast-weight attention (`falcon1_attn`, `falcon2_attn`, `falcon3_attn`, `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn`). `fasa_attn` y `sparge_attn` se omiten (solo evaluación).
 - **Cada atención sola**: una capa con cada mezclador entrenable.
 - **Todos los optimizadores** del schema (`src/schema/_optimizer.yaml`).
 - **Todas las normas** (`layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`).

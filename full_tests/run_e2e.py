@@ -68,6 +68,8 @@ ATTENTIONS = [
     "engram_attn", "gqa_attn", "mla_attn", "gqla_attn", "mlra_attn",
     "tucker_attn", "iha_attn", "gta_attn", "mtla_attn", "cca_attn", "ccgqa_attn",
     "msa_attn", "sparda_attn", "kda_attn", "gma_attn", "ssog_attn",
+    "falcon1_attn", "falcon2_attn", "falcon3_attn", "falcon1a_attn",
+    "falcon2a_attn", "falcon3a_attn",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).
@@ -99,16 +101,16 @@ NORMS = ["layer_norm", "dynamic_tanh", "derf", "rms_norm", "prms_norm", "flash_n
 # Config builders
 # ---------------------------------------------------------------------------
 def _deep_update(base: dict, updates: dict) -> dict:
-    """Return a new dict merging ``updates`` into ``base`` recursively."""
-    out = {}
-    for key in base:
-        if key in updates and isinstance(base[key], dict) and isinstance(updates[key], dict):
-            out[key] = _deep_update(base[key], updates[key])
+    """Return a new dict merging ``updates`` into ``base`` recursively.
+
+    Scalar/list values in ``updates`` win over ``base``; nested dicts merge.
+    """
+    out = dict(base)
+    for key, value in updates.items():
+        if key in out and isinstance(out[key], dict) and isinstance(value, dict):
+            out[key] = _deep_update(out[key], value)
         else:
-            out[key] = base[key]
-    for key in updates:
-        if key not in base:
-            out[key] = updates[key]
+            out[key] = value
     return out
 
 
