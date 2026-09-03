@@ -4,7 +4,7 @@
 \subsection{Familias de Atención y Mezcladores de Secuencias}
 \label{sec:attention-families}
 
-Este sistema implementa treinta y seis variantes de mezcladores de secuencia organizadas en seis categorías funcionales que reflejan las tendencias de investigación en el diseño de modelado de secuencias. La organización taxonómica refleja la comprensión evolutiva de cómo equilibrar expresividad, eficiencia computacional y restricciones de memoria.
+Este sistema implementa cuarenta y dos variantes de mezcladores de secuencia organizadas en siete categorías funcionales que reflejan las tendencias de investigación en el diseño de modelado de secuencias. La organización taxonómica refleja la comprensión evolutiva de cómo equilibrar expresividad, eficiencia computacional y restricciones de memoria.
 
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Líneas Base de Atención Densas} (3): La atención softmax estándar, la atención sigmoide y la Atención por Consultas Agrupadas (GQA) proporcionan contextualización global completa a costo computacional cuadrático, sirviendo como líneas base de referencia para comparación con alternativas más eficientes.
@@ -13,6 +13,7 @@ Este sistema implementa treinta y seis variantes de mezcladores de secuencia org
     \item \textbf{Mecanismos de Memoria con Compuerta} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax y KDA introducen control dependiente de datos sobre la retención de memoria, el olvido y la fuerza de actualización.
     \item \textbf{Compresión Latente y de Rango Bajo} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA y GMA comprimen las representaciones clave--valor en cuellos de botella latentes de rango bajo (o, para GMA, enrutan a través de una memoria latente de mezcla Gaussiana aprendida), intercambiando un pequeño error de reconstrucción por ahorros sustanciales de memoria y cómputo.
     \item \textbf{Memoria Condicional} (1): Engram proporciona memoria en tiempo de prueba mediante operaciones de lectura/escritura aprendidas sobre un banco de memoria externo.
+    \item \textbf{Atención de Peso Rápido} (6): Falcon-1, Falcon-2, Falcon-3, Falcon-1A, Falcon-2A y Falcon-3A \citep{zhang_falcon_2026} tratan la transición recurrente del estado de peso rápido como una regla de aprendizaje continuo en línea bajo semántica de lectura tras escritura, con tamaños de paso normalizados, olvido por ridge explícito y repetición opcional con ventana deslizante acotada.
 \end{enumerate}
 
 \begin{figure}[t]
@@ -23,7 +24,7 @@ Este sistema implementa treinta y seis variantes de mezcladores de secuencia org
     box/.append style={inner sep=3pt, minimum height=0.48cm}
 ]
 % Root
-\node[box, fill=blue!15, minimum width=4.0cm] (root) {\textbf{Registro de Mezcladores de Secuencia (35+ variantes)}};
+\node[box, fill=blue!15, minimum width=4.0cm] (root) {\textbf{Registro de Mezcladores de Secuencia (42 variantes)}};
 
 % Category headers — 6 columns
 \node[box, fill=red!10, below left=1.0cm and 7.5cm of root, minimum width=2.0cm] (dense) {\textbf{Densas (3)}};
@@ -32,6 +33,7 @@ Este sistema implementa treinta y seis variantes de mezcladores de secuencia org
 \node[box, fill=purple!12, below right=1.0cm and 1.5cm of root, minimum width=2.0cm] (gated) {\textbf{Con Compuerta (8)}};
 \node[box, fill=cyan!12, below right=1.0cm and 4.5cm of root, minimum width=2.0cm] (latent) {\textbf{Latentes (10)}};
 \node[box, fill=orange!12, below right=1.0cm and 7.5cm of root, minimum width=2.0cm] (memory) {\textbf{Memoria (1)}};
+\node[box, fill=violet!12, below right=1.0cm and 10.5cm of root, minimum width=2.0cm] (fweight) {\textbf{Peso Rápido (6)}};
 
 % Dense column (3)
 \node[box, fill=red!5, below=of dense] (d1) {\texttt{standard\_attn}};
@@ -80,6 +82,14 @@ Este sistema implementa treinta y seis variantes de mezcladores de secuencia org
 % Memory column (1)
 \node[box, fill=orange!6, below=of memory] (m1) {\texttt{engram\_attn}};
 
+% Fast-weight column (6)
+\node[box, fill=violet!6, below=of fweight] (f1) {\texttt{falcon1\_attn}};
+\node[box, fill=violet!6, below=of f1] (f2) {\texttt{falcon2\_attn}};
+\node[box, fill=violet!6, below=of f2] (f3) {\texttt{falcon3\_attn}};
+\node[box, fill=violet!6, below=of f3] (f4) {\texttt{falcon1a\_attn}};
+\node[box, fill=violet!6, below=of f4] (f5) {\texttt{falcon2a\_attn}};
+\node[box, fill=violet!6, below=of f5] (f6) {\texttt{falcon3a\_attn}};
+
 % Root-to-category links
 \draw[line] (root) -- (dense);
 \draw[line] (root) -- (recur);
@@ -87,6 +97,7 @@ Este sistema implementa treinta y seis variantes de mezcladores de secuencia org
 \draw[line] (root) -- (gated);
 \draw[line] (root) -- (latent);
 \draw[line] (root) -- (memory);
+\draw[line] (root) -- (fweight);
 
 % Category-to-list links — Dense
 \draw[line] (dense) -- (d1);
@@ -134,8 +145,16 @@ Este sistema implementa treinta y seis variantes de mezcladores de secuencia org
 
 % Category-to-list links — Memory
 \draw[line] (memory) -- (m1);
+
+% Category-to-list links — Fast-weight
+\draw[line] (fweight) -- (f1);
+\draw[line] (f1) -- (f2);
+\draw[line] (f2) -- (f3);
+\draw[line] (f3) -- (f4);
+\draw[line] (f4) -- (f5);
+\draw[line] (f5) -- (f6);
 \end{tikzpicture}}
-\caption{Taxonomía completa de treinta y seis variantes de mezcladores de secuencia en seis categorías funcionales. Las líneas base densas proporcionan enrutamiento global completo a costo cuadrático. Las arquitecturas recurrentes permiten inferencia en tiempo constante mediante compresión de estado. Las variantes dispersas reducen la complejidad mediante patrones estructurados o selección de tokens. Los mecanismos con compuerta introducen control dependiente de datos sobre la retención y el olvido de memoria. Los métodos latentes comprimen representaciones clave--valor en cuellos de botella de rango bajo o enrutan a través de latentes probabilísticos de mezcla Gaussiana. La memoria condicional proporciona lectura/escritura en tiempo de prueba sobre un banco de memoria externo.}
+\caption{Taxonomía completa de cuarenta y dos variantes de mezcladores de secuencia en siete categorías funcionales. Las líneas base densas proporcionan enrutamiento global completo a costo cuadrático. Las arquitecturas recurrentes permiten inferencia en tiempo constante mediante compresión de estado. Las variantes dispersas reducen la complejidad mediante patrones estructurados o selección de tokens. Los mecanismos con compuerta introducen control dependiente de datos sobre la retención y el olvido de memoria. Los métodos latentes comprimen representaciones clave--valor en cuellos de botella de rango bajo o enrutan a través de latentes probabilísticos de mezcla Gaussiana. La memoria condicional proporciona lectura/escritura en tiempo de prueba sobre un banco de memoria externo. Los métodos de peso rápido tratan la transición de estado recurrente como una regla de aprendizaje continuo en línea.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -209,6 +228,8 @@ El registro de mezcladores incluye nueve bloques dispersos: \texttt{sparse\_tran
 
 \subsection{Extensiones de Atención con Compuerta}
 El registro de mezcladores incluye ocho bloques con compuerta: \texttt{gla\_attn}, \texttt{deltanet\_attn}, \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn}, \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{gated\_softmax\_attn} y \texttt{kda\_attn} \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025}. La idea unificadora es que las compuertas controlan \emph{qué información sobrevive}: algunas compuertas actúan sobre actualizaciones de estado recurrente (GLA, variantes de DeltaNet, HGRN2), mientras que otras modifican la ruta de atención completa (FoX y Gated Softmax). KDA introduce atención dinámica kernelizada con compuertas aprendibles sobre el ancho de banda del kernel. Esto hace que las compuertas sean especialmente útiles cuando el modelo debe equilibrar recuerdo, actualidad y memoria limitada. Las formulaciones matemáticas, el pseudocódigo algorítmico, una plantilla de compuerta genérica y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-gated}.
+
+Una sexta familia replantea la propia actualización recurrente de peso rápido como una regla de aprendizaje continuo en línea: el registro de mezcladores incluye seis bloques de peso rápido --- \texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn} y \texttt{falcon3a\_attn} \citep{zhang_falcon_2026}. Falcon unifica las escrituras aditivas estilo DeltaNet y de atención lineal bajo semántica de lectura tras escritura (RAW), con tamaños de paso normalizados $\eta_t = \beta_t/(\text{estadístico}_t + \lambda_t + \varepsilon)$, un arrastre derivado del objetivo $\gamma_t = 1 - \eta_t\lambda_t$ y repetición acotada con ventana deslizante en las variantes Falcon-3. Cada variante proporciona un escaneo recurrente de referencia y un kernel chunk-parallel estilo SSD, compartiendo un único bloque de configuración. Las formulaciones matemáticas, el pseudocódigo algorítmico, la renormalización de decaimiento positivo, las perillas de configuración y los resultados publicados se recopilan en el Apéndice~\ref{sec:annex-fast-weight}.
 
 \begin{figure}[t]
 \centering

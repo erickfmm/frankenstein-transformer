@@ -4,7 +4,7 @@
 \subsection{Attention and Sequence-Mixer Families}
 \label{sec:attention-families}
 
-This system implements thirty-six sequence mixer variants organized into six functional categories reflecting research trends in sequence modeling design. The taxonomical organization reflects evolving understanding of how to balance expressivity, computational efficiency, and memory constraints.
+This system implements forty-two sequence mixer variants organized into seven functional categories reflecting research trends in sequence modeling design. The taxonomical organization reflects evolving understanding of how to balance expressivity, computational efficiency, and memory constraints.
 
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Dense Attention Baselines} (3): Standard softmax attention, sigmoid attention, and Grouped-Query Attention (GQA) provide full global contextualization at quadratic computational cost, serving as reference baselines for comparison with more efficient alternatives.
@@ -13,6 +13,7 @@ This system implements thirty-six sequence mixer variants organized into six fun
     \item \textbf{Gated Memory Mechanisms} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, and KDA introduce data-dependent control over memory retention, forgetting, and update strength.
     \item \textbf{Latent and Low-Rank Compression} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA, and GMA compress key--value representations into low-rank latent bottlenecks (or, for GMA, route through a learned Gaussian-mixture latent memory), trading a small reconstruction error for substantial memory and compute savings.
     \item \textbf{Conditional Memory} (1): Engram provides test-time memory through learned read/write operations over an external memory bank.
+    \item \textbf{Fast-Weight Attention} (6): Falcon-1, Falcon-2, Falcon-3, Falcon-1A, Falcon-2A, and Falcon-3A \citep{zhang_falcon_2026} treat the recurrent fast-weight state transition as an online continual-learning rule under read-after-write semantics, with normalized step sizes, explicit ridge forgetting, and optional bounded sliding-window rehearsal.
 \end{enumerate}
 
 \begin{figure}[t]
@@ -23,7 +24,7 @@ This system implements thirty-six sequence mixer variants organized into six fun
     box/.append style={inner sep=3pt, minimum height=0.48cm}
 ]
 % Root
-\node[box, fill=blue!15, minimum width=4.0cm] (root) {\textbf{Sequence Mixer Registry (35+ variants)}};
+\node[box, fill=blue!15, minimum width=4.0cm] (root) {\textbf{Sequence Mixer Registry (42 variants)}};
 
 % Category headers — 6 columns
 \node[box, fill=red!10, below left=1.0cm and 7.5cm of root, minimum width=2.0cm] (dense) {\textbf{Dense (3)}};
@@ -31,7 +32,8 @@ This system implements thirty-six sequence mixer variants organized into six fun
 \node[box, fill=yellow!12, below left=1.0cm and 1.5cm of root, minimum width=2.0cm] (sparse) {\textbf{Sparse (9)}};
 \node[box, fill=purple!12, below right=1.0cm and 1.5cm of root, minimum width=2.0cm] (gated) {\textbf{Gated (8)}};
 \node[box, fill=cyan!12, below right=1.0cm and 4.5cm of root, minimum width=2.0cm] (latent) {\textbf{Latent (10)}};
-\node[box, fill=orange!12, below right=1.0cm and 7.5cm of root, minimum width=2.0cm] (memory) {\textbf{Memory (1)}};
+\node[box, fill=teal!12, below right=1.0cm and 7.5cm of root, minimum width=2.0cm] (memory) {\textbf{Memory (1)}};
+\node[box, fill=violet!12, below right=1.0cm and 10.5cm of root, minimum width=2.0cm] (fweight) {\textbf{Fast-Weight (6)}};
 
 % Dense column (3)
 \node[box, fill=red!5, below=of dense] (d1) {\texttt{standard\_attn}};
@@ -80,6 +82,14 @@ This system implements thirty-six sequence mixer variants organized into six fun
 % Memory column (1)
 \node[box, fill=orange!6, below=of memory] (m1) {\texttt{engram\_attn}};
 
+% Fast-weight column (6)
+\node[box, fill=violet!6, below=of fweight] (f1) {\texttt{falcon1\_attn}};
+\node[box, fill=violet!6, below=of f1] (f2) {\texttt{falcon2\_attn}};
+\node[box, fill=violet!6, below=of f2] (f3) {\texttt{falcon3\_attn}};
+\node[box, fill=violet!6, below=of f3] (f4) {\texttt{falcon1a\_attn}};
+\node[box, fill=violet!6, below=of f4] (f5) {\texttt{falcon2a\_attn}};
+\node[box, fill=violet!6, below=of f5] (f6) {\texttt{falcon3a\_attn}};
+
 % Root-to-category links
 \draw[line] (root) -- (dense);
 \draw[line] (root) -- (recur);
@@ -87,6 +97,7 @@ This system implements thirty-six sequence mixer variants organized into six fun
 \draw[line] (root) -- (gated);
 \draw[line] (root) -- (latent);
 \draw[line] (root) -- (memory);
+\draw[line] (root) -- (fweight);
 
 % Category-to-list links — Dense
 \draw[line] (dense) -- (d1);
@@ -134,8 +145,16 @@ This system implements thirty-six sequence mixer variants organized into six fun
 
 % Category-to-list links — Memory
 \draw[line] (memory) -- (m1);
+
+% Category-to-list links — Fast-weight
+\draw[line] (fweight) -- (f1);
+\draw[line] (f1) -- (f2);
+\draw[line] (f2) -- (f3);
+\draw[line] (f3) -- (f4);
+\draw[line] (f4) -- (f5);
+\draw[line] (f5) -- (f6);
 \end{tikzpicture}}
-\caption{Comprehensive taxonomy of thirty-six sequence mixer variants across six functional categories. Dense baselines provide full global routing at quadratic cost. Recurrent architectures enable constant-time inference through state compression. Sparse variants reduce complexity through structured patterns or token selection. Gated mechanisms introduce data-dependent control over memory retention and forgetting. Latent methods compress key--value representations into low-rank bottlenecks or route through probabilistic Gaussian-mixture latents. Conditional memory provides test-time read/write over an external memory bank.}
+\caption{Comprehensive taxonomy of forty-two sequence mixer variants across seven functional categories. Dense baselines provide full global routing at quadratic cost. Recurrent architectures enable constant-time inference through state compression. Sparse variants reduce complexity through structured patterns or token selection. Gated mechanisms introduce data-dependent control over memory retention and forgetting. Latent methods compress key--value representations into low-rank bottlenecks or route through probabilistic Gaussian-mixture latents. Conditional memory provides test-time read/write over an external memory bank. Fast-weight methods treat the recurrent state transition as an online continual-learning rule.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -209,6 +228,8 @@ The mixer registry includes nine sparse blocks: \texttt{sparse\_transformer\_att
 
 \subsection{Gated Attention Extensions}
 The mixer registry includes eight gated blocks: \texttt{gla\_attn}, \texttt{deltanet\_attn}, \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn}, \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{gated\_softmax\_attn}, and \texttt{kda\_attn} \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025}. The unifying idea is that gating controls \emph{what information survives}: some gates act on recurrent state updates (GLA, DeltaNet variants, HGRN2), while others modify the full attention path itself (FoX and Gated Softmax). KDA introduces kernelized dynamic attention with learnable gating over the kernel bandwidth. This makes gating especially useful when the model must trade off recall, recency, and bounded memory. Mathematical formulations, algorithmic pseudocode, a generic gating template, and a comparison table are collected in Appendix~\ref{sec:annex-gated}.
+
+A sixth family recasts the recurrent fast-weight update itself as an online continual-learning rule: the mixer registry includes six fast-weight blocks --- \texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn}, and \texttt{falcon3a\_attn} \citep{zhang_falcon_2026}. Falcon unifies DeltaNet-style regression and linear-attention-style additive writes under read-after-write (prefix-aligned) semantics with normalized step sizes $\eta_t = \beta_t/(\text{statistic}_t + \lambda_t + \varepsilon)$, an objective-derived carry $\gamma_t = 1 - \eta_t\lambda_t$, and bounded sliding-window rehearsal in the Falcon-3 variants. Every variant ships a recurrent reference scan and an SSD-style chunk-parallel kernel, sharing one configuration block. Mathematical formulations, algorithmic pseudocode, the positive-decay renormalization, configuration knobs, and published results are collected in Appendix~\ref{sec:annex-fast-weight}.
 
 \begin{figure}[t]
 \centering

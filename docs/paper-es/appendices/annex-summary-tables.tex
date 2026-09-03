@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 36 mezcladores de secuencia en seis familias, 23 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 42 mezcladores de secuencia en siete familias, 23 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -64,6 +64,16 @@ hgrn2\_attn & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Compue
 fox\_attn & Con compuerta & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Sesgo de recencia en espacio de logits; compatible con FlashAttn & \citep{lin_forgetting_transformer_2025} \\
 gated\_softmax\_attn & Con compuerta & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Compuerta sigmoide post-SDPA; mitigación del sumidero de atención & \citep{qiu_gated_attention_2025} \\
 kda\_attn & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimiento por canal + escritura escalar; diseño Kimi Linear & \citep{kimi_kda_2025} \\
+\midrule
+
+\multicolumn{6}{c}{\textbf{Peso Rápido (6)}} \\
+\midrule
+falcon1\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Regla delta NLMS prefix-alineada (RAW); mejor perplejidad LM de la familia & \citep{zhang_falcon_2026} \\
+falcon2\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Tamaños de paso NLMS por canal de valor & \citep{zhang_falcon_2026} \\
+falcon3\_attn & Peso rápido & $\mathcal{O}(L d^2 B)$ & $\mathcal{O}(d^2)$ + cola $\mathcal{O}(B)$ & Repetición de minilote con ventana deslizante y estadísticos exactos & \citep{zhang_falcon_2026} \\
+falcon1a\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Atención lineal aditiva desplazada con decaimiento por ridge & \citep{zhang_falcon_2026} \\
+falcon2a\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimientos aditivos por canal & \citep{zhang_falcon_2026} \\
+falcon3a\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ + cola $\mathcal{O}(B)$ & Aditivo con ventana; mejor extrapolación de longitud & \citep{zhang_falcon_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Latente (9)}} \\

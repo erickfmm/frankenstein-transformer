@@ -26,7 +26,8 @@ Cada mezclador lleva una bandera \texttt{use\_pe} por mezclador
 mezcladores de atención, \texttt{False} para mezcladores
 recurrentes/de decaimiento como \texttt{retnet}, \texttt{mamba},
 \texttt{ode}, \texttt{gla\_attn}, \texttt{deltanet\_attn},
-\texttt{mtla\_attn}). Cuando \texttt{use\_pe} es \texttt{False}, el
+\texttt{mtla\_attn} y los seis mezcladores Falcon
+\texttt{falcon\{1,2,3,1a,2a,3a\}\_attn}). Cuando \texttt{use\_pe} es \texttt{False}, el
 mezclador ignora completamente el módulo inyectado.
 
 La PE se aplica en dos fases mediante los ayudantes compartidos

@@ -1,0 +1,161 @@
+\section{Atención de Peso Rápido para Aprendizaje Continuo}
+\label{sec:annex-fast-weight}
+
+Este anexo cubre la familia Falcon \citep{zhang_falcon_2026}, un marco de atención de peso rápido que trata la transición recurrente del estado de peso rápido como una \textbf{regla de aprendizaje continuo en línea} bajo semántica autoregresiva de \emph{lectura tras escritura} (read-after-write, RAW). La observación central del marco es de alineación temporal: para el objetivo de predicción de prefijo, el ejemplo local de memoria rápida revelado en el paso $t$ es el \textbf{par prefix-alineado} $(x_t, y_t) = (\phi(k_{t-1}),\, v_t)$ --- desplazado un paso respecto a la asociación de mismo paso $(\phi(k_t), v_t)$ usada por DeltaNet y la atención lineal estándar. La asociación de mismo paso sigue siendo causal, pero optimiza un objetivo interno diferente. El marco deriva \textbf{actualizaciones de primer orden normalizadas} para dos objetivos (regresión de error cuadrático y producto interno negativo) y tres estructuras de tamaño de paso (escalar, por columna, ventana deslizante), dando seis variantes: Falcon-1/2/3 (familia de regresión) y Falcon-1A/2A/3A (familia de producto interno). Las seis variantes están implementadas en el código bajo \texttt{model.attention.falcon} con un bloque de configuración compartido, cada una proporcionando tanto un escaneo recurrente de referencia como un kernel chunk-parallel estilo SSD.
+
+\subsection{Preliminares: Alineación, Normalización, Renormalización}
+
+\paragraph{Semántica de lectura tras escritura.} Con mapas de características $\phi(k_t)$ (QK-RMSNorm por defecto), el flujo prefix-alineado fija $x_t = \phi(k_{t-1})$ para $t \ge 2$ con centinela de frontera $x_1 = 0$; la lectura es $o_t = S_t^\top \phi(q_t)$. La escritura en el paso $t$ por tanto actualiza la memoria \emph{antes} de que la consulta del paso $t+1$ la lea, de modo que ninguna clave se asocia jamás con su propio token.
+
+\paragraph{Tamaños de paso normalizados.} Un paso de gradiente sobre el objetivo local $\ell_t(S)$ con el denominador acoplado al objetivo da
+\[
+\eta_t = \frac{\beta_t}{\text{estadístico}_t + \lambda_t + \varepsilon}, \qquad \beta_t \in (0, 2),
+\]
+donde el estadístico es la energía cuadrática de la clave $\|x_t\|^2$ (Falcon-1/1A/2/2A), el estadístico espectral de ventana $\mu_t^{(B)} = \lambda_{\max}(X^\top X)/B_t$ (Falcon-3), o la energía media de ventana $\bar{E}_t^{(B)}$ (Falcon-3A). La normalización acoplada al objetivo garantiza descenso por paso y elimina la sensibilidad a la escala de las tasas de aprendizaje fijas. La ganancia de \textbf{plasticidad} $\beta_t$, el ridge de \textbf{olvido} $\lambda_t$, la \textbf{alineación} temporal y la ventana de repetición $B$ quedan así separados como cuatro perillas previamente entrelazadas.
+
+\paragraph{Renormalización de decaimiento positivo.} Cuando $\lambda_t > 0$, la contracción por paso $\alpha_t = \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma)$ debe aplicarse de forma estable. La implementación fija $\alpha_t$ estrictamente por debajo de $1$, calcula prefijos logarítmicos chunk-locales en fp32 vía $\log(1 - \alpha_t)$ y sumas acumuladas, reescala los generadores al dominio sin decaimiento ($\tilde{\eta}_t = \eta_t / \gamma_t$, $\tilde{v}_t = v_t / c_{t-1}$ con $c_{t-1} = \prod_{r \le t-1} \gamma_r$) y reescala salidas y el estado emitido por el $\delta$ acumulado. Los centinelas de frontera son $(\alpha_1, \gamma_1) = (0, 1)$ y $\eta_1 = 0$, de modo que el primer paso es una lectura pura.
+
+\subsection{La Familia de Regresión (Falcon-1/2/3)}
+
+El objetivo de error cuadrático sobre el par desplazado es
+\[
+\ell_t(S) = \tfrac{1}{2}\|v_t - S^\top x_t\|^2 + \tfrac{\lambda_t}{2}\|S\|_F^2,
+\qquad
+\nabla_S \ell_t = x_t (S^\top x_t - v_t)^\top + \lambda_t S,
+\]
+que es $L_t$-suave con $L_t = \|x_t\|^2 + \lambda_t$.
+
+\subsubsection{Falcon-1: Regresión NLMS Escalar}
+
+La variante escalar de la regla delta --- la recursión NLMS clásica del filtrado adaptativo, mejorada con el flujo desplazado y un ridge explícito:
+\[
+S_t = (1 - \eta_t \lambda_t)\, S_{t-1} + \eta_t\, x_t \big(v_t - S_{t-1}^\top x_t\big)^\top,
+\qquad
+o_t = S_t^\top \phi(q_t).
+\]
+Con $\varepsilon = 0$, $\lambda_t = 0$ y la asignación sin desplazar $x_t = \phi(k_t)$ esto recupera DeltaNet exactamente. La eigenestructura de la transición $A_t = \gamma_t I - \eta_t x_t x_t^\top$ (con $\gamma_t = 1 - \eta_t\lambda_t$) muestra que la dirección de escritura se contrae por $1 - \beta_t$ mientras el subespacio ortogonal lleva $\gamma_t$: $\beta_t > 1$ produce un cambio de signo estable a lo largo de la dirección de escritura, útil para seguimiento de estado. La forma chunk-parallel usa la representación WY $\prod_s (I - \eta_s x_s x_s^\top) = I - U T U^\top$ con una única solución triangular unitaria inferior de residuo simple $L = \operatorname{tril}(G, -1) + I$ donde $G = X^\top X$ (Algoritmo~8 del artículo), tras la renormalización de decaimiento positivo.
+
+\subsubsection{Falcon-2: Regresión NLMS por Columnas}
+
+La pérdida ridge se descompone a lo largo de las coordenadas de valor, de modo que cada canal de valor $j$ recibe su propio tamaño de paso compartiendo el normalizador NLMS:
+\[
+\eta_{j,t} = \frac{\beta_{j,t}}{\|x_t\|^2 + \lambda_t + \varepsilon},
+\qquad
+S_t = S_{t-1}\big(I - \lambda_t \operatorname{Diag}(\boldsymbol{\eta}_t)\big) + x_t \big(\boldsymbol{\eta}_t \odot \mathbf{r}_t\big)^\top .
+\]
+El kernel chunk-parallel forma el Gram de claves compartido $G = X^\top X$ y resuelve el lote de sistemas triangulares unitarios inferiores por canal $L_j = I + \operatorname{tril}\big(G \odot (\Sigma_j \Sigma_j^\top), -1\big)$ con $\Sigma = \sqrt{\tilde{\boldsymbol{\eta}}}$ (Algoritmo~1). Definida pero no evaluada por separado en el artículo.
+
+\subsubsection{Falcon-3: Regresión de Minilote con Ventana Deslizante}
+
+Repetición acotada (bounded rehearsal): cada paso regresa la memoria rápida sobre los últimos $B_t \le B$ pares prefix-alineados, con \emph{todos los residuos de ventana evaluados en el estado pre-actualización} $S_{t-1}$:
+\[
+\mu_t = \frac{\lambda_{\max}\big(X_{\mathcal{I}_t}^\top X_{\mathcal{I}_t}\big)}{B_t},
+\qquad
+\eta_t = \frac{\beta_t}{\mu_t + \lambda_t + \varepsilon},
+\qquad
+S_t = (1 - \eta_t \lambda_t)\, S_{t-1} + \frac{\eta_t}{B_t} \sum_{j \in \mathcal{I}_t} x_j \big(v_j - S_{t-1}^\top x_j\big)^\top ,
+\]
+con $\mathcal{I}_t = \{\max(2, t - B + 1), \dots, t\}$. El promediado por ventana mantiene la magnitud de la actualización invariante a $B$: cada par se repite en exactamente $B$ actualizaciones consecutivas con peso $1/B$, por lo que su inyección acumulada es independiente de $B$. El estado por sí solo \emph{no} es Markov: la continuación exacta requiere una cola FIFO de los últimos $B - 1$ pares, y los kernels chunk recogen una porción extendida con $|\mathcal{J}| \le C + B - 1$. La forma chunk-parallel es una recurrencia afín de rango $B$ resuelta por sustitución hacia adelante por bloques sobre el espacio de índices extendido (tiempo $\times$ rango), con componentes de rango del mismo tiempo desacoplados (Algoritmo~3).
+
+\subsection{La Familia de Producto Interno (Falcon-1A/2A/3A)}
+
+El objetivo de producto interno negativo
+\[
+\ell_t^{\mathrm{ip}}(S) = -\langle S^\top x_t,\, v_t \rangle + \tfrac{\lambda_t}{2}\|S\|_F^2
+\qquad \Rightarrow \qquad
+\nabla_S \ell_t^{\mathrm{ip}} = -x_t v_t^\top + \lambda_t S
+\]
+produce escrituras puramente aditivas (hebbianas) con ganancias normalizadas por energía.
+
+\subsubsection{Falcon-1A y Falcon-2A}
+
+\[
+\text{Falcon-1A:}\quad S_t = \gamma_t S_{t-1} + \eta_t\, x_t v_t^\top,
+\quad \gamma_t = 1 - \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma);
+\qquad
+\text{Falcon-2A:}\quad S_t = S_{t-1}\operatorname{Diag}(\boldsymbol{\gamma}_t) + x_t (\boldsymbol{\eta}_t \odot v_t)^\top .
+\]
+Con $\lambda_t = 0$ y la asignación sin desplazar esto es exactamente la atención lineal estándar / acumulación Mamba-2; el flujo desplazado lo convierte en la variante next-latent desplazada un paso. El denominador de la familia A no lo exige la curvatura (el objetivo es lineal) --- conserva la escritura normalizada por energía como estabilizador de magnitud. La forma chunk-parallel es atención lineal con máscara de decaimiento $M_{t,i} = \eta_i \prod_{r=i+1}^{t} \gamma_r$ (máscaras por canal para Falcon-2A).
+
+\subsubsection{Falcon-3A: Producto Interno con Ventana Deslizante}
+
+La variante aditiva con ventana --- la mejor configuración de extrapolación de longitud de la familia:
+\[
+\bar{N}_t^{(B)} = \frac{1}{B_t} \sum_{j \in \mathcal{I}_t} x_j v_j^\top,
+\qquad
+\bar{E}_t^{(B)} = \frac{1}{B_t} \sum_{j \in \mathcal{I}_t} \|x_j\|^2,
+\qquad
+\eta_t = \frac{\beta_t}{\bar{E}_t^{(B)} + \lambda_t + \varepsilon},
+\qquad
+S_t = \gamma_t S_{t-1} + \eta_t\, \bar{N}_t^{(B)} .
+\]
+La máscara de decaimiento con banda de ventana factoriza como $M = D \cdot \operatorname{Diag}(\boldsymbol{\eta}) \cdot A$, donde $A$ es el operador de ventana de banda $B$ y $D$ el kernel de decaimiento causal, evaluada sobre la porción extendida (Algoritmo~4).
+
+\subsection{Interfaz de Configuración}
+
+Las seis variantes comparten un bloque anidado, \texttt{model.attention.falcon}, seleccionado mediante las entradas de \texttt{layer\_pattern} \texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn}, \texttt{falcon3a\_attn}:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.95\linewidth}{llX}
+\toprule
+\textbf{Clave} & \textbf{Por defecto} & \textbf{Descripción} \\
+\midrule
+\texttt{chunk\_size} & $64$ & Tamaño de chunk de los kernels chunk-parallel; \texttt{null} selecciona el escaneo recurrente de referencia \\
+\texttt{qk\_norm} & \texttt{rms\_norm} & Normalización QK (\texttt{rms\_norm} o \texttt{l2\_norm}); RMSNorm calculado en fp32 \\
+\texttt{beta\_mode} & \texttt{ctx\_eta} & Parametrización de la compuerta de plasticidad: \texttt{static}, \texttt{ctx\_beta} (ganancia condicionada al contenido) o \texttt{ctx\_eta} (paso normalizado condicionado al contenido) \\
+\texttt{lambda\_mode} & \texttt{ctx} & Compuerta de olvido: \texttt{static} o \texttt{ctx} (acoplada en escala con el estadístico de curvatura desacoplado) \\
+\texttt{beta} / \texttt{lambda} & $1.0$ / $0.0$ & Ganancia y ridge estáticas (usadas cuando el modo correspondiente es \texttt{static}) \\
+\texttt{window} & $4$ & Ventana deslizante $B$ (solo Falcon-3 / Falcon-3A) \\
+\texttt{short\_conv} / \texttt{conv\_kernel} & \texttt{true} / $4$ & Convoluciones cortas causales en profundidad sobre las proyecciones q/k/v \\
+\texttt{eps} / \texttt{eps\_gamma} & $10^{-6}$ / $10^{-4}$ & Estabilizador del tamaño de paso y piso de fijación del decaimiento positivo \\
+\bottomrule
+\end{tabularx}
+\caption{Perillas de configuración compartidas de Falcon (\texttt{model.attention.falcon}). Cada variante expone además un opt-out de codificación posicional por mezclador \texttt{falcon\{1,2,3,1a,2a,3a\}\_attn\_use\_pe}, por defecto \texttt{False} como los demás mezcladores recurrentes/de decaimiento.}
+\label{tab:falcon-knobs}
+\end{table}
+
+Notas de implementación: los kernels recurrente y chunk-parallel están verificados numéricamente equivalentes (chunk $\equiv$ recurrente a $\le 3.6 \times 10^{-7}$ en las seis variantes, incluidas las rutas con decaimiento, multi-chunk y ventana); los gradientes fluyen a través de las islas de solución triangular en fp32 (los generadores de características toman solo $\sqrt{\tilde{\eta}}$ mientras los objetivos de valor toman $\sqrt{\tilde{\eta}}\, e^{-u_{t-1}}$, con la raíz cuadrada fijada en $10^{-12}$ para retropropagación sin NaN en la frontera $\eta = 0$); los exponentes positivos se fijan en $80$.
+
+\subsection{Resultados Publicados}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.95\linewidth}{Xcccc}
+\toprule
+\textbf{Modelo (124M, 49.2B tokens FineWeb-Edu)} & \textbf{WikiText ppl} & \textbf{LMB. ppl} & \textbf{FineEdu ppl} & \textbf{Prom. 0-shot} \\
+\midrule
+Transformer (RoPE) & 33.25 & 47.43 & 17.38 & 48.16 \\
+Mamba-2 & 34.53 & 48.74 & 17.70 & 48.80 \\
+DeltaNet & 34.19 & 52.84 & 17.84 & 48.88 \\
+Gated DeltaNet & 30.99 & 46.70 & 17.32 & 48.78 \\
+Falcon-1A.3 & 34.02 & 49.84 & 17.40 & 48.95 \\
+Falcon-1.3 & 33.00 & 48.70 & \textbf{17.10} & \textbf{49.18} \\
+\bottomrule
+\end{tabularx}
+\caption{Resultados de modelado de lenguaje reportados por \citet{zhang_falcon_2026} a 124M de parámetros. En extrapolación de longitud para sumas de dígitos variables (33--48 dígitos), Falcon-3A.3 alcanza \textbf{87.2\%} de precisión media frente a 65.8\% de un Transformer con RoPE y 85.9\% de Falcon-1A.3: la familia de producto interno lleva la aritmética, mientras que la familia de regresión lleva la perplejidad.}
+\label{tab:falcon-results}
+\end{table}
+
+\subsection{Relación con Trabajos Previos}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{DeltaNet}: la regla delta es el paso de descenso de gradiente del objetivo de error cuadrático con el emparejamiento de mismo paso; Falcon lo recupera con el cambio crítico de índice más normalización acoplada al objetivo y contracción $\lambda_t$ explícita.
+    \item \textbf{Gated DeltaNet}: añade una compuerta de arrastre aprendida libre; Falcon \emph{deriva} el arrastre $\gamma_t = 1 - \eta_t \lambda_t$ del objetivo local y la parametrización de paso normalizada en lugar de añadir una compuerta independiente, y usa por defecto QK-RMSNorm en lugar de normalización $\ell_2$.
+    \item \textbf{Atención lineal / Mamba-2}: el numerador aditivo es un paso de gradiente del objetivo de producto interno con la asignación sin desplazar; los kernels chunkwise reutilizan el esquema SSD.
+    \item \textbf{TTT / Titans / ATLAS}: actualizaciones de peso rápido como entrenamiento en tiempo de prueba; Falcon-3 es una especialización de ventana deslizante de la vista de objetivo interno con alineación estricta next-latent.
+    \item \textbf{Filtrado adaptativo (LMS/NLMS/RLS)}: Falcon importa los principios de estabilidad y normalización de NLMS a la atención de peso rápido bajo causalidad estricta.
+\end{itemize}
+
+\subsubsection{Cuándo Usar Cada Variante}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Falcon-1}: la mejor perplejidad de modelado de lenguaje de la familia (FineEdu 17.10, superando a Gated DeltaNet 17.32); olvido principista ligado al objetivo local.
+    \item \textbf{Falcon-2}: plasticidad más fina que Falcon-1 al costo de kernels chunk por canal más pesados; sin evaluación en el artículo.
+    \item \textbf{Falcon-3}: horizonte de repetición controlado con estadísticos de ventana exactos; el kernel más complejo.
+    \item \textbf{Falcon-1A}: variante aditiva simple y estable; segunda mejor extrapolación de longitud (85.9\%).
+    \item \textbf{Falcon-2A}: granularidad de olvido por canal; sin evaluación.
+    \item \textbf{Falcon-3A}: la mejor extrapolación de longitud del artículo (87.2\% en sumas de 33--48 dígitos); carry de tareas aritméticas.
+\end{enumerate}

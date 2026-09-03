@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 36 sequence mixers across six families, 23 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 42 sequence mixers across seven families, 23 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -64,6 +64,16 @@ hgrn2\_attn & Gated & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Hierarchical b
 fox\_attn & Gated & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Logit-space recency bias; FlashAttn compatible & \citep{lin_forgetting_transformer_2025} \\
 gated\_softmax\_attn & Gated & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Post-SDPA sigmoid gating; attention-sink mitigation & \citep{qiu_gated_attention_2025} \\
 kda\_attn & Gated & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Channel-wise decay + scalar write; Kimi Linear design & \citep{kimi_kda_2025} \\
+\midrule
+
+\multicolumn{6}{c}{\textbf{Fast-Weight (6)}} \\
+\midrule
+falcon1\_attn & Fast-weight & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Prefix-aligned NLMS delta rule; best LM perplexity of the family & \citep{zhang_falcon_2026} \\
+falcon2\_attn & Fast-weight & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Per-value-channel NLMS step sizes & \citep{zhang_falcon_2026} \\
+falcon3\_attn & Fast-weight & $\mathcal{O}(L d^2 B)$ & $\mathcal{O}(d^2)$ + $\mathcal{O}(B)$ tail & Sliding-window minibatch rehearsal with exact window statistics & \citep{zhang_falcon_2026} \\
+falcon1a\_attn & Fast-weight & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Shifted additive linear attention with ridge decay & \citep{zhang_falcon_2026} \\
+falcon2a\_attn & Fast-weight & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Per-channel additive decays & \citep{zhang_falcon_2026} \\
+falcon3a\_attn & Fast-weight & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ + $\mathcal{O}(B)$ tail & Windowed additive; best length extrapolation & \citep{zhang_falcon_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Latent (9)}} \\

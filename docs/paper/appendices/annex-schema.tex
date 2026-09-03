@@ -226,6 +226,8 @@ fasa\_attn & FASA --- frequency-aware token selection & $\times$ & \checkmark \\
 msa\_attn & MiniMax Sparse Attention --- block-sparse on GQA & \checkmark & \checkmark \\
 sparda\_attn & SparDA --- decoupled sparse attention with Forecast projection & \checkmark & \checkmark \\
 kda\_attn & Kimi Delta Attention --- channel-wise decay + scalar write gate & \checkmark & \checkmark \\
+falcon1\_attn / falcon2\_attn / falcon3\_attn & Falcon regression family --- RAW prefix-aligned NLMS delta rule & \checkmark & \checkmark \\
+falcon1a\_attn / falcon2a\_attn / falcon3a\_attn & Falcon inner-product family --- shifted additive writes with ridge decay & \checkmark & \checkmark \\
 mla\_attn & Multi-Head Latent Attention + RoPE & \checkmark & \checkmark \\
 gqla\_attn & Group-Query Latent Attention --- two decoding paths & \checkmark & \checkmark \\
 mlra\_attn & Multi-Head Low-Rank Attention --- partitionable latent & \checkmark & \checkmark \\

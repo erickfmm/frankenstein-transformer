@@ -1,0 +1,161 @@
+\section{Fast-Weight Attention for Continual Learning}
+\label{sec:annex-fast-weight}
+
+This annex covers the Falcon family \citep{zhang_falcon_2026}, a fast-weight attention framework that treats the recurrent fast-weight state transition as an \textbf{online continual-learning rule} under \emph{read-after-write} (RAW) autoregressive semantics. The framework's central observation is one of temporal alignment: for the prefix-prediction objective, the local fast-memory example revealed at step $t$ is the \textbf{prefix-aligned pair} $(x_t, y_t) = (\phi(k_{t-1}),\, v_t)$ --- one step shifted relative to the same-step association $(\phi(k_t), v_t)$ used by DeltaNet and standard linear attention. The same-step pairing remains causal, but it optimizes a different internal objective. The framework derives \textbf{normalized first-order updates} for two objectives (squared-error regression and negative inner product) and three step-size structures (scalar, per-column, sliding window), giving six variants: Falcon-1/2/3 (regression family) and Falcon-1A/2A/3A (inner-product family). All six are implemented in the codebase under \texttt{model.attention.falcon} with a shared configuration block, each providing both a recurrent reference scan and an SSD-style chunk-parallel kernel.
+
+\subsection{Preliminaries: Alignment, Normalization, and Stability}
+
+\paragraph{Read-after-write semantics.} With feature maps $\phi(k_t)$ (QK-RMSNorm by default, $\ell_2$ norm optional), the prefix-aligned stream sets $x_t = \phi(k_{t-1})$ for $t \ge 2$ with boundary sentinel $x_1 = 0$; the readout is $o_t = S_t^\top \phi(q_t)$. The write at step $t$ therefore updates the memory \emph{before} the query at step $t+1$ reads it, so no token's key ever associates with its own value.
+
+\paragraph{Normalized first-order step sizes.} A gradient step on the local objective $\ell_t(S)$ with the objective-matched denominator gives
+\[
+\eta_t = \frac{\beta_t}{\text{statistic}_t + \lambda_t + \varepsilon}, \qquad \beta_t \in (0, 2),
+\]
+where the statistic is the squared key energy $\|x_t\|^2$ (Falcon-1/1A/2/2A), the window spectral statistic $\mu_t^{(B)} = \lambda_{\max}(X^\top X)/B_t$ (Falcon-3), or the window mean energy $\bar{E}_t^{(B)}$ (Falcon-3A). Objective-matched normalization guarantees per-step descent and removes the scale sensitivity of fixed learning rates. The \textbf{plasticity} gain $\beta_t$, the \textbf{forgetting} ridge $\lambda_t$, the temporal \textbf{alignment}, and the rehearsal window $B$ are thereby four previously entangled knobs, separated.
+
+\paragraph{Positive-decay renormalization.} When $\lambda_t > 0$, the per-step shrinkage $\alpha_t = \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma)$ must be applied stably. The implementation clamps $\alpha_t$ strictly below $1$, computes chunk-local log-prefixes in fp32 via $\log(1 - \alpha_t)$ and cumulative sums, rescales the drivers to the no-decay domain ($\tilde{\eta}_t = \eta_t / \gamma_t$, $\tilde{v}_t = v_t / c_{t-1}$ with $c_{t-1} = \prod_{r \le t-1} \gamma_r$), and rescales outputs and the emitted state back by the accumulated $\delta$. Boundary sentinels are $(\alpha_1, \gamma_1) = (0, 1)$ and $\eta_1 = 0$, so the first step is a pure read.
+
+\subsection{The Regression Family (Falcon-1/2/3)}
+
+The squared-error objective on the shifted pair is
+\[
+\ell_t(S) = \tfrac{1}{2}\|v_t - S^\top x_t\|^2 + \tfrac{\lambda_t}{2}\|S\|_F^2,
+\qquad
+\nabla_S \ell_t = x_t (S^\top x_t - v_t)^\top + \lambda_t S,
+\]
+which is $L_t$-smooth with $L_t = \|x_t\|^2 + \lambda_t$.
+
+\subsubsection{Falcon-1: Scalar NLMS Regression}
+
+The scalar delta-rule variant --- the classical NLMS recursion of adaptive filtering upgraded with the shifted write stream and an explicit ridge:
+\[
+S_t = (1 - \eta_t \lambda_t)\, S_{t-1} + \eta_t\, x_t \big(v_t - S_{t-1}^\top x_t\big)^\top,
+\qquad
+o_t = S_t^\top \phi(q_t).
+\]
+With $\varepsilon = 0$, $\lambda_t = 0$ and the unshifted assignment $x_t = \phi(k_t)$ this recovers DeltaNet exactly. The eigenstructure of the transition $A_t = \gamma_t I - \eta_t x_t x_t^\top$ (with $\gamma_t = 1 - \eta_t\lambda_t$) shows that the write direction contracts by $1 - \beta_t$ while the orthogonal subspace carries $\gamma_t$: $\beta_t > 1$ yields a stable sign-flip along the write direction, useful for state tracking. The chunk-parallel form uses the WY representation $\prod_s (I - \eta_s x_s x_s^\top) = I - U T U^\top$ with a single-residual unit-lower-triangular solve $L = \operatorname{tril}(G, -1) + I$ where $G = X^\top X$ (Algorithm~8 of the paper), after the positive-decay renormalization.
+
+\subsubsection{Falcon-2: Per-Column NLMS Regression}
+
+The ridge loss decomposes across value coordinates, so each value channel $j$ receives its own step size while sharing the NLMS normalizer:
+\[
+\eta_{j,t} = \frac{\beta_{j,t}}{\|x_t\|^2 + \lambda_t + \varepsilon},
+\qquad
+S_t = S_{t-1}\big(I - \lambda_t \operatorname{Diag}(\boldsymbol{\eta}_t)\big) + x_t \big(\boldsymbol{\eta}_t \odot \mathbf{r}_t\big)^\top .
+\]
+The chunk-parallel kernel forms the shared key Gram $G = X^\top X$ and solves the batch of per-channel unit-lower-triangular systems $L_j = I + \operatorname{tril}\big(G \odot (\Sigma_j \Sigma_j^\top), -1\big)$ with $\Sigma = \sqrt{\tilde{\boldsymbol{\eta}}}$ (Algorithm~1). Defined but not separately benchmarked in the paper.
+
+\subsubsection{Falcon-3: Sliding-Window Minibatch Regression}
+
+Bounded rehearsal: each step regresses the fast memory on the last $B_t \le B$ prefix-aligned pairs, with \emph{all window residuals evaluated at the pre-update state} $S_{t-1}$:
+\[
+\mu_t = \frac{\lambda_{\max}\big(X_{\mathcal{I}_t}^\top X_{\mathcal{I}_t}\big)}{B_t},
+\qquad
+\eta_t = \frac{\beta_t}{\mu_t + \lambda_t + \varepsilon},
+\qquad
+S_t = (1 - \eta_t \lambda_t)\, S_{t-1} + \frac{\eta_t}{B_t} \sum_{j \in \mathcal{I}_t} x_j \big(v_j - S_{t-1}^\top x_j\big)^\top ,
+\]
+with $\mathcal{I}_t = \{\max(2, t - B + 1), \dots, t\}$. Window-averaging keeps the update magnitude invariant to $B$: each pair is replayed in exactly $B$ consecutive updates at weight $1/B$, so its cumulative injection is $\eta$-independent of $B$. The state alone is \emph{not} Markov: exact continuation requires a FIFO tail of the last $B - 1$ pairs, and the chunk kernels gather an extended slice with $|\mathcal{J}| \le C + B - 1$. The chunk-parallel form is a rank-$B$ affine recurrence solved by block forward substitution over the (time $\times$ rank) extended index space, with same-time rank components uncoupled (Algorithm~3).
+
+\subsection{The Inner-Product Family (Falcon-1A/2A/3A)}
+
+The negative inner-product objective
+\[
+\ell_t^{\mathrm{ip}}(S) = -\langle S^\top x_t,\, v_t \rangle + \tfrac{\lambda_t}{2}\|S\|_F^2
+\qquad \Rightarrow \qquad
+\nabla_S \ell_t^{\mathrm{ip}} = -x_t v_t^\top + \lambda_t S
+\]
+yields purely additive (Hebbian) writes with energy-normalized gains.
+
+\subsubsection{Falcon-1A and Falcon-2A}
+
+\[
+\text{Falcon-1A:}\quad S_t = \gamma_t S_{t-1} + \eta_t\, x_t v_t^\top,
+\quad \gamma_t = 1 - \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma);
+\qquad
+\text{Falcon-2A:}\quad S_t = S_{t-1}\operatorname{Diag}(\boldsymbol{\gamma}_t) + x_t (\boldsymbol{\eta}_t \odot v_t)^\top .
+\]
+With $\lambda_t = 0$ and the unshifted assignment this is exactly standard linear attention / Mamba-2 accumulation; the shifted stream makes it the one-step-shifted next-latent variant. The A-family's denominator is not required by curvature (the objective is linear) --- it retains the energy-normalized write as a magnitude stabilizer. The chunk-parallel form is decay-mask linear attention with $M_{t,i} = \eta_i \prod_{r=i+1}^{t} \gamma_r$ (per-channel masks for Falcon-2A).
+
+\subsubsection{Falcon-3A: Sliding-Window Inner-Product}
+
+The windowed additive variant --- the family's best length-extrapolation configuration:
+\[
+\bar{N}_t^{(B)} = \frac{1}{B_t} \sum_{j \in \mathcal{I}_t} x_j v_j^\top,
+\qquad
+\bar{E}_t^{(B)} = \frac{1}{B_t} \sum_{j \in \mathcal{I}_t} \|x_j\|^2,
+\qquad
+\eta_t = \frac{\beta_t}{\bar{E}_t^{(B)} + \lambda_t + \varepsilon},
+\qquad
+S_t = \gamma_t S_{t-1} + \eta_t\, \bar{N}_t^{(B)} .
+\]
+The window-banded decay mask factors as $M = D \cdot \operatorname{Diag}(\boldsymbol{\eta}) \cdot A$, where $A$ is the $B$-banded window operator and $D$ the causal decay kernel, evaluated over the extended slice (Algorithm~4).
+
+\subsection{Configuration Interface}
+
+All six variants share one nested block, \texttt{model.attention.falcon}, selected through the \texttt{layer\_pattern} entries \texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn}, \texttt{falcon3a\_attn}:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.95\linewidth}{llX}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\texttt{chunk\_size} & $64$ & Chunk size of the chunk-parallel kernels; \texttt{null} selects the recurrent reference scan \\
+\texttt{qk\_norm} & \texttt{rms\_norm} & QK normalization (\texttt{rms\_norm} or \texttt{l2\_norm}); RMSNorm computed in fp32 \\
+\texttt{beta\_mode} & \texttt{ctx\_eta} & Plasticity gate parameterization: \texttt{static}, \texttt{ctx\_beta} (content-conditioned gain), or \texttt{ctx\_eta} (content-conditioned normalized step) \\
+\texttt{lambda\_mode} & \texttt{ctx} & Forgetting gate: \texttt{static} or \texttt{ctx} (scale-couples with the detached curvature statistic) \\
+\texttt{beta} / \texttt{lambda} & $1.0$ / $0.0$ & Static gain and ridge (used when the corresponding mode is \texttt{static}) \\
+\texttt{window} & $4$ & Sliding window $B$ (Falcon-3 / Falcon-3A only) \\
+\texttt{short\_conv} / \texttt{conv\_kernel} & \texttt{true} / $4$ & Causal depth-wise short convolutions on the q/k/v projections \\
+\texttt{eps} / \texttt{eps\_gamma} & $10^{-6}$ / $10^{-4}$ & Step-size stabilizer and positive-decay clamp floor \\
+\bottomrule
+\end{tabularx}
+\caption{Shared Falcon configuration knobs (\texttt{model.attention.falcon}). Each variant additionally exposes a per-mixer positional-encoding opt-out \texttt{falcon\{1,2,3,1a,2a,3a\}\_attn\_use\_pe}, default \texttt{False} like other recurrent/decay mixers.}
+\label{tab:falcon-knobs}
+\end{table}
+
+Implementation notes: the recurrent and chunk-parallel kernels are verified numerically equivalent (chunk $\equiv$ recurrent to $\le 3.6 \times 10^{-7}$ across all six variants, including decay, multi-chunk, and windowed paths); gradients flow through the fp32 triangular-solve islands (feature drivers take only $\sqrt{\tilde{\eta}}$ while value targets take $\sqrt{\tilde{\eta}}\, e^{-u_{t-1}}$, with the square root clamped at $10^{-12}$ for NaN-free backward at the $\eta = 0$ boundary); positive exponents are clamped at $80$.
+
+\subsection{Published Results}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.95\linewidth}{Xcccc}
+\toprule
+\textbf{Model (124M, 49.2B FineWeb-Edu tokens)} & \textbf{WikiText ppl} & \textbf{LMB. ppl} & \textbf{FineEdu ppl} & \textbf{0-shot avg} \\
+\midrule
+Transformer (RoPE) & 33.25 & 47.43 & 17.38 & 48.16 \\
+Mamba-2 & 34.53 & 48.74 & 17.70 & 48.80 \\
+DeltaNet & 34.19 & 52.84 & 17.84 & 48.88 \\
+Gated DeltaNet & 30.99 & 46.70 & 17.32 & 48.78 \\
+Falcon-1A.3 & 34.02 & 49.84 & 17.40 & 48.95 \\
+Falcon-1.3 & 33.00 & 48.70 & \textbf{17.10} & \textbf{49.18} \\
+\bottomrule
+\end{tabularx}
+\caption{Language modeling results reported by \citet{zhang_falcon_2026} at 124M parameters. On variable-digit addition length extrapolation (33--48 digits), Falcon-3A.3 reaches \textbf{87.2\%} mean accuracy versus 65.8\% for a RoPE Transformer and 85.9\% for Falcon-1A.3: the inner-product family carries arithmetic, while the regression family carries perplexity.}
+\label{tab:falcon-results}
+\end{table}
+
+\subsection{Relation to Prior Work}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{DeltaNet}: the delta rule is the squared-error one-gradient-descent step with the same-step pairing; Falcon recovers it with the critical index shift plus objective-matched normalization and explicit $\lambda_t$ shrinkage.
+    \item \textbf{Gated DeltaNet}: adds a free learned carry gate; Falcon \emph{derives} the carry $\gamma_t = 1 - \eta_t \lambda_t$ from the local objective and the normalized step-size parameterization instead of adding an independent gate, and defaults to QK-RMSNorm rather than $\ell_2$ normalization.
+    \item \textbf{Linear attention / Mamba-2}: the additive numerator is one gradient step on the inner-product objective with the unshifted assignment; the chunkwise kernels reuse the SSD scheme.
+    \item \textbf{TTT / Titans / ATLAS}: fast-weight updates as test-time training; Falcon-3 is a sliding-window specialization of the internal-objective view with strict next-latent alignment.
+    \item \textbf{Adaptive filtering (LMS/NLMS/RLS)}: Falcon imports the stability and normalization principles of NLMS into fast-weight attention under strict causality.
+\end{itemize}
+
+\subsubsection{When to Use Each Variant}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Falcon-1}: best language-modeling perplexity of the family (FineEdu 17.10, beating Gated DeltaNet 17.32); principled forgetting tied to the local objective.
+    \item \textbf{Falcon-2}: finer-grained plasticity than Falcon-1 at the cost of heavier per-channel chunk kernels; unbenchmarked in the paper.
+    \item \textbf{Falcon-3}: controlled rehearsal horizon with exact window statistics; most complex kernel.
+    \item \textbf{Falcon-1A}: simple and stable additive variant; second-best length extrapolation (85.9\%).
+    \item \textbf{Falcon-2A}: channel-wise forgetting granularity; unbenchmarked.
+    \item \textbf{Falcon-3A}: best length extrapolation of the paper (87.2\% on 33--48-digit addition); carries arithmetic tasks.
+\end{enumerate}

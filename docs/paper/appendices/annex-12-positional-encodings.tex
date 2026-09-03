@@ -24,7 +24,8 @@ Each mixer carries a per-mixer \texttt{use\_pe} flag
 (\texttt{<mixer>\_attn\_use\_pe}, default \texttt{True} for attention
 mixers, \texttt{False} for recurrent/decay mixers such as
 \texttt{retnet}, \texttt{mamba}, \texttt{ode}, \texttt{gla\_attn},
-\texttt{deltanet\_attn}, \texttt{mtla\_attn}). When \texttt{use\_pe} is
+\texttt{deltanet\_attn}, \texttt{mtla\_attn}, and the six Falcon
+mixers \texttt{falcon\{1,2,3,1a,2a,3a\}\_attn}). When \texttt{use\_pe} is
 \texttt{False} the mixer ignores the injected module entirely.
 
 The PE is applied in two phases via the shared helpers
