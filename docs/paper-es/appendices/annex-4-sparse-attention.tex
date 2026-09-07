@@ -196,7 +196,7 @@ Los autores demuestran que con $O(1)$ conexiones aleatorias y tokens globales, e
     \item \textbf{Limitación}: El muestreo aleatorio introduce varianza y no determinismo; el ajuste de los hiperparámetros $r, w, g$ sigue dependiendo de la tarea.
 \end{itemize}
 
-\subsection{Atención SparseK: Selección Diferencial Top-$k$}
+\subsection{Atención SparseK: Selección Diferencial \texorpdfstring{Top-$k$}{Top-k}}
 
 \subsubsection{Formulación Matemática}
 
@@ -376,7 +376,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
             \State $s_i \gets s_i + s_i^{(fc)}$
         \EndFor
     \EndFor
-    \State $\mathcal{T}_t \gets \mathrm{TopK-Índices}([s_1, \ldots, s_t], N_{\text{fac}})$ \Comment{Seleccionar tokens principales}
+    \State $\mathcal{T}_t \gets \mathrm{TopK}\text{-Índices}([s_1, \ldots, s_t], N_{\text{fac}})$ \Comment{Seleccionar tokens principales}
 \EndFor
 \State \textbf{Etapa 2: Cálculo de Atención Enfocada (FAC)}
 \State $\text{puntajes}_{\text{fac}} \gets \mathbf{q}_t \mathbf{K}_{\mathcal{T}_t}^\top / \sqrt{d}$ \Comment{Producto punto de precisión completa}

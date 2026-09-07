@@ -4,7 +4,7 @@
 \subsection{Attention and Sequence-Mixer Families}
 \label{sec:attention-families}
 
-This system implements forty-two sequence mixer variants organized into seven functional categories reflecting research trends in sequence modeling design. The taxonomical organization reflects evolving understanding of how to balance expressivity, computational efficiency, and memory constraints.
+This system implements forty-three sequence mixer variants organized into eight functional categories reflecting research trends in sequence modeling design. The taxonomical organization reflects evolving understanding of how to balance expressivity, computational efficiency, and memory constraints.
 
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Dense Attention Baselines} (3): Standard softmax attention, sigmoid attention, and Grouped-Query Attention (GQA) provide full global contextualization at quadratic computational cost, serving as reference baselines for comparison with more efficient alternatives.
@@ -14,6 +14,7 @@ This system implements forty-two sequence mixer variants organized into seven fu
     \item \textbf{Latent and Low-Rank Compression} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA, and GMA compress key--value representations into low-rank latent bottlenecks (or, for GMA, route through a learned Gaussian-mixture latent memory), trading a small reconstruction error for substantial memory and compute savings.
     \item \textbf{Conditional Memory} (1): Engram provides test-time memory through learned read/write operations over an external memory bank.
     \item \textbf{Fast-Weight Attention} (6): Falcon-1, Falcon-2, Falcon-3, Falcon-1A, Falcon-2A, and Falcon-3A \citep{zhang_falcon_2026} treat the recurrent fast-weight state transition as an online continual-learning rule under read-after-write semantics, with normalized step sizes, explicit ridge forgetting, and optional bounded sliding-window rehearsal.
+    \item \textbf{Geometric Field} (1): SSOG \citep{pisoni_ssog_2026} applies a structured geometric/sparsity field over the attention matrix, encoding domain-specific spatial or graph-structured inductive biases that the other seven families do not capture.
 \end{enumerate}
 
 \begin{figure}[t]
@@ -24,9 +25,9 @@ This system implements forty-two sequence mixer variants organized into seven fu
     box/.append style={inner sep=3pt, minimum height=0.48cm}
 ]
 % Root
-\node[box, fill=blue!15, minimum width=4.0cm] (root) {\textbf{Sequence Mixer Registry (42 variants)}};
+\node[box, fill=blue!15, minimum width=4.0cm] (root) {\textbf{Sequence Mixer Registry (43 variants)}};
 
-% Category headers — 6 columns
+% Category headers — 8 columns
 \node[box, fill=red!10, below left=1.0cm and 7.5cm of root, minimum width=2.0cm] (dense) {\textbf{Dense (3)}};
 \node[box, fill=green!10, below left=1.0cm and 4.5cm of root, minimum width=2.0cm] (recur) {\textbf{Recurrent (5)}};
 \node[box, fill=yellow!12, below left=1.0cm and 1.5cm of root, minimum width=2.0cm] (sparse) {\textbf{Sparse (9)}};
@@ -34,6 +35,7 @@ This system implements forty-two sequence mixer variants organized into seven fu
 \node[box, fill=cyan!12, below right=1.0cm and 4.5cm of root, minimum width=2.0cm] (latent) {\textbf{Latent (10)}};
 \node[box, fill=teal!12, below right=1.0cm and 7.5cm of root, minimum width=2.0cm] (memory) {\textbf{Memory (1)}};
 \node[box, fill=violet!12, below right=1.0cm and 10.5cm of root, minimum width=2.0cm] (fweight) {\textbf{Fast-Weight (6)}};
+\node[box, fill=gray!18, below right=1.0cm and 13.5cm of root, minimum width=2.0cm] (geometric) {\textbf{Geometric (1)}};
 
 % Dense column (3)
 \node[box, fill=red!5, below=of dense] (d1) {\texttt{standard\_attn}};
@@ -68,7 +70,7 @@ This system implements forty-two sequence mixer variants organized into seven fu
 \node[box, fill=purple!6, below=of g6] (g7) {\texttt{gated\_softmax\_attn}};
 \node[box, fill=purple!6, below=of g7] (g8) {\texttt{kda\_attn}};
 
-% Latent column (9)
+% Latent column (10)
 \node[box, fill=cyan!6, below=of latent] (l1) {\texttt{mla\_attn}};
 \node[box, fill=cyan!6, below=of l1] (l2) {\texttt{gqla\_attn}};
 \node[box, fill=cyan!6, below=of l2] (l3) {\texttt{mlra\_attn}};
@@ -78,6 +80,7 @@ This system implements forty-two sequence mixer variants organized into seven fu
 \node[box, fill=cyan!6, below=of l6] (l7) {\texttt{mtla\_attn}};
 \node[box, fill=cyan!6, below=of l7] (l8) {\texttt{cca\_attn}};
 \node[box, fill=cyan!6, below=of l8] (l9) {\texttt{ccgqa\_attn}};
+\node[box, fill=cyan!6, below=of l9] (l10) {\texttt{gma\_attn}};
 
 % Memory column (1)
 \node[box, fill=orange!6, below=of memory] (m1) {\texttt{engram\_attn}};
@@ -90,6 +93,9 @@ This system implements forty-two sequence mixer variants organized into seven fu
 \node[box, fill=violet!6, below=of f4] (f5) {\texttt{falcon2a\_attn}};
 \node[box, fill=violet!6, below=of f5] (f6) {\texttt{falcon3a\_attn}};
 
+% Geometric column (1)
+\node[box, fill=gray!8, below=of geometric] (geo1) {\texttt{ssog\_attn}};
+
 % Root-to-category links
 \draw[line] (root) -- (dense);
 \draw[line] (root) -- (recur);
@@ -98,6 +104,7 @@ This system implements forty-two sequence mixer variants organized into seven fu
 \draw[line] (root) -- (latent);
 \draw[line] (root) -- (memory);
 \draw[line] (root) -- (fweight);
+\draw[line] (root) -- (geometric);
 
 % Category-to-list links — Dense
 \draw[line] (dense) -- (d1);
@@ -142,6 +149,7 @@ This system implements forty-two sequence mixer variants organized into seven fu
 \draw[line] (l6) -- (l7);
 \draw[line] (l7) -- (l8);
 \draw[line] (l8) -- (l9);
+\draw[line] (l9) -- (l10);
 
 % Category-to-list links — Memory
 \draw[line] (memory) -- (m1);
@@ -153,8 +161,11 @@ This system implements forty-two sequence mixer variants organized into seven fu
 \draw[line] (f3) -- (f4);
 \draw[line] (f4) -- (f5);
 \draw[line] (f5) -- (f6);
+
+% Category-to-list links — Geometric
+\draw[line] (geometric) -- (geo1);
 \end{tikzpicture}}
-\caption{Comprehensive taxonomy of forty-two sequence mixer variants across seven functional categories. Dense baselines provide full global routing at quadratic cost. Recurrent architectures enable constant-time inference through state compression. Sparse variants reduce complexity through structured patterns or token selection. Gated mechanisms introduce data-dependent control over memory retention and forgetting. Latent methods compress key--value representations into low-rank bottlenecks or route through probabilistic Gaussian-mixture latents. Conditional memory provides test-time read/write over an external memory bank. Fast-weight methods treat the recurrent state transition as an online continual-learning rule.}
+\caption{Comprehensive taxonomy of forty-three sequence mixer variants across eight functional categories. Dense baselines provide full global routing at quadratic cost. Recurrent architectures enable constant-time inference through state compression. Sparse variants reduce complexity through structured patterns or token selection. Gated mechanisms introduce data-dependent control over memory retention and forgetting. Latent methods compress key--value representations into low-rank bottlenecks or route through probabilistic Gaussian-mixture latents. Conditional memory provides test-time read/write over an external memory bank. Fast-weight methods treat the recurrent state transition as an online continual-learning rule. Geometric-field methods encode spatial or graph-structured inductive biases over the attention matrix.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -227,7 +238,7 @@ The mixer registry includes nine sparse blocks: \texttt{sparse\_transformer\_att
 \end{figure}
 
 \subsection{Gated Attention Extensions}
-The mixer registry includes eight gated blocks: \texttt{gla\_attn}, \texttt{deltanet\_attn}, \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn}, \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{gated\_softmax\_attn}, and \texttt{kda\_attn} \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025}. The unifying idea is that gating controls \emph{what information survives}: some gates act on recurrent state updates (GLA, DeltaNet variants, HGRN2), while others modify the full attention path itself (FoX and Gated Softmax). KDA introduces kernelized dynamic attention with learnable gating over the kernel bandwidth. This makes gating especially useful when the model must trade off recall, recency, and bounded memory. Mathematical formulations, algorithmic pseudocode, a generic gating template, and a comparison table are collected in Appendix~\ref{sec:annex-gated}.
+The mixer registry includes eight gated blocks: \texttt{gla\_attn}, \texttt{deltanet\_attn}, \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn}, \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{gated\_softmax\_attn}, and \texttt{kda\_attn} \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025}. The unifying idea is that gating controls \emph{what information survives}: some gates act on recurrent state updates (GLA, DeltaNet variants, HGRN2), while others modify the full attention path itself (FoX and Gated Softmax). KDA extends Gated DeltaNet with a finer-grained, channel-wise gating (decay) mechanism on the delta-rule state update $S_t = (I - \beta_t k_t k_t^\top)D_t S_{t-1} + \beta_t k_t v_t^\top$, where $D_t = \mathrm{Diag}(d_t)$ applies a per-channel decay. This makes gating especially useful when the model must trade off recall, recency, and bounded memory. Mathematical formulations, algorithmic pseudocode, a generic gating template, and a comparison table are collected in Appendix~\ref{sec:annex-gated}.
 
 A sixth family recasts the recurrent fast-weight update itself as an online continual-learning rule: the mixer registry includes six fast-weight blocks --- \texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn}, and \texttt{falcon3a\_attn} \citep{zhang_falcon_2026}. Falcon unifies DeltaNet-style regression and linear-attention-style additive writes under read-after-write (prefix-aligned) semantics with normalized step sizes $\eta_t = \beta_t/(\text{statistic}_t + \lambda_t + \varepsilon)$, an objective-derived carry $\gamma_t = 1 - \eta_t\lambda_t$, and bounded sliding-window rehearsal in the Falcon-3 variants. Every variant ships a recurrent reference scan and an SSD-style chunk-parallel kernel, sharing one configuration block. Mathematical formulations, algorithmic pseudocode, the positive-decay renormalization, configuration knobs, and published results are collected in Appendix~\ref{sec:annex-fast-weight}.
 

@@ -4,12 +4,12 @@
 
 ## Taxonomy Overview
 
-The system implements **42 sequence mixer architectures** (the full
-`layer_pattern` enum) organized into seven functional categories. The taxonomy
+The system implements **43 sequence mixer architectures** (the full
+`layer_pattern` enum) organized into eight functional categories. The taxonomy
 figure from the paper:
 
 ```
-Sequence Mixer Registry (42 variants)
+Sequence Mixer Registry (43 variants)
 ├── Dense (2): standard_attn, sigmoid_attn
 ├── GQA (1): gqa_attn
 ├── Recurrent / Retentive (6): retnet/retnet_attn, mamba, ode, titan_attn,
@@ -29,7 +29,7 @@ Sequence Mixer Registry (42 variants)
 ```
 
 > The detailed per-mixer attribute tables below cover the most commonly used
-> and best-documented families. The authoritative list of all 42 names is the
+> and best-documented families. The authoritative list of all 43 names is the
 > `layer_pattern` enum in `src/schema/_model/_dims.yaml`.
 
 ### How to pick a mixer (plain English)
