@@ -504,6 +504,15 @@ def _train_from_config_path(
         logging.info("=" * 60)
         model, tokenizer, runtime_config = build_base_model_and_tokenizer(loaded)
         model_descriptor = loaded.base_model
+    elif task == "mlm" and dataset is not None and (loaded.tokenizer_config or {}).get("name_or_path"):
+        # Host-owned MLM corpus (e.g. a DashAI plugin): the batches are
+        # already tokenized, so resolve the tokenizer from the config's
+        # ``tokenizer`` block (HF AutoTokenizer) instead of the legacy SPM.
+        from .engine_hf_tokenizer import build_hf_tokenizer_from_config
+        model = build_model(loaded.model_class, loaded.model_config)
+        tokenizer = build_hf_tokenizer_from_config(loaded.tokenizer_config)
+        runtime_config = loaded.model_config
+        model_descriptor = loaded.model_class or "frankenstein"
     else:
         model, tokenizer = _build_legacy(loaded)
         runtime_config = loaded.model_config
@@ -515,10 +524,12 @@ def _train_from_config_path(
     logging.info("Total Parameters: %.2fM", total_params / 1e6)
     logging.info("Trainable Parameters: %.2fM", trainable_params / 1e6)
 
-    # Text classification is driven by a pre-built DataLoader passed via the
-    # ``dataset`` parameter (the engine never builds streaming MLM corpora for
-    # a supervised task); the host (e.g. a DashAI plugin) owns the dataset.
-    if task == "text_classification":
+    # Tasks driven by a pre-built DataLoader passed via the ``dataset``
+    # parameter (an embedding host such as a DashAI plugin owns the dataset
+    # and its tokenization): supervised text classification and MLM
+    # pretraining over a DashAI corpus. Without ``dataset``, MLM keeps the
+    # legacy behavior (streaming RedPajama corpus from training_runtime).
+    if task == "text_classification" or (task == "mlm" and dataset is not None):
         if dataset is None:
             raise ValueError(
                 "task=text_classification requires a pre-built DataLoader "
@@ -527,7 +538,7 @@ def _train_from_config_path(
             )
         if not hasattr(dataset, "__iter__"):
             raise ValueError(
-                "task=text_classification: 'dataset' must be an iterable "
+                f"task={task}: 'dataset' must be an iterable "
                 "(torch DataLoader) of dict batches."
             )
         dataloader = dataset

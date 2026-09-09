@@ -11,9 +11,31 @@ save, and load them from the DashAI UI.
 |---|---|---|---|
 | `frankenstein_mlm` | `FrankensteinMLMModel` | `BaseModel` | `TextClassificationTask` |
 | `frankenstein_decoder` | `FrankensteinDecoderModel` | `BaseGenerativeModel` | `TextToTextGenerationTask` |
+| `frankenstein_pretrainer` | `FrankensteinPretrainer` | `BaseModel` | `MaskedLanguageModelingTask` (provided by this plugin) |
 | `frankenstein_vit_cls` | `FrankensteinViTClassifier` | `BaseModel` | `ImageClassificationTask` |
-| `frankenstein_vit_seg` | `FrankensteinViTSegmenter` | `BaseModel` | `SegmentationTask` |
+| `frankenstein_vit_seg` | `FrankensteinViTSegmenter` | `BaseModel` | `SegmentationTask` (provided by this plugin) |
 | `segmentation_task` | `SegmentationTask` | `BaseTask` | (new task provided by this plugin) |
+| `masked_language_modeling_task` | `MaskedLanguageModelingTask` | `BaseTask` | (new task provided by this plugin) |
+
+## MLM pretraining (Masked Language Modeling)
+
+The `FrankensteinPretrainer` component runs **real BERT-style MLM
+pre-training** (`task: mlm` in the Frankenstein engine) on a DashAI text
+dataset:
+
+1. Create a dataset with a single `Text` column.
+2. Create a `MaskedLanguageModelingTask` session and select the same text
+   column as input **and** output (self-supervised target).
+3. Paste a Frankenstein config (one-line JSON) with `tokenizer.name_or_path`
+   set — the text is tokenized + 15%-masked at collate time (80% [MASK] /
+   10% random / 10% keep) and consumed by the engine's
+   `TitanTrainer.compute_mlm_loss`.
+
+Every optimizer update streams the full telemetry (loss, masked-token
+accuracy, learning rate, gradient norms per block, GPU temp/power/mem,
+throughput) into the DashAI run's metric store; the trained backbone is
+saved via the run's artifact and can be loaded later for classification
+fine-tuning with `FrankensteinMLMModel`.
 
 ## Schema (v1: passthrough JSON)
 

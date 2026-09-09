@@ -131,6 +131,101 @@ def tokenized_dataloader(
     )
 
 
+def mlm_dataloader_dict(
+    dataset: Any,
+    tokenizer: Any,
+    text_column: str,
+    *,
+    batch_size: int = 8,
+    max_length: int = 128,
+    mlm_probability: float = 0.15,
+    device: str = "cpu",
+    shuffle: bool = True,
+) -> Any:
+    """Build a DataLoader yielding MLM dict batches for the engine trainer.
+
+    Tokenizes the text column and applies BERT-style masking at collate time
+    so each epoch re-samples the mask (like ``DataCollatorForLanguageModeling``).
+    Each batch is a dict with ``input_ids`` (masked), ``attention_mask`` and
+    ``labels`` (``-100`` on unmasked positions) — the format
+    :class:`TitanTrainer.compute_mlm_loss` expects for ``task="mlm"``.
+
+    Parameters
+    ----------
+    dataset : DashAIDataset
+        Source dataset carrying the text column.
+    tokenizer : Any
+        HF tokenizer (or compatible, exposing ``__call__``).
+    text_column : str
+        Name of the text column to tokenize.
+    batch_size, max_length, mlm_probability, device, shuffle
+        Loader / masking options.
+
+    Returns
+    -------
+    torch.utils.data.DataLoader
+    """
+    import torch
+    from torch.utils.data import DataLoader, Dataset
+
+    texts = list(dataset[text_column])
+    if not texts:
+        raise ValueError(f"Column '{text_column}' has no rows for MLM pretraining.")
+
+    enc = tokenizer(texts, truncation=True, padding="max_length",
+                    max_length=max_length)
+    input_ids_all = torch.tensor(enc["input_ids"], dtype=torch.long)
+    attention_mask_all = torch.tensor(enc["attention_mask"], dtype=torch.long)
+
+    special_ids = {
+        tok_id for key in ("cls_token_id", "sep_token_id", "pad_token_id", "bos_token_id", "eos_token_id")
+        if (tok_id := getattr(tokenizer, key, None)) is not None
+    }
+
+    class _MLMDataset(Dataset):
+        def __len__(self):
+            return input_ids_all.shape[0]
+
+        def __getitem__(self, idx):
+            return input_ids_all[idx], attention_mask_all[idx]
+
+    def _collate_mask(batch):
+        ids = torch.stack([b[0] for b in batch])
+        attn = torch.stack([b[1] for b in batch])
+        labels = ids.clone()
+        # Candidates: real tokens, attended, not special, not padding.
+        prob_matrix = torch.full(labels.shape, mlm_probability)
+        prob_matrix[attn == 0] = 0.0
+        for tok_id in special_ids:
+            prob_matrix[labels == tok_id] = 0.0
+        masked = torch.bernoulli(prob_matrix).bool()
+        labels[~masked] = -100  # unmasked positions are not supervised
+        # 80% [MASK], 10% random token, 10% keep (BERT recipe).
+        ids_masked = ids.clone()
+        mask_token_id = getattr(tokenizer, "mask_token_id", None)
+        vocab = getattr(tokenizer, "vocab_size", None) or int(ids.max().item()) + 1
+        random_tokens = torch.randint(0, max(vocab - 1, 1), ids.shape)
+        r = torch.rand(ids.shape)
+        if mask_token_id is not None:
+            ids_masked[masked & (r < 0.8)] = mask_token_id
+        random_idx = masked & (r >= 0.8) & (r < 0.9)
+        ids_masked[random_idx] = random_tokens[random_idx]
+        # 10% keep original token (no change).
+        return {
+            "input_ids": ids_masked,
+            "attention_mask": attn,
+            "labels": labels,
+        }
+
+    return DataLoader(
+        _MLMDataset(),
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=_collate_mask,
+        pin_memory=str(device).startswith("cuda"),
+    )
+
+
 def prediction_loader(
     dataset: Any,
     tokenizer: Any,
