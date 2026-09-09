@@ -34,7 +34,7 @@ try:
 except ImportError as exc:  # pragma: no cover - depends on install env
     raise ImportError(
         "frankenstein-transformer is required by the dashai-frankenstein plugin. "
-        "Install it with `pip install frankenstein-transformer>=1.1.0`."
+        "Install it with `pip install frankenstein-transformer>=1.2.0`."
     ) from exc
 
 

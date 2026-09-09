@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dashai-frankenstein"
-version = "0.3.0"
+version = "0.3.1"
 description = "DashAI plugin that registers Frankenstein Transformer model classes (MLM encoder, causal decoder, ViT) as DashAI components."
 readme = "README.md"
 license = { text = "MIT" }
@@ -12,8 +12,9 @@ authors = [{ name = "Erick Merino", email = "erickfmm@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
     # Frankenstein ships the importable ``src`` package and the engine API.
-    # Pin to the Phase-0 release that exposes engine.build_model / train_from_config.
-    "frankenstein-transformer>=1.1.0",
+    # >=1.2.0 adds the text_dataset engine block + causal_lm caller-dataset
+    # support consumed by the plugin's use_dashai_dataset toggle.
+    "frankenstein-transformer>=1.2.0",
     "torch>=2.0",
     "transformers>=4.45.0,<5.0.0",
     "datasets>=3.0.0",
