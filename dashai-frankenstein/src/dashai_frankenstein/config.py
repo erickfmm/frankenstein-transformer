@@ -13,12 +13,39 @@ convert it to a one-line JSON string, and paste it into the field.
 """
 from __future__ import annotations
 
-from DashAI.back.core.schema_fields import BaseSchema, schema_field, string_field
+from DashAI.back.core.schema_fields import (
+    BaseSchema,
+    bool_field,
+    schema_field,
+    string_field,
+)
 from DashAI.back.core.utils import MultilingualString
 
 
 class FrankensteinPassthroughSchema(BaseSchema):
     """Shared fields for every Frankenstein DashAI model component."""
+
+    use_dashai_dataset: schema_field(
+        bool_field(),
+        placeholder=True,
+        description=MultilingualString(
+            en=(
+                "If checked (default), train on the DashAI run dataset, "
+                "overriding any dataset configured in the Frankenstein JSON. "
+                "If unchecked, the dataset configured inside the Frankenstein "
+                "JSON is used instead (the `text_dataset` block for NLP "
+                "tasks, the `vision_dataset` block for vision tasks)."
+            ),
+            es=(
+                "Si está marcado (por defecto), entrena con el dataset del "
+                "run de DashAI, sobrescribiendo cualquier dataset configurado "
+                "en el JSON Frankenstein. Si se desmarca, se usa el dataset "
+                "configurado dentro del JSON Frankenstein (el bloque "
+                "`text_dataset` para NLP, `vision_dataset` para visión)."
+            ),
+        ),
+        alias=MultilingualString(en="Use DashAI dataset", es="Usar dataset DashAI"),
+    ) = True  # type: ignore
 
     frankenstein_json: schema_field(
         string_field(),

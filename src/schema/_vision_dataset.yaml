@@ -1,19 +1,21 @@
 type: object
-title: Dataset Configuration
-title_es: Configuración de Dataset
+title: Vision Dataset Configuration
+title_es: Configuración de Dataset de Visión
 description: |-
-  Dataset configuration for image-based tasks (`patch_prediction`,
+  Vision dataset configuration for image-based tasks (`patch_prediction`,
   `classification`, `segmentation`). Specifies the data source (HuggingFace
   dataset or local directory), column mappings, image rescaling, normalization,
   and augmentations.
 
-  Required when `model_class: frankenstein_vit`.
+  Required when `model_class: frankenstein_vit`. For text/NLP tasks use
+  `text_dataset` instead.
 description_es: |-
-  Configuración de dataset para tareas de imagen (`patch_prediction`,
+  Configuración de dataset de visión para tareas de imagen (`patch_prediction`,
   `classification`, `segmentation`). Especifica la fuente de datos, mapeo de
   columnas, reescalado de imagen, normalización y aumentaciones.
 
-  Obligatorio cuando `model_class: frankenstein_vit`.
+  Obligatorio cuando `model_class: frankenstein_vit`. Para tareas de texto/NLP
+  usa `text_dataset` en su lugar.
 additionalProperties: false
 properties:
   dataset_name:

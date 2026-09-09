@@ -29,7 +29,7 @@ image:
   seg_num_queries: 10
   seg_l2_blocks: 2
   seg_mask_annealing: true
-dataset:
+vision_dataset:
   dataset_name: ""
   rescale:
     height: 32

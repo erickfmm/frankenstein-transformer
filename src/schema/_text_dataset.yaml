@@ -1,0 +1,96 @@
+type: object
+title: Text Dataset Configuration
+title_es: Configuración de Dataset de Texto
+description: |-
+  Text dataset configuration for NLP tasks (`mlm`, `causal_lm`,
+  `text_classification`). Specifies the data source (HuggingFace dataset id,
+  local directory with parquet/json files, or a local tokenizer-cached copy),
+  the split, and the column mappings. When present, the engine builds the
+  training DataLoader from this spec instead of the legacy fixed RedPajama
+  streaming corpus — used by embedding hosts (e.g. DashAI) when the run
+  dataset is not the data source.
+description_es: |-
+  Configuración de dataset de texto para tareas NLP (`mlm`, `causal_lm`,
+  `text_classification`). Especifica la fuente de datos (id de dataset de
+  HuggingFace, directorio local con parquet/json, o copia en caché del
+  tokenizador), el split y el mapeo de columnas. Cuando está presente, el
+  engine construye el DataLoader de entrenamiento a partir de esta
+  especificación en lugar del corpus fijo legacy de RedPajama — usado por
+  hosts de embedding (p.ej. DashAI) cuando el dataset del run no es la fuente.
+additionalProperties: false
+properties:
+  dataset_name:
+    type: string
+    title: Dataset Name
+    title_es: Nombre de Dataset
+    description: |-
+      HuggingFace dataset identifier (e.g. `wikitext`, `erickfmm/red_pajama_es_hq_35`).
+      Ignored when `data_dir` is set.
+    description_es: |-
+      Identificador de dataset de HuggingFace (p.ej. `wikitext`,
+      `erickfmm/red_pajama_es_hq_35`). Se ignora si `data_dir` está definido.
+  split:
+    type: string
+    title: Split
+    title_es: Split
+    description: Dataset split to load (e.g. `train`, `train[:90%]`).
+    description_es: Split del dataset a cargar (p.ej. `train`, `train[:90%]`).
+    default: train
+  text_column:
+    type: string
+    title: Text Column
+    title_es: Columna de Texto
+    description: Column name holding the raw text.
+    description_es: Nombre de la columna que contiene el texto crudo.
+    default: text
+  label_column:
+    type: string
+    title: Label Column
+    title_es: Columna de Etiqueta
+    description: |-
+      Column name holding the class labels. Required (with `use_labels: true`)
+      for `task: text_classification`; ignored for `mlm`/`causal_lm`.
+    description_es: |-
+      Nombre de la columna que contiene las clases. Requerida (con
+      `use_labels: true`) para `task: text_classification`; ignorada para
+      `mlm`/`causal_lm`.
+  data_dir:
+    type: string
+    title: Data Directory
+    title_es: Directorio de Datos
+    description: |-
+      Local directory with `*.parquet` or `*.json(l)` files. Takes precedence
+      over `dataset_name`.
+    description_es: |-
+      Directorio local con archivos `*.parquet` o `*.json`. Tiene prioridad
+      sobre `dataset_name`.
+  streaming:
+    type: boolean
+    title: Streaming
+    title_es: Streaming
+    description: |-
+      Stream the HuggingFace dataset instead of downloading it fully
+      (recommended for large corpora; only affects `dataset_name` mode).
+    description_es: |-
+      Transmite el dataset de HuggingFace en streaming en lugar de
+      descargarlo por completo (recomendado para datasets grandes; solo
+      afecta al modo `dataset_name`).
+    default: false
+  use_labels:
+    type: boolean
+    title: Use Labels
+    title_es: Usar Etiquetas
+    description: |-
+      Read `label_column` as integer class targets (supervised
+      text classification). Mutually exclusive with the MLM/CLM objectives.
+    description_es: |-
+      Lee `label_column` como clases enteras (clasificación de texto
+      supervisada). Mutuamente excluyente con los objetivos MLM/CLM.
+    default: false
+  max_samples:
+    type: integer
+    title: Max Samples
+    title_es: Máximo de Muestras
+    description: Optional cap on the number of samples loaded from the source.
+    description_es: Límite opcional de muestras cargadas de la fuente.
+    minimum: 1

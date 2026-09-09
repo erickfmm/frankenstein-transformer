@@ -20,8 +20,10 @@ properties:
     $ref: "schema/_training.yaml"
   image:
     $ref: "schema/_image.yaml"
-  dataset:
-    $ref: "schema/_dataset.yaml"
+  vision_dataset:
+    $ref: "schema/_vision_dataset.yaml"
+  text_dataset:
+    $ref: "schema/_text_dataset.yaml"
 
 allOf:
   $ref: "schema/_conditional_rules.yaml"

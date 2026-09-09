@@ -106,7 +106,7 @@
     - model_class
     - model
     - image
-    - dataset
+    - vision_dataset
 - if:
     properties:
       training:
@@ -129,7 +129,7 @@
     - model_class
     - model
     - image
-    - dataset
+    - vision_dataset
 - if:
     properties:
       model:
@@ -168,4 +168,4 @@
     - model_class
     - model
     - image
-    - dataset
+    - vision_dataset

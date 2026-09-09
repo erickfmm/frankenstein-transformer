@@ -28,7 +28,7 @@ image:
   mask_ratio: 0.5
   mask_token_strategy: bert
   prediction_target: mean_color_3bit
-dataset:
+vision_dataset:
   dataset_name: ""
   rescale:
     height: 32

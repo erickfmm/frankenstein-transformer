@@ -73,6 +73,7 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
     def __init__(self, **kwargs) -> None:
         kwargs = self.validate_and_transform(kwargs)
         self.frankenstein_json = kwargs.get("frankenstein_json", "")
+        self.use_dashai_dataset = bool(kwargs.get("use_dashai_dataset", True))
         # Generation defaults (overridable via kwargs from the schema/runner).
         self.max_new_tokens = int(kwargs.get("max_new_tokens", 128))
         self.temperature = float(kwargs.get("temperature", 1.0))

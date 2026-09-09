@@ -226,6 +226,77 @@ def mlm_dataloader_dict(
     )
 
 
+def causal_lm_dataloader_dict(
+    dataset: Any,
+    tokenizer: Any,
+    text_column: str,
+    *,
+    batch_size: int = 8,
+    max_length: int = 128,
+    device: str = "cpu",
+    shuffle: bool = True,
+) -> Any:
+    """Build a DataLoader yielding causal-LM dict batches for the engine.
+
+    Tokenizes the text column with padding to ``max_length`` and sets
+    ``labels = input_ids`` (no masking). The trainer's
+    :meth:`TitanTrainer.compute_causal_lm_loss` shifts labels internally to
+    build the next-token objective, so batches carry the unshifted sequence.
+
+    Parameters
+    ----------
+    dataset : DashAIDataset
+        Source dataset carrying the text column.
+    tokenizer : Any
+        HF tokenizer (or compatible, exposing ``__call__``).
+    text_column : str
+        Name of the text column to tokenize.
+    batch_size, max_length, device, shuffle
+        Loader options.
+
+    Returns
+    -------
+    torch.utils.data.DataLoader
+    """
+    import torch
+    from torch.utils.data import DataLoader, Dataset
+
+    texts = list(dataset[text_column])
+    if not texts:
+        raise ValueError(
+            f"Column '{text_column}' has no rows for causal-LM pretraining."
+        )
+
+    enc = tokenizer(texts, truncation=True, padding="max_length",
+                    max_length=max_length)
+    input_ids_all = torch.tensor(enc["input_ids"], dtype=torch.long)
+    attention_mask_all = torch.tensor(enc["attention_mask"], dtype=torch.long)
+
+    class _CLMDataset(Dataset):
+        def __len__(self):
+            return input_ids_all.shape[0]
+
+        def __getitem__(self, idx):
+            return input_ids_all[idx], attention_mask_all[idx]
+
+    def _collate_clm(batch):
+        ids = torch.stack([b[0] for b in batch])
+        attn = torch.stack([b[1] for b in batch])
+        return {
+            "input_ids": ids,
+            "attention_mask": attn,
+            "labels": ids.clone(),  # unshifted; trainer shifts internally
+        }
+
+    return DataLoader(
+        _CLMDataset(),
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=_collate_clm,
+        pin_memory=str(device).startswith("cuda"),
+    )
+
+
 def prediction_loader(
     dataset: Any,
     tokenizer: Any,

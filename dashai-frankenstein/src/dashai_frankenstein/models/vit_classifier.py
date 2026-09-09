@@ -68,6 +68,7 @@ class FrankensteinViTClassifier(BaseModel):
     def __init__(self, **kwargs) -> None:
         kwargs = self.validate_and_transform(kwargs)
         self.frankenstein_json = kwargs.get("frankenstein_json", "")
+        self.use_dashai_dataset = bool(kwargs.get("use_dashai_dataset", True))
 
         self.num_classes = None
         self.fitted = False
@@ -164,13 +165,24 @@ class FrankensteinViTClassifier(BaseModel):
             split=SplitEnum.TRAIN, log_every_n_steps=1,
         )
 
-        result = train_from_config(
-            engine_cfg,
-            dataset=engine_dataset,
-            device=device,
-            supervisor="off",
-            metrics_callback=callback,
-        )
+        if self.use_dashai_dataset:
+            result = train_from_config(
+                engine_cfg,
+                dataset=engine_dataset,
+                device=device,
+                supervisor="off",
+                metrics_callback=callback,
+            )
+        else:
+            # JSON-dataset mode: the engine resolves the corpus from the
+            # config's ``vision_dataset`` block (or a dummy smoke dataset).
+            result = train_from_config(
+                engine_cfg,
+                dataset=None,
+                device=device,
+                supervisor="off",
+                metrics_callback=callback,
+            )
         if getattr(result, "model", None) is not None:
             self._frank_model = result.model.to(device)
 

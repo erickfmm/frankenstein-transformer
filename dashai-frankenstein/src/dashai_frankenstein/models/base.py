@@ -225,19 +225,21 @@ def classification_train(
             )
 
     text_col = text_column_fn(x_train)
-    train_loader = tokenized_dataloader_dict(
-        x_train, tokenizer, text_col, label_column,
-        batch_size=batch_size, device=device, shuffle=True,
-    )
-
+    train_loader = None
     val_loader = None
-    if x_validation is not None and y_validation is not None:
-        # Merge the label column into the validation features view.
-        val_text_col = text_column_fn(x_validation)
-        val_loader = tokenized_dataloader_dict(
-            x_validation, tokenizer, val_text_col, label_column,
-            batch_size=batch_size, device=device, shuffle=False,
+    if bool(getattr(self, "use_dashai_dataset", True)):
+        train_loader = tokenized_dataloader_dict(
+            x_train, tokenizer, text_col, label_column,
+            batch_size=batch_size, device=device, shuffle=True,
         )
+
+        if x_validation is not None and y_validation is not None:
+            # Merge the label column into the validation features view.
+            val_text_col = text_column_fn(x_validation)
+            val_loader = tokenized_dataloader_dict(
+                x_validation, tokenizer, val_text_col, label_column,
+                batch_size=batch_size, device=device, shuffle=False,
+            )
     # The engine trains on a single iterable; chain train(+val) so the
     # validation split is still visited each epoch by the trainer loop.
     engine_dataset = train_loader if val_loader is None else _ConcatLoader(train_loader, val_loader)
@@ -263,9 +265,10 @@ def classification_train(
     self._label_column = label_column
     self._text_column_fn = text_column_fn
 
+    use_dashai_dataset = bool(getattr(self, "use_dashai_dataset", True))
     result = train_from_config(
         engine_cfg,
-        dataset=engine_dataset,
+        dataset=engine_dataset if use_dashai_dataset else None,
         device=device,
         supervisor="off",
         metrics_callback=callback,

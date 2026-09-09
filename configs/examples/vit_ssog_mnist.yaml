@@ -43,7 +43,7 @@ image:
   cls_token: false
   pooling_mode: gap
   num_classes: 10
-dataset:
+vision_dataset:
   dataset_name: ylecun/mnist
   rescale:
     height: 28

@@ -26,6 +26,7 @@ try:
     from .training.streaming_mlm_dataset import StreamingMLMDataset
     from .training.trainer import TitanTrainer, TrainingConfig
     from .training.config_loader import LoadedTrainingConfig, load_training_config
+    from .training.text_dataset_builder import build_text_dataloader_from_config
     from .model.config import FrankensteinModelConfig
     from .model.frankenstein_decoder import FrankensteinDecoder
     from .model.frankenstein_encoder import FrankensteinEncoder
@@ -35,6 +36,7 @@ except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
     from training.config_loader import LoadedTrainingConfig, load_training_config
+    from training.text_dataset_builder import build_text_dataloader_from_config
     from model.config import FrankensteinModelConfig
     from model.frankenstein_decoder import FrankensteinDecoder
     from model.frankenstein_encoder import FrankensteinEncoder
@@ -504,8 +506,10 @@ def _train_from_config_path(
         logging.info("=" * 60)
         model, tokenizer, runtime_config = build_base_model_and_tokenizer(loaded)
         model_descriptor = loaded.base_model
-    elif task == "mlm" and dataset is not None and (loaded.tokenizer_config or {}).get("name_or_path"):
-        # Host-owned MLM corpus (e.g. a DashAI plugin): the batches are
+    elif (task in ("mlm", "causal_lm", "text_classification")
+          and dataset is not None
+          and (loaded.tokenizer_config or {}).get("name_or_path")):
+        # Host-owned NLP corpus (e.g. a DashAI plugin): the batches are
         # already tokenized, so resolve the tokenizer from the config's
         # ``tokenizer`` block (HF AutoTokenizer) instead of the legacy SPM.
         from .engine_hf_tokenizer import build_hf_tokenizer_from_config
@@ -524,26 +528,40 @@ def _train_from_config_path(
     logging.info("Total Parameters: %.2fM", total_params / 1e6)
     logging.info("Trainable Parameters: %.2fM", trainable_params / 1e6)
 
-    # Tasks driven by a pre-built DataLoader passed via the ``dataset``
-    # parameter (an embedding host such as a DashAI plugin owns the dataset
-    # and its tokenization): supervised text classification and MLM
-    # pretraining over a DashAI corpus. Without ``dataset``, MLM keeps the
-    # legacy behavior (streaming RedPajama corpus from training_runtime).
-    if task == "text_classification" or (task == "mlm" and dataset is not None):
-        if dataset is None:
-            raise ValueError(
-                "task=text_classification requires a pre-built DataLoader "
-                "passed via the 'dataset' argument (batches must be dicts "
-                "with 'input_ids', 'attention_mask' and 'labels')."
-            )
-        if not hasattr(dataset, "__iter__"):
-            raise ValueError(
-                f"task={task}: 'dataset' must be an iterable "
-                "(torch DataLoader) of dict batches."
-            )
-        dataloader = dataset
+    # Host-owned NLP tasks. The data comes either from a pre-built DataLoader
+    # passed via ``dataset`` (an embedding host such as a DashAI plugin owns
+    # the dataset and its tokenization) or from the config's ``text_dataset``
+    # block (HF hub id / local parquet-json, built by
+    # ``build_text_dataloader_from_config``). When neither is present, MLM and
+    # causal_lm keep the legacy behavior (streaming RedPajama corpus from
+    # training_runtime); text_classification is rejected.
+    host_dataset = dataset is not None
+    text_ds_loader = (
+        build_text_dataloader_from_config(
+            loaded, tokenizer, resolved_device, batch_size, task
+        )
+        if not host_dataset
+        else None
+    )
+    if host_dataset or text_ds_loader is not None:
+        if host_dataset:
+            if not hasattr(dataset, "__iter__"):
+                raise ValueError(
+                    f"task={task}: 'dataset' must be an iterable "
+                    "(torch DataLoader) of dict batches."
+                )
+            dataloader = dataset
+        else:
+            dataloader = text_ds_loader
         mlm_dataset = None
         stats = {}
+    elif task == "text_classification":
+        raise ValueError(
+            "task=text_classification requires a pre-built DataLoader passed "
+            "via the 'dataset' argument (batches must be dicts with "
+            "'input_ids', 'attention_mask' and 'labels'), or a 'text_dataset' "
+            "block with use_labels=true in the config."
+        )
     else:
         dataloader, mlm_dataset, stats, _ = build_dataloader(
             tokenizer=tokenizer,

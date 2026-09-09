@@ -26,7 +26,7 @@ image:
   cls_token: true
   pooling_mode: cls
   num_classes: 10
-dataset:
+vision_dataset:
   dataset_name: ""
   rescale:
     height: 32

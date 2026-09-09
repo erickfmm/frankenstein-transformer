@@ -10,12 +10,33 @@ save, and load them from the DashAI UI.
 | Entry point | Class | DashAI base | Binds to task |
 |---|---|---|---|
 | `frankenstein_mlm` | `FrankensteinMLMModel` | `BaseModel` | `TextClassificationTask` |
-| `frankenstein_decoder` | `FrankensteinDecoderModel` | `BaseGenerativeModel` | `TextToTextGenerationTask` |
+| `frankenstein_decoder` | `FrankensteinDecoderModel` | `BaseGenerativeModel` | `TextToTextGenerationTask` (inference only) |
 | `frankenstein_pretrainer` | `FrankensteinPretrainer` | `BaseModel` | `MaskedLanguageModelingTask` (provided by this plugin) |
+| `frankenstein_causal_lm` | `FrankensteinCausalLMModel` | `BaseModel` | `CausalLMPretrainingTask` (provided by this plugin) |
 | `frankenstein_vit_cls` | `FrankensteinViTClassifier` | `BaseModel` | `ImageClassificationTask` |
 | `frankenstein_vit_seg` | `FrankensteinViTSegmenter` | `BaseModel` | `SegmentationTask` (provided by this plugin) |
 | `segmentation_task` | `SegmentationTask` | `BaseTask` | (new task provided by this plugin) |
 | `masked_language_modeling_task` | `MaskedLanguageModelingTask` | `BaseTask` | (new task provided by this plugin) |
+| `causal_lm_pretraining_task` | `CausalLMPretrainingTask` | `BaseTask` | (new task provided by this plugin) |
+
+## The `use_dashai_dataset` checkbox
+
+Every Frankenstein model component exposes a **Use DashAI dataset** checkbox
+(default: checked) in its configuration form:
+
+- **Checked (default)**: training consumes the DashAI run dataset
+  (`x_train`/`y_train`) — the dataset section of the Frankenstein JSON, if
+  any, is overridden. Text is tokenized by the plugin's dataset adapters
+  (masking for MLM, plain ids for causal LM, tokenized+labels for
+  classification) and passed to the engine as a pre-built DataLoader.
+- **Unchecked**: the Frankenstein engine itself loads the corpus from the
+  config pasted in `frankenstein_json`:
+  - NLP tasks (`mlm`, `causal_lm`, `text_classification`) use the
+    **`text_dataset`** block (HF hub `dataset_name`, `split`,
+    `text_column`, optional `label_column` + `use_labels`, `data_dir` with
+    parquet/json, `streaming`, `max_samples`).
+  - Vision tasks use the **`vision_dataset`** block (HF `dataset_name` or
+    local `dataset_dir`); without either, a dummy smoke dataset is used.
 
 ## MLM pretraining (Masked Language Modeling)
 

@@ -82,6 +82,7 @@ class FrankensteinMLMModel(TextClassificationModel):
         """
         kwargs = self.validate_and_transform(kwargs)
         self.frankenstein_json = kwargs.get("frankenstein_json", "")
+        self.use_dashai_dataset = bool(kwargs.get("use_dashai_dataset", True))
 
         self.num_labels = None
         self.fitted = False

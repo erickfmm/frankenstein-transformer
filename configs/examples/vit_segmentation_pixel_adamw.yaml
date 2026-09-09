@@ -26,7 +26,7 @@ image:
   cls_token: true
   seg_head_type: pixel
   num_seg_classes: 5
-dataset:
+vision_dataset:
   dataset_name: ""
   rescale:
     height: 32

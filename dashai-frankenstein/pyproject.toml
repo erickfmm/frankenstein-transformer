@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dashai-frankenstein"
-version = "0.2.1"
+version = "0.3.0"
 description = "DashAI plugin that registers Frankenstein Transformer model classes (MLM encoder, causal decoder, ViT) as DashAI components."
 readme = "README.md"
 license = { text = "MIT" }
@@ -32,10 +32,12 @@ sbert = ["sentence-transformers>=3.3.0", "sentencepiece>=0.2.0"]
 frankenstein_mlm = "dashai_frankenstein:FrankensteinMLMModel"
 frankenstein_decoder = "dashai_frankenstein:FrankensteinDecoderModel"
 frankenstein_pretrainer = "dashai_frankenstein:FrankensteinPretrainer"
+frankenstein_causal_lm = "dashai_frankenstein:FrankensteinCausalLMModel"
 frankenstein_vit_cls = "dashai_frankenstein:FrankensteinViTClassifier"
 frankenstein_vit_seg = "dashai_frankenstein:FrankensteinViTSegmenter"
 segmentation_task = "dashai_frankenstein:SegmentationTask"
 masked_language_modeling_task = "dashai_frankenstein:MaskedLanguageModelingTask"
+causal_lm_pretraining_task = "dashai_frankenstein:CausalLMPretrainingTask"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dashai_frankenstein"]

@@ -226,6 +226,7 @@ class SbertDispatchTests(unittest.TestCase):
             training_runtime={"sbert": sbert_cfg},
             image_config={},
             dataset_config={},
+            text_dataset_config={},
             config_dict=None,
         )
 
