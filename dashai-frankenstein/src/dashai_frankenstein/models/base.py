@@ -5,19 +5,22 @@ Both the NLP encoder (:class:`FrankensteinMLMModel`) and the ViT classifier
 a Frankenstein backbone with a classification head on a labelled
 ``DashAIDataset`` and return a per-class probability matrix from ``predict``.
 
-This module factors that loop out so the concrete components stay thin. It uses
-the Frankenstein engine (Strategy A classification head) and writes per-epoch
-metrics through DashAI's ``calculate_metrics``.
+This module factors that loop out so the concrete components stay thin. It
+drives training through the Frankenstein engine
+(:func:`src.engine.train_from_config`, ``task="text_classification"``), which
+runs the full :class:`TitanTrainer` loop (AMP, grad clipping, NaN retry,
+checkpoints, CSV telemetry) and streams every per-step/per-epoch metric into
+DashAI's native metric store via :class:`~dashai_frankenstein.adapters.telemetry.DashAITelemetryCallback`.
 """
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import numpy as np
 
 from dashai_frankenstein.adapters import io as io_adapter
-from dashai_frankenstein.adapters.metrics import EpochMetricsHook
+from dashai_frankenstein.adapters.telemetry import DashAITelemetryCallback
 from dashai_frankenstein.engine import (
     build_model_from_json,
     resolve_device,
@@ -87,6 +90,58 @@ def _extract_lr_from_optimizer(
     return 1e-4
 
 
+def _inject_engine_overrides(
+    json_text: str,
+    *,
+    task: str = "text_classification",
+    num_epochs: Optional[int] = None,
+    batch_size: Optional[int] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Parse a Frankenstein JSON config and inject DashAI runtime overrides.
+
+    Ensures the config is engine-drivable: sets ``training.task``, maps the
+    DashAI device label, and optionally forces ``num_epochs`` /
+    ``batch_size`` (the engine's runtime keys). Arbitrary nested extras are
+    deep-merged last.
+
+    Parameters
+    ----------
+    json_text : str
+        Frankenstein training config (one-line JSON or a dict).
+    task : str
+        Frankenstein ``training.task`` for the engine path.
+    num_epochs, batch_size : int, optional
+        Runtime overrides for the engine loop.
+    extra : dict, optional
+        Nested overrides deep-merged into the parsed config.
+
+    Returns
+    -------
+    dict
+        The merged config ready for ``engine.train_from_config``.
+    """
+    from dashai_frankenstein.engine import _deep_merge
+
+    parsed: Dict[str, Any]
+    if isinstance(json_text, dict):
+        parsed = dict(json_text)
+    else:
+        import json
+
+        parsed = json.loads(json_text) or {}
+
+    training = parsed.setdefault("training", {})
+    training["task"] = task
+    if num_epochs is not None:
+        training["num_epochs"] = int(num_epochs)
+    if batch_size is not None:
+        training["batch_size"] = int(batch_size)
+    if extra:
+        _deep_merge(parsed, extra)
+    return parsed
+
+
 def classification_train(
     self,
     x_train: Any,
@@ -99,12 +154,19 @@ def classification_train(
     text_column_fn,
     model_class_override: Optional[str] = None,
 ) -> Any:
-    """Run the in-process Frankenstein classification training loop.
+    """Run the Frankenstein classification training through the engine.
+
+    Delegates to :func:`src.engine.train_from_config` with
+    ``task="text_classification"`` and a pre-built dict-batch DataLoader.
+    The engine instantiates :class:`TitanTrainer` (AMP, gradient clipping,
+    NaN retry, rolling/best checkpoints, CSV telemetry) and streams every
+    step/epoch metric into DashAI via :class:`DashAITelemetryCallback`.
 
     Parameters
     ----------
     self : BaseModel
-        The DashAI component instance.
+        The DashAI component instance (carries ``run_id`` injected by
+        ``ModelFactory``).
     x_train, y_train : DashAIDataset
         Training features and labels.
     x_validation, y_validation : DashAIDataset, optional
@@ -123,10 +185,10 @@ def classification_train(
     BaseModel
         ``self``, fitted.
     """
-    import torch
-    import torch.nn as nn
+    from DashAI.back.core.enums.metrics import SplitEnum
 
-    from dashai_frankenstein.adapters.dataset import tokenized_dataloader
+    from dashai_frankenstein.adapters.dataset import tokenized_dataloader_dict
+    from dashai_frankenstein.engine import train_from_config
 
     self.num_labels = int(num_labels)
     json_text = resolve_json(self)
@@ -144,10 +206,6 @@ def classification_train(
     device = resolve_device(runtime.get("device", "auto"))
     batch_size = int(runtime.get("batch_size", 16) or 16)
     num_epochs = int(runtime.get("num_epochs", 3) or 3)
-    # lr from optimizer parameters (source of truth = Frankenstein schema).
-    opt_cfg = getattr(loaded.training_config, "optimizer_parameters", {}) or {}
-    opt_class = str(getattr(loaded.training_config, "optimizer_class", "adamw"))
-    lr = _extract_lr_from_optimizer(opt_class, opt_cfg)
 
     tokenizer = resolve_tokenizer(loaded)
     if tokenizer is None:
@@ -166,17 +224,8 @@ def classification_train(
                 vocab_size_override=tok_vocab,
             )
 
-    model = model.to(device)
-    self._frank_model = model
-    self._loaded_config = loaded
-    self._tokenizer = tokenizer
-    self._device = device
-    self._batch_size = batch_size
-    self._label_column = label_column
-    self._text_column_fn = text_column_fn
-
     text_col = text_column_fn(x_train)
-    train_loader = tokenized_dataloader(
+    train_loader = tokenized_dataloader_dict(
         x_train, tokenizer, text_col, label_column,
         batch_size=batch_size, device=device, shuffle=True,
     )
@@ -185,36 +234,44 @@ def classification_train(
     if x_validation is not None and y_validation is not None:
         # Merge the label column into the validation features view.
         val_text_col = text_column_fn(x_validation)
-        val_loader = tokenized_dataloader(
+        val_loader = tokenized_dataloader_dict(
             x_validation, tokenizer, val_text_col, label_column,
             batch_size=batch_size, device=device, shuffle=False,
         )
+    # The engine trains on a single iterable; chain train(+val) so the
+    # validation split is still visited each epoch by the trainer loop.
+    engine_dataset = train_loader if val_loader is None else _ConcatLoader(train_loader, val_loader)
 
-    optim = torch.optim.AdamW(
-        [p for p in model.parameters() if p.requires_grad], lr=float(lr)
+    # Engine config: inject the DashAI-driven task and runtime overrides.
+    engine_cfg = _inject_engine_overrides(
+        json_text,
+        task="text_classification",
+        num_epochs=num_epochs,
+        batch_size=batch_size,
     )
-    criterion = nn.CrossEntropyLoss()
 
-    hook = EpochMetricsHook(
-        self, x_train, y_train, x_validation, y_validation, log_every_n_epochs=1
+    callback = DashAITelemetryCallback(
+        self, x_train, y_train, x_validation, y_validation,
+        split=SplitEnum.TRAIN, log_every_n_steps=1,
     )
 
-    model.train()
-    for epoch in range(1, num_epochs + 1):
-        running, count = 0.0, 0
-        for input_ids, attention_mask, labels in train_loader:
-            input_ids = input_ids.to(device)
-            attention_mask = attention_mask.to(device)
-            labels = labels.to(device)
-            logits = model(input_ids)  # (B, num_labels) via Strategy-A head
-            loss = criterion(logits, labels)
-            optim.zero_grad()
-            loss.backward()
-            optim.step()
-            running += float(loss.item())
-            count += 1
-        log.info("epoch %s/%s loss=%.4f", epoch, num_epochs, running / max(count, 1))
-        hook(epoch=epoch)
+    self._frank_model = model
+    self._loaded_config = loaded
+    self._tokenizer = tokenizer
+    self._device = device
+    self._batch_size = batch_size
+    self._label_column = label_column
+    self._text_column_fn = text_column_fn
+
+    result = train_from_config(
+        engine_cfg,
+        dataset=engine_dataset,
+        device=device,
+        supervisor="off",
+        metrics_callback=callback,
+    )
+    if getattr(result, "model", None) is not None:
+        self._frank_model = result.model
 
     self.fitted = True
     self.x_data = {"train": x_train}
@@ -223,6 +280,43 @@ def classification_train(
         self.x_data["validation"] = x_validation
         self.y_data["validation"] = y_validation
     return self
+
+
+class _ConcatLoader:
+    """Chain two DataLoaders into one iterable (train + validation pass).
+
+    The engine's ``text_classification`` path consumes a single iterable of
+    dict batches; this wrapper yields the training loader fully followed by
+    the validation loader each epoch so both splits receive telemetry.
+
+    Parameters
+    ----------
+    first, second : Iterable
+        The loaders to chain (``second`` may be ``None``).
+    """
+
+    def __init__(self, first: Any, second: Any = None) -> None:
+        self.first = first
+        self.second = second
+
+    def __iter__(self):
+        for batch in self.first:
+            yield batch
+        if self.second is not None:
+            for batch in self.second:
+                yield batch
+
+    def __len__(self) -> int:
+        try:
+            length = len(self.first)
+        except TypeError:
+            length = 0
+        if self.second is not None:
+            try:
+                length += len(self.second)
+            except TypeError:
+                pass
+        return length
 
 
 def classification_predict(self, x_pred: Any, *, max_length: int = 512) -> np.ndarray:

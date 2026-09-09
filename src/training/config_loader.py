@@ -166,10 +166,13 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         raise ValueError("dataset must be an object when provided")
 
     task = str(training_data.get("task", "")).strip().lower()
-    if task not in {"mlm", "sbert", "causal_lm", "patch_prediction", "classification", "segmentation"}:
+    if task not in {
+        "mlm", "sbert", "causal_lm", "patch_prediction",
+        "classification", "segmentation", "text_classification",
+    }:
         raise ValueError(
             "training.task is required and must be one of: mlm, sbert, causal_lm, "
-            "patch_prediction, classification, segmentation"
+            "patch_prediction, classification, segmentation, text_classification"
         )
 
     model_config: Optional[FrankensteinModelConfig] = None
@@ -207,6 +210,13 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
             "(causal/autoregressive masking is only provided by the decoder)"
         )
 
+    # Text classification uses the encoder's Strategy-A classification head.
+    if task == "text_classification" and model_class not in (None, "frankenstein"):
+        raise ValueError(
+            "training.task=text_classification requires model_class=frankenstein "
+            "(the sequence-level classification head is only provided by the encoder)"
+        )
+
     # Vision tasks require the frankenstein_vit model class (patch embedding
     # + vision heads are only provided by the ViT class).
     vision_tasks = {"patch_prediction", "classification", "segmentation"}
@@ -217,7 +227,10 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         )
 
     optimizer_data = training_data.get("optimizer")
-    if task in {"mlm", "causal_lm", "patch_prediction", "classification", "segmentation"}:
+    if task in {
+        "mlm", "causal_lm", "patch_prediction",
+        "classification", "segmentation", "text_classification",
+    }:
         if not isinstance(optimizer_data, dict):
             raise ValueError(
                 "Missing required 'training.optimizer' object in config. "

@@ -23,7 +23,7 @@ from dashai_frankenstein.engine import (
     resolve_device,
     validate_training_json,
 )
-from dashai_frankenstein.models.base import resolve_json, _extract_lr_from_optimizer
+from dashai_frankenstein.models.base import resolve_json
 
 
 class FrankensteinViTSegmenter(BaseModel):
@@ -76,15 +76,22 @@ class FrankensteinViTSegmenter(BaseModel):
     def train(self, x_train, y_train, x_validation=None, y_validation=None):
         """Fine-tune the ViT segmentation head on a DashAI image+mask dataset.
 
+        Delegates to :func:`src.engine.train_from_config`
+        (``task=segmentation``) with a pre-built dict-batch DataLoader; the
+        engine's ``TitanTrainer`` streams all step/epoch telemetry into
+        DashAI via
+        :class:`~dashai_frankenstein.adapters.telemetry.DashAITelemetryCallback`.
+
         Masks are expected as an image column in ``y_train``; each mask is
         converted to a per-pixel class-index map (``(H, W)``) via its luminance
         quantized to ``num_seg_classes`` levels when no explicit palette exists.
         """
-        import torch
-        import torch.nn as nn
-        import torch.nn.functional as Fnn
+        from DashAI.back.core.enums.metrics import SplitEnum
 
-        from dashai_frankenstein.adapters.dataset import image_dataloader
+        from dashai_frankenstein.adapters.dataset import segmentation_dataloader_dict
+        from dashai_frankenstein.adapters.telemetry import DashAITelemetryCallback
+        from dashai_frankenstein.engine import train_from_config
+        from dashai_frankenstein.models.base import _inject_engine_overrides
 
         json_text = resolve_json(self)
         validate_training_json(json_text)
@@ -106,41 +113,43 @@ class FrankensteinViTSegmenter(BaseModel):
         device = resolve_device(runtime.get("device", "auto"))
         batch_size = int(runtime.get("batch_size", 8) or 8)
         num_epochs = int(runtime.get("num_epochs", 3) or 3)
-        opt_cfg = getattr(loaded.training_config, "optimizer_parameters", {}) or {}
-        opt_class = str(getattr(loaded.training_config, "optimizer_class", "adamw"))
-        lr = _extract_lr_from_optimizer(opt_class, opt_cfg)
 
         self._device = device
         self._batch_size = batch_size
         self._frank_model = model.to(device)
         self._loaded_config = loaded
 
-        train_loader, _, _ = image_dataloader(
-            x_train, y_dataset=y_train, image_size=img_size,
+        train_loader = segmentation_dataloader_dict(
+            x_train, image_size=img_size,
             batch_size=batch_size, device=device, shuffle=True,
+            num_seg_classes=self.num_seg_classes,
         )
 
-        optim = torch.optim.AdamW(
-            [p for p in model.parameters() if p.requires_grad], lr=lr
+        engine_cfg = _inject_engine_overrides(
+            json_text,
+            task="segmentation",
+            num_epochs=num_epochs,
+            batch_size=batch_size,
+            extra={"model": {
+                "image_height": img_size,
+                "image_width": img_size,
+            }},
         )
-        model.train()
-        for epoch in range(1, num_epochs + 1):
-            for images, _label_ids in train_loader:
-                images = images.to(device)
-                # Derive a pseudo-target mask from the input image luminance
-                # when explicit mask targets aren't materialized as class maps.
-                # This keeps the loop functional; real mask columns should be
-                # decoded into (B, H, W) long tensors of class indices.
-                with torch.no_grad():
-                    gray = images.mean(dim=1)  # (B, H, W)
-                    target = (gray * self.num_seg_classes).long().clamp(
-                        0, self.num_seg_classes - 1
-                    )
-                logits = model(images, task="segmentation")  # (B, C, H, W)
-                loss = Fnn.cross_entropy(logits, target)
-                optim.zero_grad()
-                loss.backward()
-                optim.step()
+
+        callback = DashAITelemetryCallback(
+            self, x_train, y_train,
+            split=SplitEnum.TRAIN, log_every_n_steps=1,
+        )
+
+        result = train_from_config(
+            engine_cfg,
+            dataset=train_loader,
+            device=device,
+            supervisor="off",
+            metrics_callback=callback,
+        )
+        if getattr(result, "model", None) is not None:
+            self._frank_model = result.model.to(device)
 
         self.fitted = True
         self.x_data = {"train": x_train}

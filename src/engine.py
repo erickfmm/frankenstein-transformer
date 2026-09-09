@@ -496,7 +496,7 @@ def _train_from_config_path(
     # Vision task (frankenstein_vit).
     vision_tasks = {"patch_prediction", "classification", "segmentation"}
     if task in vision_tasks:
-        return _train_vision(loaded, resolved_device, training_config, batch_size, num_epochs, metrics_callback)
+        return _train_vision(loaded, resolved_device, training_config, batch_size, num_epochs, metrics_callback, dataset=dataset)
 
     if loaded.base_model:
         logging.info("\n" + "=" * 60)
@@ -515,13 +515,32 @@ def _train_from_config_path(
     logging.info("Total Parameters: %.2fM", total_params / 1e6)
     logging.info("Trainable Parameters: %.2fM", trainable_params / 1e6)
 
-    dataloader, mlm_dataset, stats, _ = build_dataloader(
-        tokenizer=tokenizer,
-        training_runtime=training_runtime,
-        resolved_device=resolved_device,
-        cli_batch_size=batch_size,
-        task=task,
-    )
+    # Text classification is driven by a pre-built DataLoader passed via the
+    # ``dataset`` parameter (the engine never builds streaming MLM corpora for
+    # a supervised task); the host (e.g. a DashAI plugin) owns the dataset.
+    if task == "text_classification":
+        if dataset is None:
+            raise ValueError(
+                "task=text_classification requires a pre-built DataLoader "
+                "passed via the 'dataset' argument (batches must be dicts "
+                "with 'input_ids', 'attention_mask' and 'labels')."
+            )
+        if not hasattr(dataset, "__iter__"):
+            raise ValueError(
+                "task=text_classification: 'dataset' must be an iterable "
+                "(torch DataLoader) of dict batches."
+            )
+        dataloader = dataset
+        mlm_dataset = None
+        stats = {}
+    else:
+        dataloader, mlm_dataset, stats, _ = build_dataloader(
+            tokenizer=tokenizer,
+            training_runtime=training_runtime,
+            resolved_device=resolved_device,
+            cli_batch_size=batch_size,
+            task=task,
+        )
 
     logging.info("\n" + "=" * 60)
     logging.info("Step 4: %s training (%s)", task.upper(), model_descriptor)
@@ -634,7 +653,8 @@ def _train_from_config_path(
     trainer.storage_manager.cleanup()
 
     logging.info("💡 Dataset cache preserved for fault recovery")
-    logging.info("   Location: %s", stats["cache_dir"])
+    if stats:
+        logging.info("   Location: %s", stats["cache_dir"])
 
     logging.info("\n📁 Checkpoint Summary:")
     logging.info("  Rolling checkpoints kept: %s", len(trainer.rolling_checkpoints))
@@ -673,8 +693,15 @@ def _train_vision(
     batch_size: Optional[int],
     num_epochs: Optional[int],
     metrics_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    dataset: Any = None,
 ) -> TrainResult:
-    """Run a vision task (patch_prediction / classification / segmentation)."""
+    """Run a vision task (patch_prediction / classification / segmentation).
+
+    When ``dataset`` is provided it is used directly as the training
+    iterable (dict batches from an embedding host such as a DashAI plugin);
+    otherwise the dataset is resolved from ``dataset_config`` or a smoke-test
+    ``DummyImageDataset``.
+    """
     from .training.vision_dataset import DummyImageDataset
 
     logging.info("\n" + "=" * 60)
@@ -695,28 +722,40 @@ def _train_vision(
     logging.info("Total Parameters: %.2fM", total_params / 1e6)
     logging.info("Trainable Parameters: %.2fM", trainable_params / 1e6)
 
-    dataset_name = loaded.dataset_config.get("dataset_name")
-    dataset_dir = loaded.dataset_config.get("dataset_dir")
-    if dataset_name or dataset_dir:
-        from .training.vision_dataset import ImageDataset
-
-        dataset = ImageDataset(loaded.dataset_config, loaded.image_config, loaded.task)
+    if dataset is not None:
+        logging.info("Using pre-built dataset provided by the caller")
     else:
-        logging.info("No dataset_name/dataset_dir — using DummyImageDataset for smoke test")
-        dataset = DummyImageDataset(
-            task=loaded.task,
-            num_samples=64,
-            image_height=config.image_height,
-            image_width=config.image_width,
-            in_channels=config.in_channels,
-            patch_size=config.patch_size,
-            num_classes=config.num_classes,
-            num_seg_classes=config.num_seg_classes,
-            mask_ratio=config.mask_ratio,
-            prediction_target=config.prediction_target,
-        )
+        dataset_name = loaded.dataset_config.get("dataset_name")
+        dataset_dir = loaded.dataset_config.get("dataset_dir")
+        if dataset_name or dataset_dir:
+            from .training.vision_dataset import ImageDataset
 
-    dataloader = DataLoader(dataset, batch_size=batch_size_eff, shuffle=True)
+            dataset = ImageDataset(loaded.dataset_config, loaded.image_config, loaded.task)
+        else:
+            logging.info("No dataset_name/dataset_dir — using DummyImageDataset for smoke test")
+            dataset = DummyImageDataset(
+                task=loaded.task,
+                num_samples=64,
+                image_height=config.image_height,
+                image_width=config.image_width,
+                in_channels=config.in_channels,
+                patch_size=config.patch_size,
+                num_classes=config.num_classes,
+                num_seg_classes=config.num_seg_classes,
+                mask_ratio=config.mask_ratio,
+                prediction_target=config.prediction_target,
+            )
+
+    if dataset is not None and not hasattr(dataset, "__iter__"):
+        raise ValueError(
+            "Vision task: pre-built 'dataset' must be an iterable "
+            "(torch DataLoader) of dict batches."
+        )
+    if dataset is not None and hasattr(dataset, "dataset") and hasattr(dataset, "batch_size"):
+        # Already a DataLoader — use it as-is.
+        dataloader = dataset
+    else:
+        dataloader = DataLoader(dataset, batch_size=batch_size_eff, shuffle=True)
 
     logging.info("Step 4: %s training", loaded.task.upper())
     trainer = TitanTrainer(

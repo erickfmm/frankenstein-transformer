@@ -24,7 +24,7 @@ from dashai_frankenstein.engine import (
     resolve_device,
     validate_training_json,
 )
-from dashai_frankenstein.models.base import resolve_json, _extract_lr_from_optimizer
+from dashai_frankenstein.models.base import resolve_json
 
 
 class FrankensteinViTClassifier(BaseModel):
@@ -82,13 +82,19 @@ class FrankensteinViTClassifier(BaseModel):
         self.y_data = None
 
     def train(self, x_train, y_train, x_validation=None, y_validation=None):
-        """Fine-tune the ViT classification head on the DashAI image dataset."""
-        import torch
-        import torch.nn as nn
+        """Fine-tune the ViT classification head on the DashAI image dataset.
 
-        from DashAI.back.core.enums.metrics import LevelEnum, SplitEnum
+        Delegates to :func:`src.engine.train_from_config` (``task=classification``)
+        with a pre-built dict-batch DataLoader; the engine's ``TitanTrainer``
+        streams all step/epoch telemetry into DashAI via
+        :class:`~dashai_frankenstein.adapters.telemetry.DashAITelemetryCallback`.
+        """
+        from DashAI.back.core.enums.metrics import SplitEnum
 
-        from dashai_frankenstein.adapters.dataset import image_dataloader
+        from dashai_frankenstein.adapters.dataset import image_dataloader, image_dataloader_dict
+        from dashai_frankenstein.adapters.telemetry import DashAITelemetryCallback
+        from dashai_frankenstein.engine import train_from_config
+        from dashai_frankenstein.models.base import _inject_engine_overrides, _ConcatLoader
 
         json_text = resolve_json(self)
         validate_training_json(json_text)
@@ -119,57 +125,54 @@ class FrankensteinViTClassifier(BaseModel):
         device = resolve_device(runtime.get("device", "auto"))
         batch_size = int(runtime.get("batch_size", 32) or 32)
         num_epochs = int(runtime.get("num_epochs", 3) or 3)
-        opt_cfg = getattr(loaded.training_config, "optimizer_parameters", {}) or {}
-        opt_class = str(getattr(loaded.training_config, "optimizer_class", "adamw"))
-        lr = _extract_lr_from_optimizer(opt_class, opt_cfg)
 
         self._device = device
         self._batch_size = batch_size
         self._frank_model = model.to(device)
         self._loaded_config = loaded
 
-        # Build the real train loader with the resolved device/batch_size.
-        train_loader, _, _ = image_dataloader(
+        # Build the real dict-format loaders with the resolved device/batch_size.
+        train_loader, _, _ = image_dataloader_dict(
             x_train, y_dataset=y_train, image_size=self._image_size,
             batch_size=batch_size, device=device, shuffle=True,
+            label_to_idx=label_to_idx,
         )
 
         val_loader = None
         if x_validation is not None and y_validation is not None:
-            val_loader, _, _ = image_dataloader(
+            val_loader, _, _ = image_dataloader_dict(
                 x_validation, y_dataset=y_validation, image_size=self._image_size,
                 batch_size=batch_size, device=device, shuffle=False,
+                label_to_idx=label_to_idx,
             )
+        engine_dataset = train_loader if val_loader is None else _ConcatLoader(train_loader, val_loader)
 
-        optim = torch.optim.AdamW(
-            [p for p in model.parameters() if p.requires_grad], lr=lr
+        engine_cfg = _inject_engine_overrides(
+            json_text,
+            task="classification",
+            num_epochs=num_epochs,
+            batch_size=batch_size,
+            extra={"model": {
+                "num_classes": self.num_classes,
+                "image_height": self._image_size,
+                "image_width": self._image_size,
+            }},
         )
-        criterion = nn.CrossEntropyLoss()
-        model.train()
-        for epoch in range(1, num_epochs + 1):
-            running, count = 0.0, 0
-            for images, labels in train_loader:
-                images = images.to(device)
-                labels = labels.to(device)
-                logits = model(images, task="classification")  # (B, num_classes)
-                loss = criterion(logits, labels)
-                optim.zero_grad()
-                loss.backward()
-                optim.step()
-                running += float(loss.item())
-                count += 1
-            try:
-                self.calculate_metrics(
-                    split=SplitEnum.TRAIN, level=LevelEnum.EPOCH,
-                    x_data=x_train, y_data=y_train, log_index=epoch,
-                )
-                if val_loader is not None:
-                    self.calculate_metrics(
-                        split=SplitEnum.VALIDATION, level=LevelEnum.EPOCH,
-                        x_data=x_validation, y_data=y_validation, log_index=epoch,
-                    )
-            except Exception:  # noqa: BLE001
-                pass
+
+        callback = DashAITelemetryCallback(
+            self, x_train, y_train, x_validation, y_validation,
+            split=SplitEnum.TRAIN, log_every_n_steps=1,
+        )
+
+        result = train_from_config(
+            engine_cfg,
+            dataset=engine_dataset,
+            device=device,
+            supervisor="off",
+            metrics_callback=callback,
+        )
+        if getattr(result, "model", None) is not None:
+            self._frank_model = result.model.to(device)
 
         self.fitted = True
         self.x_data = {"train": x_train}

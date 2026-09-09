@@ -25,6 +25,7 @@ try:
         load_checkpoint,
         resolve_torch_device,
         save_checkpoint,
+        train_from_config,
     )
     from src.training.config_loader import load_training_config  # type: ignore
     from src.training.trainer import TrainingConfig  # type: ignore
@@ -52,6 +53,7 @@ __all__ = [
     "resolve_schema",
     "resolve_device",
     "validate_training_json",
+    "train_from_config",
 ]
 
 

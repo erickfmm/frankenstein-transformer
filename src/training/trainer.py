@@ -1389,6 +1389,42 @@ class TitanTrainer:
                     loss = loss + v
         return loss, accuracy
 
+    def compute_text_classification_loss(
+        self, batch: dict
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute supervised sequence-level classification loss (Strategy A).
+
+        Uses the encoder's built-in classification head: ``forward(input_ids)``
+        returns ``(B, num_labels)`` logits over a pooled representation.
+
+        Args:
+            batch: Dict with ``input_ids``, ``attention_mask`` and ``labels``
+                (integer class indices).
+
+        Returns:
+            Tuple of ``(loss, accuracy)``.
+
+        Raises:
+            RuntimeError: If the model has no classification head enabled
+                (``config.classification_head`` is False).
+        """
+        input_ids = batch["input_ids"]
+        labels = batch["labels"]
+        logits = self.model(input_ids)
+        if logits.dim() != 2 or logits.shape[-1] < 2:
+            raise RuntimeError(
+                "task=text_classification requires the encoder classification "
+                "head (Strategy A). Set num_labels > 0 in the model config."
+            )
+        loss = F.cross_entropy(logits.float(), labels.long())
+        accuracy = (logits.argmax(-1) == labels.long()).float().mean()
+        aux = getattr(self.model, "last_auxiliary_losses", None)
+        if aux:
+            for v in aux.values():
+                if torch.is_tensor(v):
+                    loss = loss + v
+        return loss, accuracy
+
     def compute_classification_loss(self, batch: dict) -> Tuple[torch.Tensor, torch.Tensor]:
         """Compute image classification cross-entropy loss.
 
@@ -1500,6 +1536,8 @@ class TitanTrainer:
                                 batch['attention_mask'],
                                 batch['labels']
                             )
+                        elif self.task == "text_classification":
+                            loss, accuracy = self.compute_text_classification_loss(batch)
                         elif self.task == "patch_prediction":
                             loss, accuracy = self.compute_patch_prediction_loss(batch)
                         elif self.task == "classification":
@@ -1593,8 +1631,17 @@ class TitanTrainer:
                             else self._get_default_block_grad_norms()
                         )
                         step_time_ms = (time.perf_counter() - optimizer_window_start) * 1000.0
-                        effective_batch_size = int(batch['input_ids'].shape[0]) * self.gradient_accumulation_steps
-                        token_count = effective_batch_size * int(batch['input_ids'].shape[1])
+                        # Batch size / token counts are task-dependent: text
+                        # batches carry ``input_ids``; vision batches carry
+                        # ``pixel_values`` with no token axis.
+                        if "input_ids" in batch:
+                            eff_batch = int(batch['input_ids'].shape[0])
+                            token_count = eff_batch * int(batch['input_ids'].shape[1])
+                        else:
+                            pixel_values = batch.get("pixel_values")
+                            eff_batch = int(pixel_values.shape[0]) if pixel_values is not None else 1
+                            token_count = eff_batch
+                        effective_batch_size = eff_batch * self.gradient_accumulation_steps
                         tokens_per_sec = float(token_count) / max(step_time_ms / 1000.0, 1e-9)
 
                         post_clip_bad = (not math.isfinite(grad_norm_value)) or (

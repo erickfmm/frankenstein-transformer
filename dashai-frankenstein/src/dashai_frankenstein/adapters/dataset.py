@@ -157,6 +157,210 @@ def prediction_loader(
     )
 
 
+def tokenized_dataloader_dict(
+    dataset: Any,
+    tokenizer: Any,
+    text_column: str,
+    label_column: str,
+    *,
+    batch_size: int = 16,
+    max_length: int = 512,
+    device: str = "cpu",
+    shuffle: bool = True,
+) -> Any:
+    """Build a DataLoader yielding **dict** batches for the engine trainer.
+
+    Same tokenization contract as :func:`tokenized_dataloader` but each batch
+    is a dict with ``input_ids``, ``attention_mask`` and ``labels`` keys — the
+    format :class:`TitanTrainer` expects (``batch["input_ids"]`` etc. for
+    ``task="text_classification"``).
+    """
+    import torch
+    from torch.utils.data import DataLoader, TensorDataset
+
+    texts = list(dataset[text_column])
+    labels = list(dataset[label_column])
+
+    enc = tokenizer(texts, truncation=True, padding=True, max_length=max_length)
+    input_ids = torch.tensor(enc["input_ids"], dtype=torch.long)
+    attention_mask = torch.tensor(enc["attention_mask"], dtype=torch.long)
+    label_tensor = torch.tensor(np.asarray(labels).astype("int64"), dtype=torch.long)
+
+    ds = TensorDataset(input_ids, attention_mask, label_tensor)
+
+    def _collate_dict(batch):
+        ids, mask, lbl = zip(*batch)
+        return {
+            "input_ids": torch.stack(ids),
+            "attention_mask": torch.stack(mask),
+            "labels": torch.stack(lbl),
+        }
+
+    return DataLoader(
+        ds,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=_collate_dict,
+        pin_memory=str(device).startswith("cuda"),
+    )
+
+
+def image_dataloader_dict(
+    dataset: Any,
+    y_dataset: Any = None,
+    *,
+    image_size: int = 224,
+    batch_size: int = 32,
+    device: str = "cpu",
+    shuffle: bool = True,
+    label_to_idx: Optional[dict] = None,
+    num_seg_classes: Optional[int] = None,
+) -> Any:
+    """Build a DataLoader yielding **dict** batches for the engine trainer.
+
+    Mirrors :func:`image_dataloader` but yields dicts: ``{"pixel_values",
+    "labels"}`` for classification and ``{"pixel_values", "segmentation_map"}``
+    for segmentation — the format :class:`TitanTrainer`'s vision loss
+    methods expect.
+
+    Parameters
+    ----------
+    label_to_idx : dict, optional
+        Pre-computed label mapping (from a prior :func:`image_dataloader`
+        call). When ``None`` and ``y_dataset`` is given, the mapping is
+        derived here.
+    num_seg_classes : int, optional
+        Number of segmentation classes (required for segmentation tasks).
+
+    Returns
+    -------
+    tuple
+        ``(dataloader, label_to_idx, num_classes)`` like
+        :func:`image_dataloader`.
+    """
+    import torch
+    import torch.utils.data
+    from torchvision import transforms
+
+    image_col = _image_column(dataset)
+    label_col = None
+    if y_dataset is not None:
+        label_col = y_dataset.column_names[0]
+
+    if label_to_idx is None and y_dataset is not None and label_col is not None:
+        cat = (getattr(y_dataset, "types", {}) or {}).get(label_col)
+        if cat is not None and getattr(cat, "categories", None):
+            unique_labels = sorted(cat.categories)
+        else:
+            unique_labels = sorted(set(y_dataset[label_col]))
+        label_to_idx = {lbl: i for i, lbl in enumerate(unique_labels)}
+    label_to_idx = dict(label_to_idx or {})
+
+    transform = transforms.Compose(
+        [
+            transforms.Lambda(lambda img: img.convert("RGB")),
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+
+    class _ImageDataset(torch.utils.data.Dataset):
+        def __init__(self):
+            self.x = dataset
+            self.y = y_dataset
+
+        def __len__(self):
+            return len(self.x)
+
+        def __getitem__(self, idx):
+            image = transform(self.x[idx][image_col].to_pil())
+            if self.y is None:
+                return image
+            label_str = self.y[idx][label_col]
+            return image, int(label_to_idx.get(label_str, -1))
+
+    def _collate_cls(batch):
+        images = torch.stack([b[0] for b in batch])
+        labels = torch.tensor([b[1] for b in batch], dtype=torch.long)
+        return {"pixel_values": images, "labels": labels}
+
+    def _collate_images(batch):
+        return {"pixel_values": torch.stack(batch)}
+
+    ds_obj = _ImageDataset()
+    loader = torch.utils.data.DataLoader(
+        ds_obj,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=_collate_cls if y_dataset is not None else _collate_images,
+        pin_memory=str(device).startswith("cuda"),
+    )
+    return loader, label_to_idx, len(label_to_idx)
+
+
+def segmentation_dataloader_dict(
+    dataset: Any,
+    *,
+    image_size: int = 224,
+    batch_size: int = 8,
+    device: str = "cpu",
+    shuffle: bool = True,
+    num_seg_classes: int = 2,
+) -> Any:
+    """Build a DataLoader yielding ``{"pixel_values", "segmentation_map"}`` dicts.
+
+    Targets are pseudo-masks derived from the input image luminance quantized
+    to ``num_seg_classes`` levels (same contract as the historical bespoke
+    loop; explicit mask columns should be decoded here in the future).
+
+    Returns
+    -------
+    torch.utils.data.DataLoader
+    """
+    import torch
+    import torch.utils.data
+    from torchvision import transforms
+
+    image_col = _image_column(dataset)
+
+    transform = transforms.Compose(
+        [
+            transforms.Lambda(lambda img: img.convert("RGB")),
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+
+    class _SegDataset(torch.utils.data.Dataset):
+        def __init__(self):
+            self.x = dataset
+
+        def __len__(self):
+            return len(self.x)
+
+        def __getitem__(self, idx):
+            image = transform(self.x[idx][image_col].to_pil())
+            with torch.no_grad():
+                gray = image.mean(dim=0)  # (H, W) in [0, 1]
+                target = (gray * num_seg_classes).long().clamp(0, num_seg_classes - 1)
+            return image, target
+
+    def _collate(batch):
+        images = torch.stack([b[0] for b in batch])
+        targets = torch.stack([b[1] for b in batch])
+        return {"pixel_values": images, "segmentation_map": targets}
+
+    return torch.utils.data.DataLoader(
+        _SegDataset(),
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=_collate,
+        pin_memory=str(device).startswith("cuda"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Vision: DashAI image columns -> (pixel_values, labels) tensors
 # ---------------------------------------------------------------------------

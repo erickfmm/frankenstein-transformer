@@ -26,13 +26,16 @@ properties:
     description: "Training task type.\n- `mlm`: Masked Language Modeling — tokens are masked and predicted (BERT-style pre-training).\n  Requires `training.optimizer` configuration.\n- `sbert`: Sentence-BERT\
       \ fine-tuning — contrastive learning on sentence pairs/triplets for\n  semantic embeddings. Requires `training.sbert` subsection.\n- `causal_lm`: Causal Language Modeling — autoregressive next-token\
       \ prediction (GPT-style pre-training).\n  Each token predicts the following token; cross-entropy loss is computed over all shifted positions\n  (no masking). Requires `model_class: frankensteindecoder`\
-      \ and `training.optimizer` configuration.\n\n**Impact:** Defines the training objective. `mlm` is for language understanding;\n`sbert` is for semantic similarity and retrieval; `causal_lm` is for\
-      \ autoregressive text generation.\n"
+      \ and `training.optimizer` configuration.\n- `text_classification`: Supervised sequence-level classification on tokenized text.\n  Uses the encoder's classification head (Strategy A); batches carry\n\
+      \  `input_ids`, `attention_mask` and integer class `labels`. Requires `training.optimizer` configuration.\n\n**Impact:** Defines the training objective. `mlm` is for language understanding;\n`sbert`\
+      \ is for semantic similarity and retrieval; `causal_lm` is for autoregressive text generation;\n`text_classification` is for labelled text classification."
     description_es: "Tipo de tarea de entrenamiento.\n- `mlm`: Masked Language Modeling — los tokens se enmascaran y predicen (preentrenamiento estilo BERT).\n  Requiere configuración `training.optimizer`.\n\
       - `sbert`: Sentence-BERT fine-tuning — aprendizaje contrastivo en pares/tripletes para\n  embeddings semánticos. Requiere subsección `training.sbert`.\n- `causal_lm`: Causal Language Modeling — predicción\
       \ autorregresiva de siguiente token (preentrenamiento estilo GPT).\n  Cada token predice el siguiente; la pérdida de cross-entropy se calcula sobre todas las posiciones desplazadas\n  (sin enmascaramiento).\
-      \ Requiere `model_class: frankensteindecoder` y configuración `training.optimizer`.\n\n**Impacto:** Define el objetivo de entrenamiento. `mlm` es para comprensión de lenguaje;\n`sbert` es para similitud\
-      \ semántica y recuperación; `causal_lm` es para generación de texto autorregresiva.\n"
+      \ Requiere `model_class: frankensteindecoder` y configuración `training.optimizer`.\n- `text_classification`: Clasificación supervisada a nivel de secuencia sobre texto tokenizado.\n  Usa la\
+      \ cabeza de clasificación del encoder (Estrategia A); los batches llevan `input_ids`,\n  `attention_mask` y `labels` enteros. Requiere configuración `training.optimizer`.\n\n**Impacto:** Define\
+      \ el objetivo de entrenamiento. `mlm` es para comprensión de lenguaje;\n`sbert` es para similitud semántica; `causal_lm` es para generación de texto autorregresiva;\n`text_classification` es para\
+      \ clasificación de texto etiquetado."
     enum:
     - mlm
     - sbert
@@ -40,6 +43,7 @@ properties:
     - patch_prediction
     - classification
     - segmentation
+    - text_classification
     examples:
     - mlm
   supervisor:
