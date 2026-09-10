@@ -99,6 +99,19 @@ pip install -e ./dashai-frankenstein
 DashAI discovers the plugin via the `dashai.plugins` entry-points group on
 startup — no DashAI source edits required.
 
+### Co-install compatibility with DashAI
+
+`dashai-frankenstein >= 0.4.0` (with `frankenstein-transformer >= 1.3.0`)
+allows **transformers 4.x and 5.x** (`>=4.45,<6`), so installing the plugin
+into an existing DashAI environment keeps DashAI's modern stack intact
+(transformers 5 / huggingface-hub 1.x / diffusers 0.40) with no downgrades
+and no `pip check` conflicts.
+
+If your environment must stay on transformers 4.x, pin
+`diffusers<0.40` alongside it — diffusers 0.40.0 requires
+`huggingface-hub>=1.23`, which transformers 4.x (hub `<1.0`) cannot provide;
+diffusers 0.39 works with either hub series.
+
 ## Architecture
 
 See `docs/dashai-plugin-audit.md` in the Frankenstein repo for the full

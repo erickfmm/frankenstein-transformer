@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dashai-frankenstein"
-version = "0.3.1"
+version = "0.4.0"
 description = "DashAI plugin that registers Frankenstein Transformer model classes (MLM encoder, causal decoder, ViT) as DashAI components."
 readme = "README.md"
 license = { text = "MIT" }
@@ -12,11 +12,13 @@ authors = [{ name = "Erick Merino", email = "erickfmm@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
     # Frankenstein ships the importable ``src`` package and the engine API.
-    # >=1.2.0 adds the text_dataset engine block + causal_lm caller-dataset
-    # support consumed by the plugin's use_dashai_dataset toggle.
-    "frankenstein-transformer>=1.2.0",
+    # >=1.3.0 relaxes transformers to <6 so this plugin co-installs cleanly
+    # with dashai's transformers 5 / hub 1.x / diffusers 0.40 stack.
+    # (>=1.2.0 added the text_dataset engine block + causal_lm caller-dataset
+    # support consumed by the plugin's use_dashai_dataset toggle.)
+    "frankenstein-transformer>=1.3.0",
     "torch>=2.0",
-    "transformers>=4.45.0,<5.0.0",
+    "transformers>=4.45.0,<6.0.0",
     "datasets>=3.0.0",
     "numpy>=1.26.0,<3.0",
     "PyYAML>=6.0.1",
@@ -24,7 +26,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-sbert = ["sentence-transformers>=3.3.0", "sentencepiece>=0.2.0"]
+# st>=5.2 allows transformers<6; markers mirror the main package so the Py3.9
+# dev env stays installable (sentence-transformers 5.2+ needs Python >=3.10).
+sbert = [
+    "sentence-transformers>=5.2.0; python_version >= '3.10'",
+    "sentence-transformers>=3.3.0,<5.2.0; python_version < '3.10'",
+    "sentencepiece>=0.2.0",
+]
 
 # DashAI discovers plugins whose distribution name startswith("dashai").
 # Each entry points to a class that inherits a DashAI base (BaseModel /

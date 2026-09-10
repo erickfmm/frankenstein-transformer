@@ -15,6 +15,13 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
+        include:
+          # Extra leg: transformers 4.x on py3.12. The dependency range allows
+          # both transformers majors (<6), so keep the 4.x path covered too —
+          # it is what Python 3.9 installs resolve to, and the fallback for
+          # dashai envs that pin transformers 4.
+          - python-version: "3.12"
+            transformers-pin: "<5"
 
     steps:
       - name: Checkout repository
@@ -43,6 +50,12 @@ jobs:
             > /tmp/requirements-ci.txt
           pip install -r /tmp/requirements-ci.txt
 
+      # Only on the legacy leg: downgrade transformers to the 4.x series
+      # (sentence-transformers>=5.2 still allows transformers>=4.41).
+      - name: Pin transformers 4.x (legacy leg)
+        if: matrix.transformers-pin == '<5'
+        run: pip install "transformers<5"
+
       # Install the package itself without pulling in deps (torch already
       # installed as CPU above; --no-deps avoids overriding it with cu118).
       - name: Install package
@@ -65,7 +78,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-py${{ matrix.python-version }}
+          name: test-results-py${{ matrix.python-version }}-${{ matrix.transformers-pin || 'latest' }}
           path: |
             .pytest_cache/
           retention-days: 7

@@ -11,7 +11,7 @@ requires-python = ">=3.10"  # CI matrix: 3.10/3.11/3.12; DashAI uv tool: 3.12. U
 
 dependencies = [
     "torch>=2.0",                              # unpinned: DashAI/CI bring their own (cpu/cuda) torch
-    "transformers>=4.45.0,<5.0.0",             # 4.45+ for current SBERT/ModernBERT examples
+    "transformers>=4.45.0,<6.0.0",             # 4.45+ baseline; <6 co-installs with dashai's transformers 5 / hub 1.x / diffusers 0.40 stack
     "datasets>=3.0.0",                         # HuggingFace streaming dataset for MLM + SBERT
     "tqdm>=4.66.0",
     "numpy>=1.26.0,<3.0",                      # last 1.x series (still Py 3.9 friendly); transformers caps it
@@ -44,7 +44,11 @@ cu128 = [
 # unless the components that need them are used.
 # SBERT fine-tuning/inference:                pip install -e ".[sbert]"
 sbert = [
-    "sentence-transformers>=3.3.0",            # 3.3 unlocks ModernBERT
+    # >=5.2 allows transformers<6 (5.2 lifted their <5 cap). Markers keep the
+    # Py3.9 conda dev env installable — sentence-transformers 5.2+ needs >=3.10,
+    # where transformers resolves back to 4.x and st<5.2 still applies.
+    "sentence-transformers>=5.2.0; python_version >= '3.10'",
+    "sentence-transformers>=3.3.0,<5.2.0; python_version < '3.10'",
     "sentencepiece>=0.2.0",                    # Spanish SPM tokenizer (spm_spa_redpajama35)
 ]
 # Streamlit web builder:                      pip install -e ".[web]"
@@ -53,7 +57,8 @@ web = [
 ]
 # Full local dev install (union of sbert + web):  pip install -e ".[train]"
 train = [
-    "sentence-transformers>=3.3.0",
+    "sentence-transformers>=5.2.0; python_version >= '3.10'",
+    "sentence-transformers>=3.3.0,<5.2.0; python_version < '3.10'",
     "sentencepiece>=0.2.0",
     "streamlit>=1.39.0",
 ]
