@@ -37,6 +37,7 @@ from typing import List, Optional
 
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint
 
 from .base import ResidualBase
 

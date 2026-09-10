@@ -47,6 +47,7 @@ from typing import List, Optional
 
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint
 
 from .base import ResidualBase
 from .full_attn_res import _rms_norm

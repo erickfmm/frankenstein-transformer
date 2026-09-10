@@ -32,6 +32,7 @@ try:
     from .model.frankenstein_encoder import FrankensteinEncoder
     from .model.frankenstein_vit import FrankensteinViT
     from .utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+    from .utils.hf_compat import load_auto_model, load_auto_tokenizer
 except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
@@ -42,6 +43,7 @@ except ImportError:
     from model.frankenstein_encoder import FrankensteinEncoder
     from model.frankenstein_vit import FrankensteinViT
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+    from utils.hf_compat import load_auto_model, load_auto_tokenizer
 
 
 __all__ = [
@@ -96,7 +98,7 @@ def _load_base_model_and_tokenizer(
             lacks a pad token or mask token.
     """
     try:
-        from transformers import AutoModelForMaskedLM, AutoTokenizer
+        from transformers import AutoModelForMaskedLM, AutoTokenizer  # noqa: F401
     except ImportError as exc:
         raise RuntimeError(
             "transformers is required for base_model MLM training. "
@@ -111,7 +113,7 @@ def _load_base_model_and_tokenizer(
     trust_remote_code = bool(tokenizer_cfg.get("trust_remote_code", False))
     use_fast = bool(tokenizer_cfg.get("use_fast", True))
 
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = load_auto_tokenizer(
         tokenizer_name_or_path,
         use_fast=use_fast,
         trust_remote_code=trust_remote_code,
@@ -128,8 +130,9 @@ def _load_base_model_and_tokenizer(
             "Loaded tokenizer has no mask token. Provide a compatible tokenizer for MLM training."
         )
 
-    model = AutoModelForMaskedLM.from_pretrained(
+    model = load_auto_model(
         loaded.base_model,
+        task="mlm",
         trust_remote_code=trust_remote_code,
     )
 

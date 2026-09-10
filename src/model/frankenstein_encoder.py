@@ -17,6 +17,10 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+# Explicit submodule import: torch>=2.7 no longer guarantees that
+# ``torch.utils.checkpoint`` is materialized as an attribute by an indirect
+# import elsewhere, and gradient checkpointing below relies on it.
+import torch.utils.checkpoint
 
 from .config import FrankensteinModelConfig
 from .hybrid_layer import HybridLayer
