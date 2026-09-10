@@ -53,6 +53,7 @@ the new YAML schema without an explicit migration step.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any, Dict
 
 # Leaf-name remap table for the per-mixer attention sub-objects.
@@ -326,12 +327,19 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
         model_data: The ``model:`` mapping from a YAML config or a
             ``config.json`` dict. May be either the new hierarchical shape
             (with ``dims``, ``norm``, ``embedding``, ``attention`` sub-keys)
-            or a legacy flat shape.
+            or a legacy flat shape. A :class:`FrankensteinModelConfig`
+            dataclass instance (e.g. saved inside a checkpoint) is accepted
+            too and converted to its field dict first.
 
     Returns:
         A flat dictionary suitable for ``FrankensteinModelConfig(**result)``. If the
         input is already flat, it is returned as-is (shallow copy).
     """
+    if dataclasses.is_dataclass(model_data) and not isinstance(model_data, type):
+        model_data = {
+            f.name: getattr(model_data, f.name)
+            for f in dataclasses.fields(model_data)
+        }
     if not isinstance(model_data, dict):
         return {}
 

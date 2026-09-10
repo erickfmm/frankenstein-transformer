@@ -629,7 +629,30 @@ def find_latest_checkpoint(run_dir: Path) -> Optional[Path]:
 # ---------------------------------------------------------------------------
 # Deploy / infer smoke helpers
 # ---------------------------------------------------------------------------
-def copy_tokenizer_to_deploy_dir(deploy_dir: Path, vocab_size: int) -> None:
+def copy_tokenizer_to_deploy_dir(deploy_dir: Path, vocab_size: int, run_dir: Optional[Path] = None) -> None:
+    """Copy the tokenizer matching the deployed checkpoint into the deploy dir.
+
+    Three sources, in order:
+
+    1. ``run_dir/trained_tokenizer/`` (HF artifacts saved via
+       ``tokenizer.training.save_dir`` of the
+       ``tokenizer.source=train_from_dataset`` path) and
+       ``run_dir/checkpoints/*/`` — copies all tokenizer files so the
+       inference engine can ``AutoTokenizer``-load them.
+    2. The legacy toy SentencePiece model (SPM path).
+    """
+    if run_dir is not None:
+        for tok_dir in [run_dir / "trained_tokenizer"] + sorted(run_dir.glob("checkpoints/*/")):
+            if (tok_dir / "tokenizer.json").exists():
+                for tok_file in sorted(tok_dir.glob("tokenizer*")):
+                    if tok_file.is_file():
+                        shutil.copy(str(tok_file), str(deploy_dir / tok_file.name))
+                for tok_file in ("special_tokens_map.json", "tokenizer_config.json"):
+                    candidate = tok_dir / tok_file
+                    if candidate.exists():
+                        shutil.copy(str(candidate), str(deploy_dir / tok_file))
+                logging.info("Copied HF tokenizer from %s to %s", tok_dir, deploy_dir)
+                return
     tokenizer_src = ensure_toy_tokenizer(vocab_size)
     shutil.copy(str(tokenizer_src), str(deploy_dir / "tokenizer.model"))
 

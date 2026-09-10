@@ -2,35 +2,244 @@ type: object
 title: "Tokenizer Settings"
 title_es: "Configuración del Tokenizador"
 description: |
-  Configuration for the tokenizer used when `base_model` is specified for MLM training.
-  Controls how raw text is tokenized into input IDs consumable by the pre-trained model.
-  Required when using `base_model` with the `mlm` task.
+  Configuration for the tokenizer used by NLP training tasks (`mlm`, `causal_lm`,
+  `text_classification`). Available to BOTH the `base_model` path (continual
+  pretraining / fine-tuning) and the custom from-scratch model path. Controls
+  how raw text is tokenized into input IDs consumable by the model.
+
+  Two modes are selected via `source`:
+
+  - `hf_repo` (default): load a pretrained tokenizer from a HuggingFace repo id
+    or local path via `AutoTokenizer.from_pretrained()`. Requires `name_or_path`.
+  - `train_from_dataset`: train a NEW tokenizer from the dataset text using the
+    `tokenizers` library (algorithm selected in the `training` sub-object). The
+    resulting vocabulary size is injected into `model.dims.vocab_size` before
+    model construction, so the embedding matrix always matches the tokenizer.
+
+  When `base_model` is used with the `mlm` task the tokenizer is required
+  (either mode). For custom models the legacy SentencePiece path remains as a
+  fallback when the whole `tokenizer` block is omitted.
 
   **Impact:** An incorrect tokenizer (one that doesn't match the base model) produces meaningless
   embeddings and unrecoverable loss. Always verify that `name_or_path` matches the base model.
 description_es: |
-  Configuración del tokenizador utilizado cuando se especifica `base_model` para entrenamiento MLM.
-  Controla cómo el texto crudo se convierte en IDs de entrada consumibles por el modelo preentrenado.
-  Obligatorio al usar `base_model` con la tarea `mlm`.
+  Configuración del tokenizador usado por las tareas de entrenamiento NLP (`mlm`,
+  `causal_lm`, `text_classification`). Disponible tanto para la ruta `base_model`
+  (preentrenamiento continuo / ajuste fino) como para la ruta de modelo personalizado
+  desde cero. Controla cómo el texto crudo se convierte en IDs de entrada consumibles
+  por el modelo.
+
+  Dos modos se seleccionan mediante `source`:
+
+  - `hf_repo` (por defecto): carga un tokenizador preentrenado desde un id de repo
+    de HuggingFace o ruta local vía `AutoTokenizer.from_pretrained()`. Requiere `name_or_path`.
+  - `train_from_dataset`: entrena un tokenizador NUEVO desde el texto del dataset
+    con la biblioteca `tokenizers` (algoritmo seleccionado en el sub-objeto `training`).
+    El tamaño de vocabulario resultante se inyecta en `model.dims.vocab_size` antes de
+    construir el modelo, de modo que la matriz de embedding siempre coincide con el tokenizador.
+
+  Cuando se usa `base_model` con la tarea `mlm` el tokenizador es obligatorio
+  (en cualquiera de los dos modos). Para modelos personalizados, la ruta legacy de
+  SentencePiece permanece como fallback cuando el bloque `tokenizer` se omite por completo.
 
   **Impacto:** Un tokenizador incorrecto (que no coincida con el del modelo base) produce embeddings
   sin sentido y pérdida irrecuperable. Siempre verificar que `name_or_path` coincida con el modelo base.
 additionalProperties: false
 properties:
+  source:
+    type: string
+    enum: [hf_repo, train_from_dataset]
+    title: "Tokenizer Source"
+    title_es: "Fuente del Tokenizador"
+    description: |
+      Tokenizer source mode:
+
+      - `hf_repo` (default): load a pretrained tokenizer from `name_or_path`
+        (HuggingFace repo id or local path).
+      - `train_from_dataset`: train a NEW tokenizer from the dataset text
+        (see the `training` sub-object). The trained vocabulary size is
+        injected into `model.dims.vocab_size` before model construction.
+
+      When `train_from_dataset` is selected, `name_or_path` must be omitted.
+    description_es: |
+      Modo de fuente del tokenizador:
+
+      - `hf_repo` (por defecto): carga un tokenizador preentrenado desde `name_or_path`
+        (id de repo de HuggingFace o ruta local).
+      - `train_from_dataset`: entrena un tokenizador NUEVO desde el texto del dataset
+        (ver el sub-objeto `training`). El tamaño de vocabulario entrenado se inyecta
+        en `model.dims.vocab_size` antes de construir el modelo.
+
+      Cuando se selecciona `train_from_dataset`, `name_or_path` debe omitirse.
+    examples: [hf_repo]
+    default: hf_repo
+  training:
+    type: object
+    title: "Tokenizer Training"
+    title_es: "Entrenamiento del Tokenizador"
+    description: |
+      Sub-object configuring tokenizer training from a dataset. Required when
+      `source: train_from_dataset`; ignored otherwise. Uses the HuggingFace
+      `tokenizers` library trainers (BPE, WordPiece, WordLevel, Unigram).
+    description_es: |
+      Sub-objeto que configura el entrenamiento del tokenizador desde un dataset.
+      Obligatorio cuando `source: train_from_dataset`; ignorado en otro caso.
+      Usa los trainers de la biblioteca `tokenizers` de HuggingFace
+      (BPE, WordPiece, WordLevel, Unigram).
+    additionalProperties: false
+    properties:
+      algorithm:
+        type: string
+        enum: [bpe, wordpiece, wordlevel, unigram]
+        title: "Tokenizer Algorithm"
+        title_es: "Algoritmo del Tokenizador"
+        description: |
+          Tokenizer training algorithm:
+
+          - `bpe` (default): Byte Pair Encoding (GPT-2 style). Recommended general choice.
+          - `wordpiece`: WordPiece (original BERT style). Good for MLM with
+            `[CLS]/[SEP]/[MASK]` special tokens.
+          - `wordlevel`: simple word-level tokenization (small vocabularies).
+          - `unigram`: subword language model (SentencePiece-style); `vocab_size`
+            is optional (prunes automatically).
+        description_es: |
+          Algoritmo de entrenamiento del tokenizador:
+
+          - `bpe` (por defecto): Byte Pair Encoding (estilo GPT-2). Elección general recomendada.
+          - `wordpiece`: WordPiece (estilo BERT original). Bueno para MLM con tokens
+            especiales `[CLS]/[SEP]/[MASK]`.
+          - `wordlevel`: tokenización a nivel de palabra (vocabularios pequeños).
+          - `unigram`: sub-palabras estilo SentencePiece; `vocab_size` es opcional
+            (poda automáticamente).
+        examples: [bpe]
+        default: bpe
+      vocab_size:
+        type: integer
+        title: "Tokenizer Vocab Size"
+        title_es: "Tamaño de Vocabulario"
+        description: |
+          Target vocabulary size. Required for `bpe`, `wordpiece` and `wordlevel`;
+          optional for `unigram` (which prunes automatically). The trained tokenizer's
+          actual vocabulary size (`len(tokenizer)`) is injected into
+          `model.dims.vocab_size` so the embedding matrix matches.
+        description_es: |
+          Tamaño de vocabulario objetivo. Obligatorio para `bpe`, `wordpiece` y
+          `wordlevel`; opcional para `unigram` (que poda automáticamente). El tamaño
+          real (`len(tokenizer)`) se inyecta en `model.dims.vocab_size` para que la
+          matriz de embedding coincida.
+        minimum: 1
+        examples: [8000]
+      min_frequency:
+        type: integer
+        title: "Min Frequency"
+        title_es: "Frecuencia Mínima"
+        description: |
+          Minimum frequency (count) for a token/subword to be included in the vocabulary.
+          Higher values produce smaller, cleaner vocabularies.
+        description_es: |
+          Frecuencia mínima (conteo) para que un token/sub-palabra entre al vocabulario.
+          Valores altos producen vocabularios más pequeños y limpios.
+        minimum: 1
+        default: 2
+      special_tokens:
+        type: array
+        items:
+          type: string
+        title: "Special Tokens"
+        title_es: "Tokens Especiales"
+        description: |
+          Special tokens registered in the trained tokenizer. For MLM training with a
+          custom model, include `[MASK]` (BERT-style masking). Defaults to the standard
+          BERT set when omitted.
+        description_es: |
+          Tokens especiales registrados en el tokenizador entrenado. Para entrenamiento
+          MLM con modelo personalizado, incluir `[MASK]` (enmascarado estilo BERT).
+          Por defecto se usa el conjunto estándar BERT.
+        default: ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]
+      save_dir:
+        type: string
+        title: "Save Directory"
+        title_es: "Directorio de Guardado"
+        description: |
+          Directory where the trained tokenizer is persisted via `save_pretrained()`.
+          The checkpoint loader automatically reloads from the checkpoint's
+          `tokenizer/` subdirectory, so this is mainly useful to reuse the tokenizer
+          for inference or to inspect the vocabulary.
+        description_es: |
+          Directorio donde se persiste el tokenizador entrenado vía `save_pretrained()`.
+          El cargador de checkpoints recarga automáticamente desde el subdirectorio
+          `tokenizer/`, así que esto es útil para reutilizar el tokenizador en inferencia
+          o inspeccionar el vocabulario.
+      lowercase:
+        type: boolean
+        title: "Lowercase"
+        title_es: "Minúsculas"
+        description: |
+          Lowercase all text before training (BERT-uncased style). Recommended when
+          the corpus is mixed-case and vocabulary efficiency matters.
+        description_es: |
+          Convertir todo el texto a minúsculas antes de entrenar (estilo BERT-uncased).
+          Recomendado cuando el corpus mezcla mayúsculas y se busca eficiencia de vocabulario.
+        default: false
+      strip_accents:
+        type: boolean
+        title: "Strip Accents"
+        title_es: "Quitar Acentos"
+        description: |
+          Strip diacritical accents (e.g. `á -> a`) before training. Common for
+          multilingual or accented corpora to reduce vocabulary size.
+        description_es: |
+          Quitar signos diacríticos (p.ej. `á -> a`) antes de entrenar. Común para
+          corpus multilingües o acentuados para reducir el vocabulario.
+        default: false
+      pre_tokenizer:
+        type: string
+        enum: [whitespace, bytelevel, bert]
+        title: "Pre-Tokenizer"
+        title_es: "Pre-Tokenizador"
+        description: |
+          Pre-tokenization strategy:
+
+          - `whitespace` (default): split on whitespace and punctuation (GPT-2 style).
+          - `bytelevel`: byte-level BPE splitting (GPT-2 exact); enables byte fallback.
+          - `bert`: BERT-style pre-tokenizer (whitespace + punctuation splitting,
+            pairs with `lowercase: true` for classic uncased BERT behavior).
+        description_es: |
+          Estrategia de pre-tokenización:
+
+          - `whitespace` (por defecto): divide por espacios y puntuación (estilo GPT-2).
+          - `bytelevel`: división byte-level BPE (GPT-2 exacto); habilita byte fallback.
+          - `bert`: pre-tokenizador estilo BERT (espacios + puntuación; emparejar con
+            `lowercase: true` para el comportamiento BERT-uncased).
+        default: whitespace
+      max_token_length:
+        type: integer
+        title: "Max Token Length"
+        title_es: "Longitud Máxima de Token"
+        description: |
+          Optional cap on individual token length in characters (0 = no limit).
+          Protects against degenerate very-long tokens on noisy corpora.
+        description_es: |
+          Límite opcional de longitud de token en caracteres (0 = sin límite).
+          Protege contra tokens degenerados muy largos en corpora ruidosos.
+        minimum: 0
+        default: 0
   name_or_path:
     type: string
     title: "Tokenizer Path"
     title_es: "Ruta del Tokenizador"
     description: |
       HuggingFace tokenizer identifier or local path passed to `AutoTokenizer.from_pretrained()`.
-      Must match the tokenizer used to train the `base_model`. The tokenizer determines the vocabulary
+      Required when `source: hf_repo` (the default). Must match the tokenizer used to
+      train the `base_model`. The tokenizer determines the vocabulary
       and tokenization strategy used during training.
 
       **Impact:** Si no coincide con el modelo base, los IDs de tokens no corresponderán a las
       embeddings correctas, resultando en un modelo inutilizable.
     description_es: |
       Identificador de tokenizador de HuggingFace o ruta local pasado a `AutoTokenizer.from_pretrained()`.
-      Debe coincidir con el tokenizador usado para entrenar `base_model`. El tokenizador determina el
+      Obligatorio cuando `source: hf_repo` (el valor por defecto). Debe coincidir con el
+      tokenizador usado para entrenar `base_model`. El tokenizador determina el
       vocabulario y la estrategia de tokenización durante el entrenamiento.
 
       **Impacto:** Si no coincide con el modelo base, los IDs de tokens no corresponderán a las

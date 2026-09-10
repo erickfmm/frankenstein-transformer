@@ -654,14 +654,19 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
                 help=get_field_description(schema["properties"]["base_model"]),
             )
             config["base_model"] = base_model
-            
-            tokenizer_schema = schema["properties"]["tokenizer"]
-            st.write(f"**{get_field_title(tokenizer_schema, 'Tokenizer Configuration')}**")
-            tokenizer_description = get_field_description(tokenizer_schema)
-            if tokenizer_description:
-                st.caption(tokenizer_description)
-            tokenizer_config = render_object("tokenizer", schema["properties"]["tokenizer"])
-            config["tokenizer"] = tokenizer_config
+
+    # Tokenizer configuration is available to BOTH modes (base_model
+    # fine-tuning and custom from-scratch models). It supports loading a
+    # tokenizer from a HuggingFace repo (source: hf_repo) or training a new
+    # one from the dataset (source: train_from_dataset).
+    with st.expander("Tokenizer Configuration", expanded=model_mode == "Base Model"):
+        tokenizer_schema = schema["properties"]["tokenizer"]
+        st.write(f"**{get_field_title(tokenizer_schema, 'Tokenizer Configuration')}**")
+        tokenizer_description = get_field_description(tokenizer_schema)
+        if tokenizer_description:
+            st.caption(tokenizer_description)
+        tokenizer_config = render_object("tokenizer", schema["properties"]["tokenizer"])
+        config["tokenizer"] = tokenizer_config
     
     # Training configuration
     st.header("Training Configuration")

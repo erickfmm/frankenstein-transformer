@@ -280,5 +280,80 @@ class SbertDispatchTests(unittest.TestCase):
             _train_sbert(loaded, "cpu", TrainingConfig())
 
 
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+@unittest.skipUnless(
+    find_spec("tokenizers") is not None, "tokenizers library required"
+)
+class TrainedTokenizerModelTests(unittest.TestCase):
+    """``_build_trained_tokenizer_model`` (tokenizer.source=train_from_dataset)."""
+
+    TEXTS = [
+        "el zorro marrón salta sobre el perro perezoso",
+        "la inteligencia artificial aprende patrones nuevos",
+        "los transformadores procesan secuencias con atención",
+        "entrenar un modelo pequeño requiere muchos datos",
+        "el zorro salta y el perro ladra en el jardín",
+    ] * 20
+
+    def _make_loaded(self):
+        from src.training.config_loader import LoadedTrainingConfig
+
+        return LoadedTrainingConfig(
+            task="mlm",
+            model_class="frankenstein",
+            model_config=_mini_cfg(vocab_size=10),
+            base_model=None,
+            tokenizer_config={
+                "source": "train_from_dataset",
+                "training": {
+                    "algorithm": "bpe",
+                    "vocab_size": 64,
+                    "special_tokens": ["[PAD]", "[UNK]", "[MASK]"],
+                },
+            },
+            training_config=TrainingConfig(),
+            training_runtime={},
+            image_config={},
+            dataset_config={},
+            text_dataset_config={},
+            config_dict=None,
+        )
+
+    def test_trained_tokenizer_vocab_injected_into_model(self):
+        from src.engine import _build_trained_tokenizer_model, _raw_texts_from_host_dataset
+
+        loaded = self._make_loaded()
+        model, tokenizer, runtime_config, descriptor = _build_trained_tokenizer_model(
+            loaded, dataset=self.TEXTS, task="mlm"
+        )
+        self.assertEqual(len(tokenizer), runtime_config.vocab_size)
+        self.assertEqual(descriptor, "frankenstein")
+        # The embedding matrix matches the trained vocabulary.
+        emb = model.emb if hasattr(model, "emb") else None
+        if emb is not None and hasattr(emb, "num_embeddings"):
+            self.assertEqual(int(emb.num_embeddings), len(tokenizer))
+        self.assertEqual(tokenizer.mask_token, "[MASK]")
+
+    def test_raw_texts_from_host_dataset_dicts(self):
+        from src.engine import _raw_texts_from_host_dataset
+
+        texts = list(_raw_texts_from_host_dataset(
+            [{"text": "hola"}, {"text": "mundo"}]
+        ))
+        self.assertEqual(texts, ["hola", "mundo"])
+
+    def test_raw_texts_from_host_dataset_strings(self):
+        from src.engine import _raw_texts_from_host_dataset
+
+        texts = list(_raw_texts_from_host_dataset(["uno", "dos"]))
+        self.assertEqual(texts, ["uno", "dos"])
+
+    def test_raw_texts_from_host_dataset_empty_raises(self):
+        from src.engine import _raw_texts_from_host_dataset
+
+        with self.assertRaises(ValueError):
+            list(_raw_texts_from_host_dataset([{}, {}, {"other": 1}]))
+
+
 if __name__ == "__main__":
     unittest.main()

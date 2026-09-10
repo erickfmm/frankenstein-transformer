@@ -1,0 +1,56 @@
+model_class: frankenstein
+model:
+  dims:
+    hidden_size: 256
+    num_layers: 4
+    num_heads: 4
+    num_loops: 1
+    layer_pattern: [standard_attn, standard_attn, standard_attn, standard_attn]
+    mode: encoder
+    dropout: 0.1
+  norm:
+    type: rms_norm
+  embedding:
+    factorized:
+      enabled: false
+      dim: 64
+    conv:
+      enabled: false
+      kernel: 3
+  attention: {}
+  ffn_hidden_size: 512
+  ffn_activation: gelu
+  use_bitnet: false
+  use_moe: false
+tokenizer:
+  source: train_from_dataset
+  training:
+    algorithm: bpe
+    vocab_size: 8000
+    special_tokens: ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]
+    min_frequency: 2
+    save_dir: "./trained_tokenizer"
+    pre_tokenizer: whitespace
+text_dataset:
+  dataset_name: erickfmm/red_pajama_es_hq_35
+  split: train
+  text_column: text
+  max_samples: 10000
+training:
+  task: mlm
+  num_epochs: 1
+  batch_size: 8
+  max_length: 128
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-4
+      adamw-lr_norms: 1e-4
+      adamw-lr_attention: 1e-4
+      adamw-lr_other: 1e-4
+      adamw-wd_embeddings: 0.0
+      adamw-wd_norms: 0.0
+      adamw-wd_attention: 0.0
+      adamw-wd_other: 0.0
+  scheduler_total_steps: 1000
+  csv_log_path: "training_metrics_tokenizer_train_from_dataset.csv"

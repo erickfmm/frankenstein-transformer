@@ -292,6 +292,44 @@ class _IterableTextDataset(IterableDataset):  # type: ignore[type-arg]
             count += 1
 
 
+def build_text_iterator_from_config(loaded: Any) -> Iterator[str]:
+    """Yield raw text strings from the ``text_dataset`` block for tokenizer training.
+
+    Used by ``tokenizer.source=train_from_dataset``: the tokenizers-library
+    trainers consume this iterator to learn the vocabulary. Loads the same
+    sources as :func:`build_text_dataloader_from_config` (HF hub id, optionally
+    streaming, or local parquet/json directory) and yields the raw strings of
+    ``text_column`` (no tokenization, no labels).
+
+    Args:
+        loaded: Validated :class:`LoadedTrainingConfig` whose
+            ``text_dataset_config`` names the source.
+
+    Yields:
+        Raw text strings from the dataset.
+
+    Raises:
+        ValueError: If no ``text_dataset`` source is configured, or the
+            configured text column is missing from the source.
+    """
+    cfg = TextDatasetSpec.from_config(getattr(loaded, "text_dataset_config", None))
+    if not cfg.configured:
+        raise ValueError(
+            "tokenizer.source=train_from_dataset requires a 'text_dataset' block "
+            "naming the corpus (dataset_name or data_dir)"
+        )
+    source = _load_hf_source(cfg)
+    text_col, _ = _resolve_columns(cfg, source)
+    count = 0
+    for row in source:
+        if cfg.max_samples and count >= cfg.max_samples:
+            break
+        text = row.get(text_col) if isinstance(row, dict) else None
+        if text:
+            yield str(text)
+            count += 1
+
+
 def build_text_dataloader_from_config(
     loaded: Any,
     tokenizer: Any,

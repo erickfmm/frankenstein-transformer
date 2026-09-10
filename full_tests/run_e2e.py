@@ -501,6 +501,51 @@ def make_vision_pe_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     return configs
 
 
+def make_tokenizer_configs(vocab_size: int) -> List[Tuple[str, dict]]:
+    """Tokenizer source modes: HF-repo load vs train-from-dataset (all algorithms).
+
+    Exercises the top-level ``tokenizer`` block on the CUSTOM (non-base_model)
+    path:
+
+    * ``source: hf_repo`` — load a pretrained tokenizer from a repo id; the
+      vocab size is injected into ``model.dims.vocab_size``.
+    * ``source: train_from_dataset`` — train a NEW tokenizer from the toy
+      parquet corpus (``text_dataset`` block) with each of the 4 algorithms
+      (bpe, wordpiece, wordlevel, unigram).
+    """
+    configs: List[Tuple[str, dict]] = []
+
+    for algo in ["bpe", "wordpiece", "wordlevel", "unigram"]:
+        model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
+        model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "standard_attn"]}})
+        training = training.copy()
+        training["task"] = "mlm"
+        tok_training: Dict[str, Any] = {
+            "algorithm": algo,
+            "min_frequency": 1,
+            "special_tokens": ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"],
+            "save_dir": "trained_tokenizer",
+        }
+        if algo != "unigram":
+            tok_training["vocab_size"] = vocab_size
+        configs.append((f"tokenizer_train_{algo}", {
+            "model_class": "frankenstein",
+            "model": model,
+            "tokenizer": {
+                "source": "train_from_dataset",
+                "training": tok_training,
+            },
+            "text_dataset": {
+                "data_dir": str(helpers.DATA_DIR),
+                "text_column": "text",
+                "max_samples": 200,
+            },
+            "training": training,
+        }))
+
+    return configs
+
+
 # ---------------------------------------------------------------------------
 # CLI / main
 # ---------------------------------------------------------------------------
@@ -510,7 +555,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--category",
-        choices=["all", "attn", "opt", "norm", "pe", "transversal", "task", "batch_size", "vision", "vision_pe", "deploy"],
+        choices=["all", "attn", "opt", "norm", "pe", "transversal", "task", "batch_size", "vision", "vision_pe", "tokenizer", "deploy"],
         default="all",
         help="Which sweep to run (default: all).",
     )
@@ -655,6 +700,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         combos.extend(make_vision_configs(args.vocab_size))
     if args.category in {"all", "vision_pe"}:
         combos.extend(make_vision_pe_configs(args.vocab_size))
+    if args.category in {"all", "tokenizer"}:
+        combos.extend(make_tokenizer_configs(args.vocab_size))
 
     if args.limit is not None:
         combos = combos[: args.limit]
@@ -729,7 +776,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             write_results_incremental()
             logging.info("%s -> %s (%.1fs) %s", res.combo_id, res.status, res.duration_sec, res.notes)
             if res.status == "OK":
-                helpers.copy_tokenizer_to_deploy_dir(deploy_std_dir, vocab_size)
+                helpers.copy_tokenizer_to_deploy_dir(
+                    deploy_std_dir, vocab_size,
+                    run_dir=helpers.RUNS_DIR / base_id,
+                )
                 results.append(helpers.run_infer(deploy_std_dir, f"{base_id}_infer", runner, env_extra, device=args.device))
                 write_results_incremental()
                 logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)

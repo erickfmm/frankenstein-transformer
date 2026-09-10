@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, Optional, Tuple
 
 import torch
 from torch.utils.data import DataLoader
@@ -244,15 +244,28 @@ def build_model(
 
 def build_base_model_and_tokenizer(
     loaded: LoadedTrainingConfig,
+    *,
+    tokenizer_override: Any = None,
 ) -> Tuple[torch.nn.Module, Any, Any]:
     """Build an HF base model + tokenizer for the ``base_model`` training path.
 
     Args:
         loaded: Validated :class:`LoadedTrainingConfig` with ``base_model``.
+        tokenizer_override: Optional pre-resolved tokenizer (e.g. one trained
+            from the dataset). When provided, the tokenizer is NOT loaded from
+            ``tokenizer.name_or_path``; the model embeddings are resized to
+            ``len(tokenizer_override)`` instead.
 
     Returns:
         Tuple of ``(model, tokenizer, runtime_config)``.
     """
+    if tokenizer_override is not None:
+        tokenizer = tokenizer_override
+        trust_remote_code = False
+        model = load_auto_model(loaded.base_model, task="mlm", trust_remote_code=False)
+        model.resize_token_embeddings(len(tokenizer))
+        runtime_config = getattr(model, "config", None)
+        return model, tokenizer, runtime_config
     model, tokenizer = _load_base_model_and_tokenizer(loaded)
     runtime_config = getattr(model, "config", None)
     return model, tokenizer, runtime_config
@@ -503,21 +516,38 @@ def _train_from_config_path(
     if task in vision_tasks:
         return _train_vision(loaded, resolved_device, training_config, batch_size, num_epochs, metrics_callback, dataset=dataset)
 
-    if loaded.base_model:
+    tok_cfg = loaded.tokenizer_config or {}
+    tok_source = str(tok_cfg.get("source", "hf_repo") or "hf_repo").strip().lower()
+
+    if tok_source == "train_from_dataset" and task in ("mlm", "causal_lm", "text_classification"):
+        # Train a NEW tokenizer from the dataset text (tokenizers library) and
+        # inject the resulting vocab size into the model config BEFORE model
+        # construction, so the embedding matrix matches the tokenizer.
+        model, tokenizer, runtime_config, model_descriptor = _build_trained_tokenizer_model(
+            loaded, dataset, task
+        )
+    elif loaded.base_model:
         logging.info("\n" + "=" * 60)
         logging.info("Step 1: Loading base MLM model + external tokenizer")
         logging.info("=" * 60)
         model, tokenizer, runtime_config = build_base_model_and_tokenizer(loaded)
         model_descriptor = loaded.base_model
     elif (task in ("mlm", "causal_lm", "text_classification")
-          and dataset is not None
-          and (loaded.tokenizer_config or {}).get("name_or_path")):
-        # Host-owned NLP corpus (e.g. a DashAI plugin): the batches are
-        # already tokenized, so resolve the tokenizer from the config's
-        # ``tokenizer`` block (HF AutoTokenizer) instead of the legacy SPM.
+          and (loaded.tokenizer_config or {}).get("name_or_path")
+          and (dataset is not None or loaded.text_dataset_config)):
+        # Host-owned NLP corpus (e.g. a DashAI plugin) or a ``text_dataset``
+        # block: the batches are tokenized at collate time with the tokenizer
+        # from the config's ``tokenizer`` block (HF AutoTokenizer) instead of
+        # the legacy SPM. Requires an explicit tokenizer source so the legacy
+        # SPM path stays the default when no ``tokenizer`` block is given.
         from .engine_hf_tokenizer import build_hf_tokenizer_from_config
-        model = build_model(loaded.model_class, loaded.model_config)
         tokenizer = build_hf_tokenizer_from_config(loaded.tokenizer_config)
+        # The embedding matrix must match the tokenizer (Frankenstein
+        # constraint): inject the tokenizer vocab size BEFORE building the
+        # model.
+        if loaded.model_config is not None:
+            loaded.model_config.vocab_size = len(tokenizer)
+        model = build_model(loaded.model_class, loaded.model_config)
         runtime_config = loaded.model_config
         model_descriptor = loaded.model_class or "frankenstein"
     else:
@@ -716,6 +746,158 @@ def _build_legacy(loaded: LoadedTrainingConfig) -> Tuple[torch.nn.Module, Any]:
         raise ValueError("model config is required when base_model is not provided")
     model = build_model(loaded.model_class, config)
     return model, tokenizer
+
+
+def _raw_texts_from_host_dataset(dataset: Any, max_samples: int = 0) -> Iterator[str]:
+    """Extract raw text strings from a host dataset (DashAI run dataset).
+
+    Accepts either a HF ``datasets.Dataset``-like object (row dicts) or any
+    iterable of row dicts with a ``text`` column. Used by the
+    ``tokenizer.source=train_from_dataset`` path when the corpus is owned by
+    the embedding host rather than a ``text_dataset`` block.
+
+    Args:
+        dataset: HF Dataset, iterable of row dicts, or iterable of strings.
+        max_samples: Optional cap on the number of yielded texts.
+
+    Yields:
+        Raw text strings.
+
+    Raises:
+        ValueError: If the dataset shape is unrecognized or yields no text.
+    """
+    count = 0
+    if hasattr(dataset, "with_format") or (hasattr(dataset, "column_names") and not callable(dataset)):
+        rows = dataset
+        for row in rows:
+            if max_samples and count >= max_samples:
+                break
+            if isinstance(row, dict):
+                for key in ("text", "sentence", "content", "document"):
+                    value = row.get(key)
+                    if value:
+                        yield str(value)
+                        count += 1
+                        break
+                else:
+                    # Take the first string column as a fallback.
+                    for value in row.values():
+                        if isinstance(value, str) and value:
+                            yield value
+                            count += 1
+                            break
+            elif isinstance(row, str):
+                yield row
+                count += 1
+        return
+    for item in dataset:
+        if max_samples and count >= max_samples:
+            break
+        if isinstance(item, dict):
+            for key in ("text", "sentence", "content", "document"):
+                value = item.get(key)
+                if value:
+                    yield str(value)
+                    count += 1
+                    break
+            else:
+                for value in item.values():
+                    if isinstance(value, str) and value:
+                        yield value
+                        count += 1
+                        break
+        elif isinstance(item, (list, tuple)):
+            for value in item:
+                if isinstance(value, str) and value:
+                    yield value
+                    count += 1
+                    break
+        elif isinstance(item, str):
+            yield item
+            count += 1
+    if count == 0:
+        raise ValueError(
+            "Could not extract any raw text from the host dataset for "
+            "tokenizer training (expected row dicts with a text column, "
+            "strings, or an HF Dataset)."
+        )
+
+
+def _build_trained_tokenizer_model(
+    loaded: LoadedTrainingConfig,
+    dataset: Any,
+    task: str,
+) -> Tuple[torch.nn.Module, Any, Any, str]:
+    """Build the model + a tokenizer newly trained from the dataset text.
+
+    Implements ``tokenizer.source=train_from_dataset``: the tokenizer is
+    trained FIRST (from the ``text_dataset`` block or the host dataset passed
+    via ``dataset``), then ``model.dims.vocab_size`` is injected with the
+    trained vocabulary size, and only then is the model constructed. For the
+    ``base_model`` path the pretrained model is loaded and its embeddings are
+    resized to the trained vocabulary.
+
+    Args:
+        loaded: Validated :class:`LoadedTrainingConfig` with
+            ``tokenizer.source=train_from_dataset``.
+        dataset: Optional host dataset (DashAI run dataset). Takes precedence
+            over the ``text_dataset`` block when it yields raw text.
+        task: NLP task identifier (``mlm``, ``causal_lm``, ``text_classification``).
+
+    Returns:
+        Tuple of ``(model, tokenizer, runtime_config, model_descriptor)``.
+
+    Raises:
+        ValueError: If neither the host dataset nor a ``text_dataset`` block
+            provides corpus text, or the model config is missing.
+    """
+    from .tokenizer.train_tokenizer import train_tokenizer_from_iterator
+    from .training.text_dataset_builder import build_text_iterator_from_config
+
+    training_cfg = (loaded.tokenizer_config or {}).get("training") or {}
+    max_samples = int(training_cfg.get("max_samples", 0) or 0)
+
+    if dataset is not None:
+        logging.info("Training tokenizer from the host (DashAI) dataset")
+        text_iterator: Iterator[str] = _raw_texts_from_host_dataset(
+            dataset, max_samples=max_samples
+        )
+    else:
+        logging.info("Training tokenizer from the config's text_dataset block")
+        text_iterator = build_text_iterator_from_config(loaded)
+
+    tokenizer = train_tokenizer_from_iterator(
+        text_iterator,
+        algorithm=training_cfg.get("algorithm", "bpe"),
+        vocab_size=int(training_cfg.get("vocab_size", 0) or 0),
+        special_tokens=training_cfg.get("special_tokens"),
+        min_frequency=int(training_cfg.get("min_frequency", 2) or 2),
+        lowercase=bool(training_cfg.get("lowercase", False)),
+        strip_accents=bool(training_cfg.get("strip_accents", False)),
+        pre_tokenizer=training_cfg.get("pre_tokenizer", "whitespace"),
+        max_token_length=int(training_cfg.get("max_token_length", 0) or 0),
+        save_dir=training_cfg.get("save_dir"),
+    )
+
+    if loaded.base_model:
+        # base_model path: load the pretrained model and resize embeddings to
+        # the trained tokenizer's vocabulary.
+        model, _, runtime_config = build_base_model_and_tokenizer(
+            loaded, tokenizer_override=tokenizer
+        )
+        model_descriptor = loaded.base_model
+    else:
+        config = loaded.model_config
+        if config is None:
+            raise ValueError(
+                "model config is required when base_model is not provided"
+            )
+        config.vocab_size = len(tokenizer)
+        model = build_model(loaded.model_class, config)
+        runtime_config = config
+        model_descriptor = loaded.model_class or "frankenstein"
+
+    return model, tokenizer, runtime_config, model_descriptor
 
 
 def _train_vision(

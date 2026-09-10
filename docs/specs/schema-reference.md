@@ -14,7 +14,7 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 | `model` | No (optional when `base_model` set) | FrankensteinModelConfig model parameters |
 | `training` | **Yes** | Training hyperparameters and runtime configuration |
 | `base_model` | No | HuggingFace model identifier for continual pretraining |
-| `tokenizer` | No | Tokenizer config when `base_model` is used |
+| `tokenizer` | No | Tokenizer config for NLP tasks (`hf_repo` load or `train_from_dataset`) — available to both `base_model` and custom-model paths |
 
 ## Model Fields
 
@@ -129,9 +129,54 @@ vision field reference see [Vision](vision.md):
 |---|---|---|
 | `image` | `image_size`, `patch_size`, `in_channels`, `to_grayscale`, `pos_embedding_type`, `cls_token`, `pooling_mode`, `mask_ratio`, `mask_token_strategy`, `prediction_target`, `seg_head_type`, `num_classes`, `num_seg_classes`, `seg_num_queries`, `seg_l2_blocks`, `seg_mask_annealing` | Required for vision tasks |
 | `dataset` | source, columns, rescaling, augmentations | Required for vision tasks |
-| `tokenizer` | `name_or_path`, plus tokenizer options | Required when using `base_model` for MLM |
+| `text_dataset` | `dataset_name`, `split`, `text_column`, `label_column`, `data_dir`, `streaming`, `use_labels`, `max_samples` | Host-owned NLP corpus (also the `train_from_dataset` tokenizer corpus) |
+| `tokenizer` | `source`, `name_or_path`, `use_fast`, `trust_remote_code`, `training` | Required when using `base_model` for MLM; available for custom models too |
 
 All of these enforce `additionalProperties: false`.
+
+### Tokenizer Fields
+
+The `tokenizer` block is available to both `base_model` (continual pretraining /
+fine-tuning) and custom from-scratch model paths. Two modes are selected via
+`source`:
+
+| Field | Type | Required | Range/Enum | Default | Description |
+|---|---|---|---|---|---|
+| `source` | enum | No | `hf_repo`, `train_from_dataset` | `hf_repo` | Tokenizer source mode |
+| `name_or_path` | string | Yes (when `source=hf_repo`) | — | — | HuggingFace tokenizer id or local path (`AutoTokenizer.from_pretrained`) |
+| `use_fast` | bool | No | — | `true` | Use the Rust fast tokenizer implementation |
+| `trust_remote_code` | bool | No | — | `false` | Allow custom tokenizer code from the repo (security risk) |
+| `training` | object | Yes (when `source=train_from_dataset`) | — | — | Tokenizer-training config (see below) |
+
+**Mode `hf_repo` (default):** loads a pretrained tokenizer from a repo id or
+local path. Required for `base_model` MLM training.
+
+**Mode `train_from_dataset`:** trains a NEW tokenizer from the corpus text
+(HuggingFace `tokenizers` library). The corpus comes from the `text_dataset`
+block (or the DashAI run dataset when the plugin's *Use DashAI dataset for
+tokenizer* checkbox is checked). The trained vocabulary size
+(`len(tokenizer)`) is injected into `model.dims.vocab_size` before model
+construction, so the embedding matrix always matches. `name_or_path` must be
+omitted in this mode.
+
+#### `tokenizer.training.*`
+
+| Field | Type | Required | Range/Enum | Default | Description |
+|---|---|---|---|---|---|
+| `algorithm` | enum | No | `bpe`, `wordpiece`, `wordlevel`, `unigram` | `bpe` | Tokenizer training algorithm |
+| `vocab_size` | int | Yes (bpe/wordpiece/wordlevel) | ≥ 1 | — | Target vocabulary size (optional for `unigram`, which auto-prunes) |
+| `min_frequency` | int | No | ≥ 1 | `2` | Minimum token/subword frequency to keep |
+| `special_tokens` | array[str] | No | — | `[PAD]`,`[UNK]`,`[CLS]`,`[SEP]`,`[MASK]` | Special tokens registered in the trained tokenizer |
+| `save_dir` | string | No | — | — | Directory persisted via `save_pretrained()` |
+| `lowercase` | bool | No | — | `false` | Lowercase all text before training |
+| `strip_accents` | bool | No | — | `false` | Strip diacritics (`á → a`) before training |
+| `pre_tokenizer` | enum | No | `whitespace`, `bytelevel`, `bert` | `whitespace` | Pre-tokenization strategy |
+| `max_token_length` | int | No | ≥ 0 | `0` (no limit) | Per-token character cap |
+
+**Critical gotcha:** when `source=train_from_dataset`, `dims.vocab_size` is
+overridden by the trained tokenizer's actual vocabulary — an explicit
+`dims.vocab_size` in the config is ignored. The `text_dataset` block (or the
+DashAI run dataset) is required as the training corpus.
 
 ### Vision Task Sub-Blocks
 
@@ -237,3 +282,4 @@ carries task-specific knobs:
 7. **`layer_pattern` length must equal `num_layers`**.
 8. **mHC is incompatible with MoD** (`use_mixture_of_depths`) — enabling both raises a `ValueError`.
 9. **`bitnet_routers: true` requires `use_bitnet: true`** — enforced at config load.
+10. **`tokenizer.source: train_from_dataset`** requires `tokenizer.training` (with `vocab_size` for bpe/wordpiece/wordlevel), is mutually exclusive with `name_or_path`, and overrides `dims.vocab_size` with the trained vocabulary.

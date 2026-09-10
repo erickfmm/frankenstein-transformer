@@ -1,0 +1,48 @@
+# Custom from-scratch model with an external HuggingFace tokenizer
+# (source: hf_repo on the CUSTOM model path — no base_model). The vocab size
+# of the tokenizer overrides model.dims.vocab_size before model construction
+# so the embedding matrix matches.
+model_class: frankenstein
+model:
+  dims:
+    hidden_size: 128
+    num_layers: 2
+    num_heads: 4
+    num_loops: 1
+    layer_pattern: [standard_attn, standard_attn]
+    mode: encoder
+    dropout: 0.1
+  norm:
+    type: layer_norm
+  ffn_hidden_size: 256
+  ffn_activation: gelu
+  use_bitnet: false
+  use_moe: false
+tokenizer:
+  source: hf_repo
+  name_or_path: prajjwal1/bert-tiny
+  use_fast: true
+  trust_remote_code: false
+text_dataset:
+  dataset_name: prajjwal1/wikitext
+  split: train
+  text_column: text
+  max_samples: 5000
+training:
+  task: mlm
+  num_epochs: 1
+  batch_size: 8
+  max_length: 128
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-4
+      adamw-lr_norms: 1e-4
+      adamw-lr_attention: 1e-4
+      adamw-lr_other: 1e-4
+      adamw-wd_embeddings: 0.0
+      adamw-wd_norms: 0.0
+      adamw-wd_attention: 0.0
+      adamw-wd_other: 0.0
+  scheduler_total_steps: 500
+  csv_log_path: "training_metrics_tokenizer_hf_repo_custom_model.csv"

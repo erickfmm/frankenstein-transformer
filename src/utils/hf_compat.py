@@ -17,9 +17,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+from importlib.util import find_spec
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# The `tokenizers` library ships with transformers; guard anyway so environments
+# without it skip cleanly (tokenizer.source=train_from_dataset is optional).
+TOKENIZERS_AVAILABLE = find_spec("tokenizers") is not None
 
 # Known task suffixes of ``transformers`` architecture class names, longest
 # first so that e.g. ``ForConditionalGeneration`` wins over ``Model``.

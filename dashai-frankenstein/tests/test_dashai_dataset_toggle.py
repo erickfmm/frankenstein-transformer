@@ -190,8 +190,12 @@ class _StubFrankModel:
 
 
 class TestUseDashaiDatasetFlag:
-    def _instance(self, cls, use_flag):
-        return cls(use_dashai_dataset=use_flag, frankenstein_json="{}")
+    def _instance(self, cls, use_flag, use_tok_flag=True):
+        return cls(
+            use_dashai_dataset=use_flag,
+            use_dashai_dataset_for_tokenizer=use_tok_flag,
+            frankenstein_json="{}",
+        )
 
     def test_pretrainer_flag_persisted(self):
         from dashai_frankenstein.models.pretrainer import FrankensteinPretrainer
@@ -200,6 +204,14 @@ class TestUseDashaiDatasetFlag:
         assert m.use_dashai_dataset is False
         m2 = self._instance(FrankensteinPretrainer, True)
         assert m2.use_dashai_dataset is True
+
+    def test_pretrainer_tokenizer_checkbox_persisted(self):
+        from dashai_frankenstein.models.pretrainer import FrankensteinPretrainer
+
+        m = self._instance(FrankensteinPretrainer, True, use_tok_flag=False)
+        assert m.use_dashai_dataset_for_tokenizer is False
+        m2 = self._instance(FrankensteinPretrainer, True, use_tok_flag=True)
+        assert m2.use_dashai_dataset_for_tokenizer is True
 
     def test_pretrainer_passes_none_when_unchecked(self, monkeypatch):
         from dashai_frankenstein.models import pretrainer as pm
@@ -532,3 +544,65 @@ def test_engine_causal_lm_accepts_caller_dataset(dashai_db, tmp_path, monkeypatc
             )
         ).scalars().all()
         assert losses and all(v > 0 for v in losses)
+
+
+# ---------------------------------------------------------------------------
+# tokenizer.source=train_from_dataset (plugin facade)
+# ---------------------------------------------------------------------------
+
+class TestTokenizerTrainFromDataset:
+    def test_detector_off_for_empty_json(self):
+        from dashai_frankenstein.models.pretrainer import (
+            _tokenizer_train_from_dataset,
+        )
+
+        assert _tokenizer_train_from_dataset("{}") is False
+        assert _tokenizer_train_from_dataset("not json") is False
+
+    def test_detector_on_for_train_from_dataset(self):
+        from dashai_frankenstein.models.pretrainer import (
+            _tokenizer_train_from_dataset,
+        )
+
+        cfg = {"tokenizer": {"source": "train_from_dataset"}}
+        assert _tokenizer_train_from_dataset(cfg) is True
+
+    def test_schema_field_exists(self):
+        from dashai_frankenstein.config import FrankensteinPassthroughSchema
+
+        fields = getattr(FrankensteinPassthroughSchema, "model_fields", None)
+        if fields is None:
+            fields = FrankensteinPassthroughSchema.__fields__
+        assert "use_dashai_dataset_for_tokenizer" in fields
+
+    def test_build_model_and_trained_tokenizer(self, monkeypatch, tmp_path):
+        pytest.importorskip("tokenizers")
+        pytest.importorskip("transformers")
+        monkeypatch.chdir(tmp_path)
+
+        from dashai_frankenstein.engine import build_model_and_trained_tokenizer
+
+        cfg = {
+            "model_class": "frankenstein",
+            "model": {"dims": {"hidden_size": 32, "num_layers": 1,
+                               "num_heads": 4,
+                               "layer_pattern": ["standard_attn"]}},
+            "tokenizer": {
+                "source": "train_from_dataset",
+                "training": {
+                    "algorithm": "bpe",
+                    "vocab_size": 64,
+                    "min_frequency": 1,
+                    "special_tokens": ["[PAD]", "[UNK]", "[MASK]"],
+                },
+            },
+            "training": {"task": "mlm",
+                         "optimizer": {"optimizer_class": "adamw",
+                                       "parameters": {"adamw-lr": 1e-3}}},
+        }
+        dataset = _TextDataset(["el zorro corre rapido", "el perro ladra"] * 20)
+        model, loaded, tok = build_model_and_trained_tokenizer(cfg, raw_dataset=dataset)
+        assert model is not None
+        # The trained vocab was injected into the model config.
+        assert loaded.model_config.vocab_size <= 64
+        assert tok is None  # tokenizer resolved by the engine flow

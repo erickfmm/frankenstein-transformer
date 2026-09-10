@@ -126,3 +126,29 @@ class TestBuilderBatches:
         loaded = _LoadedStub({"data_dir": json_dir})
         with pytest.raises(ValueError, match="does not support task"):
             build_text_dataloader_from_config(loaded, tok, "cpu", None, "sbert")
+
+
+class TestTextIterator:
+    """``build_text_iterator_from_config`` (tokenizer train_from_dataset path)."""
+
+    def test_yields_raw_strings(self, json_dir):
+        from training.text_dataset_builder import build_text_iterator_from_config
+
+        loaded = _LoadedStub({"data_dir": json_dir, "max_samples": 5})
+        texts = list(build_text_iterator_from_config(loaded))
+        assert len(texts) == 5
+        assert all(isinstance(t, str) and t for t in texts)
+        assert "frase de ejemplo" in texts[0]
+
+    def test_missing_source_raises(self):
+        from training.text_dataset_builder import build_text_iterator_from_config
+
+        with pytest.raises(ValueError, match="text_dataset"):
+            list(build_text_iterator_from_config(_LoadedStub({})))
+
+    def test_unknown_column_raises(self, json_dir):
+        from training.text_dataset_builder import build_text_iterator_from_config
+
+        loaded = _LoadedStub({"data_dir": json_dir, "text_column": "nope"})
+        with pytest.raises(ValueError, match="text_column"):
+            list(build_text_iterator_from_config(loaded))

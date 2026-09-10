@@ -45,6 +45,7 @@ __all__ = [
     "FrankensteinModelConfig",
     "build_model",
     "build_model_from_json",
+    "build_model_and_trained_tokenizer",
     "resolve_tokenizer",
     "load_checkpoint",
     "resolve_torch_device",
@@ -196,6 +197,81 @@ def build_model_from_json(
     return model, loaded, tokenizer
 
 
+def build_model_and_trained_tokenizer(
+    frankenstein_json: str,
+    *,
+    raw_dataset: Optional[Any] = None,
+    model_class_override: Optional[str] = None,
+    num_labels: Optional[int] = None,
+) -> Tuple[Any, Any, Any]:
+    """Build a Frankenstein model with a tokenizer trained from the dataset.
+
+    Implements ``tokenizer.source=train_from_dataset`` for DashAI components:
+    the tokenizer is trained FIRST from ``raw_dataset`` (the DashAI run
+    dataset) when provided, or from the JSON's ``text_dataset`` block
+    otherwise; the trained vocabulary size is injected as
+    ``model.dims.vocab_size`` before model construction. For the
+    ``base_model`` path the pretrained model is loaded and its embeddings
+    resized to the trained vocabulary.
+
+    Parameters
+    ----------
+    frankenstein_json : str
+        A full Frankenstein training config as a single-line JSON string
+        (with ``tokenizer.source: "train_from_dataset"``).
+    raw_dataset : any, optional
+        The DashAI run dataset (HF ``datasets.Dataset`` wrapper or row-dict
+        iterable). When ``None``, the tokenizer is trained from the JSON's
+        ``text_dataset`` block.
+    model_class_override : str, optional
+        Force a ``model_class``.
+    num_labels : int, optional
+        Number of classes for the encoder classification head.
+
+    Returns
+    -------
+    tuple
+        ``(model, loaded_config, tokenizer)``.
+    """
+    import json
+    import os
+    import tempfile
+
+    parsed: Dict[str, Any]
+    if isinstance(frankenstein_json, dict):
+        parsed = dict(frankenstein_json)
+    else:
+        parsed = json.loads(frankenstein_json) or {}
+    if model_class_override:
+        parsed["model_class"] = model_class_override
+    if num_labels is not None:
+        model_block = parsed.setdefault("model", {})
+        model_block["num_labels"] = int(num_labels)
+        model_block["classification_head"] = int(num_labels) >= 1
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".yaml", prefix="dashai_frank_tok_")
+    try:
+        import yaml
+
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            yaml.safe_dump(parsed, handle, sort_keys=False)
+        loaded = load_training_config(tmp_path)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+    # Delegate to the engine's trained-tokenizer builder, which trains the
+    # tokenizer, injects vocab_size and constructs the model.
+    from src.engine import _build_trained_tokenizer_model  # type: ignore
+
+    model, _, _, _ = _build_trained_tokenizer_model(
+        loaded, raw_dataset, loaded.task
+    )
+    return model, loaded, None
+
+
 def resolve_tokenizer(loaded: Any) -> Any:
     """Resolve an HF tokenizer for a loaded Frankenstein config.
 
@@ -211,7 +287,7 @@ def resolve_tokenizer(loaded: Any) -> Any:
     -------
     transformers.PreTrainedTokenizer or None
     """
-    from transformers import AutoTokenizer
+    from src.utils.hf_compat import load_auto_tokenizer
 
     tok_cfg = loaded.tokenizer_config or {}
     name = str(tok_cfg.get("name_or_path", "")).strip()
@@ -221,7 +297,7 @@ def resolve_tokenizer(loaded: Any) -> Any:
         return None
     trust_remote_code = bool(tok_cfg.get("trust_remote_code", False))
     use_fast = bool(tok_cfg.get("use_fast", True))
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = load_auto_tokenizer(
         name, use_fast=use_fast, trust_remote_code=trust_remote_code
     )
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:

@@ -9,7 +9,7 @@ El objeto raíz del esquema tiene cinco propiedades de nivel superior. Todas son
 
 \begin{itemize}[nosep]
     \item \texttt{base\_model} (string) --- Identificador de modelo HuggingFace o ruta local para preentrenamiento continuo o ajuste fino SBERT. Cuando se establece, \texttt{model\_class} y \texttt{model} no son obligatorios (la arquitectura se infiere del checkpoint).
-    \item \texttt{tokenizer} (object) --- Configuración del tokenizador con campos \texttt{name\_or\_path} (string), \texttt{use\_fast} (bool) y \texttt{trust\_remote\_code} (bool). Obligatorio cuando se usa \texttt{base\_model} con la tarea \texttt{mlm}.
+    \item \texttt{tokenizer} (object) --- Configuración del tokenizador, disponible tanto para la ruta \texttt{base\_model} como para modelos personalizados desde cero. Dos modos se seleccionan mediante \texttt{source}: \texttt{hf\_repo} (por defecto) carga un tokenizador preentrenado desde \texttt{name\_or\_path}; \texttt{train\_from\_dataset} entrena un tokenizador nuevo desde el texto del dataset (ver \S\ref{subsec:tokenizer-config}). Obligatorio cuando se usa \texttt{base\_model} con la tarea \texttt{mlm}.
     \item \texttt{model\_class} (enum) --- Variante de arquitectura del modelo: \texttt{frankenstein} (codificador de arquitectura mixta) o \texttt{frankensteindecoder} (decodificador causal autorregresivo). Obligatorio cuando \texttt{base\_model} no está establecido.
     \item \texttt{model} (object) --- Parámetros de arquitectura del modelo (ver \S\ref{subsec:model-config}). Obligatorio cuando \texttt{base\_model} no está establecido.
     \item \texttt{training} (object, \textbf{obligatorio}) --- Configuración de entrenamiento (ver \S\ref{subsec:training-config}).
@@ -312,6 +312,42 @@ galore\_max\_dim & int $\ge 1$ & Dimensión máxima del tensor para proyección 
 hf\_output\_dir & string & Directorio para guardar el modelo final mediante \texttt{save\_pretrained()}. \\
 \end{longtable}
 
+\subsection{Configuración del Tokenizador}
+\label{subsec:tokenizer-config}
+
+El objeto \texttt{tokenizer} de nivel superior está disponible para ambas rutas de entrenamiento: la ruta \texttt{base\_model} (preentrenamiento continuo / ajuste fino, donde el tokenizador debe coincidir con el checkpoint preentrenado) y la ruta personalizada desde cero (donde resuelve el vocabulario antes de asignar la matriz de embeddings). El campo \texttt{source} selecciona entre dos modos:
+
+\begin{itemize}[nosep]
+    \item \texttt{hf\_repo} (por defecto) --- carga un tokenizador preentrenado desde \texttt{name\_or\_path} (id de repo de HuggingFace o ruta local) mediante \texttt{AutoTokenizer.from\_pretrained()}. Banderas complementarias: \texttt{use\_fast} (tokenizador rápido Rust, por defecto \texttt{true}) y \texttt{trust\_remote\_code} (por defecto \texttt{false}).
+    \item \texttt{train\_from\_dataset} --- entrena un tokenizador \emph{nuevo} desde el texto del corpus con la biblioteca \texttt{tokenizers} de HuggingFace. El corpus es el bloque \texttt{text\_dataset} de nivel superior (id de HF hub, opcionalmente en streaming, o un directorio local parquet/json); cuando el config es dirigido por un host de embedding como dashAI, el dataset del run del host puede suministrarlo. El tamaño de vocabulario resultante se inyecta en \texttt{model.dims.vocab\_size} antes de construir el modelo, de modo que la matriz de embeddings siempre coincide con el tokenizador. En este modo \texttt{name\_or\_path} debe omitirse.
+\end{itemize}
+
+La Tabla~\ref{tab:tokenizer-training} enumera los campos del sub-objeto \texttt{tokenizer.training}.
+
+\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{8.5cm}}
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\endhead
+\bottomrule
+\caption{Campos \texttt{tokenizer.training.*} (obligatorio cuando \texttt{source=train\_from\_dataset}).}
+\label{tab:tokenizer-training}
+\endlastfoot
+algorithm & enum (bpe, wordpiece, wordlevel, unigram) & Algoritmo de entrenamiento del tokenizador. \texttt{bpe} (Byte Pair Encoding, estilo GPT-2, por defecto); \texttt{wordpiece} (BERT original); \texttt{wordlevel} (tabla de palabras); \texttt{unigram} (modelo de lenguaje de sub-palabras, con poda automática). \\
+vocab\_size & int $\ge 1$ & Tamaño de vocabulario objetivo. Obligatorio para \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}; opcional para \texttt{unigram}. \\
+min\_frequency & int $\ge 1$ & Frecuencia mínima de token a conservar (por defecto 2). \\
+special\_tokens & array de string & Tokens especiales registrados en el tokenizador (por defecto \texttt{[PAD]/[UNK]/[CLS]/[SEP]/[MASK]}). \\[\smallskipamount]
+save\_dir & string & Directorio persistido vía \texttt{save\_pretrained()}. \\
+lowercase & bool & Convertir todo el texto a minúsculas antes de entrenar (por defecto \texttt{false}). \\
+strip\_accents & bool & Quitar diacríticos antes de entrenar (por defecto \texttt{false}). \\
+pre\_tokenizer & enum (whitespace, bytelevel, bert) & Estrategia de pre-tokenización (por defecto \texttt{whitespace}). \\
+max\_token\_length & int $\ge 0$ & Límite de caracteres por token; 0 desactiva el límite. \\
+\end{longtable}
+
 \subsection{Configuración del Optimizador}
 \label{subsec:optimizer-config}
 
@@ -421,7 +457,8 @@ El esquema impone las siguientes reglas de validación entre componentes, implem
     \item \texttt{model.dims.hidden\_size} debe ser divisible por \texttt{model.dims.num\_heads}. La dimensión por cabeza es $\texttt{hidden\_size} / \texttt{num\_heads}$.
     \item \texttt{model.dims.num\_kv\_heads} debe dividir \texttt{model.dims.num\_heads} exactamente cuando se usa Atención por Consultas Agrupadas.
     \item \texttt{vocab\_size} debe coincidir con el tamaño de vocabulario del tokenizador. Una discrepancia causa corrupción de IDs de token y fallo de entrenamiento irrecuperable.
-    \item Cuando \texttt{base\_model} está configurado, \texttt{training.task} es obligatorio. Si \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} también es obligatorio.
+    \item Cuando \texttt{base\_model} está configurado, \texttt{training.task} es obligatorio. Si \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} también es obligatorio --- salvo cuando \texttt{tokenizer.source=train\_from\_dataset}, en cuyo caso el tokenizador se entrena desde el corpus y no se necesita nombre.
+    \item \texttt{tokenizer.source=train\_from\_dataset} requiere el sub-objeto \texttt{tokenizer.training} (con \texttt{vocab\_size} para \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}) y es mutuamente excluyente con \texttt{tokenizer.name\_or\_path}. El vocabulario entrenado sobrescribe \texttt{model.dims.vocab\_size} antes de construir el modelo.
     \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}; \texttt{task: causal\_lm} requiere \texttt{training.optimizer} y \texttt{model\_class='frankensteindecoder'}.
     \item \texttt{bitnet\_routers=true} requiere \texttt{use\_bitnet=true}. La bandera no tiene efecto en caso contrario.
     \item \texttt{use\_mhc=true} (flujo residual de $n$ streams mHC) y \texttt{use\_mixture\_of\_depths=true} son mutuamente excluyentes. Habilitar ambos lanza un \texttt{ValueError}: el enrutamiento MoD de tokens opera sobre un flujo $C$-dimensional único, en conflicto con el flujo residual de $n$ streams.

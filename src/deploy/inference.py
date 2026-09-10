@@ -159,21 +159,78 @@ class FrankensteinInference:
         
         return model
     
-    def _load_tokenizer(self) -> Optional[SpanishSPMTokenizer]:
-        """Load tokenizer if available."""
+    def _load_tokenizer(self):
+        """Load the deploy tokenizer (SPM first, then HF fallback).
+
+        Prefers the legacy SentencePiece ``tokenizer.model``. When the
+        deployment directory instead carries a HuggingFace ``tokenizer.json``
+        (e.g. trained via ``tokenizer.source=train_from_dataset``), an
+        ``AutoTokenizer`` wrapper exposing the SPM-like ``encode`` /
+        ``decode`` / ``mask_id`` interface is loaded instead so inference
+        token IDs match the deployed model's vocabulary.
+        """
         tokenizer_path = self.model_dir / "tokenizer.model"
-        
+        hf_tokenizer_json = self.model_dir / "tokenizer.json"
+
+        if not tokenizer_path.exists() and hf_tokenizer_json.exists():
+            return self._load_hf_tokenizer()
+
         if not tokenizer_path.exists():
             logger.warning("Tokenizer not found in deployment directory")
             logger.warning("You'll need to provide token IDs directly")
             return None
-        
+
         tokenizer = SpanishSPMTokenizer(
             vocab_size=self.config.vocab_size,
             model_path=str(tokenizer_path)
         )
         logger.info("Tokenizer loaded")
         return tokenizer
+
+    def _load_hf_tokenizer(self):
+        """Wrap a HuggingFace tokenizer with the SPM-like encode/decode API."""
+        try:
+            from transformers import AutoTokenizer
+        except ImportError:
+            logger.warning("transformers not installed; cannot load HF tokenizer")
+            return None
+        try:
+            hf_tok = AutoTokenizer.from_pretrained(str(self.model_dir))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not load HF tokenizer: %s", exc)
+            return None
+        if len(hf_tok) != int(getattr(self.config, "vocab_size", len(hf_tok))):
+            logger.warning(
+                "Deployed tokenizer vocab (%d) != config vocab_size (%s); "
+                "using the tokenizer's size for the model interface.",
+                len(hf_tok), getattr(self.config, "vocab_size", None),
+            )
+        mask_id = hf_tok.mask_token_id
+        logger.info("HF tokenizer loaded (vocab=%d)", len(hf_tok))
+
+        class _HFTokenizerAdapter:
+            """Expose ``encode``/``decode``/``mask_id`` like SpanishSPMTokenizer."""
+
+            def __init__(self, hf_tok):
+                self._tok = hf_tok
+                self.mask_id = mask_id
+
+            def encode(self, text, max_length=512):
+                enc = self._tok(
+                    text,
+                    padding="max_length",
+                    truncation=True,
+                    max_length=max_length,
+                )
+                return {
+                    "input_ids": enc["input_ids"],
+                    "attention_mask": enc["attention_mask"],
+                }
+
+            def decode(self, ids):
+                return self._tok.decode(ids)
+
+        return _HFTokenizerAdapter(hf_tok)
     
     @torch.no_grad()
     def predict(

@@ -86,6 +86,9 @@ class FrankensteinPretrainer(BaseModel):
         kwargs = self.validate_and_transform(kwargs)
         self.frankenstein_json = kwargs.get("frankenstein_json", "")
         self.use_dashai_dataset = bool(kwargs.get("use_dashai_dataset", True))
+        self.use_dashai_dataset_for_tokenizer = bool(
+            kwargs.get("use_dashai_dataset_for_tokenizer", True)
+        )
 
         self.fitted = False
         self._frank_model = None
@@ -113,7 +116,23 @@ class FrankensteinPretrainer(BaseModel):
         json_text = resolve_json(self)
         validate_training_json(json_text)
 
-        model, loaded, _ = build_model_from_json(json_text)
+        # When the config trains the tokenizer from a dataset, the tokenizer
+        # must be resolved BEFORE the model is built (the trained vocab size
+        # feeds the embedding matrix). The DashAI checkbox selects the source:
+        # the run dataset when checked, the JSON `text_dataset` block when not.
+        train_tok = _tokenizer_train_from_dataset(json_text)
+        if train_tok:
+            from dashai_frankenstein.engine import build_model_and_trained_tokenizer
+
+            if self.use_dashai_dataset_for_tokenizer:
+                raw_dataset = x_train
+            else:
+                raw_dataset = None  # engine falls back to the JSON text_dataset block
+            model, loaded, tokenizer = build_model_and_trained_tokenizer(
+                json_text, raw_dataset=raw_dataset
+            )
+        else:
+            model, loaded, _ = build_model_from_json(json_text)
 
         runtime = getattr(loaded, "training_runtime", {}) or {}
         device = resolve_device(runtime.get("device", "auto"))
@@ -122,14 +141,20 @@ class FrankensteinPretrainer(BaseModel):
         max_length = int(runtime.get("max_length", 128) or 128)
         mlm_probability = float(runtime.get("mlm_probability", 0.15) or 0.15)
 
-        tokenizer = resolve_tokenizer(loaded)
+        if train_tok:
+            # The tokenizer was already trained above.
+            tokenizer = tokenizer
+        else:
+            tokenizer = resolve_tokenizer(loaded)
         if tokenizer is None:
             raise ValueError(
                 "A tokenizer is required for MLM pretraining. Set "
                 "tokenizer.name_or_path (or base_model) in the Frankenstein config."
             )
-        # Vocab must match the tokenizer (Frankenstein constraint).
-        if hasattr(model, "emb") and hasattr(model.emb, "num_embeddings"):
+        # Vocab must match the tokenizer (Frankenstein constraint). When the
+        # tokenizer was trained from the dataset, build_model_and_trained_tokenizer
+        # already injected the trained vocab size into the model config.
+        if not train_tok and hasattr(model, "emb") and hasattr(model.emb, "num_embeddings"):
             tok_vocab = len(tokenizer)
             if tok_vocab != int(model.emb.num_embeddings):
                 model, loaded, _ = build_model_from_json(
@@ -240,3 +265,29 @@ def _first_text_column(dataset: Any) -> str:
             f"{candidates} in {list(dataset.column_names)}."
         )
     return candidates[0]
+
+
+def _tokenizer_train_from_dataset(json_text: str) -> bool:
+    """Return True when the config trains a tokenizer from the dataset.
+
+    Parses the Frankenstein JSON and checks whether
+    ``tokenizer.source == "train_from_dataset"``. Malformed JSON raises
+    later in the normal validation pipeline, so parse errors yield False.
+
+    Parameters
+    ----------
+    json_text : str
+        The Frankenstein config as a single-line JSON string.
+
+    Returns
+    -------
+    bool
+    """
+    import json as _json
+
+    try:
+        parsed = _json.loads(json_text) if not isinstance(json_text, dict) else json_text
+    except (ValueError, TypeError):
+        return False
+    tokenizer_cfg = (parsed or {}).get("tokenizer") or {}
+    return str(tokenizer_cfg.get("source", "hf_repo")).strip().lower() == "train_from_dataset"

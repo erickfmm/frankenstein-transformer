@@ -9,7 +9,7 @@ The root schema object has five top-level properties. All are optional except \t
 
 \begin{itemize}[nosep]
     \item \texttt{base\_model} (string) --- HuggingFace model identifier or local path for continual pretraining or SBERT fine-tuning. When set, \texttt{model\_class} and \texttt{model} are not required (the architecture is inferred from the checkpoint).
-    \item \texttt{tokenizer} (object) --- Tokenizer configuration with fields \texttt{name\_or\_path} (string), \texttt{use\_fast} (bool), and \texttt{trust\_remote\_code} (bool). Required when using \texttt{base\_model} with the \texttt{mlm} task.
+    \item \texttt{tokenizer} (object) --- Tokenizer configuration, available to both the \texttt{base\_model} path and custom from-scratch models. Two modes are selected via \texttt{source}: \texttt{hf\_repo} (default) loads a pretrained tokenizer from \texttt{name\_or\_path}; \texttt{train\_from\_dataset} trains a new tokenizer from the dataset text (see \S\ref{subsec:tokenizer-config}). Required when using \texttt{base\_model} with the \texttt{mlm} task.
     \item \texttt{model\_class} (enum) --- Model architecture variant: \texttt{frankenstein} (mixed-architecture encoder) or \texttt{frankensteindecoder} (autoregressive causal decoder). Required when \texttt{base\_model} is not set.
     \item \texttt{model} (object) --- Model architecture parameters (see \S\ref{subsec:model-config}). Required when \texttt{base\_model} is not set.
     \item \texttt{training} (object, \textbf{required}) --- Training configuration (see \S\ref{subsec:training-config}).
@@ -312,6 +312,42 @@ galore\_max\_dim & int $\ge 1$ & Maximum tensor dimension for GaLore projection.
 hf\_output\_dir & string & Directory for saving final model via \texttt{save\_pretrained()}. \\
 \end{longtable}
 
+\subsection{Tokenizer Configuration}
+\label{subsec:tokenizer-config}
+
+The top-level \texttt{tokenizer} object is available to both training paths: the \texttt{base\_model} route (continual pretraining / fine-tuning, where the tokenizer must match the pretrained checkpoint) and the custom from-scratch route (where it resolves the vocabulary before the embedding matrix is allocated). The \texttt{source} field selects between two modes:
+
+\begin{itemize}[nosep]
+    \item \texttt{hf\_repo} (default) --- loads a pretrained tokenizer from \texttt{name\_or\_path} (a HuggingFace repo id or local path) through \texttt{AutoTokenizer.from\_pretrained()}. Complementary flags: \texttt{use\_fast} (Rust-backed fast tokenizer, default \texttt{true}) and \texttt{trust\_remote\_code} (default \texttt{false}).
+    \item \texttt{train\_from\_dataset} --- trains a \emph{new} tokenizer from the corpus text with the HuggingFace \texttt{tokenizers} library. The corpus is the top-level \texttt{text\_dataset} block (HF hub id, optionally streamed, or a local parquet/json directory); when the config is driven by an embedding host such as dashAI, the host's run dataset can supply it instead. The resulting vocabulary size is injected into \texttt{model.dims.vocab\_size} before model construction, so the embedding matrix always matches the tokenizer. In this mode \texttt{name\_or\_path} must be omitted.
+\end{itemize}
+
+Table~\ref{tab:tokenizer-training} lists the \texttt{tokenizer.training} sub-object fields.
+
+\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{8.5cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\caption{\texttt{tokenizer.training.*} fields (required when \texttt{source=train\_from\_dataset}).}
+\label{tab:tokenizer-training}
+\endlastfoot
+algorithm & enum (bpe, wordpiece, wordlevel, unigram) & Tokenizer training algorithm. \texttt{bpe} (Byte Pair Encoding, GPT-2 style, default); \texttt{wordpiece} (original BERT); \texttt{wordlevel} (word lookup table); \texttt{unigram} (subword language model, auto-pruning). \\
+vocab\_size & int $\ge 1$ & Target vocabulary size. Required for \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}; optional for \texttt{unigram}. \\
+min\_frequency & int $\ge 1$ & Minimum token frequency to keep (default 2). \\
+special\_tokens & array of string & Special tokens registered in the tokenizer (default \texttt{[PAD]/[UNK]/[CLS]/[SEP]/[MASK]}). \\[\smallskipamount]
+save\_dir & string & Directory persisted via \texttt{save\_pretrained()}. \\
+lowercase & bool & Lowercase all text before training (default \texttt{false}). \\
+strip\_accents & bool & Strip diacritics before training (default \texttt{false}). \\
+pre\_tokenizer & enum (whitespace, bytelevel, bert) & Pre-tokenization strategy (default \texttt{whitespace}). \\
+max\_token\_length & int $\ge 0$ & Per-token character cap; 0 disables the limit. \\
+\end{longtable}
+
 \subsection{Optimizer Configuration}
 \label{subsec:optimizer-config}
 
@@ -421,7 +457,8 @@ The schema enforces the following cross-component validation rules, implemented 
     \item \texttt{model.dims.hidden\_size} must be divisible by \texttt{model.dims.num\_heads}. The per-head dimension is $\texttt{hidden\_size} / \texttt{num\_heads}$.
     \item \texttt{model.dims.num\_kv\_heads} must divide \texttt{model.dims.num\_heads} exactly when Grouped-Query Attention is used.
     \item \texttt{vocab\_size} must match the tokenizer's vocabulary size. Mismatch causes token ID corruption and unrecoverable training failure.
-    \item When \texttt{base\_model} is set, \texttt{training.task} is required. If \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} is also required.
+    \item When \texttt{base\_model} is set, \texttt{training.task} is required. If \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} is also required --- unless \texttt{tokenizer.source=train\_from\_dataset}, in which case the tokenizer is trained from the corpus and no name is needed.
+    \item \texttt{tokenizer.source=train\_from\_dataset} requires the \texttt{tokenizer.training} sub-object (with \texttt{vocab\_size} for \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}) and is mutually exclusive with \texttt{tokenizer.name\_or\_path}. The trained vocabulary overrides \texttt{model.dims.vocab\_size} before model construction.
     \item \texttt{task: mlm} requires \texttt{training.optimizer}; \texttt{task: sbert} requires \texttt{training.sbert}; \texttt{task: causal\_lm} requires \texttt{training.optimizer} and \texttt{model\_class='frankensteindecoder'}.
     \item \texttt{bitnet\_routers=true} requires \texttt{use\_bitnet=true}. The flag has no effect otherwise.
     \item \texttt{use\_mhc=true} (mHC n-stream residual) and \texttt{use\_mixture\_of\_depths=true} are mutually exclusive. Enabling both raises a \texttt{ValueError}: MoD token routing operates on a single $C$-dimensional stream, which conflicts with the n-stream residual.

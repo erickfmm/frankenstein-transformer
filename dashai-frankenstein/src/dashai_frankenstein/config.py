@@ -47,6 +47,33 @@ class FrankensteinPassthroughSchema(BaseSchema):
         alias=MultilingualString(en="Use DashAI dataset", es="Usar dataset DashAI"),
     ) = True  # type: ignore
 
+    use_dashai_dataset_for_tokenizer: schema_field(
+        bool_field(),
+        placeholder=True,
+        description=MultilingualString(
+            en=(
+                "Only relevant when `tokenizer.source` is "
+                "`train_from_dataset` in the Frankenstein JSON. If checked "
+                "(default), the tokenizer is trained from the DashAI run "
+                "dataset text. If unchecked, the tokenizer is trained from "
+                "the corpus configured inside the Frankenstein JSON (the "
+                "`text_dataset` block)."
+            ),
+            es=(
+                "Solo relevante cuando `tokenizer.source` es "
+                "`train_from_dataset` en el JSON Frankenstein. Si está "
+                "marcado (por defecto), el tokenizador se entrena desde el "
+                "texto del dataset del run de DashAI. Si se desmarca, se "
+                "entrena desde el corpus configurado dentro del JSON "
+                "Frankenstein (el bloque `text_dataset`)."
+            ),
+        ),
+        alias=MultilingualString(
+            en="Use DashAI dataset for tokenizer",
+            es="Usar dataset DashAI para tokenizador",
+        ),
+    ) = True  # type: ignore
+
     frankenstein_json: schema_field(
         string_field(),
         placeholder=(

@@ -253,6 +253,239 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_training_config(path)
 
+    # ------------------------------------------------------------------
+    # tokenizer.source (hf_repo vs train_from_dataset) validation
+    # ------------------------------------------------------------------
+
+    def test_tokenizer_source_invalid_raises(self):
+        path = self._cfg_path("""
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+            tokenizer:
+              source: bogus_source
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+        """)
+        with self.assertRaises(ValueError):
+            load_training_config(path)
+
+    def test_tokenizer_train_from_dataset_valid(self):
+        path = self._cfg_path("""
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+            tokenizer:
+              source: train_from_dataset
+              training:
+                algorithm: bpe
+                vocab_size: 500
+                special_tokens: ["[PAD]", "[UNK]", "[MASK]"]
+            text_dataset:
+              dataset_name: wikitext
+              text_column: text
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+        """)
+        cfg = load_training_config(path)
+        self.assertEqual(cfg.tokenizer_config["source"], "train_from_dataset")
+        self.assertEqual(cfg.tokenizer_config["training"]["algorithm"], "bpe")
+
+    def test_tokenizer_train_from_dataset_requires_training(self):
+        path = self._cfg_path("""
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+            tokenizer:
+              source: train_from_dataset
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+        """)
+        with self.assertRaises(ValueError):
+            load_training_config(path)
+
+    def test_tokenizer_train_from_dataset_bpe_requires_vocab_size(self):
+        path = self._cfg_path("""
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+            tokenizer:
+              source: train_from_dataset
+              training:
+                algorithm: bpe
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+        """)
+        with self.assertRaises(ValueError):
+            load_training_config(path)
+
+    def test_tokenizer_train_from_dataset_unigram_allows_missing_vocab(self):
+        path = self._cfg_path("""
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+            tokenizer:
+              source: train_from_dataset
+              training:
+                algorithm: unigram
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+        """)
+        cfg = load_training_config(path)
+        self.assertEqual(cfg.tokenizer_config["training"]["algorithm"], "unigram")
+
+    def test_tokenizer_train_from_dataset_invalid_algorithm_raises(self):
+        path = self._cfg_path("""
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+            tokenizer:
+              source: train_from_dataset
+              training:
+                algorithm: gpt2
+                vocab_size: 500
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+        """)
+        with self.assertRaises(ValueError):
+            load_training_config(path)
+
+    def test_base_model_mlm_with_train_from_dataset_skips_name_or_path(self):
+        path = self._cfg_path("""
+            base_model: "prajjwal1/bert-tiny"
+            tokenizer:
+              source: train_from_dataset
+              training:
+                algorithm: bpe
+                vocab_size: 300
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+        """)
+        cfg = load_training_config(path)
+        self.assertEqual(cfg.tokenizer_config["source"], "train_from_dataset")
+
+    def test_custom_model_mlm_tokenizer_hf_repo(self):
+        path = self._cfg_path("""
+            model:
+              vocab_size: 100
+              hidden_size: 48
+              num_layers: 1
+              num_loops: 1
+              num_heads: 6
+              retention_heads: 6
+              num_experts: 2
+              top_k_experts: 1
+              dropout: 0.0
+              norm_type: layer_norm
+              layer_pattern: [standard_attn]
+              use_bitnet: false
+              use_moe: false
+              ode_solver: rk4
+              ode_steps: 1
+            tokenizer:
+              source: hf_repo
+              name_or_path: prajjwal1/bert-tiny
+              use_fast: true
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+        """)
+        cfg = load_training_config(path)
+        self.assertEqual(cfg.tokenizer_config["name_or_path"], "prajjwal1/bert-tiny")
+
     def test_optimizer_parameters_accessible(self):
         path = self._cfg_path("""
             model:

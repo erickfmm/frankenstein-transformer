@@ -78,6 +78,44 @@
             required:
             - name_or_path
 - if:
+    properties:
+      tokenizer:
+        required:
+        - source
+        properties:
+          source:
+            const: train_from_dataset
+  then:
+    properties:
+      tokenizer:
+        required:
+        - training
+        allOf:
+        - if:
+            properties:
+              training:
+                required:
+                - algorithm
+                properties:
+                  algorithm:
+                    enum: [bpe, wordpiece, wordlevel]
+          then:
+            properties:
+              training:
+                required:
+                - vocab_size
+- if:
+    properties:
+      tokenizer:
+        required:
+        - name_or_path
+  then:
+    properties:
+      tokenizer:
+        properties:
+          source:
+            const: hf_repo
+- if:
     not:
       required:
       - base_model

@@ -29,6 +29,88 @@ def _field_names(cls) -> set:
 
 _BITNET_BOOL_KEYS = ("use_bitnet", "bitnet_routers")
 
+TOKENIZER_SOURCES = {"hf_repo", "train_from_dataset"}
+TOKENIZER_ALGORITHMS = {"bpe", "wordpiece", "wordlevel", "unigram"}
+# Algorithms that require an explicit target vocabulary size.
+_ALGORITHMS_REQUIRING_VOCAB = {"bpe", "wordpiece", "wordlevel"}
+
+
+def _validate_tokenizer_source(tokenizer_config: Dict[str, Any]) -> str:
+    """Validate the ``tokenizer.source`` field and return the resolved source.
+
+    Args:
+        tokenizer_config: The ``tokenizer`` block from the YAML config.
+
+    Returns:
+        The resolved source value (``"hf_repo"`` or ``"train_from_dataset"``).
+
+    Raises:
+        ValueError: If ``source`` is not one of the supported values.
+    """
+    source = str(tokenizer_config.get("source", "hf_repo") or "hf_repo").strip().lower()
+    if source not in TOKENIZER_SOURCES:
+        raise ValueError(
+            "tokenizer.source must be one of: hf_repo, train_from_dataset "
+            f"(got {source!r})"
+        )
+    return source
+
+
+def _validate_tokenizer_training(tokenizer_config: Dict[str, Any]) -> None:
+    """Validate the ``tokenizer.training`` sub-object for train_from_dataset mode.
+
+    Args:
+        tokenizer_config: The ``tokenizer`` mapping from the YAML config.
+
+    Raises:
+        ValueError: If the ``training`` sub-object is missing, empty, or
+            carries invalid values (unknown algorithm, missing/invalid
+            ``vocab_size``, non-string special tokens, negative
+            ``max_token_length``).
+    """
+    training_cfg = tokenizer_config.get("training")
+    if not isinstance(training_cfg, dict) or not training_cfg:
+        raise ValueError(
+            "tokenizer.source=train_from_dataset requires a 'tokenizer.training' "
+            "object (algorithm, vocab_size, ...)"
+        )
+    algorithm = str(training_cfg.get("algorithm", "bpe") or "bpe").strip().lower()
+    if algorithm not in TOKENIZER_ALGORITHMS:
+        raise ValueError(
+            "tokenizer.training.algorithm must be one of: bpe, wordpiece, "
+            f"wordlevel, unigram (got {algorithm!r})"
+        )
+    vocab_size = training_cfg.get("vocab_size")
+    if algorithm in _ALGORITHMS_REQUIRING_VOCAB:
+        if not isinstance(vocab_size, int) or isinstance(vocab_size, bool) or vocab_size < 1:
+            raise ValueError(
+                f"tokenizer.training.vocab_size must be a positive integer for "
+                f"algorithm={algorithm!r}"
+            )
+    elif vocab_size is not None:
+        if not isinstance(vocab_size, int) or isinstance(vocab_size, bool) or vocab_size < 1:
+            raise ValueError(
+                "tokenizer.training.vocab_size must be a positive integer when provided"
+            )
+    min_frequency = training_cfg.get("min_frequency")
+    if min_frequency is not None and (
+        not isinstance(min_frequency, int) or isinstance(min_frequency, bool) or min_frequency < 1
+    ):
+        raise ValueError("tokenizer.training.min_frequency must be a positive integer")
+    special_tokens = training_cfg.get("special_tokens")
+    if special_tokens is not None:
+        if not isinstance(special_tokens, list) or not all(
+            isinstance(tok, str) and tok for tok in special_tokens
+        ):
+            raise ValueError(
+                "tokenizer.training.special_tokens must be a list of non-empty strings"
+            )
+    max_token_length = training_cfg.get("max_token_length")
+    if max_token_length is not None and (
+        not isinstance(max_token_length, int) or isinstance(max_token_length, bool) or max_token_length < 0
+    ):
+        raise ValueError("tokenizer.training.max_token_length must be a non-negative integer")
+
 
 def _validate_ffn_activation(model_data: Dict[str, Any]) -> None:
     """Validate FFN activation fields when present in the model block.
@@ -159,6 +241,9 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     tokenizer_config = data.get("tokenizer", {}) or {}
     if not isinstance(tokenizer_config, dict):
         raise ValueError("tokenizer must be an object when provided")
+    tokenizer_source = _validate_tokenizer_source(tokenizer_config)
+    if tokenizer_source == "train_from_dataset":
+        _validate_tokenizer_training(tokenizer_config)
     image_data = data.get("image", {}) or {}
     if not isinstance(image_data, dict):
         raise ValueError("image must be an object when provided")
@@ -200,11 +285,21 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         model_class = model_class or "base_model"
 
     if base_model and task in {"mlm", "causal_lm"}:
-        tokenizer_name_or_path = tokenizer_config.get("name_or_path")
-        if not isinstance(tokenizer_name_or_path, str) or not tokenizer_name_or_path.strip():
-            raise ValueError(
-                "tokenizer.name_or_path must be provided for MLM/Causal-LM training when base_model is set"
-            )
+        if tokenizer_source == "train_from_dataset":
+            # A new tokenizer is trained from the dataset; no name_or_path.
+            _validate_tokenizer_training(tokenizer_config)
+        else:
+            tokenizer_name_or_path = tokenizer_config.get("name_or_path")
+            if not isinstance(tokenizer_name_or_path, str) or not tokenizer_name_or_path.strip():
+                raise ValueError(
+                    "tokenizer.name_or_path must be provided for MLM/Causal-LM training when base_model is set"
+                )
+    elif not base_model and task in {"mlm", "causal_lm"} and tokenizer_source == "train_from_dataset":
+        # Custom model path with a dataset-trained tokenizer: the resulting
+        # vocab size is injected into model.dims.vocab_size before model
+        # construction, so any explicit dims.vocab_size mismatch is acceptable
+        # but a training sub-object is mandatory (validated above).
+        _validate_tokenizer_training(tokenizer_config)
 
     # Causal-LM requires the decoder model class (causal masking). Enforce
     # this at runtime in addition to the schema conditional rule.
