@@ -13,7 +13,7 @@ SentencePiece tokenizer, exercising:
 * major transversal toggles (BitNet, MoE, MoD, mHC, embeddings, residuals/AttnRes, etc.),
 * encoder/MLM and decoder/causal-LM tasks,
 * vision tasks (frankenstein_vit: patch_prediction, classification, segmentation),
-* deploy, inference, quantization, transformers-export and bitnet-gguf smoke tests.
+* deploy, inference, transformers and BitNet-GGUF export smoke tests.
 
 It is intentionally NOT collected by ``pytest tests/`` (it lives in ``full_tests/``
 at the repository root) and is meant to be left running for several hours.
@@ -590,7 +590,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skip-deploy",
         action="store_true",
-        help="Skip deploy/infer/quantize/export/gguf smoke tests.",
+        help="Skip deploy/infer/export smoke tests.",
     )
     parser.add_argument(
         "--vocab-size",

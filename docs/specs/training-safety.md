@@ -120,12 +120,12 @@ Protects hardware by monitoring GPU temperature and taking action at configurabl
 
 | Parameter | Description |
 |---|---|
-| `gpu_temp_guard` (CLI flag) | Enable/disable thermal monitoring |
+| `gpu_temp_guard_enabled` (schema key) | Enable/disable thermal monitoring |
 | `gpu_temp_pause_threshold_c` | Temperature (°C) at which training **pauses** |
 | `gpu_temp_resume_threshold_c` | Temperature (°C) at which training **resumes** |
 | `gpu_temp_critical_threshold_c` | Temperature (°C) at which training **aborts** |
 | `gpu_temp_poll_interval_seconds` | Seconds between temperature checks |
-| `switch_on_thermal` (CLI flag) | Enable automatic device switching on thermal events |
+| `switch_on_thermal` (schema key) | Enable automatic device switching on thermal events |
 
 ### Thermal State Machine
 

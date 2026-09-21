@@ -23,7 +23,7 @@ The project command surface is:
 \texttt{frankenstein-transformer}
 \end{center}
 with subcommands for encoder and decoder workflows:
-\texttt{train}, \texttt{deploy}, \texttt{quantize}, \texttt{infer}, \texttt{sbert-train}, \texttt{sbert-infer}, \texttt{transformers-export}, \texttt{bitnet-gguf}, \texttt{web-server}.
+\texttt{train} (including SBERT-style sentence-embedding objectives via \texttt{training.task: sbert}), \texttt{deploy} (quantized/standard artifacts plus HuggingFace Transformers and BitNet GGUF export formats), \texttt{infer}, and \texttt{web-server}.
 
 The \texttt{web-server} command launches a Streamlit-based configuration builder that provides:
 \begin{itemize}[leftmargin=*]

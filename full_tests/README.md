@@ -14,7 +14,7 @@ Esta carpeta contiene un harness independiente que entrena modelos **reales pero
 - **Todas las `pos_embedding_type` del ViT** (`learned_1d`, `none`, `learned_absolute`, `sinusoidal_absolute`, `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`, `nope`, `alibi`, `bam`) a través de las 3 tareas de visión (classification, patch_prediction, segmentation) — 39 configs, sin cross product con mixers.
 - **Transversales**: BitNet (incluido routers/conv), embeddings factorizados/conv, MoE, MoD, mHC, residuos/AttnRes (`standard`/`none`/`full_attn`/`block_attn`), RoPE vs HoPE, SSMax (`use_ssmax`), SSOG campo fijo (`lookat: false`) y SSOG+BitNet, loops duplicados, activaciones de FFN, etc.
 - **Tareas**: `mlm`/encoder y `causal_lm`/decoder; visión (`classification`, `patch_prediction`, `segmentation`) — cada tarea de visión tiene además una variante `ssog_attn` (`cls_token: false` + `pooling_mode: gap`; la rejilla 2×2 se deriva de la imagen).
-- **Deploy / infer / cuantización / transformers-export / bitnet-gguf** (smoke tests sobre el primer entrenamiento exitoso).
+- **Deploy / infer / export a HuggingFace Transformers / export GGUF BitNet** (smoke tests sobre el primer entrenamiento exitoso, vía `deploy --format transformers|gguf`).
 
 ## Cómo ejecutar
 
@@ -73,7 +73,11 @@ Valores válidos: `auto`, `cpu`, `cuda`, `mps` (por defecto `cpu`).
 
 ### Guarda térmica de GPU
 
-La guarda térmica está **desactivada por defecto** (se pasa `--no-gpu-temp-guard`). Para activarla durante el entrenamiento en GPU y ajustar sus umbrales:
+La guarda térmica se configura **en el YAML** (`training.gpu_temp_guard_enabled` y
+los umbrales `training.gpu_temp_*`) — el CLI ya no acepta overrides térmicos.
+El harness **la desactiva por defecto** (escribe `gpu_temp_guard_enabled: false`
+en el YAML de cada run). Para activarla durante el entrenamiento en GPU y ajustar
+sus umbrales:
 
 ```bash
 conda run -n frankenstein python full_tests/run_e2e.py --device cuda \
@@ -85,7 +89,8 @@ conda run -n frankenstein python full_tests/run_e2e.py --device cuda \
   --gpu-temp-checkpoint-grace-seconds 30
 ```
 
-Cada umbral es opcional; si se omite, el CLI usa su valor por defecto. Solo tienen efecto cuando `--gpu-temp-guard` está activo.
+Cada umbral del harness es opcional; si se omite, no se escribe la clave y rige el
+default del schema. Solo tienen efecto cuando `--gpu-temp-guard` está activo.
 
 ## Filosofía de los resultados
 

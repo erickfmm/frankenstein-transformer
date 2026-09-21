@@ -3,24 +3,11 @@
 This document describes the compatibility rules for the CLI command:
 
 ```bash
-frankenstein-transformer transformers-export --model <checkpoint.pt> --yaml <train.yaml> --output <output_dir>
+frankenstein-transformer deploy --checkpoint <checkpoint.pt> --yaml <train.yaml> --output <output_dir> --format transformers
 ```
 
-## Integrated `--transformers-export` flag
-
-The same `--transformers-export` flag is available in other CLI commands.
-
-- `train --transformers-export`
-  - Performs a compatibility pre-check using the resolved training YAML.
-  - If compatible, exports to `checkpoints/transformers-export/` after successful training.
-- `deploy --transformers-export --yaml <train.yaml>`
-  - Performs compatibility pre-check before deploy.
-  - On success, exports to `<deploy-output>/transformers-export/`.
-- `quantize --transformers-export --yaml <train.yaml>`
-  - Performs compatibility pre-check before quantization.
-  - On success, exports to `<quantize-output>/transformers-export/`.
-
-Unsupported with this flag (returns error and stops): `infer`, `sbert-train`, `sbert-infer`.
+The compatibility pre-check runs automatically before the export; if the
+config is incompatible, the export fails with the report described below.
 
 ## Export output layout
 

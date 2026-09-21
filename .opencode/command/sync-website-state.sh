@@ -183,7 +183,7 @@ else
   fi
 
   # 3) deploy --format choices offered by the page vs src/cli.py
-  cli_fmts=$(sed -n 's/.*"--format", type=str, choices=\[\([^]]*\)\].*/\1/p' "$CLI_SRC" 2>/dev/null | head -1 | tr -d '" ' | tr ',' '\n' | sed '/^$/d' | sort -u)
+  cli_fmts=$(tr '\n' ' ' < "$CLI_SRC" 2>/dev/null | sed -n 's/.*"--format",[[:space:]]*type=str,[[:space:]]*choices=\[\([^]]*\)\].*/\1/p' | tr -d '" ' | tr ',' '\n' | sed '/^$/d' | sort -u)
   page_fmts=$(grep -o 'value="--format [a-z]*"' "$INDEX" 2>/dev/null | sed 's/value="--format //; s/"//' | sort -u)
   bad_fmts=""
   while IFS= read -r f; do
@@ -226,11 +226,11 @@ else
     probe PASS cmd-select "all Command tab subcommands exist in cli.py ($(echo "$page_cmds" | tr '\n' ' '))"
   fi
 
-  # 6) sbert-infer --mode must not offer an empty default (CLI: required=True)
+  # 6) infer --task sbert --mode must not offer an empty default (CLI: required with --task sbert)
   # (capture first: `sed | grep -q` under pipefail fails via SIGPIPE when grep exits early)
-  mode_block=$(sed -n '/id="opt-sbert-infer-mode"/,/<\/select>/p' "$INDEX")
+  mode_block=$(sed -n '/id="opt-infer-mode"/,/<\/select>/p' "$INDEX")
   if grep -q 'value=""' <<< "$mode_block"; then
-    probe FAIL sbert-mode-default "--mode select offers empty '(default)' but sbert-infer requires --mode (choices: similarity|search|cluster|encode)"
+    probe FAIL sbert-mode-default "--mode select offers empty '(default)' but infer --task sbert requires --mode (choices: similarity|search|cluster|encode)"
   else
     probe PASS sbert-mode-default "--mode has no empty default"
   fi

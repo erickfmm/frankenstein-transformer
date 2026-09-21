@@ -96,9 +96,9 @@ The probes compare the page's Command tab and asset URLs against `pyproject.toml
 
 - `cmd-binary-name` → the generated command prefix (`let cmd = '…'`) must equal the `[project.scripts]` name from `pyproject.toml` (currently `frankenstein-transformer`).
 - `github-url` → sidebar repo link must point to the real repo (`github.com/erickfmm/frankenstein-transformer`).
-- `deploy-format` → `--format` `<option>` values must be a subset of the `choices` in `src/cli.py` (`quantized`, `standard`); remove invalid options and add missing ones.
-- `cmd-config-flag` → the `--config` append condition (`['train', …].includes(selectedCmd)`) must list only subcommands whose parser in `src/cli.py` defines `--config` (currently `train`, `deploy`, `quantize` — **not** `infer`, `sbert-train`, `sbert-infer`).
-- `sbert-mode-default` → the `--mode` select must not offer an empty `(default)` option (`sbert-infer --mode` is required; default the select to `--mode similarity`).
+- `deploy-format` → `--format` `<option>` values must be a subset of the `choices` in `src/cli.py` (`quantized`, `standard`, `transformers`, `gguf`); remove invalid options and add missing ones.
+- `cmd-config-flag` → the `--config` append condition must fire only for subcommands whose parser in `src/cli.py` defines `--config` (currently `train` only — **not** `deploy`, `infer`).
+- `sbert-mode-default` → the infer `--mode` select must not offer an empty `(default)` option (`infer --task sbert --mode` is required; default the select to `--mode similarity`).
 - `schema-refs` / `example-yaml` / `asset-base-url` failures indicate broken mirrored content or wrong `/frankenstein-transformer/…` URLs — fix the content or URL, never the probe's expectations.
 
 Re-run the state script until all probes PASS.
@@ -149,12 +149,14 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
    cmds = [
        ['train', '--config', './config_generated.yaml', '--device', 'cpu'],
        ['train', '--config-name', 'frankenstein', '--device', 'cuda'],
-       ['deploy', '--config', './config_generated.yaml', '--checkpoint', './model.pt',
-        '--output', './out', '--format', 'quantized', '--validate'],
-       ['quantize', '--checkpoint', './model.pt', '--output', './out', '--validate'],
+       ['deploy', '--checkpoint', './model.pt', '--output', './out',
+        '--format', 'quantized', '--validate'],
+       ['deploy', '--checkpoint', './model.pt', '--yaml', './config_generated.yaml',
+        '--output', './hf_out', '--format', 'transformers'],
+       ['deploy', '--checkpoint', './model.pt', '--yaml', './config_generated.yaml',
+        '--output', './out.gguf', '--format', 'gguf', '--check'],
        ['infer', '--model', './deploy/model.pt', '--text', 'hola', '--batch-size', '8', '--benchmark'],
-       ['sbert-train', '--output_dir', './out', '--batch_size', '16', '--epochs', '4', '--pooling_mode', 'mean'],
-       ['sbert-infer', '--model_path', './sbert', '--mode', 'similarity',
+       ['infer', '--model', './sbert', '--task', 'sbert', '--mode', 'similarity',
         '--sentence1', 'a', '--sentence2', 'b'],
    ]
    for c in cmds:

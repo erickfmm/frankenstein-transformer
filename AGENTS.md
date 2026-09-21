@@ -8,7 +8,7 @@
 - **Install (local, CUDA 11.8 torch)**: `conda run -n frankenstein pip install -e ".[train]"`
 - **Run all tests**: `conda run -n frankenstein python -m pytest tests/ --continue-on-collection-errors -v --tb=short -p no:warnings`
 - **Run a single test**: `conda run -n frankenstein python -m pytest tests/test_optimizer_factory.py -v` or `tests/test_foo.py::TestClass::test_method`
-- **CLI**: `conda run -n frankenstein frankenstein-transformer <subcommand>` (subcommands: `train`, `deploy`, `quantize`, `infer`, `sbert-train`, `sbert-infer`, `transformers-export`, `web-server`)
+- **CLI**: `conda run -n frankenstein frankenstein-transformer <subcommand>` (subcommands: `train`, `deploy`, `infer`, `web-server`)
 - **Web UI**: `frankenstein-transformer web-server` (Streamlit schema-driven YAML builder)
 - **Website mirror sync**: `/sync-website` (opencode command in `.opencode/command/sync-website.md`) — mirrors `src/schema*`, `configs/`, `docs/paper*`, `docs/{bibliography,specs}`, `streamlit_gui/`, `utils/schema_loader.py` into the gitignored nested clone `erickfmm.github.io/` (GitHub Pages repo, `frankenstein-transformer/` subfolder), then validates: JS param estimator ≤1% vs engine ground truth (`full_tests/param_count_check.py` + `param_estimate_check.mjs --tol 0.01`), schema `$ref` resolution, YAML/JSON validity of every mirrored preset, and Command-tab CLI validity vs `src/cli.py`. Read-only state report: `bash .opencode/command/sync-website-state.sh`. The mirror stays uncommitted; the page's `index.html` / `ft-param-estimator.js` / `ft-diagram.js` are mirror-only (edited there, never synced from main).
 - **No linter/formatter configured** — match surrounding style; all modules use `from __future__ import annotations` and absolute imports from `src/`.

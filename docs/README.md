@@ -50,14 +50,9 @@ frankenstein-transformer
 
 Subcommands:
 
-- `train` — run main MLM/decoder training
-- `deploy` — convert a checkpoint into deployment artifacts
-- `quantize` — export a checkpoint in quantized deployment format
-- `infer` — run a deployed model for inference/benchmarking
-- `sbert-train` — train a Sentence-BERT model
-- `sbert-infer` — run SBERT inference (similarity/search/cluster/encode)
-- `transformers-export` — export a checkpoint + YAML into a Hugging Face Transformers-compatible folder
-- `bitnet-gguf` — best-effort GGUF (BitNet `i2_s`) export for `standard_attn`-only models
+- `train` — run schema-validated training from a YAML config (MLM, SBERT, causal LM, vision, ...)
+- `deploy` — convert a checkpoint into deployment artifacts (`quantized`/`standard`) or export formats (`transformers`, `gguf`)
+- `infer` — run inference with a deployed model (`--task mlm`) or a trained SBERT model (`--task sbert`)
 - `web-server` — run the Streamlit schema-driven YAML builder
 
 Common execution device choice:
@@ -81,14 +76,10 @@ Key train flags:
 - `--config` — path to a YAML config file
 - `--config-name` — name of a preset under `configs/` (without extension)
 - `--list-configs` — list available named presets
-- `--batch-size` — override the config's training batch size
-- `--model-mode` (`frankenstein|frankensteindecoder`)
 - `--device`
-- `--gpu-temp-guard` / `--no-gpu-temp-guard`
-- `--gpu-temp-pause-threshold-c`
-- `--gpu-temp-resume-threshold-c`
-- `--gpu-temp-critical-threshold-c`
-- `--gpu-temp-poll-interval-seconds`
+
+Everything else (batch size, model class, thermal guard, resume checkpoint, ...)
+is defined in the YAML config — the CLI does not duplicate schema settings.
 
 ## 3. Configuration Schema
 
@@ -162,35 +153,35 @@ Deploy flags:
 
 - `--checkpoint` (required)
 - `--output` (required)
-- `--format` (`quantized|standard`)
-- `--validate`
-- `--config` (optional JSON)
+- `--format` (`quantized|standard|transformers|gguf`)
+- `--yaml` (required for `transformers`/`gguf`)
+- `--validate` (standard/quantized)
+- `--check` (gguf compatibility check only)
 - `--device`
 
-Quantize shortcut:
+`quantized` is the default format, so `quantize` needs no separate command:
 
 ```bash
-frankenstein-transformer quantize --checkpoint ckpt.pt --output deployed_model_quantized --validate
+frankenstein-transformer deploy --checkpoint ckpt.pt --output deployed_model_quantized --validate
 ```
 
 ### 4.1 Hugging Face Transformers export
 
 ```bash
-frankenstein-transformer transformers-export --model deployed_model --yaml configs/frankenstein.yaml --output hf_model
+frankenstein-transformer deploy --checkpoint deployed_model --yaml configs/frankenstein.yaml --output hf_model --format transformers
 ```
 
-Flags: `--model` (required), `--yaml` (required), `--output` (required).
+Flags: `--checkpoint` (required), `--yaml` (required), `--output` (required), `--format transformers`.
 
 ### 4.2 BitNet GGUF export
 
 ```bash
-frankenstein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/mini.yaml --output model.gguf
+frankenstein-transformer deploy --checkpoint deployed_model.pt --yaml configs/mini.yaml --output model.gguf --format gguf
 # Compatibility check only:
-frankenstein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf
-frankenstein-transformer bitnet-gguf --model deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf --check --check
+frankenstein-transformer deploy --checkpoint deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf --format gguf --check
 ```
 
-Flags: `--model` (required), `--yaml` (required), `--output` (required), `--check`.
+Flags: `--checkpoint` (required), `--yaml` (required), `--output` (required), `--format gguf`, `--check`.
 
 ## 5. Inference Command
 
@@ -201,6 +192,7 @@ frankenstein-transformer infer --model deployed_model --text "hola" --device aut
 Infer flags:
 
 - `--model` (required)
+- `--task` (`mlm|sbert`, default `mlm`)
 - `--text`
 - `--input`
 - `--output`
@@ -209,23 +201,19 @@ Infer flags:
 - `--batch-size`
 - `--benchmark`
 
-## 6. SBERT Commands
+## 6. SBERT Workflows
 
-### 6.1 `sbert-train`
+SBERT training is regular training: set `training.task: sbert` (with the
+`training.sbert` block) in the YAML and run `train` with a preset such as
+`configs/modernbert_sbert.yaml`.
 
-```bash
-frankenstein-transformer sbert-train --output_dir ./output/sbert_model --batch_size 16 --epochs 4 --device auto
-```
-
-Flags: `--pretrained`, `--output_dir`, `--batch_size`, `--epochs`, `--learning_rate`, `--max_train_samples`, `--max_eval_samples`, `--hidden_size`, `--num_layers`, `--pooling_mode` (`mean|cls|max`), `--no_amp`, `--no_resample`, `--resample_std`, `--device`.
-
-### 6.2 `sbert-infer`
+SBERT inference is the `sbert` task of `infer`:
 
 ```bash
-frankenstein-transformer sbert-infer --model_path ./output/sbert_model --mode similarity --sentence1 "a" --sentence2 "b"
+frankenstein-transformer infer --model ./output/sbert_model --task sbert --mode similarity --sentence1 "a" --sentence2 "b"
 ```
 
-Flags: `--model_path` (required), `--mode` (`similarity|search|cluster|encode`) (required), `--sentence1`, `--sentence2`, `--query`, `--corpus_file`, `--top_k`, `--sentences_file`, `--n_clusters`, `--input_file`, `--output_file`, `--batch_size`, `--device`.
+Flags: `--model` (required), `--task sbert`, `--mode` (`similarity|search|cluster|encode`, required), `--sentence1`, `--sentence2`, `--query`, `--corpus-file`, `--top-k`, `--sentences-file`, `--n-clusters`, `--input-file`, `--output-file`, `--batch-size`, `--device`.
 
 ## 7. Web Server (Streamlit)
 
@@ -242,6 +230,6 @@ Flags: `--server-port` (default 8501), `--server-address` (default `localhost`),
 
 1. Select or create a YAML config that validates against `src/schema.yaml`. Named presets live in `configs/` (`frankenstein`, `frankensteindecoder`, `standard`, `tinybert`, `embbert`, …); optimizer × architecture combos live in `configs/examples/`.
 2. Run `train`.
-3. Export with `deploy` or `quantize`; optionally `transformers-export` to a Hugging Face folder or `bitnet-gguf` to a GGUF file.
+3. Export with `deploy --format transformers` (Hugging Face folder) or `deploy --format gguf` (BitNet GGUF file); plain `deploy` produces quantized/standard artifacts.
 4. Run `infer` for runtime validation and benchmark.
-5. Train/evaluate sentence embeddings via `sbert-train` and `sbert-infer`.
+5. Train/evaluate sentence embeddings via `training.task: sbert` + `train`, then `infer --task sbert`.

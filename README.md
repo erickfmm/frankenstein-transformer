@@ -15,7 +15,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Model Classes | Training Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-------------:|:--------------:|:-------:|:------------:|
-| **42** | **23** | **11** | **3** | **6** | **122** | **9** |
+| **42** | **23** | **11** | **3** | **6** | **122** | **4** |
 
 ## How It Works
 
@@ -25,7 +25,7 @@ flowchart LR
     B -- valid --> C["Train<br/>23 optimizer families<br/>AMP · schedulers · thermal guard"]
     B -- error --> A
     C --> D["Checkpoint"]
-    D --> E["Deploy / Quantize<br/>(BitNet)"]
+    D --> E["Deploy<br/>(quantize · export)"]
     E --> F["Infer<br/>batch · interactive · benchmark"]
     E --> G["Export<br/>HuggingFace · GGUF"]
 
@@ -92,7 +92,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 | Training tasks | `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation` |
 | Normalization types | `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm` |
 | Config presets | 34 named presets + 88 example configs (schema smoke-tested in CI) |
-| CLI subcommands | 9 |
+| CLI subcommands | 4 (`train`, `deploy`, `infer`, `web-server`) |
 | Web configuration UI | Streamlit schema-driven YAML builder |
 | Quantized deployment | BitNet + checkpoint export pipeline (HF Transformers / GGUF) |
 | SBERT workflows | Training + inference (similarity, search, cluster, encode) |
@@ -113,13 +113,8 @@ See [configs/README.md](configs/README.md) for preset details and [docs/specs/](
 | Subcommand | Purpose | Example |
 |------------|---------|---------|
 | `train` | Run schema-validated training | `frankenstein-transformer train --config-name frankenstein --device auto` |
-| `deploy` | Export checkpoint to deployment artifacts | `frankenstein-transformer deploy --checkpoint ckpt.pt --output deployed/ --format quantized` |
-| `quantize` | Shortcut for quantized deployment | `frankenstein-transformer quantize --checkpoint ckpt.pt --output deployed_q/ --validate` |
-| `infer` | Batch/interactive/benchmark inference | `frankenstein-transformer infer --model deployed/ --text "hello" --device auto` |
-| `sbert-train` | Train sentence embedding model | `frankenstein-transformer sbert-train --output_dir ./sbert_out --batch_size 16 --epochs 4` |
-| `sbert-infer` | SBERT similarity/search/cluster/encode | `frankenstein-transformer sbert-infer --model_path ./sbert_out --mode similarity --sentence1 "a" --sentence2 "b"` |
-| `transformers-export` | Export to HuggingFace Transformers format | `frankenstein-transformer transformers-export --config-name frankenstein --output ./hf_export/` |
-| `bitnet-gguf` | Export a BitNet model to GGUF (i2_s) for bitnet.cpp | `frankenstein-transformer bitnet-gguf --model ckpt.pt --yaml cfg.yaml --output out.gguf` |
+| `deploy` | Export checkpoint to deployment artifacts (`quantized`/`standard`) or formats (`transformers`, `gguf`) | `frankenstein-transformer deploy --checkpoint ckpt.pt --output deployed/ --format quantized` |
+| `infer` | Batch/interactive/benchmark inference (`--task mlm`) or SBERT similarity/search/cluster/encode (`--task sbert`) | `frankenstein-transformer infer --model deployed/ --text "hello" --device auto` |
 | `web-server` | Launch Streamlit config builder UI | `frankenstein-transformer web-server` |
 
 All model-executing commands accept `--device auto|cpu|cuda|mps`.

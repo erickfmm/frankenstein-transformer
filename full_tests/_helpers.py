@@ -520,6 +520,22 @@ def run_training(
     tokenizer_dst = run_dir / tokenizer_src.name
     shutil.copy(str(tokenizer_src), str(tokenizer_dst))
 
+    # Single source of truth: all overrides are written into the YAML config
+    # (the CLI no longer accepts batch-size or thermal-guard overrides).
+    training_cfg = config.setdefault("training", {})
+    training_cfg["batch_size"] = int(batch_size)
+    training_cfg["gpu_temp_guard_enabled"] = bool(gpu_temp_guard)
+    if gpu_temp_pause_threshold_c is not None:
+        training_cfg["gpu_temp_pause_threshold_c"] = float(gpu_temp_pause_threshold_c)
+    if gpu_temp_resume_threshold_c is not None:
+        training_cfg["gpu_temp_resume_threshold_c"] = float(gpu_temp_resume_threshold_c)
+    if gpu_temp_critical_threshold_c is not None:
+        training_cfg["gpu_temp_critical_threshold_c"] = float(gpu_temp_critical_threshold_c)
+    if gpu_temp_poll_interval_seconds is not None:
+        training_cfg["gpu_temp_poll_interval_seconds"] = float(gpu_temp_poll_interval_seconds)
+    if gpu_temp_checkpoint_grace_seconds is not None:
+        training_cfg["gpu_temp_checkpoint_grace_seconds"] = float(gpu_temp_checkpoint_grace_seconds)
+
     # Keep checkpoints inside the run dir (checkpoints/ is relative to CWD).
     yaml_path = run_dir / "config.yaml"
     write_yaml(config, yaml_path)
@@ -533,22 +549,7 @@ def run_training(
         "train",
         "--config", str(yaml_path),
         "--device", device,
-        "--batch-size", str(batch_size),
     ]
-    if gpu_temp_guard:
-        cmd.append("--gpu-temp-guard")
-    else:
-        cmd.append("--no-gpu-temp-guard")
-    if gpu_temp_pause_threshold_c is not None:
-        cmd.extend(["--gpu-temp-pause-threshold-c", str(gpu_temp_pause_threshold_c)])
-    if gpu_temp_resume_threshold_c is not None:
-        cmd.extend(["--gpu-temp-resume-threshold-c", str(gpu_temp_resume_threshold_c)])
-    if gpu_temp_critical_threshold_c is not None:
-        cmd.extend(["--gpu-temp-critical-threshold-c", str(gpu_temp_critical_threshold_c)])
-    if gpu_temp_poll_interval_seconds is not None:
-        cmd.extend(["--gpu-temp-poll-interval-seconds", str(gpu_temp_poll_interval_seconds)])
-    if gpu_temp_checkpoint_grace_seconds is not None:
-        cmd.extend(["--gpu-temp-checkpoint-grace-seconds", str(gpu_temp_checkpoint_grace_seconds)])
 
     logging.info("[%s] Starting training (timeout=%ds)", combo_id, timeout)
     start = time.time()
@@ -673,21 +674,10 @@ def run_deploy(
     if os.environ.get("PYTHONPATH"):
         env["PYTHONPATH"] += os.pathsep + os.environ["PYTHONPATH"]
 
-    # The project's deploy path expects a JSON config; the checkpoint embeds a
-    # dataclass instance that flatten_model_dict does not handle, so we pass the
-    # original YAML model block as a JSON config explicitly.
-    run_dir = checkpoint_path.parent.parent
-    yaml_path = run_dir / "config.yaml"
-    config_json_path = run_dir / "model_config.json"
-    if yaml_path.exists():
-        try:
-            with yaml_path.open("r", encoding="utf-8") as fh:
-                full_cfg = yaml.safe_load(fh)
-            model_cfg = full_cfg.get("model", {})
-            with config_json_path.open("w", encoding="utf-8") as fh:
-                json.dump(model_cfg, fh, indent=2)
-        except Exception as exc:
-            logging.warning("Could not write deploy config JSON: %s", exc)
+    env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
+    env["PYTHONPATH"] = str(TMP_DIR) + os.pathsep + str(PROJECT_ROOT)
+    if os.environ.get("PYTHONPATH"):
+        env["PYTHONPATH"] += os.pathsep + os.environ["PYTHONPATH"]
 
     cmd = runner + [
         "deploy",
@@ -697,8 +687,6 @@ def run_deploy(
         "--validate",
         "--device", device,
     ]
-    if config_json_path.exists():
-        cmd.extend(["--config", str(config_json_path)])
     start = time.time()
     try:
         proc = subprocess.run(
@@ -845,10 +833,11 @@ def run_transformers_export(
         env["PYTHONPATH"] += os.pathsep + os.environ["PYTHONPATH"]
 
     cmd = runner + [
-        "transformers-export",
-        "--model", str(checkpoint_path),
+        "deploy",
+        "--checkpoint", str(checkpoint_path),
         "--yaml", str(yaml_path),
         "--output", str(output_dir),
+        "--format", "transformers",
     ]
     start = time.time()
     try:
@@ -906,10 +895,11 @@ def run_bitnet_gguf(
         env["PYTHONPATH"] += os.pathsep + os.environ["PYTHONPATH"]
 
     cmd = runner + [
-        "bitnet-gguf",
-        "--model", str(checkpoint_path),
+        "deploy",
+        "--checkpoint", str(checkpoint_path),
         "--yaml", str(yaml_path),
         "--output", str(output_path),
+        "--format", "gguf",
     ]
     start = time.time()
     try:

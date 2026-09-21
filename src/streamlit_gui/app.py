@@ -20,11 +20,8 @@ import yaml
 SCHEMA_PATH = Path(__file__).parent.parent / "schema.yaml"
 AVAILABLE_COMMANDS = [
     {"id": "train", "name": "Train", "description": "Run main training"},
-    {"id": "deploy", "name": "Deploy", "description": "Convert checkpoint to deployment artifacts"},
-    {"id": "quantize", "name": "Quantize", "description": "Export checkpoint in quantized deployment format"},
-    {"id": "infer", "name": "Infer", "description": "Run deployed model inference"},
-    {"id": "sbert-train", "name": "SBERT Train", "description": "Train SBERT model"},
-    {"id": "sbert-infer", "name": "SBERT Infer", "description": "Run SBERT inference tasks"},
+    {"id": "deploy", "name": "Deploy", "description": "Convert checkpoint to deployment artifacts or export formats"},
+    {"id": "infer", "name": "Infer", "description": "Run deployed model or SBERT inference"},
 ]
 
 LANG_EN = "en"
@@ -1022,73 +1019,37 @@ def build_cli_command(
 
     if command == "train":
         add("--config", output_path)
-        add("--config-name", config.get("model_class", "frankenstein"))
         add("--device", extra_args.get("device"))
-        add("--batch-size", extra_args.get("batch_size"))
-        add("--gpu-temp-guard", extra_args.get("gpu_temp_guard"), store_true=True)
-        add("--no-gpu-temp-guard", extra_args.get("gpu_temp_guard") is False, store_true=True)
-        add("--gpu-temp-pause-threshold-c", extra_args.get("gpu_temp_pause_threshold_c"))
-        add("--gpu-temp-resume-threshold-c", extra_args.get("gpu_temp_resume_threshold_c"))
-        add("--gpu-temp-critical-threshold-c", extra_args.get("gpu_temp_critical_threshold_c"))
-        add("--gpu-temp-poll-interval-seconds", extra_args.get("gpu_temp_poll_interval_seconds"))
-        add("--gpu-temp-checkpoint-grace-seconds", extra_args.get("gpu_temp_checkpoint_grace_seconds"))
-        add("--resume-from-checkpoint", extra_args.get("resume_from_checkpoint"))
-        add("--switch-on-thermal", extra_args.get("switch_on_thermal"), store_true=True)
-        add("--no-switch-on-thermal", extra_args.get("switch_on_thermal") is False, store_true=True)
-    elif command in ["deploy", "quantize"]:
+    elif command == "deploy":
         add("--checkpoint", extra_args.get("checkpoint"))
         add("--output", extra_args.get("output"))
         add("--format", extra_args.get("format"))
-        add("--device", extra_args.get("device"))
-        add("--config", extra_args.get("config"))
         add("--yaml", extra_args.get("yaml"))
         add("--validate", extra_args.get("validate"), store_true=True)
+        add("--check", extra_args.get("check"), store_true=True)
+        add("--device", extra_args.get("device"))
     elif command == "infer":
         add("--model", extra_args.get("model"))
-        add("--device", extra_args.get("device"))
+        add("--task", extra_args.get("task") or "mlm")
+        if (extra_args.get("task") or "mlm") == "sbert":
+            add("--mode", extra_args.get("mode"))
+            add("--sentence1", extra_args.get("sentence1"))
+            add("--sentence2", extra_args.get("sentence2"))
+            add("--query", extra_args.get("query"))
+            add("--corpus-file", extra_args.get("corpus_file"))
+            add("--top-k", extra_args.get("top_k"))
+            add("--sentences-file", extra_args.get("sentences_file"))
+            add("--n-clusters", extra_args.get("n_clusters"))
+            add("--input-file", extra_args.get("input_file"))
+            add("--output-file", extra_args.get("output_file"))
+        else:
+            add("--text", extra_args.get("text"))
+            add("--input", extra_args.get("input"))
+            add("--output", extra_args.get("output"))
+            add("--fp16", extra_args.get("fp16"), store_true=True)
+            add("--benchmark", extra_args.get("benchmark"), store_true=True)
         add("--batch-size", extra_args.get("batch_size"))
-        add("--text", extra_args.get("text"))
-        add("--input", extra_args.get("input"))
-        add("--output", extra_args.get("output"))
-        add("--fp16", extra_args.get("fp16"), store_true=True)
-        add("--benchmark", extra_args.get("benchmark"), store_true=True)
-    elif command == "sbert-train":
-        add("--base-model", extra_args.get("base_model"))
-        add("--pretrained", extra_args.get("pretrained"))
-        add("--output_dir", extra_args.get("output_dir"))
-        add("--dataset_name", extra_args.get("dataset_name"))
-        add("--batch_size", extra_args.get("batch_size"))
-        add("--epochs", extra_args.get("epochs"))
-        add("--warmup_steps", extra_args.get("warmup_steps"))
-        add("--evaluation_steps", extra_args.get("evaluation_steps"))
-        add("--learning_rate", extra_args.get("learning_rate"))
-        add("--max_train_samples", extra_args.get("max_train_samples"))
-        add("--max_eval_samples", extra_args.get("max_eval_samples"))
-        add("--max_seq_length", extra_args.get("max_seq_length"))
-        add("--hidden_size", extra_args.get("hidden_size"))
-        add("--num_layers", extra_args.get("num_layers"))
-        add("--pooling_mode", extra_args.get("pooling_mode"))
-        add("--resample_std", extra_args.get("resample_std"))
         add("--device", extra_args.get("device"))
-        add("--trust_remote_code", extra_args.get("trust_remote_code"), store_true=True)
-        add("--no_amp", extra_args.get("no_amp"), store_true=True)
-        add("--no_resample", extra_args.get("no_resample"), store_true=True)
-        add("--switch-on-thermal", extra_args.get("switch_on_thermal"), store_true=True)
-        add("--no-switch-on-thermal", extra_args.get("switch_on_thermal") is False, store_true=True)
-    elif command == "sbert-infer":
-        add("--model_path", extra_args.get("model_path"))
-        add("--mode", extra_args.get("mode"))
-        add("--batch_size", extra_args.get("batch_size"))
-        add("--device", extra_args.get("device"))
-        add("--top_k", extra_args.get("top_k"))
-        add("--n_clusters", extra_args.get("n_clusters"))
-        add("--sentence1", extra_args.get("sentence1"))
-        add("--sentence2", extra_args.get("sentence2"))
-        add("--query", extra_args.get("query"))
-        add("--corpus_file", extra_args.get("corpus_file"))
-        add("--sentences_file", extra_args.get("sentences_file"))
-        add("--input_file", extra_args.get("input_file"))
-        add("--output_file", extra_args.get("output_file"))
 
     return " ".join(str(part) for part in cmd_parts)
 
@@ -1117,35 +1078,7 @@ def render_command_args(command: str) -> Dict[str, Any]:
 
     if command == "train":
         args["device"] = device
-        args["batch_size"] = st.number_input(
-            "Batch Size (override)", value=0, min_value=0, step=1, key="train.batch_size"
-        ) or None
-        args["gpu_temp_guard"] = st.checkbox(
-            "Enable GPU Temp Guard", value=True, key="train.gpu_temp_guard"
-        )
-        args["switch_on_thermal"] = st.checkbox(
-            "Switch on Thermal", value=False, key="train.switch_on_thermal"
-        )
-        args["resume_from_checkpoint"] = st.text_input(
-            "Resume From Checkpoint (auto or path)", value="", key="train.resume"
-        ).strip() or None
-        with st.expander("Advanced GPU Temp Thresholds", expanded=False):
-            args["gpu_temp_pause_threshold_c"] = st.number_input(
-                "GPU Temp Pause (°C)", value=0.0, min_value=0.0, key="train.temp_pause"
-            ) or None
-            args["gpu_temp_resume_threshold_c"] = st.number_input(
-                "GPU Temp Resume (°C)", value=0.0, min_value=0.0, key="train.temp_resume"
-            ) or None
-            args["gpu_temp_critical_threshold_c"] = st.number_input(
-                "GPU Temp Critical (°C)", value=0.0, min_value=0.0, key="train.temp_critical"
-            ) or None
-            args["gpu_temp_poll_interval_seconds"] = st.number_input(
-                "GPU Temp Poll Interval (s)", value=0.0, min_value=0.0, key="train.temp_poll"
-            ) or None
-            args["gpu_temp_checkpoint_grace_seconds"] = st.number_input(
-                "GPU Temp Checkpoint Grace (s)", value=0.0, min_value=0.0, key="train.temp_grace"
-            ) or None
-    elif command in ["deploy", "quantize"]:
+    elif command == "deploy":
         args["device"] = device
         args["checkpoint"] = st.text_input(
             "Checkpoint Path", value="", key=f"{command}.checkpoint"
@@ -1153,140 +1086,84 @@ def render_command_args(command: str) -> Dict[str, Any]:
         args["output"] = st.text_input(
             "Output Directory", value="", key=f"{command}.output"
         ).strip() or None
-        if command == "deploy":
-            args["format"] = st.selectbox(
-                "Deploy Format",
-                ["quantized", "standard"],
-                index=0,
-                key="deploy.format",
-            )
-        args["validate"] = st.checkbox(
-            "Validate Output", value=False, key=f"{command}.validate"
+        args["format"] = st.selectbox(
+            "Deploy Format",
+            ["quantized", "standard", "transformers", "gguf"],
+            index=0,
+            key="deploy.format",
         )
-        args["config"] = st.text_input(
-            "Training Config YAML (optional)", value="", key=f"{command}.config"
-        ).strip() or None
+        args["validate"] = st.checkbox(
+            "Validate Output (standard/quantized)", value=False, key=f"{command}.validate"
+        )
         args["yaml"] = st.text_input(
-            "Model YAML (for transformers-export, optional)", value="", key=f"{command}.yaml"
+            "Model YAML (required for transformers/gguf formats)", value="", key=f"{command}.yaml"
         ).strip() or None
+        args["check"] = st.checkbox(
+            "GGUF compatibility check only (gguf)", value=False, key=f"{command}.check"
+        )
     elif command == "infer":
         args["device"] = device
         args["model"] = st.text_input(
             "Model Path", value="", key="infer.model"
         ).strip() or None
-        args["batch_size"] = st.number_input(
-            "Batch Size", value=8, min_value=1, step=1, key="infer.batch_size"
-        )
-        args["text"] = st.text_input(
-            "Text (single prompt)", value="", key="infer.text"
-        ).strip() or None
-        args["input"] = st.text_input(
-            "Input File", value="", key="infer.input"
-        ).strip() or None
-        args["output"] = st.text_input(
-            "Output File", value="", key="infer.output"
-        ).strip() or None
-        args["fp16"] = st.checkbox("Use FP16", value=False, key="infer.fp16")
-        args["benchmark"] = st.checkbox("Run Benchmark", value=False, key="infer.benchmark")
-    elif command == "sbert-train":
-        args["device"] = device
-        args["base_model"] = st.text_input(
-            "Base Model", value="", key="sbert_train.base_model"
-        ).strip() or None
-        args["pretrained"] = st.text_input(
-            "Pretrained Model", value="", key="sbert_train.pretrained"
-        ).strip() or None
-        args["output_dir"] = st.text_input(
-            "Output Dir", value="./output/sbert_frankenstein_v2", key="sbert_train.output_dir"
-        ).strip()
-        args["dataset_name"] = st.text_input(
-            "Dataset Name",
-            value="erickfmm/agentlans__multilingual-sentences__paired_10_sts",
-            key="sbert_train.dataset_name",
-        ).strip()
-        args["batch_size"] = st.number_input(
-            "Batch Size", value=16, min_value=1, step=1, key="sbert_train.batch_size"
-        )
-        args["epochs"] = st.number_input(
-            "Epochs", value=4, min_value=1, step=1, key="sbert_train.epochs"
-        )
-        args["warmup_steps"] = st.number_input(
-            "Warmup Steps", value=1000, min_value=0, step=1, key="sbert_train.warmup_steps"
-        )
-        args["evaluation_steps"] = st.number_input(
-            "Evaluation Steps", value=5000, min_value=1, step=1, key="sbert_train.eval_steps"
-        )
-        args["learning_rate"] = st.number_input(
-            "Learning Rate", value=2e-5, min_value=0.0, format="%.2e", key="sbert_train.lr"
-        )
-        args["max_seq_length"] = st.number_input(
-            "Max Sequence Length", value=512, min_value=1, step=1, key="sbert_train.max_len"
-        )
-        args["hidden_size"] = st.number_input(
-            "Hidden Size", value=768, min_value=1, step=1, key="sbert_train.hidden"
-        )
-        args["num_layers"] = st.number_input(
-            "Num Layers", value=12, min_value=1, step=1, key="sbert_train.layers"
-        )
-        args["pooling_mode"] = st.selectbox(
-            "Pooling Mode", ["mean", "cls", "max"], index=0, key="sbert_train.pooling"
-        )
-        args["resample_std"] = st.number_input(
-            "Resample Std", value=0.3, min_value=0.0, key="sbert_train.resample_std"
-        )
-        args["trust_remote_code"] = st.checkbox(
-            "Trust Remote Code", value=False, key="sbert_train.trust_remote"
-        )
-        args["no_amp"] = st.checkbox(
-            "Disable AMP", value=False, key="sbert_train.no_amp"
-        )
-        args["no_resample"] = st.checkbox(
-            "Disable Resample", value=False, key="sbert_train.no_resample"
-        )
-        args["switch_on_thermal"] = st.checkbox(
-            "Switch on Thermal", value=False, key="sbert_train.switch_on_thermal"
-        )
-    elif command == "sbert-infer":
-        args["device"] = device
-        args["model_path"] = st.text_input(
-            "Model Path", value="", key="sbert_infer.model_path"
-        ).strip() or None
-        args["mode"] = st.selectbox(
-            "Inference Mode",
-            ["similarity", "search", "cluster", "encode"],
+        args["task"] = st.selectbox(
+            "Task",
+            ["mlm", "sbert"],
             index=0,
-            key="sbert_infer.mode",
+            key="infer.task",
         )
-        args["batch_size"] = st.number_input(
-            "Batch Size", value=32, min_value=1, step=1, key="sbert_infer.batch_size"
-        )
-        args["top_k"] = st.number_input(
-            "Top K", value=5, min_value=1, step=1, key="sbert_infer.top_k"
-        )
-        args["n_clusters"] = st.number_input(
-            "N Clusters", value=5, min_value=1, step=1, key="sbert_infer.n_clusters"
-        )
-        args["sentence1"] = st.text_input(
-            "Sentence 1", value="", key="sbert_infer.sentence1"
-        ).strip() or None
-        args["sentence2"] = st.text_input(
-            "Sentence 2", value="", key="sbert_infer.sentence2"
-        ).strip() or None
-        args["query"] = st.text_input(
-            "Query", value="", key="sbert_infer.query"
-        ).strip() or None
-        args["corpus_file"] = st.text_input(
-            "Corpus File", value="", key="sbert_infer.corpus_file"
-        ).strip() or None
-        args["sentences_file"] = st.text_input(
-            "Sentences File", value="", key="sbert_infer.sentences_file"
-        ).strip() or None
-        args["input_file"] = st.text_input(
-            "Input File", value="", key="sbert_infer.input_file"
-        ).strip() or None
-        args["output_file"] = st.text_input(
-            "Output File", value="", key="sbert_infer.output_file"
-        ).strip() or None
+        if args["task"] == "sbert":
+            args["mode"] = st.selectbox(
+                "Inference Mode",
+                ["similarity", "search", "cluster", "encode"],
+                index=0,
+                key="infer.sbert_mode",
+            )
+            args["sentence1"] = st.text_input(
+                "Sentence 1 (similarity)", value="", key="infer.sentence1"
+            ).strip() or None
+            args["sentence2"] = st.text_input(
+                "Sentence 2 (similarity)", value="", key="infer.sentence2"
+            ).strip() or None
+            args["query"] = st.text_input(
+                "Query (search)", value="", key="infer.query"
+            ).strip() or None
+            args["corpus_file"] = st.text_input(
+                "Corpus File (search)", value="", key="infer.corpus_file"
+            ).strip() or None
+            args["top_k"] = st.number_input(
+                "Top K (search)", value=5, min_value=1, step=1, key="infer.top_k"
+            )
+            args["sentences_file"] = st.text_input(
+                "Sentences File (cluster/encode)", value="", key="infer.sentences_file"
+            ).strip() or None
+            args["n_clusters"] = st.number_input(
+                "N Clusters (cluster)", value=5, min_value=1, step=1, key="infer.n_clusters"
+            )
+            args["input_file"] = st.text_input(
+                "Input File (encode)", value="", key="infer.input_file"
+            ).strip() or None
+            args["output_file"] = st.text_input(
+                "Output File (encode)", value="", key="infer.output_file"
+            ).strip() or None
+            args["batch_size"] = st.number_input(
+                "Batch Size", value=32, min_value=1, step=1, key="infer.sbert_batch_size"
+            )
+        else:
+            args["batch_size"] = st.number_input(
+                "Batch Size", value=8, min_value=1, step=1, key="infer.batch_size"
+            )
+            args["text"] = st.text_input(
+                "Text (single prompt)", value="", key="infer.text"
+            ).strip() or None
+            args["input"] = st.text_input(
+                "Input File", value="", key="infer.input"
+            ).strip() or None
+            args["output"] = st.text_input(
+                "Output File", value="", key="infer.output"
+            ).strip() or None
+            args["fp16"] = st.checkbox("Use FP16", value=False, key="infer.fp16")
+            args["benchmark"] = st.checkbox("Run Benchmark", value=False, key="infer.benchmark")
 
     return args
 

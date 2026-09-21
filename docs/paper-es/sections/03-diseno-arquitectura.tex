@@ -44,7 +44,7 @@ box/.append style={inner sep=4pt, minimum height=0.62cm}
 \node[box, fill=green!10, minimum width=1.9cm] (yaml) at (0,0) {\textbf{YAML Config}};
 \node[box, fill=green!8, minimum width=2.0cm] (validation) at (0,-1.55) {\textbf{Validation}\\\texttt{schema + rules}};
 \node[box, fill=blue!10, minimum width=1.9cm] (web) at (-3.9,-2.95) {\textbf{Web}\\\texttt{Streamlit}};
-\node[box, fill=blue!8, minimum width=2.1cm] (cli) at (3.9,-2.95) {\textbf{CLI}\\\texttt{train / deploy / quantize / infer / sbert-train / sbert-infer / transformers-export / bitnet-gguf / web-server}};
+\node[box, fill=blue!8, minimum width=2.1cm] (cli) at (3.9,-2.95) {\textbf{CLI}\\\texttt{train / deploy / infer / web-server}};
 % Main blocks
 \node[box, fill=orange!12, minimum width=1.9cm] (model) at (-2.6,-4.3) {\textbf{Model}\\35+ mixers};
 \node[box, fill=yellow!15, minimum width=2.0cm] (train) at (0,-4.3) {\textbf{Training}\\AMP + scheduler};
@@ -56,7 +56,7 @@ box/.append style={inner sep=4pt, minimum height=0.62cm}
 % Deployment
 \node[box, fill=cyan!12, minimum width=2.0cm] (deploy) at (0,-7.75) {\textbf{Deploy}\\quantization};
 \node[box, fill=cyan!10, minimum width=2.0cm] (sbert) at (2.6,-7.75) {\textbf{SBERT}\\search/cluster};
-\node[box, fill=cyan!8, minimum width=2.0cm] (export) at (-2.6,-7.75) {\textbf{Export}\\transformers-export / bitnet-gguf};
+\node[box, fill=cyan!8, minimum width=2.0cm] (export) at (-2.6,-7.75) {\textbf{Export}\\deploy --format transformers / gguf};
 % Arrows
 \draw[line] (yaml) -- (validation);
 \draw[line] (validation) -- (web);

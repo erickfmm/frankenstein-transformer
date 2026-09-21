@@ -162,38 +162,33 @@ sentences score noticeably higher than unrelated ones.
 
 ## CLI Examples
 
-```bash
-# Train SBERT from a pretrained base model
-frankenstein-transformer sbert-train \
-  --base-model answerdotai/ModernBERT-base \
-  --dataset_name erickfmm/agentlans__multilingual-sentences__paired_10_sts \
-  --pooling_mode mean --epochs 4 --batch_size 16
+SBERT training is regular training: put `training.task: sbert` (with the
+`training.sbert` block) in the YAML and run `train`. SBERT inference is the
+`sbert` task of `infer`.
 
-# Train SBERT from a frankenstein checkpoint
-frankenstein-transformer sbert-train \
-  --pretrained checkpoints/model.pt \
-  --hidden_size 768 --num_layers 12 \
-  --pooling_mode cls
+```bash
+# Train SBERT from a YAML preset
+frankenstein-transformer train --config-name modernbert_sbert --device auto
 
 # Pairwise similarity
-frankenstein-transformer sbert-infer \
-  --model_path ./output/sbert --mode similarity \
+frankenstein-transformer infer \
+  --model ./output/sbert --task sbert --mode similarity \
   --sentence1 "Machine learning is fascinating" \
   --sentence2 "AI research is exciting"
 
 # Semantic search
-frankenstein-transformer sbert-infer \
-  --model_path ./output/sbert --mode search \
+frankenstein-transformer infer \
+  --model ./output/sbert --task sbert --mode search \
   --query "transformer architecture" \
-  --corpus_file papers.txt --top_k 10
+  --corpus-file papers.txt --top-k 10
 
 # Clustering
-frankenstein-transformer sbert-infer \
-  --model_path ./output/sbert --mode cluster \
-  --sentences_file reviews.txt --n_clusters 5
+frankenstein-transformer infer \
+  --model ./output/sbert --task sbert --mode cluster \
+  --sentences-file reviews.txt --n-clusters 5
 
 # Embedding export
-frankenstein-transformer sbert-infer \
-  --model_path ./output/sbert --mode encode \
-  --input_file documents.txt --output_file embeddings.npy
+frankenstein-transformer infer \
+  --model ./output/sbert --task sbert --mode encode \
+  --input-file documents.txt --output-file embeddings.npz
 ```

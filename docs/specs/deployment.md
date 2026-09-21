@@ -8,7 +8,7 @@
 Trained checkpoint → Weight packing (ternary / low-bit) → Activation scaling (INT8) → Deployable artifact
 ```
 
-The codebase treats quantization as a deploy-stage transformation rather than a separate model family. The pipeline is accessed via the `deploy` and `quantize` CLI subcommands.
+The codebase treats quantization as a deploy-stage transformation rather than a separate model family. The pipeline is accessed via the `deploy` CLI subcommand (`--format quantized` is the default).
 
 ### End-to-end walkthrough
 
@@ -82,8 +82,8 @@ every forward. At export/deploy time, `bake_bitnet_weights()` replaces the
 master with the quantized value `{-1, 0, 1} · s` once, so the checkpoint
 becomes compact and self-describing. Baking is **idempotent** (a no-op on
 already-ternary weights) and is applied automatically by `deploy --format
-quantized` and `transformers-export`. Training should not continue after
-baking (the STE gradient path is gone).
+quantized` and `deploy --format transformers`. Training should not continue
+after baking (the STE gradient path is gone).
 
 ### INT8 Activation Quantization
 
@@ -147,17 +147,15 @@ The `infer` subcommand supports three modes:
 
 ## Quantization CLI
 
-The `quantize` subcommand is a convenience wrapper that calls `deploy` with `--format quantized`:
+`deploy --format quantized` (the default format) produces quantized artifacts:
 
 ```bash
-# These are equivalent:
-frankenstein-transformer quantize --checkpoint model.pt --output ./out
 frankenstein-transformer deploy --checkpoint model.pt --output ./out --format quantized
 ```
 
 ## Validation
 
-The `--validate` flag on `deploy`/`quantize` runs a forward pass with the quantized model and checks:
+The `--validate` flag on `deploy` runs a forward pass with the quantized model and checks:
 - Output tensor shapes match expectations
 - No NaN/Inf in activations
 - Numerical consistency within tolerance vs FP32 reference
@@ -178,7 +176,7 @@ source `.pt` checkpoint is always left untouched.
 
 ## HuggingFace Transformers Export
 
-The `transformers-export` subcommand (and `--transformers-export` flag on `train`/`deploy`/`quantize`) converts a checkpoint + YAML config into a HuggingFace Transformers-compatible folder with:
+The `deploy --format transformers` export converts a checkpoint + YAML config into a HuggingFace Transformers-compatible folder with:
 - `config.json` (HF format)
 - `pytorch_model.bin` or `model.safetensors`
 - Tokenizer files (if available)
@@ -234,10 +232,10 @@ to the Llama-style tensor naming. Any other `layer_pattern` (e.g.
 
 ```bash
 # Compatibility check (returns is_compatible + reason)
-frankenstein-transformer bitnet-gguf --yaml cfg.yaml --output out.gguf --check
+frankenstein-transformer deploy --checkpoint ckpt.pt --yaml cfg.yaml --output out.gguf --format gguf --check
 
 # Export a standard_attn-only BitNet model to i2_s GGUF
-frankenstein-transformer bitnet-gguf --model ckpt.pt --yaml cfg.yaml --output out.gguf
+frankenstein-transformer deploy --checkpoint ckpt.pt --yaml cfg.yaml --output out.gguf --format gguf
 ```
 
 The writer is a self-contained GGUF v3 emitter (no dependency on the
