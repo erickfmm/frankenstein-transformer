@@ -36,6 +36,7 @@ import torch.nn.functional as F
 
 from .config import FrankensteinModelConfig
 from .hybrid_layer import HybridLayer
+from .hyperloop import HyperloopConnections
 from .attention.common import BitLinear
 from .embeddings import build_pos_encoder, LearnedAbsolutePE, SinusoidalAbsolute
 from .norm import get_norm
@@ -179,9 +180,23 @@ class FrankensteinViT(nn.Module):
         self.final_norm = get_norm(cfg)
         self.residual: ResidualBase = build_residual(cfg)
 
-        # ---- mHC (reused) ----
+        # ---- mHC / Hyperloop (reused) ----
         self.use_mhc = bool(getattr(cfg, "use_mhc", False))
-        if self.use_mhc:
+        # Hyperloop (arXiv:2604.21254) replaces the learned in/out projections
+        # with loop-level hyper-connections using copy/avg expand-collapse.
+        self.use_hyperloop = self.use_mhc and bool(getattr(cfg, "mhc_hyperloop", False))
+        if self.use_hyperloop:
+            self.hyperloop = HyperloopConnections(
+                hidden_size=cfg.hidden_size,
+                num_loops=int(cfg.num_loops),
+                expansion_rate=cfg.mhc_expansion_rate,
+                gating_init=cfg.mhc_gating_init,
+                res_parameterization=cfg.mhc_hyperloop_res_parameterization,
+                sinkhorn_iters=cfg.mhc_sinkhorn_iters,
+                use_bitnet=cfg.use_bitnet,
+                full_prec_under_bitnet=cfg.mhc_full_prec_under_bitnet,
+            )
+        elif self.use_mhc:
             n = int(cfg.mhc_expansion_rate)
             self.mhc_in_proj = nn.Linear(cfg.hidden_size, n * cfg.hidden_size)
             self.mhc_out_proj = nn.Linear(n * cfg.hidden_size, cfg.hidden_size)
@@ -343,7 +358,7 @@ class FrankensteinViT(nn.Module):
     def _run_encoder(
         self, x: torch.Tensor,
     ) -> torch.Tensor:
-        """Run the HybridLayer stack with looped depth + residual + mHC.
+        """Run the HybridLayer stack with looped depth + residual + mHC/Hyperloop.
 
         Args:
             x: Input hidden states of shape ``(B, S, D)``.
@@ -351,7 +366,20 @@ class FrankensteinViT(nn.Module):
         Returns:
             Output hidden states of shape ``(B, S, D)``.
         """
-        if self.use_mhc:
+        # ---- Middle-cycle partitioning (Hyperloop, arXiv:2604.21254) ----
+        n_begin = (
+            int(getattr(self.config, "mhc_hyperloop_begin_layers", 0))
+            if self.use_hyperloop
+            else 0
+        )
+        n_end = (
+            int(getattr(self.config, "mhc_hyperloop_end_layers", 0))
+            if self.use_hyperloop
+            else 0
+        )
+        n_middle = self.config.num_layers - n_begin - n_end
+
+        if self.use_mhc and not self.use_hyperloop:
             n = int(self.config.mhc_expansion_rate)
             bsz, seq_len, dim = x.shape
             x = self.mhc_in_proj(x).view(bsz, seq_len, n, dim)
@@ -363,16 +391,61 @@ class FrankensteinViT(nn.Module):
             self.residual.set_embedding(x)
 
         logical_layer_idx = 0
-        for _ in range(self.config.num_loops):
-            for layer in self.layers:
-                x = layer(x, logical_layer_idx=logical_layer_idx, input_ids=None)
+
+        def _run_layers(x_in, layers, idx0):
+            """Run a layer slice, applying the AttnRes residual when active.
+
+            Args:
+                x_in: Input stream for the first layer in the slice.
+                layers: The :class:`HybridLayer` objects to run in order.
+                idx0: The logical layer index of the first layer in the slice.
+
+            Returns:
+                Tuple ``(x_out, next_idx)`` with the updated stream and the
+                next logical layer index.
+            """
+            x = x_in
+            idx = idx0
+            for layer in layers:
+                x = layer(x, logical_layer_idx=idx, input_ids=None)
                 if self.residual.is_attn_res:
-                    x = self.residual(logical_layer_idx, x)
-                logical_layer_idx += 1
+                    x = self.residual(idx, x)
+                idx += 1
+            return x, idx
+
+        # ---- Hyperloop middle-cycle forward ----
+        if self.use_hyperloop:
+            hl = self.hyperloop
+            # Begin block: plain C-dim layers, run exactly once.
+            x, logical_layer_idx = _run_layers(x, self.layers[:n_begin], logical_layer_idx)
+
+            # Expand by copying: (B, S, C) → (B, S, n, C).
+            x = hl.expand(x)
+
+            # Looped middle block wrapped in loop-level hyper-connections.
+            middle = self.layers[n_begin : n_begin + n_middle]
+            for loop_idx in range(self.config.num_loops):
+                h_pre, h_post, h_res = hl.mappings(x, loop_idx)
+                block_in = hl.apply_fpre(x, h_pre)
+                block_out, logical_layer_idx = _run_layers(
+                    block_in, middle, logical_layer_idx
+                )
+                x = hl.apply_update(x, block_out, h_post, h_res, loop_idx)
+
+            # Collapse by averaging: (B, S, n, C) → (B, S, C).
+            x = hl.collapse(x)
+
+            # End block: plain C-dim layers, run exactly once.
+            x, logical_layer_idx = _run_layers(
+                x, self.layers[n_begin + n_middle :], logical_layer_idx
+            )
+        else:
+            for _ in range(self.config.num_loops):
+                x, logical_layer_idx = _run_layers(x, self.layers, logical_layer_idx)
 
         x = self.residual.finalize(x)
 
-        if self.use_mhc:
+        if self.use_mhc and not self.use_hyperloop:
             bsz, seq_len, n, dim = x.shape
             x = self.mhc_out_proj(x.reshape(bsz, seq_len, n * dim))
 

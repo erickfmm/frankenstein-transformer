@@ -51,7 +51,7 @@ def _categorize(name: str) -> str:
         pass
     if leaf in ("norm1", "norm2", "final_norm") or n.endswith("final_norm"):
         return "norm"
-    if "mhc" in name:
+    if "mhc" in name or "hyperloop" in name:
         return "mhc"
     if leaf in ("router", "depth_router"):
         return "router"

@@ -211,3 +211,105 @@ RMSNorm, Loss-Free load balancing) from 3B to 27B parameters
         communication overlap, mHC adds only $6.7\%$ additional training time
         at $n = 4$ on the 27B model.
 \end{itemize}
+
+\subsection{Hyperloop: Loop-Level Hyper-Connections on Looped Transformers}
+
+\label{sec:annex-hyperloop}
+
+The \emph{Hyperloop Transformer} \citep{zeitoun_hyperloop_2026} combines
+looped Transformers — which reuse layer weights across depth — with
+\emph{loop-level} hyper-connections, targeting parameter efficiency rather
+than raw depth. The layer stack is partitioned \emph{middle-cycle} into a
+begin block (run once), a looped middle block, and an end block (run once);
+the looped middle block is wrapped in hyper-connections applied only after
+each loop iteration. With $Y^{(l)}_t \in \mathbb{R}^{n \times C}$ the
+matrix-valued stream at loop $l$, $z^{(l)}_t =
+\mathrm{RMSNorm}(\mathrm{flatten}(Y^{(l)}_t))$, and per-loop parameters
+$\{W^{\tau}_l, b^{\tau}_l, \alpha^{\tau}_l\}$ for $\tau \in
+\{\text{pre}, \text{post}, \text{res}\}$ plus a loop position embedding
+$e_l \in \mathbb{R}^C$, the recurrence is
+\begin{equation}
+y^{(l+1)}_t = H^{\text{res}}_l\, y^{(l)}_t + H^{\text{post}}_l \otimes
+\bigl( F(H^{\text{pre}}_l\, y^{(l)}_t) + e_l \bigr),
+\end{equation}
+with the data-dependent coefficients
+\begin{align*}
+H^{\text{pre}}_l &= \sigma\bigl(\alpha^{\text{pre}}_l (W^{\text{pre}}_l z^{(l)}_t) + b^{\text{pre}}_l\bigr), &
+H^{\text{post}}_l &= 2\sigma\bigl(\alpha^{\text{post}}_l (W^{\text{post}}_l z^{(l)}_t) + b^{\text{post}}_l\bigr),\\
+H^{\text{res}}_l &= \mathrm{diag}\bigl(\sigma(\alpha^{\text{res}}_l (W^{\text{res}}_l z^{(l)}_t) + b^{\text{res}}_l)\bigr) &
+W^{\text{res}}_l &\in \mathbb{R}^{n \times nC}
+\end{align*}
+(the diagonal $H^{\text{res}}$ substitutes mHC's $\mathrm{sinkhorn}(\cdot)$
+over a dense $n^2 \times nC$ projection with a sigmoid over a diagonal gate —
+the paper's Table~6 ablation finds this both cheaper \emph{and} more
+accurate: 14.40 perplexity versus 14.59 Sinkhorn and 14.61 identity).
+
+Four properties distinguish the Hyperloop wiring from per-sublayer mHC
+(\S\ref{sec:annex-mhc}): (1) hyper-connections fire once per
+\emph{loop}, not after every sub-layer — also the most performant placement
+in the paper's Table~5 ablation; (2) the stream is created by \emph{copying}
+the begin-block output $n$ times and collapsed by \emph{averaging} the
+streams before the end block, replacing mHC's learned in/out projections;
+(3) the parameters are \emph{per loop}, relaxing the strict weight sharing of
+ordinary looped Transformers — the paper's representation-similarity analysis
+(Table~8) shows looped-layer representations deviate more across loops, which
+it identifies as the source of the quality gains; and (4) $H^{\text{res}}$
+defaults to the diagonal-sigmoid parameterization.
+
+The Frankenstein integration is controlled by the \texttt{mhc.hyperloop}
+boolean (flat \texttt{mhc\_hyperloop}; requires \texttt{mhc.enabled} and
+\texttt{dims.num\_loops} $\ge 2$), with three additional keys:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{hyperloop\_begin\_layers} / \texttt{hyperloop\_end\_layers}
+        (int $\ge 0$, default $0$): sizes of the begin/end blocks, which run
+        exactly once. The paper allocates $\sim$25\% of parameters to each and
+        50\% to the middle block (unrolled depth $=$ begin $+$ middle
+        $\times$ loops $+$ end; e.g.\ $2L \to 4L(\times3) \to 2L$ at 16
+        layers). $0/0$ loops the whole stack.
+    \item \texttt{hyperloop\_res\_parameterization} (enum, default
+        \texttt{diagonal}): \texttt{diagonal}, \texttt{sinkhorn} (full mHC-style
+        doubly stochastic mixing, reusing
+        \texttt{Sinkhorn\-Knopp\-Function}) or \texttt{identity}.
+\end{itemize}
+
+Implementation: \texttt{src/model/hyperloop.py} hosts
+\texttt{HyperloopConnections} with per-loop \texttt{projs} / \texttt{biases} /
+\texttt{alphas\_\*} / \texttt{loop\_pos\_embs} ($e_l$, zero-initialized so
+that at initialisation the update reduces to the plain looped-Transformer
+recurrence). \texttt{FrankensteinEncoder} (and \texttt{FrankensteinViT}) build
+it \emph{instead of} the \texttt{mhc\_in\_proj}/\texttt{mhc\_out\_proj}
+pair; the forward pass runs begin $\to$ copy $\to$ per-loop read/middle/update
+$\to$ average $\to$ end. \texttt{HybridLayer} disables its per-layer
+\texttt{mhc\_attn}/\texttt{mhc\_ffn} modules under Hyperloop, so middle-block
+layers run the standard $C$-dimensional path — which restores \textbf{Mixture-of-Depths
+compatibility} (per-layer mHC forbids MoD). Hyperloop is incompatible with
+the AttnRes residuals (\texttt{residuals.type} \texttt{full\_attn} /
+\texttt{block\_attn}), which assume a per-logical-layer n-stream residual.
+The per-loop parameter budget is $3n^2C + 3n + 3 + C$ (diagonal): for the
+paper's 136M model ($C = 1024$, $n = 4$, 3 loops) only $\approx$150K
+parameters beyond the plain looped Transformer.
+
+Example configuration: \texttt{configs/examples/hyperloop\_mhc\_adamw.yaml}.
+
+\subsubsection*{Reported results (arXiv:2604.21254)}
+
+Trained on FineWeb-Edu with $n = 4$ streams and 3 loops (25\%/50\%/25\%
+parameter split), against depth-matched Transformer and mHC baselines:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Parameter efficiency}: at 240M/1B/2B depth-matched scale,
+        Hyperloop uses $\approx$50\% fewer parameters (136M/580M/991M) yet
+        matches or beats the baselines in perplexity (14.40 vs 14.65 at
+        240M scale; 9.65 vs 10.19 at 1B; 8.49 vs 8.60 at 2B).
+    \item \textbf{Quantization}: INT4 (GPTQ) perplexity degrades less than
+        the vanilla looped model (14.68 vs 15.18 at 240M scale), so the
+        parameter savings survive post-training compression.
+    \item \textbf{Overhead}: loop-level placement plus the diagonal
+        $H^{\text{res}}$ keep the training throughput within $\approx$5\% of
+        the plain looped Transformer in unoptimized PyTorch (per-layer mHC
+        loses $\approx$33\% without fused kernels).
+    \item \textbf{Ablations}: every-loop placement beats every-layer
+        (Table~5); diagonal $H^{\text{res}}$ beats Sinkhorn and identity
+        (Table~6); stream count $n$ shows diminishing returns beyond 4
+        (Table~4); LoRA-per-loop (relaxed recursive Transformers) helps far
+        less per parameter than the hyper-connection relaxation (Table~7).
+\end{itemize}

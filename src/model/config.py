@@ -558,6 +558,25 @@ class FrankensteinModelConfig:
     # noise on the small mHC coefficients). Defaults to True.
     mhc_full_prec_under_bitnet: bool = True
 
+    # ---- Hyperloop Transformers (arXiv:2604.21254) ----
+    # Loop-level hyper-connections over a middle-cycle looped middle block
+    # (begin → middle × num_loops → end). Requires ``mhc_hyperloop_mhc_enabled``
+    # semantics: only meaningful when ``use_mhc`` is True — it *replaces* the
+    # per-sublayer mHC wiring with loop-level hyper-connections. The stream is
+    # created by copying ``mhc_expansion_rate`` times and collapsed by average;
+    # per-loop parameters {W/b/α/e} relax strict weight sharing across loops.
+    mhc_hyperloop: bool = False
+    # Layers at the start of the stack that run exactly once (begin block).
+    # 0 = loop the whole stack (no begin block).
+    mhc_hyperloop_begin_layers: int = 0
+    # Layers at the end of the stack that run exactly once (end block).
+    mhc_hyperloop_end_layers: int = 0
+    # Parameterization of the transition matrix H[res]:
+    #   - "diagonal": sigmoid-gated diagonal (paper default & best ablation).
+    #   - "sinkhorn": full doubly-stochastic mHC-style matrix.
+    #   - "identity": stateless pass-through of the stream (ablation).
+    mhc_hyperloop_res_parameterization: str = "diagonal"
+
     # ---- Attention Residuals (AttnRes, arXiv:2603.15031) ----
     # Depth-wise softmax attention replaces the fixed residual coefficient of 1.
     # ``residual_type`` selects the strategy:
@@ -939,6 +958,50 @@ class FrankensteinModelConfig:
             raise ValueError("mhc_sinkhorn_iters must be >= 1")
         if float(self.mhc_gating_init) <= 0.0:
             raise ValueError("mhc_gating_init must be > 0")
+
+        # ---- Validate Hyperloop (arXiv:2604.21254) ----
+        if self.mhc_hyperloop:
+            if not bool(self.use_mhc):
+                raise ValueError(
+                    "mhc_hyperloop=True requires use_mhc=True: the Hyperloop "
+                    "transformer replaces the per-sublayer mHC wiring with "
+                    "loop-level hyper-connections (arXiv:2604.21254)"
+                )
+            if int(self.num_loops) < 2:
+                raise ValueError(
+                    f"mhc_hyperloop=True requires num_loops >= 2 (the paper uses "
+                    f"3), got num_loops={int(self.num_loops)}"
+                )
+            if int(self.mhc_hyperloop_begin_layers) < 0:
+                raise ValueError("mhc_hyperloop_begin_layers must be >= 0")
+            if int(self.mhc_hyperloop_end_layers) < 0:
+                raise ValueError("mhc_hyperloop_end_layers must be >= 0")
+            if int(self.mhc_hyperloop_begin_layers) + int(
+                self.mhc_hyperloop_end_layers
+            ) >= int(self.num_layers):
+                raise ValueError(
+                    "mhc_hyperloop_begin_layers + mhc_hyperloop_end_layers "
+                    f"({int(self.mhc_hyperloop_begin_layers)} + "
+                    f"{int(self.mhc_hyperloop_end_layers)}) must be strictly less "
+                    f"than num_layers ({int(self.num_layers)}): the looped middle "
+                    "block must contain at least one layer"
+                )
+            rp = str(self.mhc_hyperloop_res_parameterization).lower()
+            valid_res_params = {"diagonal", "sinkhorn", "identity"}
+            if rp not in valid_res_params:
+                raise ValueError(
+                    f"mhc_hyperloop_res_parameterization must be one of "
+                    f"{sorted(valid_res_params)}, got {rp!r}"
+                )
+            self.mhc_hyperloop_res_parameterization = rp
+            if str(self.residual_type).lower() in {"full_attn", "block_attn"}:
+                raise ValueError(
+                    "mhc_hyperloop is incompatible with AttnRes residuals "
+                    "(residual_type='full_attn'/'block_attn'): AttnRes applies "
+                    "depth-wise attention per logical layer on the n-stream "
+                    "residual, while Hyperloop applies hyper-connections only "
+                    "at the loop level"
+                )
 
         # ---- Validate Attention Residuals (arXiv:2603.15031) ----
         valid_residual_types = {"standard", "none", "full_attn", "block_attn"}

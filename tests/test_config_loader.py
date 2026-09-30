@@ -623,6 +623,81 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
         self.assertTrue(cfg.model_config.mhc_checkpoint)
         self.assertFalse(cfg.model_config.mhc_full_prec_under_bitnet)
 
+    def test_hyperloop_hierarchical_schema(self):
+        # Hyperloop (arXiv:2604.21254): model.mhc.hyperloop + middle-cycle keys.
+        path = self._cfg_path("""
+            model:
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 6
+                num_loops: 3
+                num_heads: 6
+                retention_heads: 6
+                dropout: 0.0
+                layer_pattern: [standard_attn, retnet, titan_attn, standard_attn, retnet, titan_attn]
+                mode: encoder
+              norm:
+                type: layer_norm
+              use_bitnet: false
+              use_moe: false
+              ffn_hidden_size: 96
+              ffn_activation: gelu
+              mhc:
+                enabled: true
+                expansion_rate: 4
+                hyperloop: true
+                hyperloop_begin_layers: 2
+                hyperloop_end_layers: 2
+                hyperloop_res_parameterization: diagonal
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+                parameters: {}
+        """)
+        cfg = load_training_config(path)
+        self.assertTrue(cfg.model_config.use_mhc)
+        self.assertTrue(cfg.model_config.mhc_hyperloop)
+        self.assertEqual(cfg.model_config.mhc_hyperloop_begin_layers, 2)
+        self.assertEqual(cfg.model_config.mhc_hyperloop_end_layers, 2)
+        self.assertEqual(
+            cfg.model_config.mhc_hyperloop_res_parameterization, "diagonal"
+        )
+
+    def test_hyperloop_requires_enabled_in_yaml(self):
+        # The schema conditional rule demands mhc.enabled alongside hyperloop.
+        path = self._cfg_path("""
+            model:
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 6
+                num_loops: 3
+                num_heads: 6
+                retention_heads: 6
+                dropout: 0.0
+                layer_pattern: [standard_attn, retnet, titan_attn, standard_attn, retnet, titan_attn]
+                mode: encoder
+              norm:
+                type: layer_norm
+              use_bitnet: false
+              use_moe: false
+              ffn_hidden_size: 96
+              ffn_activation: gelu
+              mhc:
+                hyperloop: true
+                hyperloop_begin_layers: 2
+                hyperloop_end_layers: 2
+            training:
+              task: mlm
+              optimizer:
+                optimizer_class: adamw
+                parameters: {}
+        """)
+        with self.assertRaises(Exception):
+            load_training_config(path)
+
 
 
 @unittest.skipUnless(_IMPORTS_OK, "torch and training deps required")

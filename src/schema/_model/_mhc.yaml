@@ -23,6 +23,15 @@ description: |-
   ⚠️ mHC is incompatible with `use_mixture_of_depths` (MoD token routing
   operates on a single C-dimensional stream, conflicting with the n-stream
   residual).
+
+  **Hyperloop mode** (`hyperloop: true`, arXiv:2604.21254): instead of the
+  per-sublayer wiring above, hyper-connections fire once per loop iteration
+  over a middle-cycle partitioned stack (begin → looped middle → end), with
+  per-loop parameters, copy/average stream expansion, and a diagonal-sigmoid
+  `H^res` by default. See the `hyperloop` property below. Hyperloop requires
+  `enabled: true` and `dims.num_loops >= 2`; it lifts the MoD incompatibility
+  (middle-block layers run the standard C-dim path) but is incompatible with
+  AttnRes residuals (`residuals.type: full_attn|block_attn`).
 description_es: |-
   Configuración para Hyper-Connexiones Restringidas por Variedad (mHC,
   arXiv:2512.24880). mHC expande el ancho del flujo residual por un factor
@@ -140,3 +149,151 @@ properties:
       `φ_l` usa `BitLinear`.
     default: true
     examples: [true, false]
+  hyperloop:
+    type: boolean
+    title: "Hyperloop Transformer (loop-level hyper-connections)"
+    title_es: "Transformer Hyperloop (hiperconexiones a nivel de bucle)"
+    description: |-
+      Enable the **Hyperloop Transformer** architecture (Zeitoun,
+      Torroba-Hennigen & Kim, arXiv:2604.21254). Instead of applying mHC
+      hyper-connections after every attention/FFN sub-layer, the layer stack
+      is partitioned middle-cycle into a **begin block** (runs once), a
+      **looped middle block** wrapped in loop-level hyper-connections, and an
+      **end block** (runs once):
+
+      `x → begin → copy×n → { read(H^pre) → middle → +e_l → update(H^res, H^post) } × num_loops → avg → end → head`
+
+      Key properties (all measured in the paper):
+      - Loop-level hyper-connections with **per-loop** parameters
+        `{W_l, b_l, α_l, e_l}` relax strict weight sharing across loops —
+        this is what recovers depth-matched quality with ~50% fewer
+        parameters.
+      - The stream is created by **copying** (`expansion_rate` copies) and
+        collapsed by **averaging**, replacing mHC's learned in/out
+        projections.
+      - `H^res` uses a **diagonal sigmoid** parameterization by default (the
+        paper's best ablation: fewer parameters than Sinkhorn AND better
+        perplexity). See `hyperloop_res_parameterization`.
+      - Only fires once per loop, so overhead is minimal (~5% throughput vs
+        mHC's ~33% slowdown in plain PyTorch).
+      - Post-training INT4 (GPTQ) perplexity degrades less than plain looped
+        models.
+      - **Requires** `enabled: true` and `dims.num_loops >= 2` (paper uses
+        3). Incompatible with `residuals.type: full_attn|block_attn`
+        (AttnRes assumes a per-logical-layer n-stream residual). Unlike
+        per-layer mHC, **Mixture-of-Depths stays compatible** (middle-block
+        layers run the standard C-dim path).
+
+      Parameter budget: per loop `≈ 3n²C + 3n + 3 + C` (diagonal) — for the
+      paper's 136M model (C=1024, n=4, 3 loops) this is ~150K extra
+      parameters over the plain looped Transformer.
+    description_es: |-
+      Habilita la arquitectura **Hyperloop Transformer** (Zeitoun,
+      Torroba-Hennigen & Kim, arXiv:2604.21254). En lugar de aplicar las
+      hiperconexiones mHC tras cada subcapa attention/FFN, la pila de capas
+      se particiona en ciclo medio: un **bloque inicial** (se ejecuta una
+      vez), un **bloque intermedio en bucle** envuelto en hiperconexiones a
+      nivel de bucle y un **bloque final** (se ejecuta una vez).
+
+      Propiedades clave (todas medidas en el paper):
+      - Hiperconexiones a nivel de bucle con parámetros **por bucle**
+        `{W_l, b_l, α_l, e_l}` que relajan la compartición estricta de pesos
+        entre bucles — esto recupera calidad equivalente a profundidad
+        completa con ~50% menos parámetros.
+      - El stream se crea **copiando** (`expansion_rate` copias) y se colapsa
+        **promediando**, reemplazando las proyecciones aprendidas de mHC.
+      - `H^res` usa una parametrización **sigmoide diagonal** por defecto
+        (la mejor ablación del paper). Ver `hyperloop_res_parameterization`.
+      - Se aplica una vez por bucle, así que la sobrecarga es mínima.
+      - **Requiere** `enabled: true` y `dims.num_loops >= 2` (el paper usa
+        3). Incompatible con `residuals.type: full_attn|block_attn`. A
+        diferencia de mHC por capa, **Mixture-of-Depths sigue siendo
+        compatible**.
+    default: false
+    examples: [true, false]
+  hyperloop_begin_layers:
+    type: integer
+    minimum: 0
+    title: "Hyperloop Begin Block Layers"
+    title_es: "Capas del Bloque Inicial Hyperloop"
+    description: |
+      Number of physical layers at the start of the stack that run exactly
+      once before the looped middle block (the "begin block" / prelude). The
+      paper allocates ~25% of parameters to the begin block, 50% to the
+      middle, 25% to the end (e.g. `2L → 4L(×3) → 2L` at 16 unrolled layers).
+
+      Only meaningful when `hyperloop` is true. `0` (default) loops the whole
+      stack with no begin/end split.
+
+      Must satisfy `hyperloop_begin_layers + hyperloop_end_layers <
+      dims.num_layers`.
+    description_es: |
+      Número de capas físicas al inicio de la pila que se ejecutan una sola
+      vez antes del bloque intermedio en bucle (el "bloque inicial"). El
+      paper asigna ~25% de los parámetros al bloque inicial, 50% al
+      intermedio y 25% al final (p. ej. `2L → 4L(×3) → 2L` a 16 capas
+      desenrolladas).
+
+      Solo es significativo cuando `hyperloop` es true. `0` (por defecto)
+      recorre la pila completa sin partición begin/end.
+
+      Debe satisfacer `hyperloop_begin_layers + hyperloop_end_layers <
+      dims.num_layers`.
+    default: 0
+    examples: [0, 2, 3]
+  hyperloop_end_layers:
+    type: integer
+    minimum: 0
+    title: "Hyperloop End Block Layers"
+    title_es: "Capas del Bloque Final Hyperloop"
+    description: |
+      Number of physical layers at the end of the stack that run exactly once
+      after the looped middle block (the "end block" / coda). The paper
+      allocates ~25% of parameters to it. Only meaningful when `hyperloop` is
+      true; `0` (default) loops the whole stack.
+
+      Must satisfy `hyperloop_begin_layers + hyperloop_end_layers <
+      dims.num_layers`.
+    description_es: |
+      Número de capas físicas al final de la pila que se ejecutan una sola
+      vez tras el bloque intermedio en bucle (el "bloque final"). El paper le
+      asigna ~25% de los parámetros. Solo es significativo cuando `hyperloop`
+      es true; `0` (por defecto) recorre la pila completa.
+
+      Debe satisfacer `hyperloop_begin_layers + hyperloop_end_layers <
+      dims.num_layers`.
+    default: 0
+    examples: [0, 2, 3]
+  hyperloop_res_parameterization:
+    type: string
+    title: "H^res Parameterization"
+    title_es: "Parametrización de H^res"
+    description: |
+      Parameterization of the transition matrix `H^res` that mixes the
+      parallel residual streams between loop iterations (paper §3, ablation
+      Table 6). Only meaningful when `hyperloop` is true.
+
+      - `"diagonal"` (default, paper's choice): `H^res = diag(σ(α·W·z+b))` —
+        a data-dependent per-stream gate. Cheapest (W_res is `n×nC` instead
+        of `n²×nC`) **and** the paper's best perplexity (14.40).
+      - `"sinkhorn"`: full mHC-style `sinkhorn(W·z+b)` doubly stochastic
+        matrix (14.59 in the paper's ablation). Available for ablation
+        parity with `mhc.enabled` without `hyperloop`.
+      - `"identity"`: `H^res = I` — no mixing parameters at all. The
+        paper's simplest ablation (14.61).
+    description_es: |
+      Parametrización de la matriz de transición `H^res` que mezcla los
+      streams residuales paralelos entre iteraciones de bucle (paper §3,
+      ablación Tabla 6). Solo es significativa cuando `hyperloop` es true.
+
+      - `"diagonal"` (por defecto, elección del paper):
+        `H^res = diag(σ(α·W·z+b))` — compuerta por stream dependiente de los
+        datos. La más barata **y** la de mejor perplejidad (14.40).
+      - `"sinkhorn"`: matriz doblemente estocástica completa estilo mHC
+        (14.59 en la ablación). Disponible para paridad de ablación con
+        `mhc.enabled` sin `hyperloop`.
+      - `"identity"`: `H^res = I` — sin parámetros de mezcla. La ablación
+        más simple del paper (14.61).
+    enum: [diagonal, sinkhorn, identity]
+    default: diagonal
+    examples: [diagonal, sinkhorn, identity]

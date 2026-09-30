@@ -224,3 +224,116 @@ RMSNorm, balance de carga sin pérdida auxiliar) de 3B a 27B parámetros
         de comunicación DualPipe, mHC añade solo $6.7\%$ de tiempo adicional de
         entrenamiento con $n = 4$ en el modelo de 27B.
 \end{itemize}
+
+\subsection{Hyperloop: Hiperconexiones a Nivel de Bucle en Transformers en Bucle}
+
+\label{sec:annex-hyperloop-es}
+
+El \emph{Hyperloop Transformer} \citep{zeitoun_hyperloop_2026} combina
+Transformers en bucle — que reutilizan los pesos de capa a través de la
+profundidad — con hiperconexiones \emph{a nivel de bucle}, orientándose a la
+eficiencia de parámetros en lugar de a la profundidad bruta. La pila de capas
+se particiona en \emph{ciclo medio}: un bloque inicial (se ejecuta una vez),
+un bloque intermedio en bucle y un bloque final (se ejecuta una vez); el
+bloque intermedio en bucle se envuelve en hiperconexiones aplicadas solo tras
+cada iteración de bucle. Con $Y^{(l)}_t \in \mathbb{R}^{n \times C}$ el flujo
+matricial en el bucle $l$, $z^{(l)}_t =
+\mathrm{RMSNorm}(\mathrm{flatten}(Y^{(l)}_t))$, y parámetros por bucle
+$\{W^{\tau}_l, b^{\tau}_l, \alpha^{\tau}_l\}$ para $\tau \in
+\{\text{pre}, \text{post}, \text{res}\}$ más un embedding de posición de
+bucle $e_l \in \mathbb{R}^C$, la recurrencia es
+\begin{equation}
+y^{(l+1)}_t = H^{\text{res}}_l\, y^{(l)}_t + H^{\text{post}}_l \otimes
+\bigl( F(H^{\text{pre}}_l\, y^{(l)}_t) + e_l \bigr),
+\end{equation}
+con los coeficientes dependientes de datos
+\begin{align*}
+H^{\text{pre}}_l &= \sigma\bigl(\alpha^{\text{pre}}_l (W^{\text{pre}}_l z^{(l)}_t) + b^{\text{pre}}_l\bigr), &
+H^{\text{post}}_l &= 2\sigma\bigl(\alpha^{\text{post}}_l (W^{\text{post}}_l z^{(l)}_t) + b^{\text{post}}_l\bigr),\\
+H^{\text{res}}_l &= \mathrm{diag}\bigl(\sigma(\alpha^{\text{res}}_l (W^{\text{res}}_l z^{(l)}_t) + b^{\text{res}}_l)\bigr) &
+W^{\text{res}}_l &\in \mathbb{R}^{n \times nC}
+\end{align*}
+(el $H^{\text{res}}$ diagonal sustituye el $\mathrm{sinkhorn}(\cdot)$ de mHC
+sobre una proyección densa $n^2 \times nC$ por una sigmoide sobre una
+compuerta diagonal — la ablación de la Tabla~6 del paper muestra que esto es
+a la vez más barato \emph{y} más preciso: 14.40 de perplejidad frente a 14.59
+Sinkhorn y 14.61 identity).
+
+Cuatro propiedades distinguen el cableado Hyperloop del mHC por subcapa
+(\S\ref{sec:annex-mhc}): (1) las hiperconexiones se disparan una vez por
+\emph{bucle}, no tras cada subcapa — también la ubicación más eficaz en la
+ablación de la Tabla~5 del paper; (2) el flujo se crea \emph{copiando} la
+salida del bloque inicial $n$ veces y se colapsa \emph{promediando} los
+streams antes del bloque final, reemplazando las proyecciones aprendidas de
+mHC; (3) los parámetros son \emph{por bucle}, relajando la compartición
+estricta de pesos de los Transformers en bucle ordinarios — el análisis de
+similitud de representaciones del paper (Tabla~8) muestra que las
+representaciones de las capas en bucle se desvían más entre bucles, lo que
+identifica como la fuente de las ganancias de calidad; y (4) $H^{\text{res}}$
+usa por defecto la parametrización sigmoide diagonal.
+
+La integración en Frankenstein se controla con el booleano
+\texttt{mhc.hyperloop} (plano \texttt{mhc\_hyperloop}; requiere
+\texttt{mhc.enabled} y \texttt{dims.num\_loops} $\ge 2$), con tres claves
+adicionales:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{hyperloop\_begin\_layers} / \texttt{hyperloop\_end\_layers}
+        (int $\ge 0$, por defecto $0$): tamaños de los bloques inicial/final,
+        que se ejecutan exactamente una vez. El paper asigna $\sim$25\% de
+        los parámetros a cada uno y 50\% al bloque intermedio (profundidad
+        desenrollada $=$ inicial $+$ intermedio $\times$ bucles $+$ final;
+        p.\ ej.\ $2L \to 4L(\times3) \to 2L$ en 16 capas). $0/0$ recorre la
+        pila completa.
+    \item \texttt{hyperloop\_res\_parameterization} (enum, por defecto
+        \texttt{diagonal}): \texttt{diagonal}, \texttt{sinkhorn} (mezcla
+        doblemente estocástica completa estilo mHC, reutilizando
+        \texttt{Sinkhorn\-Knopp\-Function}) o \texttt{identity}.
+\end{itemize}
+
+Implementación: \texttt{src/model/hyperloop.py} aloja
+\texttt{HyperloopConnections} con \texttt{projs} / \texttt{biases} /
+\texttt{alphas\_\*} / \texttt{loop\_pos\_embs} ($e_l$, inicializados a cero
+para que al inicio la actualización se reduzca a la recurrencia del
+Transformer en bucle simple). \texttt{FrankensteinEncoder} (y
+\texttt{FrankensteinViT}) lo construyen \emph{en lugar de} la pareja
+\texttt{mhc\_in\_proj}/\texttt{mhc\_out\_proj}; el pase hacia adelante
+ejecuta inicial $\to$ copia $\to$ lectura/capa/actualización por bucle
+$\to$ promedio $\to$ final. \texttt{HybridLayer} desactiva sus módulos por
+capa \texttt{mhc\_attn}/\texttt{mhc\_ffn} bajo Hyperloop, de modo que las
+capas del bloque intermedio ejecutan la ruta $C$-dimensional estándar — lo
+cual \textbf{restaura la compatibilidad con Mixture-of-Depths} (el mHC por
+capa prohíbe MoD). Hyperloop es incompatible con los residuales AttnRes
+(\texttt{residuals.type} \texttt{full\_attn} / \texttt{block\_attn}), que
+asumen un flujo de $n$ streams por capa lógica. El presupuesto de parámetros
+por bucle es $3n^2C + 3n + 3 + C$ (diagonal): para el modelo de 136M del
+paper ($C = 1024$, $n = 4$, 3 bucles) solo $\approx$150K parámetros más allá
+del Transformer en bucle simple.
+
+Ejemplo de configuración: \texttt{configs/examples/hyperloop\_mhc\_adamw.yaml}.
+
+\subsubsection*{Resultados reportados (arXiv:2604.21254)}
+
+Entrenado en FineWeb-Edu con $n = 4$ streams y 3 bucles (reparto de
+parámetros 25\%/50\%/25\%), contra líneas base Transformer y mHC con
+profundidad equiparada:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Eficiencia de parámetros}: a escala equiparada de
+        240M/1B/2B, Hyperloop usa $\approx$50\% menos parámetros
+        (136M/580M/991M) e iguala o supera las líneas base en perplejidad
+        (14.40 vs 14.65 a escala 240M; 9.65 vs 10.19 a 1B; 8.49 vs 8.60 a 2B).
+    \item \textbf{Cuantización}: la perplejidad INT4 (GPTQ) se degrada menos
+        que en el modelo en bucle simple (14.68 vs 15.18 a escala 240M), por
+        lo que el ahorro de parámetros sobrevive a la compresión
+        post-entrenamiento.
+    \item \textbf{Sobrecarga}: la colocación a nivel de bucle más el
+        $H^{\text{res}}$ diagonal mantienen el throughput de entrenamiento
+        dentro de $\approx$5\% del Transformer en bucle simple en PyTorch sin
+        optimizar (el mHC por capa pierde $\approx$33\% sin kernels
+        fusionados).
+    \item \textbf{Ablaciones}: la colocación por bucle supera a la por capa
+        (Tabla~5); el $H^{\text{res}}$ diagonal supera a Sinkhorn e identity
+        (Tabla~6); el número de streams $n$ muestra rendimientos decrecientes
+        más allá de 4 (Tabla~4); LoRA por bucle (Transformers recursivos
+        relajados) ayuda mucho menos por parámetro que la relajación por
+        hiperconexiones (Tabla~7).
+\end{itemize}

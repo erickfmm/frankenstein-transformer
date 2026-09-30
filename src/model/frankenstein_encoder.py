@@ -24,6 +24,7 @@ import torch.utils.checkpoint
 
 from .config import FrankensteinModelConfig
 from .hybrid_layer import HybridLayer
+from .hyperloop import HyperloopConnections
 from .attention.common import BitLinear
 from .norm import get_norm
 from .embeddings import FactorizedEmbedding, build_pos_encoder
@@ -45,6 +46,13 @@ class FrankensteinEncoder(nn.Module):
     * **Looped depth**: the physical layer stack is iterated ``num_loops``
       times, sharing parameters across loops for parameter-efficient deep
       computation.
+     * **Hyperloop (arXiv:2604.21254)**: ``mhc_hyperloop=True`` (requires
+       ``use_mhc=True``) reorganises the stack as a middle-cycle looped
+       Transformer — begin block (runs once) → looped middle block → end
+       block (runs once) — wrapped in **loop-level** hyper-connections with
+       per-loop parameters ``{W_l, b_l, α_l, e_l}``. The stream is expanded
+       by copying ``mhc_expansion_rate`` times and collapsed by averaging,
+       replacing the learned in/out projections of per-sublayer mHC.
     * **Mixture-of-Experts (MoE) FFN**: per-token top-k expert routing with
       weighted expert outputs.
     * **BitNet b1.58**: ternary weight quantization via :class:`BitLinear`
@@ -134,8 +142,26 @@ class FrankensteinEncoder(nn.Module):
         # mHC stream expansion / collapse. The embedding is C-dimensional; the
         # n-stream residual lives at (B, S, n, C). We expand the single stream
         # into ``n`` copies on entry and collapse back to ``C`` before the head.
+        #
+        # Hyperloop (arXiv:2604.21254): ``mhc_hyperloop=True`` swaps the learned
+        # in/out projections for loop-level hyper-connections with per-loop
+        # parameters — the stream is created by copying and collapsed by
+        # averaging, and hyper-connections fire once per loop iteration over
+        # the middle-cycle partitioning of the layer stack.
         self.use_mhc = bool(getattr(config, "use_mhc", False))
-        if self.use_mhc:
+        self.use_hyperloop = self.use_mhc and bool(getattr(config, "mhc_hyperloop", False))
+        if self.use_hyperloop:
+            self.hyperloop = HyperloopConnections(
+                hidden_size=config.hidden_size,
+                num_loops=int(config.num_loops),
+                expansion_rate=config.mhc_expansion_rate,
+                gating_init=config.mhc_gating_init,
+                res_parameterization=config.mhc_hyperloop_res_parameterization,
+                sinkhorn_iters=config.mhc_sinkhorn_iters,
+                use_bitnet=config.use_bitnet,
+                full_prec_under_bitnet=config.mhc_full_prec_under_bitnet,
+            )
+        elif self.use_mhc:
             n = int(config.mhc_expansion_rate)
             self.mhc_in_proj = nn.Linear(config.hidden_size, n * config.hidden_size)
             self.mhc_out_proj = nn.Linear(n * config.hidden_size, config.hidden_size)
@@ -161,7 +187,22 @@ class FrankensteinEncoder(nn.Module):
             x = self.pos_encoder.add(x)
         x = self.dropout(x)
 
-        if self.use_mhc:
+        # ---- Middle-cycle partitioning (Hyperloop, arXiv:2604.21254) ----
+        # begin layers | looped middle layers | end layers. Without Hyperloop
+        # the whole stack is the middle block and both guards are 0.
+        n_begin = (
+            int(getattr(self.config, "mhc_hyperloop_begin_layers", 0))
+            if self.use_hyperloop
+            else 0
+        )
+        n_end = (
+            int(getattr(self.config, "mhc_hyperloop_end_layers", 0))
+            if self.use_hyperloop
+            else 0
+        )
+        n_middle = self.config.num_layers - n_begin - n_end
+
+        if self.use_mhc and not self.use_hyperloop:
             n = int(self.config.mhc_expansion_rate)
             bsz, seq_len, dim = x.shape
             # Expand the C-dim stream to (B, S, n, C).
@@ -178,35 +219,83 @@ class FrankensteinEncoder(nn.Module):
         mixture_of_depths_aux_losses = []
         mixture_of_depths_selected_fractions = []
         mhc_checkpoint = bool(getattr(self.config, "mhc_checkpoint", False))
-        for _ in range(self.config.num_loops):
-            for layer in self.layers:
+
+        def _run_layers(x_in, layers, idx0):
+            """Run a layer slice and dispatch per-layer mHC checkpointing.
+
+            Args:
+                x_in: Input stream for the first layer in the slice.
+                layers: The :class:`HybridLayer` objects to run in order.
+                idx0: The logical layer index of the first layer in the slice.
+
+            Returns:
+                Tuple ``(x_out, next_idx)`` with the updated stream and the
+                next logical layer index.
+            """
+            x = x_in
+            idx = idx0
+            for layer in layers:
                 if mhc_checkpoint and layer.use_mhc:
                     x = torch.utils.checkpoint.checkpoint(
                         layer,
                         x,
-                        logical_layer_idx,
+                        idx,
                         input_ids,
                         use_reentrant=False,
                     )
                 else:
-                    x = layer(x, logical_layer_idx=logical_layer_idx, input_ids=input_ids)
+                    x = layer(x, logical_layer_idx=idx, input_ids=input_ids)
                 # For AttnRes variants, the depth-wise attention is the
                 # post-layer residual update. The layer has already applied
                 # its internal residual merge (``standard`` semantics);
                 # we now overwrite ``x`` with the attended aggregation over
                 # all previous layer outputs / block sums.
                 if self.residual.is_attn_res:
-                    x = self.residual(logical_layer_idx, x)
+                    x = self.residual(idx, x)
                 if layer.use_mixture_of_depths and layer.last_mixture_of_depths_aux_loss is not None:
                     mixture_of_depths_aux_losses.append(layer.last_mixture_of_depths_aux_loss)
                     mixture_of_depths_selected_fractions.append(
                         layer.last_mixture_of_depths_selected_fraction
                     )
-                logical_layer_idx += 1
+                idx += 1
+            return x, idx
+
+        # ---- Hyperloop middle-cycle forward ----
+        if self.use_hyperloop:
+            hl = self.hyperloop
+            # Begin block: plain C-dim layers, run exactly once.
+            x, logical_layer_idx = _run_layers(x, self.layers[:n_begin], logical_layer_idx)
+
+            # Expand by copying: (B, S, C) → (B, S, n, C).
+            x = hl.expand(x)
+
+            # Looped middle block wrapped in loop-level hyper-connections.
+            # All coefficient matrices are computed from the *input* stream
+            # y^(l) (Eq. 4 of arXiv:2604.21254):
+            #   y^(l+1) = H^res y^(l) + H^post ⊗ ( F(H^pre y^(l)) + e_l )
+            middle = self.layers[n_begin : n_begin + n_middle]
+            for loop_idx in range(self.config.num_loops):
+                h_pre, h_post, h_res = hl.mappings(x, loop_idx)
+                block_in = hl.apply_fpre(x, h_pre)
+                block_out, logical_layer_idx = _run_layers(
+                    block_in, middle, logical_layer_idx
+                )
+                x = hl.apply_update(x, block_out, h_post, h_res, loop_idx)
+
+            # Collapse by averaging: (B, S, n, C) → (B, S, C).
+            x = hl.collapse(x)
+
+            # End block: plain C-dim layers, run exactly once.
+            x, logical_layer_idx = _run_layers(
+                x, self.layers[n_begin + n_middle :], logical_layer_idx
+            )
+        else:
+            for _ in range(self.config.num_loops):
+                x, logical_layer_idx = _run_layers(x, self.layers, logical_layer_idx)
 
         x = self.residual.finalize(x)
 
-        if self.use_mhc:
+        if self.use_mhc and not self.use_hyperloop:
             bsz, seq_len, n, dim = x.shape
             x = self.mhc_out_proj(x.reshape(bsz, seq_len, n * dim))
 

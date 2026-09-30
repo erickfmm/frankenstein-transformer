@@ -129,7 +129,13 @@ class HybridLayer(nn.Module):
         super().__init__()
         self.layer_type = layer_type
         self.pos_encoder = pos_encoder
-        self.use_mhc = bool(getattr(config, "use_mhc", False))
+        # Hyperloop (arXiv:2604.21254) replaces the per-sublayer mHC wiring
+        # with loop-level hyper-connections owned by the encoder: layers run
+        # the standard C-dimensional path, and MoD becomes compatible again
+        # (the n-stream residual only exists between loop iterations).
+        self.use_mhc = bool(getattr(config, "use_mhc", False)) and not bool(
+            getattr(config, "mhc_hyperloop", False)
+        )
         self.use_mixture_of_depths = bool(getattr(config, "use_mixture_of_depths", False))
         if self.use_mhc and self.use_mixture_of_depths:
             raise ValueError(

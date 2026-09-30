@@ -187,6 +187,23 @@
                 const: encoder
 - if:
     properties:
+      model:
+        properties:
+          mhc:
+            required:
+            - hyperloop
+            properties:
+              hyperloop:
+                const: true
+  then:
+    properties:
+      model:
+        properties:
+          mhc:
+            required:
+            - enabled
+- if:
+    properties:
       training:
         properties:
           task:

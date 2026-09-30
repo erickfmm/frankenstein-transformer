@@ -218,6 +218,7 @@ Full AttnRes & $x_{l+1} = \sum_{i=0}^{l} \mathrm{softmax}_i(\mathbf{w}_l^{\top} 
 Block AttnRes & $x_{l+1} = \sum_{m=0}^{n} \mathrm{softmax}_m(\mathbf{w}_l^{\top} \mathrm{RMSNorm}(v_m))\, v_m$ & $\mathbf{w}_l$ learned, zero-init; RMSNorm on keys; $N$ block reps + partial sum; $L \cdot C$ parameters & \citep{sun_attnres_2026} \\
 Hyper-Connections (HC) & $x_{l+1} = H^{\text{res}}_l x_l + (H^{\text{post}}_l)^{\top} F(H^{\text{pre}}_l x_l, W_l)$ & Unconstrained & \citep{xie_mhc_2025} \\
 mHC (this codebase) & same update as HC & $H^{\text{res}}_l$ doubly stochastic via Sinkhorn--Knopp ($t_{\max} = 20$), $H^{\text{pre}} = \sigma(\cdot)$, $H^{\text{post}} = 2\sigma(\cdot)$, $\alpha$-init $0.01$ & \citep{xie_mhc_2025} \\
+Hyperloop (this codebase) & $y^{(l+1)}_t = H^{\text{res}}_l y^{(l)}_t + H^{\text{post}}_l \otimes (F(H^{\text{pre}}_l y^{(l)}_t) + e_l)$ & Loop-level HC on a middle-cycle looped middle block; per-loop $\{W_l, b_l, \alpha_l, e_l\}$; copy/avg expansion; $H^{\text{res}}$ diagonal (default), Sinkhorn or identity & \citep{zeitoun_hyperloop_2026} \\
 \bottomrule
 \end{longtable}
 \normalsize

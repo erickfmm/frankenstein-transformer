@@ -356,6 +356,32 @@ standard residual connection that expands the residual stream width by a factor
 Example: `configs/examples/es_arch_mhc_adamw.yaml`. ⚠️ mHC is incompatible with
 `use_mixture_of_depths`.
 
+#### Hyperloop mode (arXiv:2604.21254)
+
+`model.mhc.hyperloop: true` switches mHC to the **Hyperloop Transformer**
+wiring: loop-level hyper-connections (once per loop iteration, with per-loop
+parameters `{W_l, b_l, α_l, e_l}`) over a **middle-cycle** partitioned stack —
+begin block (runs once) → looped middle block → end block (runs once). The
+stream is created by copying `expansion_rate` times and collapsed by averaging
+(no learned in/out projections), and `H^res` uses the paper's diagonal-sigmoid
+parameterization by default. The paper matches depth-matched Transformers with
+~50% fewer parameters.
+
+- `model.mhc.hyperloop`: enable Hyperloop mode (`mhc_hyperloop`). Default `false`.
+  Requires `enabled: true` and `dims.num_loops >= 2`.
+- `model.mhc.hyperloop_begin_layers`: begin-block layers (`mhc_hyperloop_begin_layers`).
+  Default `0` (loop the whole stack); paper uses ~25% e.g. `2`.
+- `model.mhc.hyperloop_end_layers`: end-block layers (`mhc_hyperloop_end_layers`).
+  Default `0`; paper uses ~25% e.g. `2`.
+- `model.mhc.hyperloop_res_parameterization`: `H^res` mixing
+  (`mhc_hyperloop_res_parameterization`): `diagonal` (paper default & best),
+  `sinkhorn` (mHC-style doubly stochastic), or `identity`. Default `diagonal`.
+
+Example: `configs/examples/hyperloop_mhc_adamw.yaml`. ⚠️ Incompatible with
+`residuals.type: full_attn|block_attn`; unlike per-layer mHC,
+`use_mixture_of_depths` **stays compatible** (middle-block layers run the
+standard C-dim path).
+
 ## Decoder Examples (Famous Architecture-Inspired)
 
 Autoregressive decoder examples are available in `configs/examples/`:

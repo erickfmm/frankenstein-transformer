@@ -427,6 +427,15 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
             out["mhc_checkpoint"] = mhc["checkpoint"]
         if "full_prec_under_bitnet" in mhc:
             out["mhc_full_prec_under_bitnet"] = mhc["full_prec_under_bitnet"]
+        # Hyperloop (arXiv:2604.21254) — loop-level hyper-connections.
+        if "hyperloop" in mhc:
+            out["mhc_hyperloop"] = mhc["hyperloop"]
+        if "hyperloop_begin_layers" in mhc:
+            out["mhc_hyperloop_begin_layers"] = mhc["hyperloop_begin_layers"]
+        if "hyperloop_end_layers" in mhc:
+            out["mhc_hyperloop_end_layers"] = mhc["hyperloop_end_layers"]
+        if "hyperloop_res_parameterization" in mhc:
+            out["mhc_hyperloop_res_parameterization"] = mhc["hyperloop_res_parameterization"]
 
     # residuals.* — Attention Residuals (AttnRes, arXiv:2603.15031).
     residuals = model_data.get("residuals")
