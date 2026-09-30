@@ -18,25 +18,25 @@ SentencePiece tokenizer, exercising:
 It is intentionally NOT collected by ``pytest tests/`` (it lives in ``full_tests/``
 at the repository root) and is meant to be left running for several hours.
 
-Run from the repo root inside the ``frankenstein`` conda env:
+Run from the repo root with the uv project env:
 
-    conda run -n frankenstein python full_tests/run_e2e.py
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py
 
 To run only a subset:
 
-    conda run -n frankenstein python full_tests/run_e2e.py --category optimizers --limit 3
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --category optimizers --limit 3
 
 To run on a specific device (default is cpu):
 
-    conda run -n frankenstein python full_tests/run_e2e.py --device cuda
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --device cuda
 
 To enable the GPU thermal guard during training (with optional thresholds):
 
-    conda run -n frankenstein python full_tests/run_e2e.py --device cuda --gpu-temp-guard
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --device cuda --gpu-temp-guard
 
 To resume from existing tmp/results directory (skip cleanup):
 
-    conda run -n frankenstein python full_tests/run_e2e.py --resume
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --resume
 """
 from __future__ import annotations
 

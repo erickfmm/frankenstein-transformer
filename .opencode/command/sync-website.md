@@ -64,7 +64,7 @@ Decision rules per status — apply them to whatever the report shows:
 - `MISSING_SITE <file>` → copy main → mirror (`cp` or `mkdir -p` + `cp`; **rsync is not installed on this machine**).
 - `DIFF <file>` → copy main → mirror (main repo wins: schema, presets, paper sources, specs, bibliography, `app.py`, `schema_loader.py`).
 - `ONLY_SITE <file>` ending in `.yaml` under `examples/` → a preset that exists only on the website:
-  1. Validate it: `conda run -n frankenstein python -c "import sys; sys.path.insert(0,'.'); from src.training.config_loader import load_training_config; load_training_config('<mirror file>')"` must succeed.
+  1. Validate it: `uv run --extra cu118 --extra train python -c "import sys; sys.path.insert(0,'.'); from src.training.config_loader import load_training_config; load_training_config('<mirror file>')"` must succeed.
   2. If valid → **reverse-sync**: copy it into `configs/` (or `configs/examples/` when under `examples/examples/`) so CI smoke-tests it, and keep the mirror copy. This is the only case where files flow mirror → main.
   3. If invalid → **STOP and ask the user** before touching anything.
 - `ONLY_SITE <file>` of any other kind → do not delete; list it in the final report and ask.
@@ -110,7 +110,7 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 1. **Regenerate parameter ground truth** (CPU, meta device — builds every preset through the real engine; also covers presets reverse-synced in step 1):
 
    ```bash
-   conda run -n frankenstein python full_tests/param_count_check.py
+   uv run --extra cu118 --extra train python full_tests/param_count_check.py
    ```
 
    Must print `… configs counted, 0 failures`.
@@ -128,7 +128,7 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 3. **YAML/JSON validity of the mirror**: the state script's `schema-refs` and `example-yaml` probes must PASS (schema `$ref` resolution + every `examples/**/*.yaml` through `load_training_config`). Additionally verify the JSON serialization the page produces round-trips:
 
    ```bash
-   conda run --no-capture-output -n frankenstein python - <<'PY'
+   uv run --extra cu118 --extra train python - <<'PY'
    import glob, json, sys, yaml
    bad = 0
    for p in glob.glob('erickfmm.github.io/frankenstein-transformer/examples/**/*.yaml', recursive=True):
@@ -143,7 +143,7 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 4. **Command-tab CLI validity** — every command the page can generate must parse with the real parser (no torch needed):
 
    ```bash
-   conda run --no-capture-output -n frankenstein python - <<'PY'
+   uv run --extra cu118 --extra train python - <<'PY'
    import sys; sys.path.insert(0, '.')
    from src.cli import build_parser
    cmds = [

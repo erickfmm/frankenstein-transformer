@@ -18,40 +18,40 @@ Esta carpeta contiene un harness independiente que entrena modelos **reales pero
 
 ## Cómo ejecutar
 
-Desde la raíz del repo, dentro del entorno `frankenstein` de conda:
+Desde la raíz del repo, con el entorno uv del proyecto:
 
 ```bash
-conda run -n frankenstein python full_tests/run_e2e.py
+uv run --extra cu118 --extra train python full_tests/run_e2e.py
 ```
 
 Ejecución rápida de solo 3 optimizadores:
 
 ```bash
-conda run -n frankenstein python full_tests/run_e2e.py --category opt --limit 3
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --category opt --limit 3
 ```
 
 Solo atenciones de a pares:
 
 ```bash
-conda run -n frankenstein python full_tests/run_e2e.py --category attn
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --category attn
 ```
 
 Saltar el barrido más lento de atenciones de a pares:
 
 ```bash
-conda run -n frankenstein python full_tests/run_e2e.py --skip-attn-pairs
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --skip-attn-pairs
 ```
 
 Solo las codificaciones posicionales a nivel de modelo:
 
 ```bash
-conda run -n frankenstein python full_tests/run_e2e.py --category pe
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --category pe
 ```
 
 Solo las `pos_embedding_type` del ViT (3 tareas × 12 PEs):
 
 ```bash
-conda run -n frankenstein python full_tests/run_e2e.py --category vision_pe
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --category vision_pe
 ```
 
 ### Selección de dispositivo
@@ -60,13 +60,13 @@ Por defecto todo corre en `cpu`. Para ejecutar los tests en otro dispositivo (en
 
 ```bash
 # En GPU
-conda run -n frankenstein python full_tests/run_e2e.py --device cuda
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --device cuda
 
 # En Apple Silicon (Metal)
-conda run -n frankenstein python full_tests/run_e2e.py --device mps
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --device mps
 
 # Dejar que el CLI resuelva el dispositivo automáticamente
-conda run -n frankenstein python full_tests/run_e2e.py --device auto
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --device auto
 ```
 
 Valores válidos: `auto`, `cpu`, `cuda`, `mps` (por defecto `cpu`).
@@ -80,7 +80,7 @@ en el YAML de cada run). Para activarla durante el entrenamiento en GPU y ajusta
 sus umbrales:
 
 ```bash
-conda run -n frankenstein python full_tests/run_e2e.py --device cuda \
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --device cuda \
   --gpu-temp-guard \
   --gpu-temp-pause-threshold-c 80 \
   --gpu-temp-resume-threshold-c 70 \

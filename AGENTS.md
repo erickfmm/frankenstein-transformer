@@ -4,18 +4,18 @@
 
 ## Environment & Commands
 
-- **Conda env**: `frankenstein` (Python 3.9). Prefix commands: `conda run -n frankenstein <cmd>`.
-- **Install (local, CUDA 11.8 torch)**: `conda run -n frankenstein pip install -e ".[train]"`
-- **Run all tests**: `conda run -n frankenstein python -m pytest tests/ --continue-on-collection-errors -v --tb=short -p no:warnings`
-- **Run a single test**: `conda run -n frankenstein python -m pytest tests/test_optimizer_factory.py -v` or `tests/test_foo.py::TestClass::test_method`
-- **CLI**: `conda run -n frankenstein frankenstein-transformer <subcommand>` (subcommands: `train`, `deploy`, `infer`, `web-server`)
+- **Env manager**: `uv` — project `.venv/` at repo root (Python 3.13, resolved via `uv.lock`). Prefix commands: `uv run --extra cu118 --extra train <cmd>`. The torch extras (`cpu`/`cu118`/`cu126`/`cu128`) are mutually exclusive (`[tool.uv] conflicts` in `pyproject.toml`) — install exactly ONE; `cu118` is the local default (Tesla P40). Always pass the same extras to `uv run`: a bare `uv run` re-syncs without extras and swaps torch off the cu118 wheel.
+- **Install (local, CUDA 11.8 torch)**: `uv sync --extra cu118 --extra train` — the uv equivalent of `pip install -e ".[cu118]"` plus the sbert/web extras; the `dev` dependency-group brings pytest automatically. If torch ever fails to import with a missing `libcudnn.so`/`libnccl.so`, the uv cache served a gutted wheel — repair with `uv sync --extra cu118 --extra train --reinstall-package nvidia-cudnn-cu11 --reinstall-package nvidia-nccl-cu11 --refresh-package nvidia-cudnn-cu11 --refresh-package nvidia-nccl-cu11`.
+- **Run all tests**: `uv run --extra cu118 --extra train python -m pytest tests/ --continue-on-collection-errors -v --tb=short -p no:warnings`
+- **Run a single test**: `uv run --extra cu118 --extra train python -m pytest tests/test_optimizer_factory.py -v` or `tests/test_foo.py::TestClass::test_method`
+- **CLI**: `uv run --extra cu118 --extra train frankenstein-transformer <subcommand>` (subcommands: `train`, `deploy`, `infer`, `web-server`)
 - **Web UI**: `frankenstein-transformer web-server` (Streamlit schema-driven YAML builder)
 - **Website mirror sync**: `/sync-website` (opencode command in `.opencode/command/sync-website.md`) — mirrors `src/schema*`, `configs/`, `docs/paper*`, `docs/{bibliography,specs}`, `streamlit_gui/`, `utils/schema_loader.py` into the gitignored nested clone `erickfmm.github.io/` (GitHub Pages repo, `frankenstein-transformer/` subfolder), then validates: JS param estimator ≤1% vs engine ground truth (`full_tests/param_count_check.py` + `param_estimate_check.mjs --tol 0.01`), schema `$ref` resolution, YAML/JSON validity of every mirrored preset, and Command-tab CLI validity vs `src/cli.py`. Read-only state report: `bash .opencode/command/sync-website-state.sh`. The mirror stays uncommitted; the page's `index.html` / `ft-param-estimator.js` / `ft-diagram.js` are mirror-only (edited there, never synced from main).
 - **No linter/formatter configured** — match surrounding style; all modules use `from __future__ import annotations` and absolute imports from `src/`.
 
 ### CI quirks (`.github/workflows/tests.yml`)
 
-- Matrix is **Python 3.10/3.11/3.12** (conda env is 3.9 — keep code compatible across all four).
+- Matrix is **Python 3.10/3.11/3.12** (uv dev env is 3.13 — keep code compatible across 3.10–3.13).
 - CI installs **CPU-only torch first** (`torch==2.6.0+cpu`), then `requirements.txt` with torch/extra-index lines stripped, then `pip install -e . --no-deps`. Never assume a CUDA torch in tests.
 - GPU code paths are guarded by `TORCH_AVAILABLE = find_spec("torch") is not None`; tests skip cleanly without CUDA.
 

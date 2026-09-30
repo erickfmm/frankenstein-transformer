@@ -44,9 +44,9 @@ cu128 = [
 # unless the components that need them are used.
 # SBERT fine-tuning/inference:                pip install -e ".[sbert]"
 sbert = [
-    # >=5.2 allows transformers<6 (5.2 lifted their <5 cap). Markers keep the
-    # Py3.9 conda dev env installable — sentence-transformers 5.2+ needs >=3.10,
-    # where transformers resolves back to 4.x and st<5.2 still applies.
+    # >=5.2 allows transformers<6 (5.2 lifted their <5 cap). The <3.10 marker
+    # branch is legacy (requires-python is >=3.10); kept only to avoid
+    # lockfile churn.
     "sentence-transformers>=5.2.0; python_version >= '3.10'",
     "sentence-transformers>=3.3.0,<5.2.0; python_version < '3.10'",
     "sentencepiece>=0.2.0",                    # Spanish SPM tokenizer (spm_spa_redpajama35)
@@ -142,7 +142,6 @@ exclude = [
     "tests",
     "examples",
     "configs",
-    "environment.yml",
     "requirements.txt",
     "run_tests.sh",
     "skills-lock.json",

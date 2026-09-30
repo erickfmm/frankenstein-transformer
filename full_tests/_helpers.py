@@ -5,8 +5,9 @@ SentencePiece tokenizer, writes a toy parquet corpus, constructs training
 YAMLs, runs the ``frankenstein-transformer`` CLI as a subprocess, and
 collects results.
 
-Run from inside the ``frankenstein`` conda environment (or any environment
-that has ``sentencepiece``, ``pandas``, ``pyarrow`` and the project installed).
+Run with the project uv env (``uv run --extra cu118 --extra train``), or any
+environment that has ``sentencepiece``, ``pandas``, ``pyarrow`` and the project
+installed).
 """
 from __future__ import annotations
 
@@ -123,38 +124,33 @@ def resolve_runner() -> Tuple[List[str], dict]:
     """Return the CLI command prefix and extra env for training subprocesses.
 
     Tries (in order):
-      1. ``conda run -n frankenstein frankenstein-transformer`` (entrypoint)
-      2. ``conda run -n frankenstein python -m src.cli`` (module)
-      3. ``uv run frankenstein-transformer``
-      4. A local virtualenv at ``.venv``
-      5. The current interpreter with ``python -m src.cli``
+      1. ``uv run --extra cu118 --extra train frankenstein-transformer``
+      2. ``uv run --extra cu118 --extra train python -m src.cli``
+      3. A local virtualenv at ``.venv``
+      4. The current interpreter with ``python -m src.cli``
     """
     env_extra = {"PYTHONHASHSEED": "0", "OMP_NUM_THREADS": "1"}
     project_root = str(PROJECT_ROOT)
 
-    # 1) conda env frankenstein, entrypoint
-    rc, _, _ = _run_silent(["conda", "run", "-n", "frankenstein", "frankenstein-transformer", "--help"])
+    # 1) uv project env (cu118 torch + train extras), entrypoint
+    uv_prefix = ["uv", "run", "--extra", "cu118", "--extra", "train"]
+    rc, _, _ = _run_silent([*uv_prefix, "frankenstein-transformer", "--help"], cwd=PROJECT_ROOT)
     if rc == 0:
-        logging.info("Using runner: conda run -n frankenstein frankenstein-transformer")
-        return ["conda", "run", "-n", "frankenstein", "frankenstein-transformer"], env_extra
+        logging.info("Using runner: uv run --extra cu118 --extra train frankenstein-transformer")
+        return [*uv_prefix, "frankenstein-transformer"], env_extra
 
-    # 2) conda env, module
+    # 2) uv project env, module
     env_module = {**os.environ, **env_extra, "PYTHONPATH": project_root}
     rc, _, _ = _run_silent(
-        ["conda", "run", "-n", "frankenstein", "python", "-m", "src.cli", "--help"],
+        [*uv_prefix, "python", "-m", "src.cli", "--help"],
+        cwd=PROJECT_ROOT,
         env=env_module,
     )
     if rc == 0:
-        logging.info("Using runner: conda run -n frankenstein python -m src.cli")
-        return ["conda", "run", "-n", "frankenstein", "python", "-m", "src.cli"], env_extra
+        logging.info("Using runner: uv run --extra cu118 --extra train python -m src.cli")
+        return [*uv_prefix, "python", "-m", "src.cli"], env_extra
 
-    # 3) uv
-    rc, _, _ = _run_silent(["uv", "run", "frankenstein-transformer", "--help"], cwd=PROJECT_ROOT)
-    if rc == 0:
-        logging.info("Using runner: uv run frankenstein-transformer")
-        return ["uv", "run", "frankenstein-transformer"], env_extra
-
-    # 4) .venv
+    # 3) .venv
     venv_python = PROJECT_ROOT / ".venv" / "bin" / "python"
     if sys.platform == "win32":
         venv_python = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
@@ -164,7 +160,7 @@ def resolve_runner() -> Tuple[List[str], dict]:
             logging.info("Using runner: .venv python -m src.cli")
             return [str(venv_python), "-m", "src.cli"], env_extra
 
-    # 5) current interpreter
+    # 4) current interpreter
     logging.warning("Falling back to current interpreter; ensure the project is installed.")
     return [sys.executable, "-m", "src.cli"], env_extra
 
@@ -328,7 +324,7 @@ def ensure_toy_tokenizer(vocab_size: int = TOY_VOCAB_SIZE, force_retrain: bool =
     if not HAVE_SENTENCEPIECE:
         raise RuntimeError(
             "sentencepiece is required to train the toy tokenizer. "
-            "Run this harness inside the frankenstein conda environment."
+            "Run 'uv sync --extra cu118 --extra train' before this harness."
         )
 
     corpus_path = ensure_toy_corpus_text()

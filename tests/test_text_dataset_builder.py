@@ -9,8 +9,8 @@ Covers:
   loader when ``dataset=None`` (smoke: task=text_classification raises
   without text_dataset, with text_dataset it trains).
 
-Run with the conda env:
-    conda run -n frankenstein python -m pytest tests/test_text_dataset_builder.py -v
+Run with the uv project env:
+    uv run --extra cu118 --extra train python -m pytest tests/test_text_dataset_builder.py -v
 """
 from __future__ import annotations
 

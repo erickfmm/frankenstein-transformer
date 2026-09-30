@@ -72,10 +72,12 @@ Python **>= 3.10** required.
 
 | Method | Command |
 |--------|---------|
-| **uv** (recommended) | `git clone https://github.com/erickfmm/frankenstein-transformer.git && cd frankenstein-transformer && uv venv && source .venv/bin/activate && uv pip install -e ".[train]"` |
+| **uv** (recommended, CUDA 11.8) | `git clone https://github.com/erickfmm/frankenstein-transformer.git && cd frankenstein-transformer && uv sync --extra cu118 --extra train` |
+| **uv** (CPU only) | `uv sync --extra cpu --extra train` |
 | **pip** | `python -m venv .venv && source .venv/bin/activate && pip install -e ".[train]"` |
-| **conda** | `conda create -n frankenstein python=3.10 && conda activate frankenstein && pip install -e ".[train]"` |
 | **PyPI** | `pip install frankenstein-transformer` |
+
+Run uv-installed commands through `uv run --extra cu118 --extra train <cmd>` (e.g. `uv run --extra cu118 --extra train frankenstein-transformer --help`). Other torch extras: `cu126` (driver ≥ 560), `cu128` (driver ≥ 570).
 
 Verify: `frankenstein-transformer --help`
 

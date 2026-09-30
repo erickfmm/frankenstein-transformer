@@ -256,14 +256,14 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# [python-probes] — schema refs + example YAML validity (frankenstein env)
+# [python-probes] — schema refs + example YAML validity (uv project env)
 # ---------------------------------------------------------------------------
 echo ""
 echo "[python-probes]"
-conda_ok="no"
-if command -v conda >/dev/null 2>&1; then
-  conda_ok="yes"
-  out=$(conda run -n frankenstein python -c "
+uv_ok="no"
+if command -v uv >/dev/null 2>&1; then
+  uv_ok="yes"
+  out=$(uv run --project "$REPO_ROOT" --extra cu118 --extra train python -c "
 import sys
 sys.path.insert(0, r'$REPO_ROOT')
 try:
@@ -275,11 +275,11 @@ except Exception as e:
 " 2>/dev/null | grep '^SCHEMA_REFS=')
   case "$out" in
     "SCHEMA_REFS=OK") probe PASS schema-refs "site schema.yaml resolves all \$ref pointers" ;;
-    "") probe FAIL schema-refs "could not run schema resolution (conda env 'frankenstein' missing python deps?)" ;;
+    "") probe FAIL schema-refs "could not run schema resolution (uv project env missing python deps?)" ;;
     *) probe FAIL schema-refs "${out#SCHEMA_REFS=FAIL: }" ;;
   esac
 
-  out=$(conda run -n frankenstein python -c "
+  out=$(uv run --project "$REPO_ROOT" --extra cu118 --extra train python -c "
 import glob, os, sys
 sys.path.insert(0, r'$REPO_ROOT')
 from src.training.config_loader import load_training_config
@@ -308,7 +308,7 @@ for m in msgs[:15]:
     probe FAIL example-yaml "no site example YAMLs found"
   fi
 else
-  probe FAIL conda "conda not found; cannot run schema/YAML probes"
+  probe FAIL uv "uv not found; cannot run schema/YAML probes"
 fi
 
 # ---------------------------------------------------------------------------
@@ -340,10 +340,10 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "[tools]"
-for t in node pandoc pdflatex bibtex rsync conda; do
+for t in node pandoc pdflatex bibtex rsync uv; do
   if command -v "$t" >/dev/null 2>&1; then echo "$t=yes"; else echo "$t=no"; fi
 done
-echo "conda_env_frankenstein=$conda_ok"
+echo "uv_env=$uv_ok"
 
 # ---------------------------------------------------------------------------
 # [summary]
