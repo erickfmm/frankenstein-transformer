@@ -9,6 +9,8 @@
 
 **See [frankenstein-transformer](https://erickfmm.github.io/frankenstein-transformer/index.html) for a web interface to configure your YAML!**
 
+![web capture](docs/webcapture.gif)
+
 ## At a Glance
 
 A **schema-first, config-driven transformer experimentation toolkit**: pick mixers, optimizers, norms and positional encodings from one strict JSON-Schema-validated YAML — no code changes needed.
