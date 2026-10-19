@@ -103,7 +103,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
             ode_steps=1,
             ffn_hidden_size=96,
             ffn_activation="gelu",
-            use_hope=True,
+            positional_encoding="hope",
             **kw,
         )
         return FrankensteinEncoder(cfg)

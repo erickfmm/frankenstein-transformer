@@ -50,25 +50,17 @@ class FrankensteinModelConfigDefaultsTests(unittest.TestCase):
         cfg = FrankensteinModelConfig(**_minimal_dict(hidden_size=64, ffn_hidden_size=200))
         self.assertEqual(cfg.ffn_hidden_size, 200)
 
-    def test_use_hope_true_sets_positional_encoding_to_hope(self):
-        cfg = FrankensteinModelConfig(**_minimal_dict(use_hope=True, positional_encoding=None))
-        self.assertEqual(cfg.positional_encoding, "hope")
-        self.assertTrue(cfg.use_hope)
-
-    def test_use_hope_false_sets_positional_encoding_to_rope(self):
-        cfg = FrankensteinModelConfig(**_minimal_dict(use_hope=False, positional_encoding=None))
+    def test_positional_encoding_defaults_to_rope(self):
+        cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding=None))
         self.assertEqual(cfg.positional_encoding, "rope")
-        self.assertFalse(cfg.use_hope)
 
     def test_positional_encoding_hope_explicit(self):
         cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="hope"))
         self.assertEqual(cfg.positional_encoding, "hope")
-        self.assertTrue(cfg.use_hope)
 
     def test_positional_encoding_rope_explicit(self):
         cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="rope"))
         self.assertEqual(cfg.positional_encoding, "rope")
-        self.assertFalse(cfg.use_hope)
 
     def test_positional_encoding_case_insensitive(self):
         cfg = FrankensteinModelConfig(**_minimal_dict(positional_encoding="HOPE"))

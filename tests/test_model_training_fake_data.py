@@ -56,7 +56,7 @@ def _cfg(layer_pattern, mode="encoder", use_moe=False, **kw):
         ode_steps=1,
         ffn_hidden_size=HIDDEN * 2,
         ffn_activation="gelu",
-        use_hope=True,
+        positional_encoding="hope",
         mode=mode,
     )
     defaults.update(kw)

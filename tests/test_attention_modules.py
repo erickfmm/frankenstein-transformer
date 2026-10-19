@@ -34,7 +34,7 @@ def _cfg(**overrides):
         ode_steps=1,
         ffn_hidden_size=96,
         ffn_activation="gelu",
-        use_hope=True,
+        positional_encoding="hope",
         mode="encoder",
     )
     base.update(overrides)
@@ -136,12 +136,12 @@ class TitanAttentionTests(unittest.TestCase):
         return torch.randn(BSZ, SEQ, DIM)
 
     def test_encoder_with_hope(self):
-        attn = self._make(use_hope=True, positional_encoding="hope")
+        attn = self._make(positional_encoding="hope")
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_encoder_with_rope(self):
-        attn = self._make(use_hope=False, positional_encoding="rope")
+        attn = self._make(positional_encoding="rope")
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 

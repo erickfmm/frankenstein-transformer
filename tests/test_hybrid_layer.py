@@ -29,7 +29,7 @@ def _cfg(layer_pattern=None, **overrides):
         ode_steps=1,
         ffn_hidden_size=96,
         ffn_activation="gelu",
-        use_hope=True,
+        positional_encoding="hope",
         mode="encoder",
     )
     base.update(overrides)

@@ -103,7 +103,7 @@ class MhcModelTests(unittest.TestCase):
             use_bitnet=False,
             use_moe=False,
             layer_pattern=["standard_attn", "retnet"],
-            use_hope=True,
+            positional_encoding="hope",
             mode="encoder",
             use_mhc=True,
             mhc_expansion_rate=4,
@@ -177,7 +177,7 @@ class MhcHybridLayerTests(unittest.TestCase):
             layer_pattern=["standard_attn"],
             use_mhc=True,
             mhc_expansion_rate=2,
-            use_hope=True,
+            positional_encoding="hope",
             mode="encoder",
         )
 
@@ -307,7 +307,7 @@ class HyperloopModelTests(unittest.TestCase):
             use_bitnet=False,
             use_moe=False,
             mode="encoder",
-            use_hope=True,
+            positional_encoding="hope",
             layer_pattern=[
                 "standard_attn",
                 "retnet",

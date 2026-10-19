@@ -83,7 +83,7 @@ class TransformersExportTests(unittest.TestCase):
                     "hope_damping": 0.01,
                     "rope_base": 10000.0,
                     "rope_scaling": 1.0,
-                    "use_hope": True,
+                    "positional_encoding": "hope",
                     "use_moe": False,
                     "use_mixture_of_depths": False,
                     "mixture_of_depths_capacity_ratio": 0.5,

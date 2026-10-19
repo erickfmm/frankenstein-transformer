@@ -68,13 +68,11 @@ class SchemaAttentionLayerTests(unittest.TestCase):
         schema = resolve_schema(schema_path)
 
         model_properties = schema["properties"]["model"]["properties"]
+        self.assertIn("mixture_of_depths", model_properties)
 
-        for field_name in [
-            "use_mixture_of_depths",
-            "mixture_of_depths_capacity_ratio",
-            "mixture_of_depths_router_aux_loss_weight",
-        ]:
-            self.assertIn(field_name, model_properties)
+        mod_properties = model_properties["mixture_of_depths"]["properties"]
+        for field_name in ["enabled", "capacity_ratio", "router_aux_loss_weight"]:
+            self.assertIn(field_name, mod_properties)
 
     def test_schema_includes_new_latent_sparse_gated_fields(self):
         schema_path = pathlib.Path(__file__).parent.parent / "src" / "schema.yaml"

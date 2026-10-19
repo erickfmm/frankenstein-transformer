@@ -61,7 +61,7 @@ class AttentionRefactorTests(unittest.TestCase):
             factorized_embedding_dim=16,
             use_embedding_conv=False,
             embedding_conv_kernel=3,
-            use_hope=True,
+            positional_encoding="hope",
             use_moe=False,
             use_mixture_of_depths=False,
             mixture_of_depths_capacity_ratio=0.5,
@@ -107,10 +107,9 @@ class AttentionRefactorTests(unittest.TestCase):
         y = model(x)
         self.assertEqual(y.shape, (2, 8, config.vocab_size))
 
-    def test_legacy_use_hope_false_maps_to_rope(self):
+    def test_default_positional_encoding_is_rope(self):
         from src.model.embeddings.factory import build_pos_encoder
         config = self._build_config(["titan_attn"])
-        config.use_hope = False
         config.positional_encoding = None
         config.__post_init__()
         pe = build_pos_encoder(config)

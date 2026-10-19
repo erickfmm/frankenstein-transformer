@@ -29,7 +29,7 @@ def _cfg(**overrides):
         ode_steps=1,
         ffn_hidden_size=64,
         ffn_activation="gelu",
-        use_hope=True,
+        positional_encoding="hope",
         use_factorized_embedding=True,
         factorized_embedding_dim=16,
         use_embedding_conv=False,
