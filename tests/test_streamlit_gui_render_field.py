@@ -1,9 +1,9 @@
 """Tests for the Streamlit GUI ``render_field`` default-value resolution.
 
-These exercise the fallback chain (``examples`` → ``default`` → ``minimum`` →
+These exercise the fallback chain (``default`` → ``examples`` → ``minimum`` →
 fallback) that prevents ``TypeError: float() argument must be a string or a
 number, not 'NoneType'`` when a schema field omits ``examples``/``default``/
-``minimum`` (e.g. the ``ffn_activation_config`` learnable-activation params).
+``minimum`` (e.g. the ``ffn.activation_config`` learnable-activation params).
 """
 
 from __future__ import annotations
@@ -30,11 +30,16 @@ def captured(monkeypatch):
         captured["text_input"] = {"value": value}
         return value
 
+    def checkbox(label, value=False, **kwargs):
+        captured["checkbox"] = {"value": value}
+        return value
+
     def warning(message):
         captured["warning"] = message
 
     monkeypatch.setattr(app.st, "number_input", number_input)
     monkeypatch.setattr(app.st, "text_input", text_input)
+    monkeypatch.setattr(app.st, "checkbox", checkbox)
     monkeypatch.setattr(app.st, "warning", warning)
     return captured
 
@@ -51,9 +56,19 @@ def _integer_schema(**overrides):
     return schema
 
 
-def test_number_uses_examples_when_present(captured):
+def test_number_prefers_default_over_examples(captured):
     app.render_field("x", _number_schema(examples=[0.5], default=0.25))
+    assert captured["number_input"]["value"] == 0.25
+
+
+def test_number_uses_examples_when_no_default(captured):
+    app.render_field("x", _number_schema(examples=[0.5]))
     assert captured["number_input"]["value"] == 0.5
+
+
+def test_boolean_prefers_default_over_examples(captured):
+    app.render_field("x", {"type": "boolean", "examples": [False], "default": True})
+    assert captured["checkbox"]["value"] is True
 
 
 def test_number_uses_default_when_no_examples(captured):
