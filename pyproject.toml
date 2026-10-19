@@ -126,6 +126,13 @@ source = "vcs"
 # download) so `python -m build` works without a full clone.
 fallback-version = "0.0.0"
 
+[tool.hatch.version.raw-options]
+# Only describe from `v<version>` tags. The repo also carries
+# `dashai-v<version>` tags for the plugin; without this filter hatch-vcs
+# treats them as releases of the main package (publishing 0.6.0 instead of
+# 1.5.0 when both tags point at the same commit).
+git_describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--match", "v[0-9]*"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
