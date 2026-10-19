@@ -9,7 +9,6 @@ model:
     layer_pattern:
     - retnet
     - standard_attn
-  use_bitnet: true
   norm:
     type: derf
   embedding:
@@ -18,11 +17,12 @@ model:
     conv:
       enabled: true
       kernel: 5
-  use_moe: false
-  ffn_hidden_size: 2048
-  attention:
-    titan:
-      use_hope: false
+  moe:
+    enabled: false
+  bitnet:
+    enabled: true
+  ffn:
+    hidden_size: 2048
 training:
   task: mlm
   num_epochs: 4

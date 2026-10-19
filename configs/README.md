@@ -205,9 +205,10 @@ Examples:
 
 ### model (FrankensteinModelConfig)
 
-The `model` block is organized into hierarchical sub-objects: `dims`, `norm`,
-`embedding`, `attention`, plus flat top-level keys for cross-cutting features
-(MoE, BitNet, Mixture-of-Depths, FFN, ODE).
+The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
+`positional_encoding`/`positional_encoding_parameters`, `attention`, `moe`,
+`bitnet`, `mixture_of_depths`, `ssmax`, `ffn`, `classification_head`, `mhc`,
+and `residuals`. Flat `model.*` feature keys are no longer accepted.
 
 #### model.dims
 
@@ -216,13 +217,13 @@ The `model` block is organized into hierarchical sub-objects: `dims`, `norm`,
 - `num_layers`: physical layers.
 - `num_loops`: logical loops.
 - `num_heads`: attention heads.
-- `num_kv_heads`: key-value heads for GQA.
-- `retention_heads`: retention heads.
+- `num_kv_heads`: key-value heads for GQA (also used by `msa_attn`/`sparda_attn`).
 - `dropout`: global dropout.
 - `layer_pattern`: list of blocks.
+- `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankensteindecoder`, which forces decoder).
 - Legacy blocks: `retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`.
 - Sparse blocks: `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `msa_attn` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda_attn` (SparDA, arXiv:2606.04511).
-- Gated blocks: `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` (Kimi Delta Attention, arXiv:2510.26692).
+- Gated blocks: `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` (Kimi Delta Attention, arXiv:2510.26692).
 - Latent blocks (KV-compression / head-mixing, generalising GQA):
   - `mla_attn` — Multi-Head Latent Attention + RoPE (arXiv:2506.09342).
   - `gqla_attn` — Group-Query Latent Attention, two decoding paths (arXiv:2605.15250).
@@ -234,12 +235,12 @@ The `model` block is organized into hierarchical sub-objects: `dims`, `norm`,
   - `cca_attn` — Compressed Convolutional Attention, attention in compressed latent + convs (arXiv:2510.04476).
   - `ccgqa_attn` — Compressed Convolutional Grouped Query Attention, CCA + decoupled GQA in latent (arXiv:2510.04476).
 - Training-free policy: `sparge_attn` and `fasa_attn` are eval-only; training mode raises an explicit runtime error.
-- `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankensteindecoder`, which forces decoder).
 
 #### model.norm
 
-- `type`: `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`.
+- `type`: `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`.
 - `partial_ratio`: fraction of dims for pRMSNorm (default 0.0625).
+- `flashnorm_partial_ratio`: partial-RMS composition for FlashNorm (default 0.0).
 
 #### model.embedding
 
@@ -248,45 +249,54 @@ The `model` block is organized into hierarchical sub-objects: `dims`, `norm`,
 - `conv.enabled`: optional Conv1d on embeddings.
 - `conv.kernel`: Conv1d kernel size.
 
-#### model.attention.titan
+#### model.positional_encoding / model.positional_encoding_parameters
 
-- `positional_encoding`: titan positional encoding (`hope` or `rope`). If omitted, legacy `use_hope` is used.
-- `use_hope`: legacy fallback for `titan_attn` when `positional_encoding` is omitted.
-- `hope.base`: HoPE base.
-- `hope.damping`: HoPE damping.
-- `rope.base`: RoPE base.
-- `rope.scaling`: RoPE position scaling.
+- `positional_encoding`: model-wide PE enum (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape`, `pape_efficient`, `pape_ri`, `sinusoidal_absolute`, `sinusoidal_rotary`, `learned_absolute`, `none`).
+- `positional_encoding_parameters.rope`: `base`, `scaling`.
+- `positional_encoding_parameters.hope`: `base`, `damping`.
+- `positional_encoding_parameters.alibi`: `num_heads` (null = `dims.num_heads`).
+- `positional_encoding_parameters.bam`: `learn_mu`, `theta_init`, `mu_init`, `eps`.
+- `positional_encoding_parameters.pape`: `num_parabolas`, `num_positions`, `rotation_invariant`.
+- `positional_encoding_parameters.sinusoidal`: `max_len`, `base`, `scale`.
+- `positional_encoding_parameters.learned`: `max_len`, `init_std`.
+- `positional_encoding_parameters.use_pe.<mixer>`: per-mixer opt-out.
 
-#### Flat model.* keys
+#### model.attention.<mixer>
 
-- `num_experts`: MoE experts.
-- `top_k_experts`: top-k routing in MoE.
-- `ode_solver`: `rk4` or `euler`.
-- `ode_steps`: integration steps.
-- `use_bitnet`: BitLinear on/off (BitNet b1.58). When true, all primary + gate
+Per-mixer sub-objects: `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
+`cca`, `ccgqa`, `msa`, `sparda`, `engram`, `gma`, `ssog`, `falcon`, `ode`
+(`solver`, `steps`), `retnet` (`heads`). Optional rank fields accept `null`
+(= derive from `hidden_size` / `num_heads`).
+
+#### model.moe / model.bitnet / model.mixture_of_depths / model.ssmax
+
+- `moe`: `enabled`, `num_experts`, `top_k`.
+- `bitnet`: `enabled`, `routers`, `conv`. When `enabled`, all primary + gate
   projections (Q/K/V/O, FFN, embeddings `proj`, LM head, and recurrent-state
-  gates) become ternary `{-1,0,1}`.
-- `bitnet_routers`: when `true` (and `use_bitnet`), also quantize
-  routing/scoring projections (MoE router, MoD router, sparse block-index,
-  forecast, top-k score nets). Default `false` keeps them full-precision for
-  routing stability.
-- `use_bitnet_conv`: when `true` (and `use_bitnet` and `model.embedding.conv.enabled`),
-  also quantize the embedding Conv1d to `BitConv1d`. Default `false` (opt-in).
-- `use_moe`: use MoE in FFN.
-- `use_mixture_of_depths`: enable Mixture-of-Depths token routing.
-- `mixture_of_depths_capacity_ratio`: fraction of tokens updated per MoD layer.
-- `mixture_of_depths_router_aux_loss_weight`: MoD router aux loss weight.
-- `ffn_hidden_size`: FFN intermediate dimension.
-- `ffn_activation`: `silu` or `gelu` (or any of the 43 supported activations).
-- `ffn_activation_config`: nested object for learnable/parametric activations.
-- `use_ssmax`: enable Scalable Softmax (SSMax, arXiv:2505.22842), a transversal
-  logit rescale `s·ln(n)` applicable to every `positional_encoding`. Adds
-  `num_heads` learnable scalars (init `ssmax_s_init`). Default `false`.
-- `ssmax_s_init`: initial value for the per-head SSMax scalar `s` (default `1.0`).
-- `bam_learn_mu`: if true, BAM location θ_µ is learnable (default `false`).
-- `bam_theta_init`: initial value for BAM θ_α/θ_β (default `0.0` = Uniform prior).
-- `bam_eps`: BAM numerical-stability floor for `β < 0` (default `1e-5`).
-- `bam_mu_init`: initial value for BAM θ_µ (default `0.0`; used only when `bam_learn_mu=true`).
+  gates) become ternary `{-1,0,1}`. `routers` also quantizes routing/scoring
+  projections (default `false` for routing stability). `conv` also quantizes
+  the embedding Conv1d (requires `model.embedding.conv.enabled`).
+- `mixture_of_depths`: `enabled`, `capacity_ratio`, `router_aux_loss_weight`.
+- `ssmax`: `enabled`, `s_init` (Scalable Softmax, arXiv:2505.22842).
+
+#### model.ffn
+
+- `hidden_size`: FFN intermediate dimension (null = 2× `dims.hidden_size`).
+- `activation`: `silu`, `gelu`, or any of the 43 supported activations.
+- `activation_config`: nested object for learnable/parametric activations.
+
+#### model.classification_head
+
+- `enabled`: enable the NLP sequence-classification head (DashAI).
+- `num_labels`: number of classes.
+- `pooling_mode`: `cls` or `gap`.
+
+#### model.mhc / model.residuals
+
+- `mhc`: `enabled`, `expansion_rate`, `sinkhorn_iters`, `gating_init`,
+  `checkpoint`, `full_prec_under_bitnet`, `hyperloop*`.
+- `residuals`: `type`, `full_attn.*`, `block_attn.*`, `mhc_stream_mode`,
+  `gradient_checkpoint`.
 
 ### Latent / KV-compression family (model.attention.*)
 
@@ -354,7 +364,7 @@ standard residual connection that expands the residual stream width by a factor
 - `model.mhc.full_prec_under_bitnet`: keep `φ_l` full-precision under BitNet (`mhc_full_prec_under_bitnet`). Default `true`.
 
 Example: `configs/examples/es_arch_mhc_adamw.yaml`. ⚠️ mHC is incompatible with
-`use_mixture_of_depths`.
+`mixture_of_depths.enabled`.
 
 #### Hyperloop mode (arXiv:2604.21254)
 
@@ -379,7 +389,7 @@ parameterization by default. The paper matches depth-matched Transformers with
 
 Example: `configs/examples/hyperloop_mhc_adamw.yaml`. ⚠️ Incompatible with
 `residuals.type: full_attn|block_attn`; unlike per-layer mHC,
-`use_mixture_of_depths` **stays compatible** (middle-block layers run the
+`mixture_of_depths.enabled` **stays compatible** (middle-block layers run the
 standard C-dim path).
 
 ## Decoder Examples (Famous Architecture-Inspired)

@@ -14,10 +14,13 @@ model:
     dropout: 0.1
   norm:
     type: layer_norm
-  ffn_hidden_size: 256
-  ffn_activation: gelu
-  use_bitnet: false
-  use_moe: false
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 256
+    activation: gelu
 tokenizer:
   source: hf_repo
   name_or_path: prajjwal1/bert-tiny

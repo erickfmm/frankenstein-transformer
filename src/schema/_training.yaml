@@ -7,12 +7,24 @@ description: 'Training hyperparameters and runtime configuration. Includes task-
 
   Controls the entire training pipeline from data ingestion to model saving.
 
+  Keys that are not fields of ``TrainingConfig`` (e.g. ``batch_size``,
+  ``num_epochs``, ``max_length``, data-loading/cache keys, and the vision
+  task sub-blocks) are collected into the runtime dictionary consumed by
+  ``main.py`` / ``engine.py``; ``TrainingConfig`` owns optimizer, scheduler,
+  stability, checkpointing and telemetry fields.
+
   '
 description_es: 'Hiperparámetros de entrenamiento y configuración de ejecución. Incluye configuraciones
 
   específicas de tarea (MLM/SBERT/Causal-LM), carga de datos, optimización, checkpointing, logging y gestión
 
   de hardware. Controla todo el pipeline de entrenamiento desde ingesta de datos hasta guardado del modelo.
+
+  Las claves que no son campos de ``TrainingConfig`` (p. ej. ``batch_size``,
+  ``num_epochs``, ``max_length``, claves de carga/caché de datos y los
+  sub-bloques de tareas de visión) se recopilan en el diccionario de runtime
+  consumido por ``main.py`` / ``engine.py``; ``TrainingConfig`` posee los
+  campos de optimizador, scheduler, estabilidad, checkpointing y telemetría.
 
   '
 additionalProperties: false
@@ -48,6 +60,7 @@ properties:
     - mlm
   supervisor:
     type: string
+    default: auto
     title: Training Supervisor Mode
     title_es: Modo Supervisor de Entrenamiento
     description: "Runtime control for the GPU-temperature supervisor subprocess.\n- `auto`: spawn the CPU-side supervisor subprocess when running on CUDA with `gpu_temp_guard_enabled=true` (legacy CLI behavior).\n- `off`: run training in-process in the current process (no child subprocess spawned). The GPU thermal guard still operates as an in-process polling loop where supported. Required when driving training from an embedding host (e.g. a DashAI Huey worker) that already manages its own process lifecycle.\n\n**Impact:** `off` avoids nested supervisor/child subprocesses conflicting with an external job-queue lifecycle; `auto` preserves the standalone CLI behavior."
@@ -62,14 +75,14 @@ properties:
     title: Training Epochs
     title_es: Épocas de Entrenamiento
     description: 'Complete passes through the training dataset (MLM only). Typical: 1–3 (large datasets, billions of tokens), 5–10 (medium, millions), 10–20+ (small). Monitor validation loss. For SBERT,
-      use `sbert.epochs` instead.
+      use `sbert.num_epochs` instead.
 
 
       **Impact:** More epochs = better learning but risk of overfitting. Early stopping recommended.
 
       '
     description_es: 'Pasadas completas por el dataset de entrenamiento (solo MLM). Típico: 1–3 (datasets grandes, miles de millones de tokens), 5–10 (medios, millones), 10–20+ (pequeños). Monitorear pérdida
-      de validación. Para SBERT, usar `sbert.epochs`.
+      de validación. Para SBERT, usar `sbert.num_epochs`.
 
 
       **Impacto:** Más épocas = mejor aprendizaje pero riesgo de sobreajuste. Early stopping recomendado.
@@ -121,6 +134,7 @@ properties:
     - 4
   dataloader_workers:
     type: integer
+    default: 2
     title: Dataloader Workers
     title_es: Workers de Carga de Datos
     description: 'Parallel worker processes for data loading/preprocessing. Typical: 0 (main process), 2–4 (small), 8–16 (large). More workers reduce I/O bottlenecks. Limited by CPU cores.
@@ -140,6 +154,7 @@ properties:
     - 2
   max_length:
     type: integer
+    default: 512
     title: Max Sequence Length
     title_es: Longitud Máxima de Secuencia
     description: 'Maximum token sequence length. 128 (short), 256 (moderate), 512 (BERT standard), 1024+ (long docs).
@@ -180,6 +195,7 @@ properties:
     - 512
   mlm_probability:
     type: number
+    default: 0.15
     title: MLM Masking Probability
     title_es: Probabilidad de Enmascaramiento MLM
     description: 'Fraction of tokens masked for MLM prediction. Standard: 0.15 (15%). Breakdown of masked tokens:
@@ -218,6 +234,7 @@ properties:
     - 0.15
   max_samples:
     type: integer
+    default: 20000000
     title: Max Training Samples
     title_es: Máximo de Muestras de Entrenamiento
     description: 'Total samples before stopping, independent of epochs. Limits training on large datasets.
@@ -240,6 +257,7 @@ properties:
     - 20000000
   dataset_batch_size:
     type: integer
+    default: 25000
     title: Dataset Streaming Batch Size
     title_es: Tamaño de Lote de Streaming
     description: 'Internal batch size for streaming dataset. Typical: 10,000–50,000. Larger = less I/O, more memory.
@@ -262,6 +280,7 @@ properties:
     - 25000
   num_workers:
     type: integer
+    default: 8
     title: Dataset Streaming Workers
     title_es: Workers de Streaming de Datos
     description: 'Parallel workers for dataset streaming pipeline. Typical: 4–16. More workers = less data loading latency,
@@ -284,6 +303,7 @@ properties:
     - 8
   cache_dir:
     type: string
+    default: "./temp_data/v2_dataset_cache"
     title: Dataset Cache Dir
     title_es: Directorio de Caché de Datos
     description: 'Directory for caching processed datasets to avoid recomputation. SSD preferred. Example: `./temp_data/v2_dataset_cache`.
@@ -324,6 +344,7 @@ properties:
     - /path/to/parquet
   prefer_local_cache:
     type: boolean
+    default: true
     title: Prefer Local Cache
     title_es: Preferir Caché Local
     description: 'Check local cache first before remote download. Speeds up repeated runs. Cache miss falls back to remote.
@@ -342,6 +363,7 @@ properties:
     - true
   stream_local_parquet:
     type: boolean
+    default: true
     title: Stream Local Parquet
     title_es: Hacer Streaming de Parquet Local
     description: 'Stream from local parquet when `local_parquet_dir` is set. `false` may use remote even if local exists.
@@ -360,6 +382,7 @@ properties:
     - true
   join_temp_data_context_window:
     type: integer
+    default: 0
     title: Join Temp Data Context Window
     title_es: Ventana de Contexto de Datos Temporales
     description: 'If >0, joins cached token chunks into sequences of this length. Example: 2000 for 2k-token sequences.
@@ -384,6 +407,7 @@ properties:
     - 8192
   join_temp_data_min_remainder_tokens:
     type: integer
+    default: 128
     title: Min Remainder Tokens
     title_es: Tokens Mínimos Restantes
     description: 'Minimum content tokens in last partial joined window to keep it. Typical: 64–256. Only when `join_temp_data_context_window > 0`.
@@ -402,6 +426,7 @@ properties:
     - 128
   use_amp:
     type: boolean
+    default: false
     title: Use AMP
     title_es: Usar Precisión Mixta Automática
     description: 'Enable FP16 mixed precision. ~50% less memory, faster on GPUs with Tensor Cores (V100, A100, RTX 20/30/40). Auto gradient scaling prevents underflow.
@@ -420,6 +445,7 @@ properties:
     - false
   gradient_accumulation_steps:
     type: integer
+    default: 4
     title: Gradient Accumulation Steps
     title_es: Pasos de Acumulación de Gradientes
     description: 'Accumulate gradients over N mini-batches before optimizer step. Effective batch = `batch_size × N`.
@@ -442,6 +468,7 @@ properties:
     - 4
   scheduler_total_steps:
     type: integer
+    default: 10000
     title: Scheduler Total Steps
     title_es: Pasos Totales del Scheduler
     description: 'Total optimizer steps for LR schedule. Formula: `(num_epochs × dataset_size) / (batch_size × gradient_accumulation_steps)`.
@@ -464,6 +491,7 @@ properties:
     - 10000
   scheduler_warmup_ratio:
     type: number
+    default: 0.1
     title: Scheduler Warmup Ratio
     title_es: Ratio de Calentamiento del Scheduler
     description: 'Fraction of `scheduler_total_steps` for LR warmup. Typical: 0.05–0.1. Larger models need more warmup (0.1), smaller less (0.05).
@@ -482,6 +510,7 @@ properties:
     - 0.1
   scheduler_type:
     type: string
+    default: "cosine"
     title: LR Scheduler
     title_es: Scheduler de LR
     description: 'LR decay strategy.
@@ -529,6 +558,7 @@ properties:
     - cosine
   grad_clip_max_norm:
     type: number
+    default: 5.0
     title: Gradient Clipping Max Norm
     title_es: Norma Máxima de Recorte de Gradientes
     description: 'Max allowed gradient norm. Gradients exceeding this are scaled down. Typical: 1.0–10.0.
@@ -551,6 +581,7 @@ properties:
     - 5.0
   inf_post_clip_threshold:
     type: number
+    default: 100.0
     title: Inf Post-Clip Threshold
     title_es: Umbral Inf Post-Recorte
     description: 'If any gradient norm exceeds this after clipping, flag it. Typical: 50–200. Must be > `grad_clip_max_norm`. Logging only.
@@ -569,6 +600,7 @@ properties:
     - 100.0
   max_nan_retries:
     type: integer
+    default: 3
     title: Max NaN Retries
     title_es: Reintentos Máximos por NaN
     description: 'Max retries on NaN/Inf gradients before stopping. Typical: 3–10. Skips corrupted batches.
@@ -591,6 +623,7 @@ properties:
     - 3
   checkpoint_every_n_steps:
     type: integer
+    default: 500
     title: Checkpoint Frequency
     title_es: Frecuencia de Checkpoints
     description: 'Save rolling checkpoint every N steps. Typical: 500–5000. More often = less data loss on crash, more disk I/O.
@@ -609,6 +642,7 @@ properties:
     - 500
   max_rolling_checkpoints:
     type: integer
+    default: 3
     title: Max Rolling Checkpoints
     title_es: Máximo de Checkpoints Rodantes
     description: 'Max rolling checkpoints kept. Oldest deleted when exceeded. Typical: 2–5. Disk ≈ `checkpoint_size × max_rolling_checkpoints`.
@@ -627,6 +661,7 @@ properties:
     - 3
   num_best_checkpoints:
     type: integer
+    default: 2
     title: Best Checkpoints
     title_es: Mejores Checkpoints
     description: 'Number of best checkpoints kept permanently (by validation loss). Typical: 1–3. Not auto-deleted.
@@ -645,6 +680,7 @@ properties:
     - 2
   nan_check_interval:
     type: integer
+    default: 10
     title: NaN Check Interval
     title_es: Intervalo de Verificación de NaN
     description: 'Steps between NaN/Inf checks. Typical: 10–100. Critical for mixed precision. Combined with `max_nan_retries` for recovery.
@@ -663,6 +699,7 @@ properties:
     - 10
   log_gradient_stats:
     type: boolean
+    default: true
     title: Log Gradient Stats
     title_es: Registrar Estadísticas de Gradientes
     description: 'Log per-layer gradient norms, min/max. `true` for debugging/tuning, `false` for production. Combined with `enable_block_grad_norms`.
@@ -681,6 +718,7 @@ properties:
     - true
   gradient_log_interval:
     type: integer
+    default: 100
     title: Gradient Log Interval
     title_es: Intervalo de Log de Gradientes
     description: 'Steps between gradient stat logs (when `log_gradient_stats=true`). Typical: 10–100. Reduce once training is stable.
@@ -693,6 +731,7 @@ properties:
     - 10
   csv_log_path:
     type: string
+    default: "training_metrics.csv"
     title: CSV Metrics Log Path
     title_es: Ruta de Log de Métricas CSV
     description: 'File path for step-level training metrics in CSV format. Includes loss, LR, gradient norms, GPU metrics, telemetry.
@@ -711,6 +750,7 @@ properties:
     - training_metrics.csv
   csv_rotate_on_schema_change:
     type: boolean
+    default: true
     title: CSV Rotate on Schema Change
     title_es: Rotar CSV al Cambiar Esquema
     description: 'Rotate CSV file (backup + new) when schema changes. Prevents corruption from column mismatches.
@@ -723,6 +763,7 @@ properties:
     - true
   gpu_metrics_backend:
     type: string
+    default: "nvml"
     title: GPU Metrics Backend
     title_es: Backend de Métricas GPU
     description: 'GPU telemetry backend. `nvml` = NVIDIA metrics (temp, memory, utilization). `none` = disabled. Required for `gpu_temp_guard_enabled`.
@@ -738,6 +779,7 @@ properties:
     - nvml
   nvml_device_index:
     type: integer
+    default: 0
     title: NVML Device Index
     title_es: Índice de Dispositivo NVML
     description: 'GPU index to monitor (0 = first GPU). Must match training device. Single GPU: always 0.
@@ -750,6 +792,7 @@ properties:
     - 0
   enable_block_grad_norms:
     type: boolean
+    default: true
     title: Per-Block Gradient Norms
     title_es: Normas de Gradiente por Bloque
     description: 'Log gradient norms per block (embeddings, attention, FFN, etc.) in CSV. `true` for debugging, `false` for production.
@@ -768,6 +811,7 @@ properties:
     - true
   telemetry_log_interval:
     type: integer
+    default: 1
     title: Telemetry Log Interval
     title_es: Intervalo de Log de Telemetría
     description: 'Steps between heavy telemetry logs (GPU metrics, per-block gradient norms). Typical: 1–10. Set 1 for max visibility.
@@ -780,6 +824,7 @@ properties:
     - 1
   gpu_temp_guard_enabled:
     type: boolean
+    default: true
     title: GPU Temp Guard
     title_es: Guardia de Temperatura GPU
     description: 'Enable the CPU-side GPU temperature supervisor (CUDA only). When the GPU
@@ -804,6 +849,7 @@ properties:
     - true
   switch_on_thermal:
     type: boolean
+    default: false
     title: Switch on Thermal
     title_es: Cambiar en Evento Térmico
     description: 'When `gpu_temp_critical_threshold_c` is reached: `true` = the supervisor
@@ -832,6 +878,7 @@ properties:
     - true
   gpu_temp_pause_threshold_c:
     type: number
+    default: 90.0
     title: GPU Pause Temp
     title_es: Temp de Pausa GPU (°C)
     description: 'Temp (°C) to pause training. Typical: 85–95. Set below GPU Tjmax (usually 100–110°C). Must be > `gpu_temp_resume_threshold_c`.
@@ -844,6 +891,7 @@ properties:
     - 90.0
   gpu_temp_resume_threshold_c:
     type: number
+    default: 80.0
     title: GPU Resume Temp
     title_es: Temp de Reanudación GPU (°C)
     description: 'Temp (°C) to resume training after pause. Typical: 70–85. Must be < `gpu_temp_pause_threshold_c` by ≥5–10°C (hysteresis).
@@ -855,7 +903,8 @@ properties:
     examples:
     - 80.0
   gpu_temp_critical_threshold_c:
-    type: number
+    type: [number, "null"]
+    default: null
     title: GPU Critical Temp
     title_es: Temp Crítica GPU (°C)
     description: 'Permanent-abort (or CPU-switch) threshold in Celsius. Behaviour depends on `switch_on_thermal`:
@@ -869,6 +918,7 @@ properties:
     - 95.0
   gpu_temp_poll_interval_seconds:
     type: number
+    default: 30.0
     title: GPU Temp Poll Interval
     title_es: Intervalo de Sondeo de Temp GPU (s)
     description: 'Seconds between temperature polls while the GPU child is running and during cooldown wait. Typical: 10–60. Shorter = faster reaction but more overhead.
@@ -881,6 +931,7 @@ properties:
     - 30.0
   gpu_temp_checkpoint_grace_seconds:
     type: number
+    default: 30.0
     title: GPU Temp Checkpoint Grace
     title_es: Gracia de Checkpoint Térmico (s)
     description: 'Seconds the supervisor waits after sending SIGUSR1 to the training child for it to flush a rolling checkpoint before SIGKILL. Typical: 15–60. Must be > 0.
@@ -892,7 +943,8 @@ properties:
     examples:
     - 30.0
   resume_from_checkpoint:
-    type: string
+    type: [string, "null"]
+    default: null
     title: Resume From Checkpoint
     title_es: Reanudar Desde Checkpoint
     description: 'Resume training from a checkpoint. `auto` = pick the latest rolling checkpoint in the checkpoints directory; an absolute/relative path = load that specific checkpoint. Null = start from scratch.
@@ -905,6 +957,8 @@ properties:
     - auto
   use_galore:
     type: boolean
+    deprecated: true
+    default: false
     title: Enable GaLore
     title_es: Habilitar GaLore
     description: 'Gradient Low-Rank Projection for memory-efficient training of large models (>1B params).
@@ -914,6 +968,11 @@ properties:
 
       **Impact:** Reduces optimizer memory from O(P×2) to O(P×rank). Computational overhead from projection.
 
+      **Deprecated:** prefer `training.optimizer.optimizer_class: galore_adamw`,
+      which composes with the per-parameter-group system and uses
+      `optimizer.parameters["galore_adamw-rank"]`/`-update_proj_gap`. These
+      trainer-side flags remain for backward compatibility.
+
       '
     description_es: 'Proyección de Gradientes de Bajo Rango para entrenamiento eficiente de modelos grandes (>1B params).
 
@@ -922,11 +981,17 @@ properties:
 
       **Impacto:** Reduce memoria del optimizador de O(P×2) a O(P×rank). Overhead computacional por proyección.
 
+      **Obsoleto:** preferir `training.optimizer.optimizer_class: galore_adamw`,
+      que se compone con el sistema de grupos de parámetros y usa
+      `optimizer.parameters["galore_adamw-rank"]`/`-update_proj_gap`. Estas
+      banderas del trainer se mantienen por compatibilidad.
+
       '
     examples:
     - false
   galore_rank:
     type: integer
+    default: 64
     title: GaLore Rank
     title_es: Rango de GaLore
     description: 'Low-rank projection dimension. Typical: 16–128. Memory savings ≈ `1 − (rank / param_dim)`. Start with `hidden_size/12`.
@@ -939,6 +1004,7 @@ properties:
     - 64
   galore_update_interval:
     type: integer
+    default: 1
     title: GaLore Update Interval
     title_es: Intervalo de Actualización GaLore
     description: 'Steps between projection matrix recomputation. Typical: 1–10. 1 = every step (accurate, slower), 10 = every 10 steps (faster).
@@ -957,6 +1023,7 @@ properties:
     - 1
   galore_scale:
     type: number
+    default: 1.0
     title: GaLore Gradient Scale
     title_es: Escala de Gradiente GaLore
     description: 'Scaling factor for projected gradients. Typical: 1.0. Scale down if unstable, scale up if too slow.
@@ -969,6 +1036,7 @@ properties:
     - 1.0
   galore_max_dim:
     type: integer
+    default: 4096
     title: GaLore Max Tensor Dim
     title_es: Dim Máxima de Tensor GaLore
     description: 'Max tensor dimension for GaLore projection. Smaller tensors use standard optimizer. Typical: 4096 or `hidden_size`.
@@ -1007,8 +1075,6 @@ properties:
     $ref: _optimizer.yaml
   sbert:
     $ref: _sbert.yaml
-  patch_prediction:
-    $ref: _vision_patch.yaml
   classification:
     $ref: _vision_classification.yaml
   segmentation:
@@ -1027,7 +1093,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^sgd_momentum-: {}
+              ^sgd_momentum-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1041,7 +1107,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^adamw-: {}
+              ^adamw-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1055,7 +1121,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^adafactor-: {}
+              ^adafactor-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1069,7 +1135,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^galore_adamw-: {}
+              ^galore_adamw-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1083,7 +1149,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^prodigy-: {}
+              ^prodigy-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1097,7 +1163,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^lion-: {}
+              ^lion-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1111,7 +1177,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^sophia-: {}
+              ^sophia-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1125,7 +1191,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^muon-: {}
+              ^muon-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1139,7 +1205,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^turbo_muon-: {}
+              ^turbo_muon-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1153,7 +1219,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^radam-: {}
+              ^radam-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1167,7 +1233,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^adan-: {}
+              ^adan-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1181,7 +1247,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^adopt-: {}
+              ^adopt-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1195,7 +1261,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^ademamix-: {}
+              ^ademamix-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1209,7 +1275,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^mars_adamw-: {}
+              ^mars_adamw-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1223,7 +1289,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^cautious_adamw-: {}
+              ^cautious_adamw-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1237,7 +1303,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^lamb-: {}
+              ^lamb-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1251,7 +1317,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^schedulefree_adamw-: {}
+              ^schedulefree_adamw-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1265,7 +1331,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^shampoo-: {}
+              ^shampoo-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1279,7 +1345,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^soap-: {}
+              ^soap-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1293,7 +1359,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^anon-: {}
+              ^anon-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1307,7 +1373,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^apollo-: {}
+              ^apollo-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1321,7 +1387,7 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^apollo_mini-: {}
+              ^apollo_mini-: { type: [number, boolean, array, string] }
 - if:
     properties:
       optimizer:
@@ -1335,4 +1401,4 @@ allOf:
           parameters:
             additionalProperties: false
             patternProperties:
-              ^q_apollo-: {}
+              ^q_apollo-: { type: [number, boolean, array, string] }

@@ -1,0 +1,70 @@
+type: object
+additionalProperties: false
+title: "Mixture of Experts (MoE)"
+title_es: "Mezcla de Expertos (MoE)"
+description: |-
+  Mixture-of-Experts configuration. When enabled, the standard FFN is replaced
+  by a router that selects `top_k` of `num_experts` specialised sub-networks
+  for each token, scaling model capacity without a proportional compute
+  increase (only the selected experts run).
+
+  **Examples explained:**
+  - `enabled: false`: standard dense FFN. Every token passes through the same
+    network. Predictable, no routing overhead; the right default below ~100M
+    parameters.
+  - `enabled: true, num_experts: 4, top_k: 1`: 4× total FFN capacity for ~1×
+    compute (plus routing). The router learns to specialise experts.
+  - `enabled: true, num_experts: 8, top_k: 2`: more capacity and compute,
+    harder to train — requires load balancing to avoid expert collapse.
+description_es: |-
+  Configuración de Mezcla de Expertos. Cuando está habilitada, la FFN estándar
+  se reemplaza por un router que selecciona `top_k` de `num_experts` sub-redes
+  especializadas por token, escalando la capacidad sin un aumento proporcional
+  de cómputo (solo se ejecutan los expertos seleccionados).
+
+  **Ejemplos explicados:**
+  - `enabled: false`: FFN densa estándar. Cada token pasa por la misma red.
+    Predecible, sin sobrecarga de ruteo; valor por defecto para modelos <100M.
+  - `enabled: true, num_experts: 4, top_k: 1`: 4× capacidad FFN total por ~1×
+    cómputo (más ruteo). El router aprende a especializar expertos.
+  - `enabled: true, num_experts: 8, top_k: 2`: más capacidad y cómputo, más
+    difícil de entrenar — requiere balanceo de carga para evitar colapso.
+properties:
+  enabled:
+    type: boolean
+    title: "Enable MoE"
+    title_es: "Habilitar MoE"
+    description: Replace the dense FFN with a routed mixture of experts.
+    description_es: Reemplaza la FFN densa por una mezcla de expertos con router.
+    default: true
+    examples: [true, false]
+  num_experts:
+    type: integer
+    minimum: 1
+    title: "MoE Expert Count"
+    title_es: "Número de Expertos MoE"
+    description: |-
+      Total number of expert networks. Each expert is a separate FFN; the
+      router selects `top_k` per token. Typical: 4–8 (efficient), up to 64
+      (scaling). Inactive experts occupy memory but consume no FLOPs.
+    description_es: |-
+      Número total de redes expertas. Cada experto es una FFN separada; el
+      router selecciona `top_k` por token. Típico: 4–8 (eficiente), hasta 64
+      (escalado). Los expertos inactivos ocupan memoria pero no FLOPs.
+    default: 8
+    examples: [4, 8]
+  top_k:
+    type: integer
+    minimum: 1
+    title: "Top-K Expert Selection"
+    title_es: "Selección Top-K de Expertos"
+    description: |-
+      Number of experts activated per token (must be ≤ `num_experts`).
+      `top_k: 1` maximises sparsity and specialisation; `top_k: 2` adds
+      capacity at the cost of sparsity.
+    description_es: |-
+      Número de expertos activados por token (debe ser ≤ `num_experts`).
+      `top_k: 1` maximiza dispersión y especialización; `top_k: 2` agrega
+      capacidad a costa de la dispersión.
+    default: 2
+    examples: [1, 2]

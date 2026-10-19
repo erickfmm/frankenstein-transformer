@@ -6,7 +6,6 @@
       num_layers: 12
       num_loops: 1
       num_heads: 12
-      retention_heads: 12
       dropout: 0.1
       layer_pattern: [standard_attn]
     norm:
@@ -18,26 +17,26 @@
       conv:
         enabled: false
         kernel: 3
-    attention:
-      titan:
-        positional_encoding: hope
-        use_hope: false
-        hope:
-          base: 10000.0
-          damping: 0.01
-        rope:
-          base: 10000.0
-          scaling: 1.0
-    num_experts: 4
-    top_k_experts: 2
-    ode_solver: rk4
-    ode_steps: 2
-    use_bitnet: false
-    bitnet_routers: false
-    use_bitnet_conv: false
-    use_moe: false
-    ffn_hidden_size: 3072
-    ffn_activation: gelu
+    positional_encoding: hope
+    positional_encoding_parameters:
+      hope:
+        base: 10000.0
+        damping: 0.01
+    moe:
+      enabled: false
+      num_experts: 4
+      top_k: 2
+    bitnet:
+      enabled: false
+      routers: false
+      conv: false
+    mixture_of_depths:
+      enabled: false
+    ssmax:
+      enabled: false
+    ffn:
+      hidden_size: 3072
+      activation: gelu
   training:
     task: mlm
     batch_size: 4

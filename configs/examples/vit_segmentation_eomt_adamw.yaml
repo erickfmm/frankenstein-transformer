@@ -11,11 +11,13 @@ model:
   norm:
     type: layer_norm
   embedding: {}
-  attention: {}
-  use_moe: false
-  use_bitnet: false
-  ffn_activation: gelu
-  ffn_hidden_size: 256
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 256
+    activation: gelu
 image:
   image_size:
     height: 32

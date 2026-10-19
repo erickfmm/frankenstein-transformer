@@ -6,20 +6,14 @@ model:
     num_layers: 6
     num_loops: 1
     num_heads: 8
-    retention_heads: 8
     dropout: 0.1
     layer_pattern:
     - standard_attn
     - retnet
     - mamba
     mode: encoder
-  num_experts: 4
-  top_k_experts: 2
   norm:
     type: layer_norm
-  use_bitnet: true
-  bitnet_routers: false
-  use_bitnet_conv: false
   embedding:
     factorized:
       enabled: true
@@ -27,9 +21,6 @@ model:
     conv:
       enabled: false
       kernel: 3
-  use_moe: true
-  ffn_hidden_size: 1024
-  ffn_activation: silu
   residuals:
     type: full_attn
     full_attn:
@@ -38,12 +29,24 @@ model:
     mhc_stream_mode: independent
     gradient_checkpoint: false
   attention:
-    titan:
-      positional_encoding: rope
-      rope:
-        base: 10000.0
-        scaling: 1.0
-      use_hope: false
+    retnet:
+      heads: 8
+  moe:
+    enabled: true
+    num_experts: 4
+    top_k: 2
+  bitnet:
+    enabled: true
+    routers: false
+    conv: false
+  ffn:
+    hidden_size: 1024
+    activation: silu
+  positional_encoding: rope
+  positional_encoding_parameters:
+    rope:
+      base: 10000.0
+      scaling: 1.0
 training:
   task: mlm
   batch_size: 4

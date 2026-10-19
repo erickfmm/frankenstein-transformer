@@ -6,7 +6,8 @@ properties:
     additionalProperties: false
     properties:
       latent_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "MLA Latent Rank"
         title_es: "Rango Latente MLA"
         description: |-
@@ -37,7 +38,8 @@ properties:
     additionalProperties: false
     properties:
       latent_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "GQLA Latent Rank"
         title_es: "Rango Latente GQLA"
         description: |-
@@ -50,7 +52,8 @@ properties:
           Solo aplica cuando `gqla_attn` está en `layer_pattern`.
         examples: [384]
       num_groups:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "GQLA Number of Groups"
         title_es: "Número de Grupos GQLA"
         description: |-
@@ -83,7 +86,8 @@ properties:
     additionalProperties: false
     properties:
       latent_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "MLRA Latent Rank"
         title_es: "Rango Latente MLRA"
         description: |-
@@ -115,7 +119,8 @@ properties:
     additionalProperties: false
     properties:
       query_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "Tucker Query Rank"
         title_es: "Rango de Query Tucker"
         description: |-
@@ -129,7 +134,8 @@ properties:
           `hidden_size` (recupera el rango de query de MHA).
         examples: [768]
       key_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "Tucker Key Rank"
         title_es: "Rango de Key Tucker"
         description: |-
@@ -144,7 +150,8 @@ properties:
           recupera MLA.
         examples: [384]
       value_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "Tucker Value Rank"
         title_es: "Rango de Value Tucker"
         description: |-
@@ -161,7 +168,8 @@ properties:
     additionalProperties: false
     properties:
       num_pseudo_heads:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "IHA Pseudo-Heads"
         title_es: "Pseudo-Cabezas IHA"
         description: |-
@@ -182,7 +190,8 @@ properties:
     additionalProperties: false
     properties:
       num_shared_groups:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "GTA Shared Groups"
         title_es: "Grupos Compartidos GTA"
         description: |-
@@ -197,7 +206,8 @@ properties:
           Valores menores = más compartir = menor caché de claves.
         examples: [4]
       value_latent_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "GTA Value Latent Rank"
         title_es: "Rango Latente de Value GTA"
         description: |-
@@ -215,7 +225,8 @@ properties:
     additionalProperties: false
     properties:
       latent_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "MTLA Latent Rank"
         title_es: "Rango Latente MTLA"
         description: |-
@@ -241,7 +252,8 @@ properties:
           factor. Debe ser >= 1. Por defecto: 2.
         examples: [2]
       stride:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "MTLA Stride"
         title_es: "Stride MTLA"
         description: |-

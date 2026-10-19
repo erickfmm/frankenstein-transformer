@@ -6,24 +6,27 @@ model:
     num_layers: 12
     num_loops: 1
     num_heads: 12
-    retention_heads: 12
     layer_pattern:
     - retnet
     - mamba
     - titan_attn
     - retnet
     mode: decoder
-  use_bitnet: false
   norm:
     type: layer_norm
   embedding:
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 3072
   attention:
-    titan:
-      positional_encoding: rope
+    retnet:
+      heads: 12
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+  positional_encoding: rope
 training:
   task: mlm
   batch_size: 4

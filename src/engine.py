@@ -1050,7 +1050,7 @@ def _train_sbert(
         "--batch_size",
         str(int(sbert_cfg.get("batch_size", 16))),
         "--epochs",
-        str(int(sbert_cfg.get("epochs", 4))),
+        str(int(sbert_cfg.get("num_epochs", sbert_cfg.get("epochs", 4)))),
         "--learning_rate",
         str(float(sbert_cfg.get("learning_rate", 2e-5))),
         "--max_eval_samples",
@@ -1070,7 +1070,7 @@ def _train_sbert(
                 str(int(gradient_accumulation_steps)),
             ]
         )
-    max_grad_norm = sbert_cfg.get("max_grad_norm")
+    max_grad_norm = sbert_cfg.get("grad_clip_max_norm", sbert_cfg.get("max_grad_norm"))
     if max_grad_norm is not None:
         argv.extend(["--max_grad_norm", str(float(max_grad_norm))])
 
@@ -1098,7 +1098,7 @@ def _train_sbert(
     if bool(sbert_cfg.get("resume_from_checkpoint", False)):
         argv.append("--resume_from_checkpoint")
 
-    max_seq_length = sbert_cfg.get("max_seq_length")
+    max_seq_length = sbert_cfg.get("max_length", sbert_cfg.get("max_seq_length"))
     if max_seq_length is not None:
         argv.extend(["--max_seq_length", str(int(max_seq_length))])
 
@@ -1194,7 +1194,7 @@ def _train_sbert(
         optimizer_class = sbert_optimizer.get("optimizer_class")
         if isinstance(optimizer_class, str) and optimizer_class.strip():
             argv.extend(["--optimizer_class", str(optimizer_class).strip()])
-        optimizer_params = sbert_optimizer.get("parameters", {})
+        optimizer_params = sbert_optimizer.get("optimizer_kwargs", sbert_optimizer.get("parameters", {}))
         if isinstance(optimizer_params, dict):
             import json as _json
 
@@ -1215,7 +1215,7 @@ def _train_sbert(
         model=None,
         loaded=loaded,
         tokenizer=None,
-        final_epoch=int(sbert_cfg.get("epochs", 4)),
+        final_epoch=int(sbert_cfg.get("num_epochs", sbert_cfg.get("epochs", 4))),
     )
 
 

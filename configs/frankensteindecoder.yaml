@@ -9,7 +9,6 @@ model:
     layer_pattern:
     - titan_attn
     mode: decoder
-  use_bitnet: false
   norm:
     type: layer_norm
   embedding:
@@ -17,12 +16,14 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 3072
-  ffn_activation: silu
-  attention:
-    titan:
-      positional_encoding: rope
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+    activation: silu
+  positional_encoding: rope
 training:
   task: mlm
   batch_size: 4

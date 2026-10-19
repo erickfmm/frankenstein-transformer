@@ -6,19 +6,21 @@ model:
     num_layers: 8
     num_loops: 1
     num_heads: 12
-    retention_heads: 12
     layer_pattern:
     - titan_attn
-  use_bitnet: false
   embedding:
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 3072
-  ffn_activation: gelu
   attention:
-    titan:
-      use_hope: false
+    retnet:
+      heads: 12
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+    activation: gelu
 training:
   task: mlm
   num_epochs: 4

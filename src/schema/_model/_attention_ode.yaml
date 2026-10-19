@@ -1,0 +1,47 @@
+type: object
+additionalProperties: false
+title: "ODE Layer"
+title_es: "Capa ODE"
+description: |-
+  Configuration for the continuous-depth `ode` mixer. Only applies when `ode`
+  appears in `model.dims.layer_pattern`. This mirrors the per-mixer layout used
+  by every other configurable mixer.
+description_es: |-
+  Configuración del mixer `ode` de profundidad continua. Solo aplica cuando
+  `ode` aparece en `model.dims.layer_pattern`. Refleja el layout por mixer
+  usado por el resto de mixers configurables.
+properties:
+  solver:
+    type: string
+    title: "ODE Solver"
+    title_es: "Solucionador ODE"
+    description: |-
+      Numerical integration method:
+      - `rk4`: Runge-Kutta 4th order — higher accuracy and stability, 4× the
+        cost of `euler`.
+      - `euler`: Euler method — faster, may require smaller `steps` or careful
+        tuning.
+    description_es: |-
+      Método de integración numérica:
+      - `rk4`: Runge-Kutta de orden 4 — mayor precisión y estabilidad, 4× el
+        costo de `euler`.
+      - `euler`: Método de Euler — más rápido, puede requerir `steps` menores o
+        ajuste cuidadoso.
+    enum: [rk4, euler]
+    default: rk4
+    examples: [rk4, euler]
+  steps:
+    type: integer
+    minimum: 1
+    title: "ODE Integration Steps"
+    title_es: "Pasos de Integración ODE"
+    description: |-
+      Number of integration steps between consecutive transformer layers.
+      Typical: 2–4. More steps improve the continuous-dynamics approximation at
+      linear compute cost; `rk4` usually needs fewer than `euler`.
+    description_es: |-
+      Número de pasos de integración entre capas transformer consecutivas.
+      Típico: 2–4. Más pasos mejoran la aproximación de dinámicas continuas con
+      costo lineal; `rk4` suele necesitar menos que `euler`.
+    default: 2
+    examples: [2, 4]

@@ -129,20 +129,22 @@ def _resolve_default(
 ) -> Any:
     """Resolve a field's default value from the schema.
 
-    Precedence: ``examples[0]`` → ``default`` → ``minimum`` → ``fallback``.
+    Precedence: ``default`` → ``examples[0]`` → ``minimum`` → ``fallback``.
+    ``default`` is the authoritative runtime default (mirrors the dataclass);
+    ``examples`` are illustrative only and must never silently override it.
     Emits a warning when the schema provides none of the first three so the
     missing metadata is surfaced to the developer.
     """
+    if "default" in field_schema:
+        return field_schema["default"]
     examples = field_schema.get("examples", [])
     if examples:
         return examples[0]
-    if "default" in field_schema:
-        return field_schema["default"]
     min_val = field_schema.get("minimum", None)
     if min_val is not None:
         return min_val
     st.warning(
-        f"Schema field '{field_title}' has no 'examples', 'default', or "
+        f"Schema field '{field_title}' has no 'default', 'examples', or "
         f"'minimum'; using fallback value {fallback!r}."
     )
     return fallback
@@ -166,8 +168,8 @@ def render_field(
     field_type = field_schema.get("type")
     
     if field_type == "boolean":
-        default = field_schema.get("examples", [False])[0]
-        return st.checkbox(field_title, value=default, key=field_key, help=field_description)
+        default = _resolve_default(field_schema, False, field_title)
+        return st.checkbox(field_title, value=bool(default), key=field_key, help=field_description)
     
     elif field_type == "integer":
         min_val = field_schema.get("minimum", None)

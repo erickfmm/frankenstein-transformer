@@ -3,6 +3,7 @@ additionalProperties: false
 properties:
   vocab_size:
     type: integer
+    minimum: 0
     title: "Vocabulary Size"
     title_es: "Tamaño de Vocabulario"
     description: |-
@@ -13,8 +14,8 @@ properties:
       **Examples explained:**
       - `vocab_size=30000`: Common for English-only models (BERT). Smaller vocab = fewer embedding params, faster lookup. May struggle with rare words or multilingual text.
       - `vocab_size=50000`: Multilingual BERT-style. Good coverage for 100+ languages with shared subword units. ~38M embedding params with hidden_size=768.
-      - `vocab_size=100000`: Very large vocab for code or highly multilingual models. ~77M embedding params — strongly consider `use_factorized_embedding=true` to reduce this cost.
-      - With `use_factorized_embedding=true` and `factorized_embedding_dim=128`: vocab_size=50k, hidden=768 → embedding params drop from 38.4M to ~8.4M (4.5× reduction). Quality impact is typically negligible for vocabs > 10k.
+      - `vocab_size=100000`: Very large vocab for code or highly multilingual models. ~77M embedding params — strongly consider `embedding.factorized.enabled=true` to reduce this cost.
+      - With `embedding.factorized.enabled=true` and `embedding.factorized.dim=128`: vocab_size=50k, hidden=768 → embedding params drop from 38.4M to ~8.4M (4.5× reduction). Quality impact is typically negligible for vocabs > 10k.
       - If using `base_model`: vocab_size must exactly match the pretrained model's vocabulary. Mismatch causes token ID corruption and unrecoverable training failure.
     description_es: |-
       Número de tokens únicos en el vocabulario del modelo. Debe coincidir con el tamaño del
@@ -24,12 +25,14 @@ properties:
       **Ejemplos explicados:**
       - `vocab_size=30000`: Común para modelos solo en inglés (BERT). Vocab más pequeño = menos params de embedding, inferencia más rápida. Puede tener problemas con palabras raras o texto multilingüe.
       - `vocab_size=50000`: Estilo BERT multilingüe. Buena cobertura para 100+ idiomas con unidades sub-palabra compartidas. ~38M params de embedding con hidden_size=768.
-      - `vocab_size=100000`: Vocabulario muy grande para código o modelos altamente multilingües. ~77M params de embedding — considerar seriamente `use_factorized_embedding=true` para reducir este costo.
-      - Con `use_factorized_embedding=true` y `factorized_embedding_dim=128`: vocab_size=50k, hidden=768 → params de embedding bajan de 38.4M a ~8.4M (reducción 4.5×). El impacto en calidad es típicamente insignificante para vocabularios > 10k.
+      - `vocab_size=100000`: Vocabulario muy grande para código o modelos altamente multilingües. ~77M params de embedding — considerar seriamente `embedding.factorized.enabled=true` para reducir este costo.
+      - Con `embedding.factorized.enabled=true` y `embedding.factorized.dim=128`: vocab_size=50k, hidden=768 → params de embedding bajan de 38.4M a ~8.4M (reducción 4.5×). El impacto en calidad es típicamente insignificante para vocabularios > 10k.
       - Si se usa `base_model`: vocab_size debe coincidir exactamente con el vocabulario del modelo preentrenado. Una discrepancia causa corrupción de IDs de token y falla de entrenamiento irrecuperable.
+    default: 50000
     examples: [50000]
   hidden_size:
     type: integer
+    minimum: 1
     title: "Hidden Dimension"
     title_es: "Dimensión Oculta"
     description: |-
@@ -54,9 +57,11 @@ properties:
       - `hidden_size=1024` con `num_heads=16` → 64 dimensiones por cabeza. Escala BERT-large, mayor capacidad para tareas complejas (~340M params).
       - `hidden_size=2048` con `num_heads=32` → 64 dimensiones por cabeza. Escala de modelo grande, requiere memoria GPU significativa. Considerar embeddings factorizados y MoE para manejar el conteo de parámetros.
       - Regla de oro: dimensión por cabeza debe ser ≥ 64. Valores por debajo de 48 degradan calidad de atención. Usar `hidden_size / num_heads >= 64` como restricción de diseño.
+    default: 2048
     examples: [768]
   num_layers:
     type: integer
+    minimum: 1
     title: "Number of Layers"
     title_es: "Número de Capas"
     description: |-
@@ -79,9 +84,11 @@ properties:
       - `num_layers=12` con `num_loops=1`: Profundidad BERT-base estándar. 12 capas distintas cada una con sus propios pesos. Buen balance para la mayoría de tareas.
       - `num_layers=24` con `num_loops=1`: Profundidad BERT-large. Requiere entrenamiento cuidadoso (Pre-LN, gradient clipping, warmup). Usar para datasets grandes y tareas complejas.
       - Relación con `num_loops`: Profundidad lógica = `num_layers × num_loops`. Usar loops para aumentar profundidad efectiva sin explosión de parámetros. Los loops comparten pesos entre iteraciones, intercambiando capacidad por cómputo.
+    default: 12
     examples: [12]
   num_loops:
     type: integer
+    minimum: 1
     title: "Logical Loops"
     title_es: "Bucles Lógicos"
     description: |
@@ -98,11 +105,13 @@ properties:
       12 capas pero con parámetros de 6. Aumenta el tiempo de entrenamiento linealmente.
 
       **Impacto:** Aumenta el costo de cómputo sin aumentar memoria de parámetros. Ideal para compensar
-      models with few physical layers. Doesn't improve representation capacity as much as additional physical layers
-      (weights are shared across loop iterations by position).
+      modelos con pocas capas físicas. No mejora la capacidad de representación tanto como capas
+      físicas adicionales (los pesos se comparten entre iteraciones de bucle por posición).
+    default: 2
     examples: [1, 2]
   num_heads:
     type: integer
+    minimum: 1
     title: "Attention Heads"
     title_es: "Cabezas de Atención"
     description: |
@@ -116,12 +125,15 @@ properties:
       Número de cabezas de atención paralelas. Debe dividir `hidden_size` exactamente. Típico:
       8 (pequeño), 12 (BERT-base), 16 (BERT-large), 32 (grande). Cada cabeza aprende patrones de atención distintos.
 
-      **Impacto:** Per-head dimension = `hidden_size / num_heads`. Valores <64 por cabeza pueden degradar
-      quality. Too many heads with small dimensions fragment the representation. Rule of thumb:
-      keep per-head dimension between 64 and 128. With `hidden_size=768`, `num_heads=12` gives 64/head.
+      **Impacto:** Dimensión por cabeza = `hidden_size / num_heads`. Valores <64 por cabeza pueden
+      degradar la calidad. Demasiadas cabezas con dimensiones pequeñas fragmentan la representación.
+      Regla general: mantener la dimensión por cabeza entre 64 y 128. Con `hidden_size=768`,
+      `num_heads=12` da 64/cabeza.
+    default: 16
     examples: [12]
   num_kv_heads:
     type: integer
+    minimum: 1
     title: "Key-Value Heads (GQA)"
     title_es: "Cabezas Clave-Valor (GQA)"
     description: |
@@ -136,28 +148,14 @@ properties:
       van de 1 (equivalente a multi-query attention) a ``num_heads``
       (equivalente a multi-head attention). El paper sugiere 8 como un
       punto medio favorable para tamaños de modelo típicos.
+      También lo consumen los mixers GQA-based (`msa_attn`, `sparda_attn`) y
+      `attention.ccgqa.num_kv_heads` para CCGQA.
+    default: 1
     examples: [1, 8]
-  retention_heads:
-    type: integer
-    title: "Retention Heads"
-    title_es: "Cabezas de Retención"
-    description: |
-      Number of heads for RetentionNet/RetNet layers. Similar to `num_heads` but governs
-      retention mechanisms that blend RNN and transformer properties. Must divide `hidden_size` evenly.
-
-      **Impact:** Only affects `retnet`/`retnet_attn` layers in `layer_pattern`. Generally set equal
-      to `num_heads` for simplicity. More heads enable diverse retention contexts but
-      reduce per-head capacity.
-    description_es: |
-      Número de cabezas para capas RetentionNet/RetNet. Similar a `num_heads` pero gobierna
-      mecanismos de retención que combinan propiedades de RNN y transformer. Debe dividir `hidden_size` exactamente.
-
-      **Impacto:** Solo afecta capas `retnet`/`retnet_attn` en `layer_pattern`. Generalmente se iguala
-      to `num_heads` for simplicity. More heads enable diverse retention contexts but
-      reduce per-head capacity.
-    examples: [12]
   dropout:
     type: number
+    minimum: 0
+    maximum: 1
     title: "Dropout Probability"
     title_es: "Probabilidad de Dropout"
     description: |-
@@ -182,6 +180,7 @@ properties:
       - `0.2–0.3`: Regularización fuerte. Para datasets pequeños (<10M tokens) donde el sobreajuste es probable. Ralentiza el entrenamiento pero mejora la generalización.
       - `0.0`: Sin dropout. Solo para debugging o cuando se usan otros regularizadores (weight decay, data augmentation). Los modelos típicamente sobreajustan sin él.
       - Diagnóstico de sobreajuste: Si la pérdida de entrenamiento sigue bajando mientras la de validación se estanca o sube, aumentar dropout en 0.05–0.1. Si ambas pérdidas están planas (subajuste), bajar dropout.
+    default: 0.1
     examples: [0.1]
   layer_pattern:
     type: array
@@ -199,7 +198,7 @@ properties:
       | `titan_attn` | Titan attention with positional encoding (`hope`/`rope`) | ✅ | ✅ |
       | `retnet` / `retnet_attn` | Retention Network (RNN+transformer hybrid) | ✅ | ✅ |
       | `mamba` | Selective state-space model (SSM) | ✅ | ✅ |
-      | `ode` | Continuous-depth ODE layer (uses `ode_solver`/`ode_steps`) | ✅ | ✅ |
+      | `ode` | Continuous-depth ODE layer (uses `attention.ode.solver`/`attention.ode.steps`) | ✅ | ✅ |
       | `gla_attn` | Gated Linear Attention with multiplicative decay | ✅ | ✅ |
       | `deltanet_attn` / `gated_deltanet_attn` | DeltaNet with corrective delta rule | ✅ | ✅ |
       | `gated_deltanet2_attn` | Gated DeltaNet-2 with decoupled channel-wise erase/write gates (arXiv:2605.22791) | ✅ | ✅ |
@@ -252,7 +251,7 @@ properties:
       | `titan_attn` | Atención Titan con codificación posicional (`hope`/`rope`) | ✅ | ✅ |
       | `retnet` / `retnet_attn` | Retention Network (híbrido RNN+transformer) | ✅ | ✅ |
       | `mamba` | Modelo de espacio de estados (SSM) selectivo | ✅ | ✅ |
-      | `ode` | Capa ODE de profundidad continua (usa `ode_solver`/`ode_steps`) | ✅ | ✅ |
+      | `ode` | Capa ODE de profundidad continua (usa `attention.ode.solver`/`attention.ode.steps`) | ✅ | ✅ |
       | `gla_attn` | Gated Linear Attention con decaimiento multiplicativo | ✅ | ✅ |
       | `deltanet_attn` / `gated_deltanet_attn` | DeltaNet con regla delta correctiva | ✅ | ✅ |
       | `gated_deltanet2_attn` | Gated DeltaNet-2 con compuertas erase/write canalizadas decoupladas (arXiv:2605.22791) | ✅ | ✅ |
@@ -358,6 +357,7 @@ properties:
       se fuerza `decoder` en ejecución.
 
       **Impacto:** `encoder` permite que cada token atienda a todos los demás (tipo BERT). `decoder` solo
-      allows attending to previous tokens (GPT-style). Changing modes fundamentally changes the task.
+      permite atender a tokens anteriores (tipo GPT). Cambiar de modo cambia fundamentalmente la tarea.
     enum: [encoder, decoder]
+    default: encoder
     examples: [encoder, decoder]

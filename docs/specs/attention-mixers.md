@@ -543,9 +543,9 @@ full list):
 | Mixer | Example config keys |
 |---|---|
 | `gqa_attn` | `num_kv_heads` |
-| `retnet` / `retnet_attn` | `retention_heads`, `retnet_chunk_size` |
+| `retnet` / `retnet_attn` | `attention.retnet.heads`, `retnet_chunk_size` |
 | `titan_attn` | `positional_encoding` (`rope`/`hope`), RoPE/HoPE base |
-| `ode` | `ode_solver` (`rk4`/`euler`), `ode_steps` |
+| `ode` | `attention.ode.solver` (`rk4`/`euler`), `attention.ode.steps` |
 | `engram_attn` | `engram_max_ngram_size`, `engram_n_heads_per_ngram`, `engram_embed_dim_per_head`, `engram_kernel_size` |
 | `sparsek_attn` | `sparsek_k` |
 | `longformer_attn` | window size |

@@ -4,24 +4,25 @@ description: |-
   structure, capacity, and behavior. Required when building a model from scratch (i.e., when
   `base_model` is not set). Organized into hierarchical sub-objects: `dims` (core dimensions
   and layer pattern), `norm` (normalization), `embedding` (factorized embeddings and conv),
-  `attention` (per-mixer configuration for titan/MLA/CCA/etc.), plus flat top-level keys for
-  cross-cutting features (MoE, BitNet, Mixture-of-Depths, FFN, ODE).
+  `attention` (per-mixer configuration), `moe`, `bitnet`, `mixture_of_depths`, `ssmax`,
+  `ffn` (feed-forward), and `classification_head` — plus `mhc` and `residuals`.
 
   **Examples explained:**
-  - Typical BERT-base style: `dims.hidden_size=768, dims.num_layers=12, dims.num_heads=12, ffn_hidden_size=3072` — ~110M params, good starting point for MLM pre-training.
-  - Memory-efficient: `embedding.factorized.enabled=true, embedding.factorized.dim=128, use_moe=false` — reduces embedding params ~4.5× for large vocabularies.
+  - Typical BERT-base style: `dims.hidden_size=768, dims.num_layers=12, dims.num_heads=12, ffn.hidden_size=3072` — ~110M params, good starting point for MLM pre-training.
+  - Memory-efficient: `embedding.factorized.enabled=true, embedding.factorized.dim=128, moe.enabled=false` — reduces embedding params ~4.5× for large vocabularies.
   - Experimental hybrid: `dims.layer_pattern: [retnet, titan_attn, mamba, standard_attn, ode]` — mixes recurrent, attention, state-space, and continuous-depth layers for diverse representation learning.
 description_es: |-
   Parámetros FrankensteinModelConfig del modelo. Todos los hiperparámetros arquitectónicos que definen
   la estructura, capacidad y comportamiento del modelo. Obligatorio al construir un modelo desde
   cero (cuando `base_model` no está configurado). Organizado en sub-objetos jerárquicos: `dims`
   (dimensiones núcleo y patrón de capas), `norm` (normalización), `embedding` (embeddings
-  factorizados y conv), `attention` (configuración por mixer para titan/MLA/CCA/etc.), más claves
-  planas de nivel superior para características transversales (MoE, BitNet, Mixture-of-Depths, FFN, ODE).
+  factorizados y conv), `attention` (configuración por mixer), `moe`, `bitnet`,
+  `mixture_of_depths`, `ssmax`, `ffn` (feed-forward) y `classification_head` — además de
+  `mhc` y `residuals`.
 
   **Ejemplos explicados:**
-  - Estilo BERT-base típico: `dims.hidden_size=768, dims.num_layers=12, dims.num_heads=12, ffn_hidden_size=3072` — ~110M params, buen punto de partida para preentrenamiento MLM.
-  - Eficiente en memoria: `embedding.factorized.enabled=true, embedding.factorized.dim=128, use_moe=false` — reduce params de embedding ~4.5× para vocabularios grandes.
+  - Estilo BERT-base típico: `dims.hidden_size=768, dims.num_layers=12, dims.num_heads=12, ffn.hidden_size=3072` — ~110M params, buen punto de partida para preentrenamiento MLM.
+  - Eficiente en memoria: `embedding.factorized.enabled=true, embedding.factorized.dim=128, moe.enabled=false` — reduce params de embedding ~4.5× para vocabularios grandes.
   - Híbrido experimental: `dims.layer_pattern: [retnet, titan_attn, mamba, standard_attn, ode]` — mezcla capas recurrentes, de atención, de espacio de estados y de profundidad continua para aprendizaje de representaciones diverso.
 additionalProperties: false
 required:
@@ -42,19 +43,19 @@ properties:
     description: |-
       Per-mixer configuration sub-objects. Each mixer with dedicated hyperparameters has
       its own sub-object here; mixers without config knobs (standard_attn, sigmoid_attn,
-      gla_attn, deltanet_attn, hgrn2_attn, fox_attn, gated_softmax_attn, longformer_attn,
-      bigbird_attn, sparse_transformer_attn, sparsek_attn, nsa_attn, sparge_attn, fasa_attn,
-      kda_attn, retnet, mamba, ode) do not need a sub-object.
+      gated_softmax_attn, gla_attn, deltanet_attn, gated_deltanet_attn,
+      gated_deltanet2_attn, hgrn2_attn, fox_attn, longformer_attn, bigbird_attn,
+      sparse_transformer_attn, sparsek_attn, nsa_attn, sparge_attn, fasa_attn, kda_attn,
+      mamba) do not need a sub-object. `gqa_attn` reads `dims.num_kv_heads`.
     description_es: |-
       Sub-objetos de configuración por mixer. Cada mixer con hiperparámetros dedicados tiene
       su propio sub-objeto aquí; los mixers sin parámetros de configuración (standard_attn,
-      sigmoid_attn, gla_attn, deltanet_attn, hgrn2_attn, fox_attn, gated_softmax_attn,
-      longformer_attn, bigbird_attn, sparse_transformer_attn, sparsek_attn, nsa_attn,
-      sparge_attn, fasa_attn, kda_attn, retnet, mamba, ode) no necesitan sub-objeto.
+      sigmoid_attn, gated_softmax_attn, gla_attn, deltanet_attn, gated_deltanet_attn,
+      gated_deltanet2_attn, hgrn2_attn, fox_attn, longformer_attn, bigbird_attn,
+      sparse_transformer_attn, sparsek_attn, nsa_attn, sparge_attn, fasa_attn, kda_attn,
+      mamba) no necesitan sub-objeto. `gqa_attn` lee `dims.num_kv_heads`.
     additionalProperties: false
     properties:
-      titan:
-        $ref: "_model/_attention_titan.yaml"
       mla:
         $ref: "_model/_attention_latent.yaml#/properties/mla"
       gqla:
@@ -85,46 +86,23 @@ properties:
         $ref: "_model/_attention_ssog.yaml#/properties/ssog"
       falcon:
         $ref: "_model/_attention_falcon.yaml#/properties/falcon"
+      ode:
+        $ref: "_model/_attention_ode.yaml"
+      retnet:
+        $ref: "_model/_attention_retnet.yaml"
+  moe:
+    $ref: "_model/_moe.yaml"
+  bitnet:
+    $ref: "_model/_bitnet.yaml"
+  mixture_of_depths:
+    $ref: "_model/_mixture_of_depths.yaml"
+  ssmax:
+    $ref: "_model/_ssmax.yaml"
+  ffn:
+    $ref: "_model/_ffn.yaml"
+  classification_head:
+    $ref: "_model/_classification_head.yaml"
   mhc:
     $ref: "_model/_mhc.yaml"
   residuals:
     $ref: "_model/_residuals.yaml"
-  # Flat keys (MoE, BitNet, Mixture-of-Depths, FFN, ODE) stay at model.* top level.
-  num_experts:
-    $ref: "_model/_model_flat.yaml#/properties/num_experts"
-  top_k_experts:
-    $ref: "_model/_model_flat.yaml#/properties/top_k_experts"
-  ode_solver:
-    $ref: "_model/_model_flat.yaml#/properties/ode_solver"
-  ode_steps:
-    $ref: "_model/_model_flat.yaml#/properties/ode_steps"
-  use_bitnet:
-    $ref: "_model/_model_flat.yaml#/properties/use_bitnet"
-  bitnet_routers:
-    $ref: "_model/_model_flat.yaml#/properties/bitnet_routers"
-  use_bitnet_conv:
-    $ref: "_model/_model_flat.yaml#/properties/use_bitnet_conv"
-  use_moe:
-    $ref: "_model/_model_flat.yaml#/properties/use_moe"
-  use_mixture_of_depths:
-    $ref: "_model/_model_flat.yaml#/properties/use_mixture_of_depths"
-  mixture_of_depths_capacity_ratio:
-    $ref: "_model/_model_flat.yaml#/properties/mixture_of_depths_capacity_ratio"
-  mixture_of_depths_router_aux_loss_weight:
-    $ref: "_model/_model_flat.yaml#/properties/mixture_of_depths_router_aux_loss_weight"
-  use_ssmax:
-    $ref: "_model/_model_flat.yaml#/properties/use_ssmax"
-  ssmax_s_init:
-    $ref: "_model/_model_flat.yaml#/properties/ssmax_s_init"
-  ffn_hidden_size:
-    $ref: "_model/_model_flat.yaml#/properties/ffn_hidden_size"
-  ffn_activation:
-    $ref: "_model/_model_flat.yaml#/properties/ffn_activation"
-  ffn_activation_config:
-    $ref: "_model/_model_flat.yaml#/properties/ffn_activation_config"
-  classification_head:
-    $ref: "_model/_model_flat.yaml#/properties/classification_head"
-  num_labels:
-    $ref: "_model/_model_flat.yaml#/properties/num_labels"
-  encoder_pooling_mode:
-    $ref: "_model/_model_flat.yaml#/properties/encoder_pooling_mode"

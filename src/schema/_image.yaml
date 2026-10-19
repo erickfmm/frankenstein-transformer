@@ -77,22 +77,34 @@ properties:
     description: |-
       Positional encoding for the ViT. `learned_1d` adds a learnable
       `nn.Parameter` of shape `(1, N+cls, D)` after patch embedding
-      (faithful to the ViT paper, arXiv:2010.11929); it is a legacy alias for
-      `learned_absolute`. `none` disables the absolute positional embedding
+      (faithful to the ViT paper, arXiv:2010.11929); it is a **deprecated**
+      alias for `learned_absolute` and will be removed in a future release.
+      `none` disables the absolute positional embedding
       and relies on the existing RoPE/HoPE rotary positional encodings applied
       inside the attention mixers (treats patches as a sequence). The unified
       model-level enum values (`learned_absolute`, `sinusoidal_absolute`,
       `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`,
       `nope`, `alibi`) are also accepted and align with `model.positional_encoding`.
+
+      **Precedence:** this field controls the *patch-embedding* PE (absolute,
+      added before the layer stack). `model.positional_encoding` independently
+      controls the PE applied inside each attention mixer. Setting `none` here
+      leaves the mixer PE untouched; it does not disable `model.positional_encoding`.
     description_es: |-
       Codificación posicional para el ViT. `learned_1d` añade un
       `nn.Parameter` aprendible de forma `(1, N+cls, D)` después del patch
-      embedding (fiel al paper ViT); es un alias legado de `learned_absolute`.
-      `none` desactiva el embedding posicional absoluto y confía en las
-      codificaciones rotacionales RoPE/HoPE existentes. Los valores unificados
-      a nivel de modelo (`learned_absolute`, `sinusoidal_absolute`,
+      embedding (fiel al paper ViT); es un alias **obsoleto** de
+      `learned_absolute` y se eliminará en una versión futura. `none` desactiva
+      el embedding posicional absoluto y confía en las codificaciones
+      rotacionales RoPE/HoPE existentes. Los valores unificados a nivel de
+      modelo (`learned_absolute`, `sinusoidal_absolute`,
       `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`,
       `nope`, `alibi`) también se aceptan y se alinean con `model.positional_encoding`.
+
+      **Precedencia:** este campo controla la PE del *patch embedding*
+      (absoluta, añadida antes de la pila de capas). `model.positional_encoding`
+      controla de forma independiente la PE aplicada dentro de cada mixer.
+      Poner `none` aquí no desactiva `model.positional_encoding`.
     enum:
       - learned_1d
       - none
@@ -205,9 +217,9 @@ properties:
     minimum: 1
     title: Number of Classes
     title_es: Número de Clases
-    description: "Number of classes for image classification (`task: classification`)."
-    description_es: Número de clases para clasificación de imágenes.
-    default: 1000
+    description: "Number of classes for image classification (`task: classification`). Required for that task — no implicit ImageNet default is applied by the schema."
+    description_es: Número de clases para clasificación de imágenes. Obligatorio para esa tarea — el esquema no aplica un valor por defecto implícito de ImageNet.
+    examples: [1000, 10]
   num_seg_classes:
     type: integer
     minimum: 1

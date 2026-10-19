@@ -6,18 +6,12 @@ model:
     num_layers: 6
     num_loops: 1
     num_heads: 8
-    retention_heads: 8
     dropout: 0.1
     layer_pattern:
     - standard_attn
     mode: encoder
-  num_experts: 4
-  top_k_experts: 2
   norm:
     type: layer_norm
-  use_bitnet: false
-  bitnet_routers: false
-  use_bitnet_conv: false
   embedding:
     factorized:
       enabled: false
@@ -25,27 +19,36 @@ model:
     conv:
       enabled: false
       kernel: 3
-  use_moe: true
-  ffn_hidden_size: 1024
-  ffn_activation: raf
-  ffn_activation_config:
-    raf_degrees:
-    - 5
-    - 4
-    raf_version: A
-    raf_approx_func: gelu
-    raf_trainable: true
-    raf_input_scaling: true
   attention:
-    titan:
-      positional_encoding: rope
-      hope:
-        base: 10000.0
-        damping: 0.01
-      rope:
-        base: 10000.0
-        scaling: 1.0
-      use_hope: false
+    retnet:
+      heads: 8
+  moe:
+    enabled: true
+    num_experts: 4
+    top_k: 2
+  bitnet:
+    enabled: false
+    routers: false
+    conv: false
+  ffn:
+    hidden_size: 1024
+    activation: raf
+    activation_config:
+      raf_degrees:
+      - 5
+      - 4
+      raf_version: A
+      raf_approx_func: gelu
+      raf_trainable: true
+      raf_input_scaling: true
+  positional_encoding: rope
+  positional_encoding_parameters:
+    hope:
+      base: 10000.0
+      damping: 0.01
+    rope:
+      base: 10000.0
+      scaling: 1.0
 training:
   task: mlm
   batch_size: 4

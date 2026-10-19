@@ -6,22 +6,25 @@ model:
     num_layers: 16
     num_loops: 1
     num_heads: 16
-    retention_heads: 16
     dropout: 0.0
     layer_pattern:
     - titan_attn
     mode: decoder
-  use_bitnet: false
   norm:
     type: layer_norm
   embedding:
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 4096
   attention:
-    titan:
-      positional_encoding: rope
+    retnet:
+      heads: 16
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 4096
+  positional_encoding: rope
 training:
   task: mlm
   batch_size: 2

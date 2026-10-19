@@ -5,15 +5,18 @@ model:
     hidden_size: 768
     num_layers: 8
     num_heads: 12
-    retention_heads: 12
     layer_pattern:
     - titan_attn
-  use_bitnet: false
-  use_moe: false
-  ffn_hidden_size: 3072
   attention:
-    titan:
-      positional_encoding: rope
+    retnet:
+      heads: 12
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+  positional_encoding: rope
 training:
   task: mlm
   num_epochs: 4

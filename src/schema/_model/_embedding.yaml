@@ -12,42 +12,45 @@ properties:
         description: |-
           Enable embedding matrix factorization to reduce parameters. Instead of full
           `(vocab_size × hidden_size)`, uses two smaller matrices. Reduces from O(V×H) to O(V×R + R×H)
-          where R = `factorized_embedding_dim`. **Recommended when `vocab_size × hidden_size > 100M`.**
+          where R = `embedding.factorized.dim`. **Recommended when `vocab_size × hidden_size > 100M`.**
 
           **Examples explained:**
           - `false`: Standard embedding. vocab_size=50000, hidden_size=768 → 38.4M embedding params. Simple, no quality tradeoff. Best when embedding params are a small fraction of total model size.
-          - `true` with `factorized_embedding_dim=128`: vocab_size=50000, hidden_size=768 → (50000×128) + (128×768) = ~6.5M params. 5.9× reduction. Quality impact is usually negligible for large vocabularies (>10k tokens).
-          - `true` with `factorized_embedding_dim=64`: More aggressive compression. ~3.3M params but may start to lose fine-grained token distinctions. Best for models where total parameter budget is tight.
-          - `true` with `factorized_embedding_dim=256`: Conservative compression. ~13.1M params. If model quality is the priority but some savings are desired. Close to full embedding quality.
-          - Decision rule: If `vocab_size × hidden_size` exceeds 20% of your parameter budget, consider factorized embeddings. Use `factorized_embedding_dim ≈ sqrt(vocab_size)` or `hidden_size/6` as starting point.
+          - `true` with `embedding.factorized.dim=128`: vocab_size=50000, hidden_size=768 → (50000×128) + (128×768) = ~6.5M params. 5.9× reduction. Quality impact is usually negligible for large vocabularies (>10k tokens).
+          - `true` with `embedding.factorized.dim=64`: More aggressive compression. ~3.3M params but may start to lose fine-grained token distinctions. Best for models where total parameter budget is tight.
+          - `true` with `embedding.factorized.dim=256`: Conservative compression. ~13.1M params. If model quality is the priority but some savings are desired. Close to full embedding quality.
+          - Decision rule: If `vocab_size × hidden_size` exceeds 20% of your parameter budget, consider factorized embeddings. Use `embedding.factorized.dim ≈ sqrt(vocab_size)` or `hidden_size/6` as starting point.
         description_es: |-
           Habilita factorización de matriz de embedding para reducir parámetros. En lugar de
           `(vocab_size × hidden_size)` completo, usa dos matrices más pequeñas. Reduce de O(V×H) a
-          O(V×R + R×H) donde R = `factorized_embedding_dim`. **Recomendado cuando `vocab_size × hidden_size > 100M`.**
+          O(V×R + R×H) donde R = `embedding.factorized.dim`. **Recomendado cuando `vocab_size × hidden_size > 100M`.**
 
           **Ejemplos explicados:**
           - `false`: Embedding estándar. vocab_size=50000, hidden_size=768 → 38.4M params de embedding. Simple, sin compromiso de calidad. Mejor cuando los params de embedding son una fracción pequeña del tamaño total del modelo.
-          - `true` con `factorized_embedding_dim=128`: vocab_size=50000, hidden_size=768 → (50000×128) + (128×768) = ~6.5M params. Reducción 5.9×. El impacto en calidad suele ser insignificante para vocabularios grandes (>10k tokens).
-          - `true` con `factorized_embedding_dim=64`: Compresión más agresiva. ~3.3M params pero puede empezar a perder distinciones finas entre tokens. Mejor para modelos donde el presupuesto total de parámetros es ajustado.
-          - `true` con `factorized_embedding_dim=256`: Compresión conservadora. ~13.1M params. Si la calidad del modelo es prioridad pero se desean algunos ahorros. Cercano a la calidad de embedding completo.
-          - Regla de decisión: Si `vocab_size × hidden_size` excede el 20% de tu presupuesto de parámetros, considerar embeddings factorizados. Usar `factorized_embedding_dim ≈ sqrt(vocab_size)` o `hidden_size/6` como punto de partida.
+          - `true` con `embedding.factorized.dim=128`: vocab_size=50000, hidden_size=768 → (50000×128) + (128×768) = ~6.5M params. Reducción 5.9×. El impacto en calidad suele ser insignificante para vocabularios grandes (>10k tokens).
+          - `true` con `embedding.factorized.dim=64`: Compresión más agresiva. ~3.3M params pero puede empezar a perder distinciones finas entre tokens. Mejor para modelos donde el presupuesto total de parámetros es ajustado.
+          - `true` con `embedding.factorized.dim=256`: Compresión conservadora. ~13.1M params. Si la calidad del modelo es prioridad pero se desean algunos ahorros. Cercano a la calidad de embedding completo.
+          - Regla de decisión: Si `vocab_size × hidden_size` excede el 20% de tu presupuesto de parámetros, considerar embeddings factorizados. Usar `embedding.factorized.dim ≈ sqrt(vocab_size)` o `hidden_size/6` como punto de partida.
+        default: false
         examples: [false]
       dim:
         type: integer
+        minimum: 1
         title: "Factorized Embedding Dim"
         title_es: "Dim de Embedding Factorizado"
         description: |
-          Intermediate dimension for factorized embeddings (only when `use_factorized_embedding=true`).
-          Typical: 64–256. Rule of thumb: `factorized_embedding_dim ≈ sqrt(vocab_size)` or `hidden_size/6`.
+          Intermediate dimension for factorized embeddings (only when `embedding.factorized.enabled=true`).
+          Typical: 64–256. Rule of thumb: `embedding.factorized.dim ≈ sqrt(vocab_size)` or `hidden_size/6`.
 
           **Impact:** Lower = more compression but possible quality loss. <32 degrades quality;
           >512 reduces compression benefits. For vocab=50k and hidden=768: try 128–224.
         description_es: |
-          Dimensión intermedia para embeddings factorizados (solo cuando `use_factorized_embedding=true`).
-          Típico: 64–256. Regla general: `factorized_embedding_dim ≈ sqrt(vocab_size)` o `hidden_size/6`.
+          Dimensión intermedia para embeddings factorizados (solo cuando `embedding.factorized.enabled=true`).
+          Típico: 64–256. Regla general: `embedding.factorized.dim ≈ sqrt(vocab_size)` o `hidden_size/6`.
 
           **Impacto:** Menor = más compresión pero posible pérdida de calidad. <32 degrada calidad;
-          >512 reduces compression benefits. For vocab=50k and hidden=768: try 128–224.
+          >512 reduce los beneficios de compresión. Para vocab=50k y hidden=768: probar 128–224.
+        default: 128
         examples: [128]
   conv:
     type: object
@@ -61,30 +64,33 @@ properties:
           Apply 1D convolution over token embeddings to capture local n-gram patterns
           before the transformer. Experimental — may help with code or n-gram-heavy languages.
 
-          **Impact:** Adds `hidden_size × embedding_conv_kernel` parameters. Little gain for
+          **Impact:** Adds `hidden_size × embedding.conv.kernel` parameters. Little gain for
           languages where global context is more important than local patterns. Try with kernel=3.
         description_es: |
           Aplica convolución 1D sobre embeddings de tokens para capturar patrones locales
           de n-gramas antes del transformer. Experimental — puede ayudar con código o idiomas
           con fuerte estructura de n-gramas.
 
-          **Impacto:** Agrega `hidden_size × embedding_conv_kernel` parámetros. Poca ganancia para
-          languages where global context is more important than local patterns. Try with kernel=3.
-        examples: [false]
+          **Impacto:** Agrega `hidden_size × embedding.conv.kernel` parámetros. Poca ganancia para
+          idiomas donde el contexto global es más importante que los patrones locales. Probar con kernel=3.
+        default: true
+        examples: [false, true]
       kernel:
         type: integer
+        minimum: 1
         title: "Embedding Conv Kernel"
         title_es: "Kernel de Conv de Embeddings"
         description: |
-          Kernel size for embedding Conv1d when `use_embedding_conv=true`. Typical: 3 (trigram), 5, 7.
+          Kernel size for embedding Conv1d when `embedding.conv.enabled=true`. Typical: 3 (trigram), 5, 7.
           Larger = wider local context but more params (`kernel_size × hidden_size`).
 
           **Impact:** Kernel=3 is the safe starting point. Values >15 negate the benefit of
-          the transformer's global attention. Only applies if `use_embedding_conv=true`.
+          the transformer's global attention. Only applies if `embedding.conv.enabled=true`.
         description_es: |
-          Tamaño de kernel para Conv1d de embeddings cuando `use_embedding_conv=true`. Típico: 3 (trigrama), 5, 7.
+          Tamaño de kernel para Conv1d de embeddings cuando `embedding.conv.enabled=true`. Típico: 3 (trigrama), 5, 7.
           Mayor = contexto local más amplio pero más parámetros (`kernel_size × hidden_size`).
 
-          **Impacto:** Kernel=3 es el punto de partida seguro. Valores >15 anulan el beneficio de la
-          the transformer's global attention. Only applies if `use_embedding_conv=true`.
+          **Impacto:** Kernel=3 es el punto de partida seguro. Valores >15 anulan el beneficio de
+          la atención global del transformer. Solo aplica si `embedding.conv.enabled=true`.
+        default: 3
         examples: [3]

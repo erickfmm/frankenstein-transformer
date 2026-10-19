@@ -11,7 +11,6 @@ model:
     - msa_attn
     mode: decoder
     num_kv_heads: 8
-  use_bitnet: false
   norm:
     type: rms_norm
   embedding:
@@ -19,11 +18,15 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: true
-  ffn_hidden_size: 9216
-  ffn_activation: swiglu
-  num_experts: 32
-  top_k_experts: 2
+  moe:
+    enabled: true
+    num_experts: 32
+    top_k: 2
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 9216
+    activation: swiglu
 training:
   task: mlm
   batch_size: 1

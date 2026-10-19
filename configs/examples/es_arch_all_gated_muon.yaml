@@ -6,7 +6,6 @@ model:
     num_layers: 12
     num_loops: 1
     num_heads: 12
-    retention_heads: 12
     layer_pattern:
     - gla_attn
     - deltanet_attn
@@ -15,17 +14,20 @@ model:
     - hgrn2_attn
     - fox_attn
     - gated_softmax_attn
-  num_experts: 4
-  top_k_experts: 2
   norm:
     type: derf
   embedding:
     conv:
       enabled: false
-  ffn_hidden_size: 3072
   attention:
-    titan:
-      positional_encoding: rope
+    retnet:
+      heads: 12
+  moe:
+    num_experts: 4
+    top_k: 2
+  ffn:
+    hidden_size: 3072
+  positional_encoding: rope
 training:
   task: mlm
   num_epochs: 4

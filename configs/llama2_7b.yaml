@@ -10,7 +10,6 @@ model:
     layer_pattern:
     - titan_attn
     mode: decoder
-  use_bitnet: false
   norm:
     type: rms_norm
   embedding:
@@ -18,15 +17,18 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 11008
-  ffn_activation: swiglu
-  attention:
-    titan:
-      positional_encoding: rope
-      rope:
-        base: 10000.0
-        scaling: 1.0
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 11008
+    activation: swiglu
+  positional_encoding: rope
+  positional_encoding_parameters:
+    rope:
+      base: 10000.0
+      scaling: 1.0
 training:
   task: mlm
   batch_size: 1

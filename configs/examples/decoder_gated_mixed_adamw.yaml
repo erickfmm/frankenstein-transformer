@@ -6,7 +6,6 @@ model:
     num_layers: 12
     num_loops: 1
     num_heads: 12
-    retention_heads: 12
     layer_pattern:
     - gla_attn
     - standard_attn
@@ -15,17 +14,21 @@ model:
     - hgrn2_attn
     - standard_attn
     mode: decoder
-  use_bitnet: false
   norm:
     type: dynamic_tanh
   embedding:
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 2048
   attention:
-    titan:
-      positional_encoding: rope
+    retnet:
+      heads: 12
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 2048
+  positional_encoding: rope
 training:
   task: mlm
   num_epochs: 4

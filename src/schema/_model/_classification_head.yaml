@@ -1,0 +1,57 @@
+type: object
+additionalProperties: false
+title: "NLP Classification Head"
+title_es: "Cabeza de Clasificación NLP"
+description: |-
+  Optional sequence-level classification head on the NLP encoder (DashAI
+  integration). When enabled with `num_labels` set,
+  ``FrankensteinEncoder.forward`` returns ``(B, num_labels)`` class logits
+  instead of ``(B, S, vocab_size)`` MLM logits. The head is a full-precision
+  ``nn.Linear`` (NOT BitNet-quantized). Disabled by default so the MLM CLI path
+  is unchanged. This mirrors the ViT `image:` head knobs structurally.
+description_es: |-
+  Cabeza de clasificación opcional a nivel de secuencia en el encoder NLP
+  (integración DashAI). Cuando se habilita con `num_labels`, 
+  ``FrankensteinEncoder.forward`` devuelve logits de clase ``(B, num_labels)``
+  en lugar de logits MLM ``(B, S, vocab_size)``. La cabeza es un ``nn.Linear``
+  de precisión completa (NO cuantizado con BitNet). Deshabilitada por defecto
+  para dejar el camino MLM de CLI sin cambios. Refleja estructuralmente los
+  parámetros de cabeza del bloque ViT `image:`.
+properties:
+  enabled:
+    type: boolean
+    title: "Enable Classification Head"
+    title_es: "Habilitar Cabeza de Clasificación"
+    description: |-
+      Enable the sequence-level classification head on the encoder.
+    description_es: |-
+      Habilita la cabeza de clasificación a nivel de secuencia en el encoder.
+    default: false
+    examples: [false, true]
+  num_labels:
+    type: [integer, "null"]
+    minimum: 1
+    title: "Number of Classes (NLP)"
+    title_es: "Número de Clases (NLP)"
+    description: |-
+      Number of target classes. Required when `enabled: true`; ignored
+      otherwise. `null` means unset.
+    description_es: |-
+      Número de clases objetivo. Obligatorio cuando `enabled: true`; ignorado
+      en caso contrario. `null` significa sin definir.
+    default: null
+    examples: [2, null]
+  pooling_mode:
+    type: string
+    enum: [cls, gap]
+    title: "Encoder Pooling Mode"
+    title_es: "Modo de Pooling del Encoder"
+    description: |-
+      Pooling for the classification head: ``cls`` reads the first token output;
+      ``gap`` averages over all tokens. Mirrors the ViT `image.pooling_mode`.
+    description_es: |-
+      Pooling para la cabeza de clasificación: ``cls`` lee la salida del primer
+      token; ``gap`` promedia sobre todos los tokens. Refleja el
+      `image.pooling_mode` del ViT.
+    default: cls
+    examples: [cls, gap]

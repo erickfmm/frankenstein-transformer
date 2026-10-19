@@ -186,8 +186,6 @@ class FrankensteinModelConfig:
             Default: 10000.0.
         rope_scaling: Scaling factor applied to RoPE frequencies.
             Default: 1.0.
-        use_hope: Legacy toggle for HoPE. Automatically aligned with
-            ``positional_encoding`` in ``__post_init__``. Default: True.
         positional_encoding: Explicit positional encoding scheme. One of
             ``"rope"`` (Rotary Position Embedding), ``"hope"`` (Hybrid
             Positional Encoding), ``"nope"`` (No Position Embedding),
@@ -198,8 +196,8 @@ class FrankensteinModelConfig:
             PaPE), ``"sinusoidal_absolute"`` (absolute sinusoidal), 
             ``"sinusoidal_rotary"`` (rotary sinusoidal),
             ``"learned_absolute"`` (learned absolute position embedding), or
-            ``"none"`` (explicitly disabled). If None, inferred from
-            ``use_hope``. Default: None.
+            ``"none"`` (explicitly disabled). If None, resolved to
+            ``"rope"``. Default: None.
         alibi_num_heads: Number of heads used by ALiBi biases. Defaults to
             ``num_heads`` in ``__post_init__`` when None. Default: None.
         use_ssmax: Enable Scalable Softmax (SSMax, arXiv:2505.22842), a
@@ -452,7 +450,6 @@ class FrankensteinModelConfig:
     rope_base: float = 10_000.0
     rope_scaling: float = 1.0
 
-    use_hope: bool = True
     positional_encoding: Optional[str] = None  # defaults to "rope" in __post_init__
 
     alibi_num_heads: Optional[int] = None
@@ -528,6 +525,7 @@ class FrankensteinModelConfig:
     falcon1a_attn_use_pe: bool = False
     falcon2a_attn_use_pe: bool = False
     falcon3a_attn_use_pe: bool = False
+    ssog_attn_use_pe: bool = True
 
     use_moe: bool = True
     use_mixture_of_depths: bool = False
@@ -801,9 +799,8 @@ class FrankensteinModelConfig:
     def __post_init__(self):
         """Validate and derive dependent configuration fields after dataclass init.
 
-        Derives ``ffn_hidden_size``, ``positional_encoding``, and aligns the
-        legacy ``use_hope`` flag. Validates ``mode``, ``positional_encoding``,
-        and Mixture-of-Depths parameter ranges.
+        Derives ``ffn_hidden_size`` and validates ``positional_encoding``,
+        ``mode``, and Mixture-of-Depths parameter ranges.
 
         Raises:
             ValueError: If any field fails validation constraints.
@@ -911,7 +908,7 @@ class FrankensteinModelConfig:
             "sinusoidal_absolute", "sinusoidal_rotary", "learned_absolute", "none",
         }
         if self.positional_encoding is None:
-            self.positional_encoding = "hope" if bool(self.use_hope) else "rope"
+            self.positional_encoding = "rope"
         else:
             self.positional_encoding = str(self.positional_encoding).lower()
             if self.positional_encoding not in _VALID_POSITIONAL_ENCODINGS:
@@ -919,8 +916,6 @@ class FrankensteinModelConfig:
                     f"positional_encoding must be one of {sorted(_VALID_POSITIONAL_ENCODINGS)}, "
                     f"got {self.positional_encoding!r}"
                 )
-
-        self.use_hope = self.positional_encoding == "hope"
 
         if self.alibi_num_heads is None:
             self.alibi_num_heads = self.num_heads

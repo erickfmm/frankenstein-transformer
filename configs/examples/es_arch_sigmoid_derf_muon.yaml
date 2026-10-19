@@ -6,20 +6,22 @@ model:
     num_layers: 8
     num_loops: 1
     num_heads: 10
-    retention_heads: 10
     layer_pattern:
     - sigmoid_attn
-  use_bitnet: false
   norm:
     type: derf
   embedding:
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 2560
   attention:
-    titan:
-      use_hope: false
+    retnet:
+      heads: 10
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 2560
 training:
   task: mlm
   num_epochs: 4

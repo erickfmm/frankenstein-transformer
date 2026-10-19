@@ -1,0 +1,58 @@
+type: object
+additionalProperties: false
+title: "Mixture of Depths (MoD)"
+title_es: "Mezcla de Profundidades (MoD)"
+description: |-
+  Mixture-of-Depths token routing inside each transformer block. Each layer
+  scores tokens with a lightweight router and only the top `capacity_ratio`
+  subset is updated; skipped tokens pass through unchanged, allocating more
+  depth to salient tokens and reducing per-layer compute.
+description_es: |-
+  Ruteo de tokens Mixture-of-Depths dentro de cada bloque transformer. Cada capa
+  puntúa tokens con un router ligero y solo el subconjunto superior
+  `capacity_ratio` se actualiza; los tokens omitidos pasan sin cambios,
+  asignando más profundidad a tokens salientes y reduciendo el cómputo por capa.
+properties:
+  enabled:
+    type: boolean
+    title: "Enable Mixture of Depths"
+    title_es: "Habilitar Mixture of Depths"
+    description: |-
+      Enable per-layer token routing. Saves compute but can degrade quality if
+      too many tokens are skipped; tune `capacity_ratio`.
+    description_es: |-
+      Habilita el ruteo de tokens por capa. Ahorra cómputo pero puede degradar
+      la calidad si se omiten demasiados tokens; ajustar `capacity_ratio`.
+    default: false
+    examples: [false, true]
+  capacity_ratio:
+    type: number
+    exclusiveMinimum: 0
+    maximum: 1
+    title: "MoD Capacity Ratio"
+    title_es: "Ratio de Capacidad MoD"
+    description: |-
+      Fraction of tokens each layer updates. Effective capacity =
+      `ceil(seq_len × ratio)`, minimum 1 token. Typical: 0.125–0.5 (aggressive),
+      0.5–1.0 (conservative).
+    description_es: |-
+      Fracción de tokens que cada capa actualiza. Capacidad efectiva =
+      `ceil(seq_len × ratio)`, mínimo 1 token. Típico: 0.125–0.5 (agresivo),
+      0.5–1.0 (conservador).
+    default: 0.5
+    examples: [0.5]
+  router_aux_loss_weight:
+    type: number
+    minimum: 0
+    title: "MoD Router Aux Loss Weight"
+    title_es: "Peso de Pérdida Auxiliar del Router MoD"
+    description: |-
+      Weight for the auxiliary router regularizer, which encourages the average
+      router activation probability to match `capacity_ratio`. Set to 0 to
+      disable. Typical: 0.0 or 0.01–0.1.
+    description_es: |-
+      Peso del regularizador auxiliar del router, que incentiva que la
+      probabilidad promedio de activación coincida con `capacity_ratio`. 0 para
+      deshabilitar. Típico: 0.0 o 0.01–0.1.
+    default: 0.0
+    examples: [0.0, 0.01]

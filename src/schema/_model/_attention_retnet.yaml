@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+title: "RetNet / Retention"
+title_es: "RetNet / Retención"
+description: |-
+  Configuration for the `retnet` / `retnet_attn` retention mixers. Only applies
+  when either appears in `model.dims.layer_pattern`.
+description_es: |-
+  Configuración de los mixers de retención `retnet` / `retnet_attn`. Solo aplica
+  cuando alguno aparece en `model.dims.layer_pattern`.
+properties:
+  heads:
+    type: integer
+    minimum: 1
+    title: "Retention Heads"
+    title_es: "Cabezas de Retención"
+    description: |-
+      Number of retention heads. Must divide `dims.hidden_size` evenly. Only
+      affects `retnet` / `retnet_attn` layers; usually set equal to
+      `dims.num_heads`.
+    description_es: |-
+      Número de cabezas de retención. Debe dividir `dims.hidden_size`
+      exactamente. Solo afecta capas `retnet` / `retnet_attn`; normalmente se
+      iguala a `dims.num_heads`.
+    default: 8
+    examples: [8, 12]

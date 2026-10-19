@@ -10,15 +10,15 @@ training:
       similarity: similarity
     output_dir: "./output/es_sbert_xlmr_mean"
     batch_size: 12
-    epochs: 4
     warmup_steps: 1000
     evaluation_steps: 5000
     learning_rate: 1.5e-5
     max_train_samples: 500000
     max_eval_samples: 10000
-    max_seq_length: 512
     pooling_mode: mean
     trust_remote_code: false
     use_amp: false
     resample_balanced: true
     resample_std: 0.3
+    num_epochs: 4
+    max_length: 512

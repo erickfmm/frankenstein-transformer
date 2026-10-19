@@ -15,10 +15,13 @@ model:
       theta_init: 0.0
       mu_init: 0.0
       eps: 1.0e-5
-  use_bitnet: false
-  use_moe: false
-  ffn_hidden_size: 128
-  ffn_activation: gelu
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 128
+    activation: gelu
 training:
   task: mlm
   num_epochs: 1

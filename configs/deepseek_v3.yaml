@@ -10,7 +10,6 @@ model:
     layer_pattern:
     - mla_attn
     mode: decoder
-  use_bitnet: false
   norm:
     type: rms_norm
   embedding:
@@ -18,14 +17,18 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: true
-  ffn_hidden_size: 18432
-  ffn_activation: swiglu
-  num_experts: 256
-  top_k_experts: 8
   attention:
     mla:
       latent_rank: 512
+  moe:
+    enabled: true
+    num_experts: 256
+    top_k: 8
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 18432
+    activation: swiglu
 training:
   task: mlm
   batch_size: 1

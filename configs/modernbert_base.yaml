@@ -10,7 +10,6 @@ model:
     layer_pattern:
     - standard_attn
     mode: encoder
-  use_bitnet: false
   norm:
     type: layer_norm
   embedding:
@@ -18,9 +17,13 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 1152
-  ffn_activation: gelu
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 1152
+    activation: gelu
 training:
   task: mlm
   batch_size: 2

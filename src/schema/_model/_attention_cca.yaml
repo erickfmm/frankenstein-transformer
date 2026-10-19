@@ -6,7 +6,8 @@ properties:
     additionalProperties: false
     properties:
       latent_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "CCA Latent Rank"
         title_es: "Rango Latente CCA"
         description: |-
@@ -114,7 +115,8 @@ properties:
     additionalProperties: false
     properties:
       query_latent_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "CCGQA Query Latent Rank"
         title_es: "Rango Latente de Query CCGQA"
         description: |-
@@ -132,7 +134,8 @@ properties:
           `num_heads`.
         examples: [256]
       kv_latent_rank:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "CCGQA KV Latent Rank"
         title_es: "Rango Latente de KV CCGQA"
         description: |-
@@ -149,7 +152,8 @@ properties:
           Debe ser ≤ `ccgqa_query_latent_rank`.
         examples: [64]
       num_kv_heads:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "CCGQA KV Heads"
         title_es: "Cabezas KV CCGQA"
         description: |-

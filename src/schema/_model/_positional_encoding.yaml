@@ -77,6 +77,7 @@ properties:
             title_es: "Base RoPE"
             description: "Base frequency for RoPE. Standard: 10000 (Llama). Extended: 100000-1000000 for longer contexts."
             description_es: "Frecuencia base para RoPE. Estándar: 10000. Extendido: 100000-1000000."
+            default: 10000.0
             examples: [10000.0]
           scaling:
             type: number
@@ -85,6 +86,7 @@ properties:
             title_es: "Escalado RoPE"
             description: "Multiplier for RoPE position indices for context extrapolation. Typical: 1.0 (none), 2-8 (moderate), 16+ (aggressive)."
             description_es: "Multiplicador para índices de posición RoPE. Típico: 1.0, 2-8, 16+."
+            default: 1.0
             examples: [1.0]
       hope:
         type: object
@@ -99,6 +101,7 @@ properties:
             title_es: "Base HoPE"
             description: "Base frequency scale for HoPE. Typical: 10000 (standard), 100000 (long-range)."
             description_es: "Escala de frecuencia base para HoPE. Típico: 10000, 100000."
+            default: 10000.0
             examples: [10000.0]
           damping:
             type: number
@@ -107,15 +110,35 @@ properties:
             title_es: "Amortiguación HoPE"
             description: "Damping coefficient for HoPE attention decay. Typical: 0.01 (strong/local), 0.5 (mild/long-range)."
             description_es: "Coeficiente de amortiguación para HoPE. Típico: 0.01, 0.5."
+            default: 0.01
             examples: [0.01]
       alibi:
         type: object
         additionalProperties: false
         title: "ALiBi Parameters"
         title_es: "Parámetros ALiBi"
-        description: ALiBi is parameter-free; slopes are derived from num_heads. This sub-object is reserved for future extensions.
-        description_es: ALiBi es libre de parámetros; las pendientes se derivan de num_heads. Reservado para extensiones futuras.
-        properties: {}
+        description: |-
+          ALiBi is parameter-free: slopes are derived from the head count. By
+          default the model uses `dims.num_heads`; `num_heads` here overrides
+          that derivation for ALiBi only.
+        description_es: |-
+          ALiBi es libre de parámetros: las pendientes se derivan del número de
+          cabezas. Por defecto el modelo usa `dims.num_heads`; `num_heads` aquí
+          sobrescribe esa derivación solo para ALiBi.
+        properties:
+          num_heads:
+            type: [integer, "null"]
+            minimum: 1
+            title: "ALiBi Slope Heads"
+            title_es: "Cabezas para Pendientes ALiBi"
+            description: |-
+              Number of heads used to derive the ALiBi slopes. `null` (default)
+              means use `dims.num_heads`.
+            description_es: |-
+              Número de cabezas usado para derivar las pendientes ALiBi. `null`
+              (por defecto) significa usar `dims.num_heads`.
+            default: null
+            examples: [null, 8, 16]
       bam:
         type: object
         additionalProperties: false
@@ -271,51 +294,54 @@ properties:
           Per-mixer boolean flags to enable/disable the model-wide positional encoding
           for specific mixers. Defaults: True for attention mixers, False for
           recurrent/decay mixers (retnet, mamba, ode, gla, deltanet, gated_deltanet,
-          gated_deltanet2, hgrn2, fox, kda, mtla). Override to force PE on/off per mixer.
+          gated_deltanet2, hgrn2, fox, kda, mtla, falcon*). Override to force PE
+          on/off per mixer. `ssog_attn` is a positional-field mixer; it defaults to
+          True and the flag is documented for completeness.
         description_es: |-
           Banderas booleanas por mixer para habilitar/deshabilitar la codificación
           posicional a nivel de modelo para mixers específicos. Por defecto: True para
           mixers de atención, False para mixers recurrentes/de decaimiento.
         properties:
-          standard_attn: { type: boolean, default: true }
-          titan_attn: { type: boolean, default: true }
-          sigmoid_attn: { type: boolean, default: true }
-          gated_softmax_attn: { type: boolean, default: true }
-          gqa_attn: { type: boolean, default: true }
-          mla_attn: { type: boolean, default: true }
-          gqla_attn: { type: boolean, default: true }
-          mlra_attn: { type: boolean, default: true }
-          tucker_attn: { type: boolean, default: true }
-          iha_attn: { type: boolean, default: true }
-          gta_attn: { type: boolean, default: true }
-          mtla_attn: { type: boolean, default: false }
-          cca_attn: { type: boolean, default: true }
-          ccgqa_attn: { type: boolean, default: true }
-          msa_attn: { type: boolean, default: true }
-          sparda_attn: { type: boolean, default: true }
-          gma_attn: { type: boolean, default: true }
-          longformer_attn: { type: boolean, default: true }
-          bigbird_attn: { type: boolean, default: true }
-          sparse_transformer_attn: { type: boolean, default: true }
-          sparsek_attn: { type: boolean, default: true }
-          nsa_attn: { type: boolean, default: true }
-          fasa_attn: { type: boolean, default: true }
-          sparge_attn: { type: boolean, default: true }
-          engram_attn: { type: boolean, default: true }
-          retnet: { type: boolean, default: false }
-          retnet_attn: { type: boolean, default: false }
-          mamba: { type: boolean, default: false }
-          ode: { type: boolean, default: false }
-          gla_attn: { type: boolean, default: false }
-          deltanet_attn: { type: boolean, default: false }
-          gated_deltanet_attn: { type: boolean, default: false }
-          gated_deltanet2_attn: { type: boolean, default: false }
-          hgrn2_attn: { type: boolean, default: false }
-          fox_attn: { type: boolean, default: false }
-          kda_attn: { type: boolean, default: false }
-          falcon1_attn: { type: boolean, default: false }
-          falcon2_attn: { type: boolean, default: false }
-          falcon3_attn: { type: boolean, default: false }
-          falcon1a_attn: { type: boolean, default: false }
-          falcon2a_attn: { type: boolean, default: false }
-          falcon3a_attn: { type: boolean, default: false }
+          standard_attn: { type: boolean, title: "standard_attn", description: "Model-wide PE for `standard_attn` layers.", default: true }
+          titan_attn: { type: boolean, title: "titan_attn", description: "Model-wide PE for `titan_attn` layers.", default: true }
+          sigmoid_attn: { type: boolean, title: "sigmoid_attn", description: "Model-wide PE for `sigmoid_attn` layers.", default: true }
+          gated_softmax_attn: { type: boolean, title: "gated_softmax_attn", description: "Model-wide PE for `gated_softmax_attn` layers.", default: true }
+          gqa_attn: { type: boolean, title: "gqa_attn", description: "Model-wide PE for `gqa_attn` layers.", default: true }
+          mla_attn: { type: boolean, title: "mla_attn", description: "Model-wide PE for `mla_attn` layers.", default: true }
+          gqla_attn: { type: boolean, title: "gqla_attn", description: "Model-wide PE for `gqla_attn` layers.", default: true }
+          mlra_attn: { type: boolean, title: "mlra_attn", description: "Model-wide PE for `mlra_attn` layers.", default: true }
+          tucker_attn: { type: boolean, title: "tucker_attn", description: "Model-wide PE for `tucker_attn` layers.", default: true }
+          iha_attn: { type: boolean, title: "iha_attn", description: "Model-wide PE for `iha_attn` layers.", default: true }
+          gta_attn: { type: boolean, title: "gta_attn", description: "Model-wide PE for `gta_attn` layers.", default: true }
+          mtla_attn: { type: boolean, title: "mtla_attn", description: "Model-wide PE for `mtla_attn` layers (temporal latent merge).", default: false }
+          cca_attn: { type: boolean, title: "cca_attn", description: "Model-wide PE for `cca_attn` layers.", default: true }
+          ccgqa_attn: { type: boolean, title: "ccgqa_attn", description: "Model-wide PE for `ccgqa_attn` layers.", default: true }
+          msa_attn: { type: boolean, title: "msa_attn", description: "Model-wide PE for `msa_attn` layers.", default: true }
+          sparda_attn: { type: boolean, title: "sparda_attn", description: "Model-wide PE for `sparda_attn` layers.", default: true }
+          gma_attn: { type: boolean, title: "gma_attn", description: "Model-wide PE for `gma_attn` layers.", default: true }
+          longformer_attn: { type: boolean, title: "longformer_attn", description: "Model-wide PE for `longformer_attn` layers.", default: true }
+          bigbird_attn: { type: boolean, title: "bigbird_attn", description: "Model-wide PE for `bigbird_attn` layers.", default: true }
+          sparse_transformer_attn: { type: boolean, title: "sparse_transformer_attn", description: "Model-wide PE for `sparse_transformer_attn` layers.", default: true }
+          sparsek_attn: { type: boolean, title: "sparsek_attn", description: "Model-wide PE for `sparsek_attn` layers.", default: true }
+          nsa_attn: { type: boolean, title: "nsa_attn", description: "Model-wide PE for `nsa_attn` layers.", default: true }
+          fasa_attn: { type: boolean, title: "fasa_attn", description: "Model-wide PE for `fasa_attn` layers (eval-only mixer).", default: true }
+          sparge_attn: { type: boolean, title: "sparge_attn", description: "Model-wide PE for `sparge_attn` layers (eval-only mixer).", default: true }
+          engram_attn: { type: boolean, title: "engram_attn", description: "Model-wide PE for `engram_attn` layers.", default: true }
+          retnet: { type: boolean, title: "retnet", description: "Model-wide PE for `retnet` layers.", default: false }
+          retnet_attn: { type: boolean, title: "retnet_attn", description: "Model-wide PE for `retnet_attn` layers.", default: false }
+          mamba: { type: boolean, title: "mamba", description: "Model-wide PE for `mamba` layers.", default: false }
+          ode: { type: boolean, title: "ode", description: "Model-wide PE for `ode` layers.", default: false }
+          gla_attn: { type: boolean, title: "gla_attn", description: "Model-wide PE for `gla_attn` layers.", default: false }
+          deltanet_attn: { type: boolean, title: "deltanet_attn", description: "Model-wide PE for `deltanet_attn` layers.", default: false }
+          gated_deltanet_attn: { type: boolean, title: "gated_deltanet_attn", description: "Model-wide PE for `gated_deltanet_attn` layers.", default: false }
+          gated_deltanet2_attn: { type: boolean, title: "gated_deltanet2_attn", description: "Model-wide PE for `gated_deltanet2_attn` layers.", default: false }
+          hgrn2_attn: { type: boolean, title: "hgrn2_attn", description: "Model-wide PE for `hgrn2_attn` layers.", default: false }
+          fox_attn: { type: boolean, title: "fox_attn", description: "Model-wide PE for `fox_attn` layers.", default: false }
+          kda_attn: { type: boolean, title: "kda_attn", description: "Model-wide PE for `kda_attn` layers.", default: false }
+          falcon1_attn: { type: boolean, title: "falcon1_attn", description: "Model-wide PE for `falcon1_attn` layers.", default: false }
+          falcon2_attn: { type: boolean, title: "falcon2_attn", description: "Model-wide PE for `falcon2_attn` layers.", default: false }
+          falcon3_attn: { type: boolean, title: "falcon3_attn", description: "Model-wide PE for `falcon3_attn` layers.", default: false }
+          falcon1a_attn: { type: boolean, title: "falcon1a_attn", description: "Model-wide PE for `falcon1a_attn` layers.", default: false }
+          falcon2a_attn: { type: boolean, title: "falcon2a_attn", description: "Model-wide PE for `falcon2a_attn` layers.", default: false }
+          falcon3a_attn: { type: boolean, title: "falcon3a_attn", description: "Model-wide PE for `falcon3a_attn` layers.", default: false }
+          ssog_attn: { type: boolean, title: "ssog_attn", description: "Model-wide PE for `ssog_attn` layers (its Gaussian field already encodes relative position).", default: true }

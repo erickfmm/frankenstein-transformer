@@ -1,0 +1,44 @@
+type: object
+additionalProperties: false
+title: "Scalable Softmax (SSMax)"
+title_es: "Softmax Escalable (SSMax)"
+description: |-
+  Scalable Softmax (arXiv:2505.22842, §Scalable Softmax): a transversal
+  pre-softmax logit rescale by `s · ln(n)` where `s` is a learnable per-head
+  scalar and `n` is the sequence length. Counteracts "attention fading" as
+  context grows and improves length extrapolation for every positional
+  encoding.
+description_es: |-
+  Softmax Escalable (arXiv:2505.22842, §Scalable Softmax): un reescalado
+  transversal de logits pre-softmax por `s · ln(n)`, donde `s` es un escalar
+  aprendible por cabeza y `n` la longitud de secuencia. Contrarresta el
+  "attention fading" al crecer el contexto y mejora la extrapolación de
+  longitud para toda codificación posicional.
+properties:
+  enabled:
+    type: boolean
+    title: "Enable SSMax"
+    title_es: "Habilitar SSMax"
+    description: |-
+      Enable the per-head `s · ln(n)` logit rescale. Composable with any
+      `model.positional_encoding`; off by default.
+    description_es: |-
+      Habilita el reescalado de logits `s · ln(n)` por cabeza. Componible con
+      cualquier `model.positional_encoding`; desactivado por defecto.
+    default: false
+    examples: [false, true]
+  s_init:
+    type: number
+    exclusiveMinimum: 0
+    title: "SSMax s Init"
+    title_es: "Init s de SSMax"
+    description: |-
+      Initial value of the per-head learnable scalar `s`. The paper's
+      post-training distribution peaks around `s ≈ 1.5–3`; `1.0` is a neutral
+      start.
+    description_es: |-
+      Valor inicial del escalar aprendible por cabeza `s`. La distribución
+      post-entrenamiento del paper se sitúa en `s ≈ 1.5–3`; `1.0` es un inicio
+      neutral.
+    default: 1.0
+    examples: [1.0]

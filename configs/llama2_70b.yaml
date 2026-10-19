@@ -11,7 +11,6 @@ model:
     - gqa_attn
     mode: decoder
     num_kv_heads: 8
-  use_bitnet: false
   norm:
     type: rms_norm
   embedding:
@@ -19,9 +18,13 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 28672
-  ffn_activation: swiglu
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 28672
+    activation: swiglu
 training:
   task: mlm
   batch_size: 1

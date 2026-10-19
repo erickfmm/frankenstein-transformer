@@ -14,7 +14,6 @@ model:
     - gqa_attn
     mode: decoder
     num_kv_heads: 4
-  use_bitnet: false
   norm:
     type: rms_norm
   embedding:
@@ -22,9 +21,13 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 17408
-  ffn_activation: silu
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 17408
+    activation: silu
 training:
   task: mlm
   batch_size: 1

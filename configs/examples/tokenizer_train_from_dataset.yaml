@@ -17,11 +17,13 @@ model:
     conv:
       enabled: false
       kernel: 3
-  attention: {}
-  ffn_hidden_size: 512
-  ffn_activation: gelu
-  use_bitnet: false
-  use_moe: false
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 512
+    activation: gelu
 tokenizer:
   source: train_from_dataset
   training:

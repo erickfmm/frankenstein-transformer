@@ -14,7 +14,7 @@ description_es: |
   detallado sobre diferentes tipos de parámetros.
 
   **Impacto:** La elección del optimizador afecta significativamente la dinámica de entrenamiento
-  and final quality. `adamw` is the most proven and recommended option for most cases.
+  y la calidad final. `adamw` es la opción más probada y recomendada para la mayoría de casos.
 additionalProperties: false
 required:
   - optimizer_class
@@ -176,7 +176,7 @@ properties:
       - `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
       - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
       - Otros: sin sufijos específicos (solo los compartidos)
-    minProperties: 1
+    minProperties: 0
     additionalProperties: true
     x_parameter_reference:
       shared_per_group_suffixes:

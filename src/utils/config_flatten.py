@@ -10,14 +10,12 @@ The hierarchical schema groups keys as:
 
     model:
       dims:        {vocab_size, hidden_size, num_layers, num_loops, num_heads,
-                    num_kv_heads, retention_heads, dropout, layer_pattern, mode}
-      norm:        {type, partial_ratio}
+                    num_kv_heads, dropout, layer_pattern, mode}
+      norm:        {type, partial_ratio, flashnorm_partial_ratio}
       embedding:
         factorized: {enabled, dim}
         conv:       {enabled, kernel}
       attention:
-        titan:      {positional_encoding, use_hope, hope: {base, damping},
-                     rope: {base, scaling}}
         mla:        {latent_rank}
         gqla:       {latent_rank, num_groups, decode_path}
         mlra:       {latent_rank, num_latent_heads}
@@ -38,12 +36,23 @@ The hierarchical schema groups keys as:
                     init_mean_std}
         ssog:       {num_atoms, lookat, max_offset, cold_init, sigma_floor,
                     grid_h, grid_w}
-      positional_encoding: string enum (rope, hope, nope, alibi, pape, ...)
+        falcon:     {chunk_size, qk_norm, beta_mode, lambda_mode, beta,
+                    lambda, window, short_conv, conv_kernel, eps, eps_gamma}
+        ode:        {solver, steps}
+        retnet:     {heads}
+      positional_encoding: string enum (rope, hope, nope, alibi, bam, pape, ...)
       positional_encoding_parameters: {rope: {base, scaling}, hope: {base, damping},
+                         alibi: {num_heads},
                          pape: {num_parabolas, num_positions, rotation_invariant},
                          sinusoidal: {max_len, base, scale}, learned: {max_len, init_std},
                          use_pe: {<mixer>: bool, ...}}
-      # flat keys that were never moved (use_moe, use_bitnet, ffn_*, ode_*, ...)
+      moe:               {enabled, num_experts, top_k}
+      bitnet:            {enabled, routers, conv}
+      mixture_of_depths: {enabled, capacity_ratio, router_aux_loss_weight}
+      ssmax:             {enabled, s_init}
+      ffn:               {hidden_size, activation, activation_config}
+      classification_head: {enabled, num_labels, pooling_mode}
+      mhc / residuals:   ...
 
 The flattener is tolerant: if the input ``model_data`` is already flat
 (legacy shape, e.g. an old checkpoint ``config.json``), it is returned
@@ -150,11 +159,14 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
         "eps": "falcon_eps",
         "eps_gamma": "falcon_eps_gamma",
     },
+    "ode": {
+        "solver": "ode_solver",
+        "steps": "ode_steps",
+    },
+    "retnet": {
+        "heads": "retention_heads",
+    },
 }
-
-# Sub-mixers that should be skipped entirely (they are grouping containers
-# like titan's hope/rope, not direct flat-key producers).
-_MIXER_GROUP_KEYS = {"titan"}
 
 
 def _is_nested_shape(model_data: Dict[str, Any]) -> bool:
@@ -163,10 +175,24 @@ def _is_nested_shape(model_data: Dict[str, Any]) -> bool:
     Returns True if any of the top-level grouping keys is present.
     Legacy flat dicts (e.g. old checkpoint config.json) do not contain
     ``dims``, ``norm``, ``embedding`` (as a dict), ``attention`` (as a
-    dict), ``mhc`` (as a dict) or ``residuals`` (as a dict) and are
-    passed through unchanged.
+    dict), ``mhc`` (as a dict), ``residuals`` (as a dict) or the feature
+    blocks and are passed through unchanged.
     """
-    for key in ("dims", "norm", "embedding", "attention", "mhc", "residuals", "positional_encoding_parameters"):
+    for key in (
+        "dims",
+        "norm",
+        "embedding",
+        "attention",
+        "mhc",
+        "residuals",
+        "positional_encoding_parameters",
+        "moe",
+        "bitnet",
+        "mixture_of_depths",
+        "ssmax",
+        "ffn",
+        "classification_head",
+    ):
         if key in model_data and isinstance(model_data[key], dict):
             return True
     return False
@@ -228,37 +254,14 @@ def flatten_image_dict(image_data: Dict[str, Any]) -> Dict[str, Any]:
 def _flatten_attention(attn: Dict[str, Any], out: Dict[str, Any]) -> None:
     """Flatten the ``model.attention`` sub-tree into flat keys in ``out``."""
     for mixer, spec in attn.items():
-        if mixer == "titan":
-            _flatten_titan(spec, out)
-        else:
-            renames = _ATTENTION_MIXER_RENAMES.get(mixer)
-            if renames is None:
-                # Unknown mixer sub-key: skip (defensive — the schema
-                # `additionalProperties: false` already rejects unknowns).
-                continue
-            for leaf, flat_key in renames.items():
-                if leaf in spec:
-                    out[flat_key] = spec[leaf]
-
-
-def _flatten_titan(titan: Dict[str, Any], out: Dict[str, Any]) -> None:
-    """Flatten ``model.attention.titan`` (positional encoding) sub-tree."""
-    if "positional_encoding" in titan:
-        out["positional_encoding"] = titan["positional_encoding"]
-    if "use_hope" in titan:
-        out["use_hope"] = titan["use_hope"]
-    hope = titan.get("hope")
-    if isinstance(hope, dict):
-        if "base" in hope:
-            out["hope_base"] = hope["base"]
-        if "damping" in hope:
-            out["hope_damping"] = hope["damping"]
-    rope = titan.get("rope")
-    if isinstance(rope, dict):
-        if "base" in rope:
-            out["rope_base"] = rope["base"]
-        if "scaling" in rope:
-            out["rope_scaling"] = rope["scaling"]
+        renames = _ATTENTION_MIXER_RENAMES.get(mixer)
+        if renames is None:
+            # Unknown mixer sub-key: skip (defensive — the schema
+            # `additionalProperties: false` already rejects unknowns).
+            continue
+        for leaf, flat_key in renames.items():
+            if leaf in spec:
+                out[flat_key] = spec[leaf]
 
 
 def _flatten_pe_parameters(pe_params: Dict[str, Any], out: Dict[str, Any]) -> None:
@@ -285,6 +288,10 @@ def _flatten_pe_parameters(pe_params: Dict[str, Any], out: Dict[str, Any]) -> No
             out["pape_num_positions"] = pape["num_positions"]
         if "rotation_invariant" in pape:
             out["pape_rotation_invariant"] = pape["rotation_invariant"]
+
+    alibi = pe_params.get("alibi")
+    if isinstance(alibi, dict) and alibi.get("num_heads") is not None:
+        out["alibi_num_heads"] = alibi["num_heads"]
 
     sinusoidal = pe_params.get("sinusoidal")
     if isinstance(sinusoidal, dict):
@@ -349,9 +356,23 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
 
     out: Dict[str, Any] = {}
 
-    # Pass through the staying-flat keys (use_moe, use_bitnet, ffn_*, ...).
-    # We do this by copying everything that is NOT a known grouping key.
-    grouping_keys = {"dims", "norm", "embedding", "attention", "mhc", "residuals", "positional_encoding_parameters"}
+    # Pass through the staying-flat keys. We do this by copying everything
+    # that is NOT a known grouping key.
+    grouping_keys = {
+        "dims",
+        "norm",
+        "embedding",
+        "attention",
+        "mhc",
+        "residuals",
+        "positional_encoding_parameters",
+        "moe",
+        "bitnet",
+        "mixture_of_depths",
+        "ssmax",
+        "ffn",
+        "classification_head",
+    }
     for key, value in model_data.items():
         if key not in grouping_keys:
             out[key] = value
@@ -366,7 +387,6 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
             "num_loops",
             "num_heads",
             "num_kv_heads",
-            "retention_heads",
             "dropout",
             "layer_pattern",
             "mode",
@@ -411,6 +431,61 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
     pe_params = model_data.get("positional_encoding_parameters")
     if isinstance(pe_params, dict):
         _flatten_pe_parameters(pe_params, out)
+
+    # ---- Feature blocks moved out of the flat model namespace ----
+    moe = model_data.get("moe")
+    if isinstance(moe, dict):
+        if "enabled" in moe:
+            out["use_moe"] = moe["enabled"]
+        if "num_experts" in moe:
+            out["num_experts"] = moe["num_experts"]
+        if "top_k" in moe:
+            out["top_k_experts"] = moe["top_k"]
+
+    bitnet = model_data.get("bitnet")
+    if isinstance(bitnet, dict):
+        if "enabled" in bitnet:
+            out["use_bitnet"] = bitnet["enabled"]
+        if "routers" in bitnet:
+            out["bitnet_routers"] = bitnet["routers"]
+        if "conv" in bitnet:
+            out["use_bitnet_conv"] = bitnet["conv"]
+
+    mixture_of_depths = model_data.get("mixture_of_depths")
+    if isinstance(mixture_of_depths, dict):
+        if "enabled" in mixture_of_depths:
+            out["use_mixture_of_depths"] = mixture_of_depths["enabled"]
+        if "capacity_ratio" in mixture_of_depths:
+            out["mixture_of_depths_capacity_ratio"] = mixture_of_depths["capacity_ratio"]
+        if "router_aux_loss_weight" in mixture_of_depths:
+            out["mixture_of_depths_router_aux_loss_weight"] = mixture_of_depths[
+                "router_aux_loss_weight"
+            ]
+
+    ssmax = model_data.get("ssmax")
+    if isinstance(ssmax, dict):
+        if "enabled" in ssmax:
+            out["use_ssmax"] = ssmax["enabled"]
+        if "s_init" in ssmax:
+            out["ssmax_s_init"] = ssmax["s_init"]
+
+    ffn = model_data.get("ffn")
+    if isinstance(ffn, dict):
+        if "hidden_size" in ffn:
+            out["ffn_hidden_size"] = ffn["hidden_size"]
+        if "activation" in ffn:
+            out["ffn_activation"] = ffn["activation"]
+        if "activation_config" in ffn:
+            out["ffn_activation_config"] = ffn["activation_config"]
+
+    classification_head = model_data.get("classification_head")
+    if isinstance(classification_head, dict):
+        if "enabled" in classification_head:
+            out["classification_head"] = classification_head["enabled"]
+        if "num_labels" in classification_head:
+            out["num_labels"] = classification_head["num_labels"]
+        if "pooling_mode" in classification_head:
+            out["encoder_pooling_mode"] = classification_head["pooling_mode"]
 
     # mhc.* — Manifold-Constrained Hyper-Connections (arXiv:2512.24880).
     mhc = model_data.get("mhc")

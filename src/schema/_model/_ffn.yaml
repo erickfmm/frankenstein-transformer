@@ -1,0 +1,227 @@
+type: object
+additionalProperties: false
+title: "Feed-Forward Network (FFN)"
+title_es: "Red Feed-Forward (FFN)"
+description: |-
+  Feed-forward network configuration shared by every HybridLayer: hidden
+  dimension, activation function, and learnable-activation parameters.
+description_es: |-
+  Configuración de la red feed-forward compartida por cada HybridLayer:
+  dimensión oculta, función de activación y parámetros de activaciones
+  aprendibles.
+properties:
+  hidden_size:
+    type: integer
+    minimum: 1
+    title: "FFN Hidden Dimension"
+    title_es: "Dimensión Oculta de FFN"
+    description: |-
+      Intermediate dimension of feed-forward layers. Typical ratio: 4×
+      `dims.hidden_size` (e.g. 768→3072 for BERT-base). When `moe.enabled` is
+      true, this is each expert's hidden size.
+
+      **Examples explained:**
+      - `hidden_size=3072` with `dims.hidden_size=768`: standard 4× ratio,
+        ~4.7M params per FFN layer. Good balance for most tasks.
+      - `hidden_size=2048` with `dims.hidden_size=768`: reduced 2.67× ratio,
+        ~3.1M params per FFN layer; saves ~35% FFN params.
+      - `hidden_size=4608` with `dims.hidden_size=768`: expanded 6× ratio for
+        knowledge-intensive tasks; higher memory.
+      - With MoE: each expert uses this hidden size, so FFN params multiply by
+        `moe.num_experts` (stored, not all active). Prefer 2–3× ratios with MoE.
+    description_es: |-
+      Dimensión intermedia de las capas feed-forward. Ratio típico: 4×
+      `dims.hidden_size` (p. ej. 768→3072 para BERT-base). Cuando
+      `moe.enabled` es true, es el tamaño oculto de cada experto.
+
+      **Ejemplos explicados:**
+      - `hidden_size=3072` con `dims.hidden_size=768`: ratio 4× estándar,
+        ~4.7M params por capa FFN. Buen balance para la mayoría de tareas.
+      - `hidden_size=2048` con `dims.hidden_size=768`: ratio 2.67× reducido,
+        ~3.1M params por capa FFN; ahorra ~35% de params FFN.
+      - `hidden_size=4608` con `dims.hidden_size=768`: ratio 6× expandido para
+        tareas intensivas en conocimiento; mayor memoria.
+      - Con MoE: cada experto usa este tamaño oculto, así que los params FFN se
+        multiplican por `moe.num_experts` (almacenados, no todos activos).
+        Preferir ratios 2–3× con MoE.
+    default: null
+    examples: [3072]
+  activation:
+    type: string
+    title: "FFN Activation"
+    title_es: "Activación de FFN"
+    description: |
+      Non-linear activation for feed-forward networks. Grouped by family:
+
+      **Common / classical** (survey: Lederer arXiv:2101.09957; Dubey et al. arXiv:2109.14545):
+      - `silu`: Sigmoid Linear Unit / Swish₁ — smoother, used in Llama/PaLM. **Recommended default for new models.**
+      - `gelu`: Gaussian Error Linear Unit — classic, used in BERT/GPT-2/GPT-3. More stable for very small models.
+      - `gelu_tanh`: GELU with the tanh approximation (faster; GPT-2/BERT original).
+      - `relu`: Rectified Linear Unit.
+      - `sigmoid`, `tanh`, `arctan`, `softsign`, `elliott`, `identity`, `softplus`, `mish`.
+
+      **Rectified family** (survey §4): `leaky_relu`, `relu6`, `hardswish`, `prelu` (learnable),
+      `abs_relu` (ABReLU), `nl_relu`, `brelu`, `vrelu`, `hexpo`, `ptanh`, `dis_relu`, `lisht`.
+
+      **Exponential / ELU family** (survey §5): `elu`, `selu`, `celu`, `pelu`, `mpelu`, `felu`,
+      `eelu`, `pdelu`, `preu`, `softexp`, `elish`, `hardelish`.
+
+      **Learnable / adaptive**: `swish` (β-hyperparam), `swish_trainable` (β-trainable), `maxout`,
+      `raf` (**Rational Activation Function**, learnable Padé polynomial ratio, Fang et al.
+      arXiv:2208.14111). Configure via `ffn.activation_config`.
+
+      **Gated FFN variants** (own their projections, replace the FFN block): `swiglu`, `geglu`, `reglu`.
+
+      **Impact:** `silu`/`gelu` tend to converge well. With BitNet or quantization, `silu` may be
+      more robust. Learnable activations (`raf`, `prelu`, `swish_trainable`) add parameters but can
+      adapt per-task, especially in low-data regimes.
+    description_es: |
+      Activación no lineal para redes feed-forward, agrupada por familia:
+
+      **Comunes / clásicas** (survey: Lederer arXiv:2101.09957; Dubey et al. arXiv:2109.14545):
+      - `silu`: Sigmoid Linear Unit / Swish₁ — más suave, usada en Llama/PaLM. **Recomendada por defecto.**
+      - `gelu`: Gaussian Error Linear Unit — clásica, usada en BERT/GPT-2/GPT-3.
+      - `gelu_tanh`: GELU con aproximación tanh (más rápida; GPT-2/BERT original).
+      - `relu`: Rectified Linear Unit.
+      - `sigmoid`, `tanh`, `arctan`, `softsign`, `elliott`, `identity`, `softplus`, `mish`.
+
+      **Familia rectificada** (survey §4): `leaky_relu`, `relu6`, `hardswish`, `prelu` (aprendible),
+      `abs_relu` (ABReLU), `nl_relu`, `brelu`, `vrelu`, `hexpo`, `ptanh`, `dis_relu`, `lisht`.
+
+      **Familia exponencial / ELU** (survey §5): `elu`, `selu`, `celu`, `pelu`, `mpelu`, `felu`,
+      `eelu`, `pdelu`, `preu`, `softexp`, `elish`, `hardelish`.
+
+      **Aprendibles / adaptativas**: `swish` (β hiperparámetro), `swish_trainable` (β entrenable),
+      `maxout`, `raf` (**Rational Activation Function**, razón polinómica Padé aprendible, Fang et al.
+      arXiv:2208.14111). Configurar vía `ffn.activation_config`.
+
+      **Variantes FFN con compuerta** (tienen sus proyecciones, reemplazan el bloque FFN): `swiglu`, `geglu`, `reglu`.
+    enum: [silu, gelu, gelu_tanh, relu, sigmoid, tanh, arctan, softsign, elliott, identity, softplus, mish, leaky_relu, relu6, hardswish, prelu, abs_relu, nl_relu, brelu, vrelu, hexpo, ptanh, dis_relu, lisht, elu, selu, celu, pelu, mpelu, felu, eelu, pdelu, preu, softexp, elish, hardelish, swish, swish_trainable, maxout, raf, swiglu, geglu, reglu]
+    default: silu
+    examples: [gelu, silu]
+  activation_config:
+    type: object
+    title: "FFN Activation Configuration"
+    title_es: "Configuración de Activación de FFN"
+    description: |
+      Optional nested parameters for learnable / parametric activations. Ignored for
+      stateless activations. All keys are optional.
+
+      **RAF (Rational Activation Function, arXiv:2208.14111):**
+      - `raf_degrees`: `[m, n]` Padé numerator/denominator degrees (ints ≥ 1). Default `[5, 4]`.
+      - `raf_version`: denominator form, one of `A` (default, "safe"), `B`, `C`, `D`, `N`.
+      - `raf_approx_func`: init target — `gelu` (default), `relu`, `leaky_relu`, `leaky_relu_0.1`,
+        `sigmoid`, `tanh`, `swish`, `silu`, `identity`.
+      - `raf_trainable`: freeze the rational coefficients when `false`. Default `true`.
+      - `raf_input_scaling`: per-token min-max scaling to `[-3, 3]` before the RAF (RAFT
+        preprocessing). Default `false`.
+
+      **Parametric activations:** `prelu_init` (default `0.25`), `elu_alpha` (`1.0`),
+      `celu_alpha`, `swish_beta` (`1.0`), `leaky_relu_slope` (`0.01`), `pelu_alpha`, `mpelu_alpha`,
+      `mpelu_beta`, `felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`,
+      `preu_beta`, `softexp_alpha`, `maxout_pieces` (int ≥ 1, default `2`).
+    description_es: |
+      Parámetros anidados opcionales para activaciones aprendibles / paramétricas. Se ignoran para
+      activaciones sin estado. Todas las claves son opcionales.
+
+      **RAF (Rational Activation Function, arXiv:2208.14111):**
+      - `raf_degrees`: grados `[m, n]` del numerador/denominador Padé (ints ≥ 1). Por defecto `[5, 4]`.
+      - `raf_version`: forma del denominador, uno de `A` (por defecto, "segura"), `B`, `C`, `D`, `N`.
+      - `raf_approx_func`: objetivo de inicialización — `gelu` (por defecto), `relu`, `leaky_relu`,
+        `leaky_relu_0.1`, `sigmoid`, `tanh`, `swish`, `silu`, `identity`.
+      - `raf_trainable`: congela los coeficientes racionales cuando es `false`. Por defecto `true`.
+      - `raf_input_scaling`: escalado min-max por token a `[-3, 3]` antes del RAF (preprocesamiento
+        RAFT). Por defecto `false`.
+
+      **Activaciones paramétricas:** `prelu_init` (`0.25`), `elu_alpha` (`1.0`), `celu_alpha`,
+      `swish_beta` (`1.0`), `leaky_relu_slope` (`0.01`), `pelu_alpha`, `mpelu_alpha`, `mpelu_beta`,
+      `felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`, `preu_beta`,
+      `softexp_alpha`, `maxout_pieces` (int ≥ 1, `2`).
+    additionalProperties: false
+    properties:
+      raf_degrees:
+        type: array
+        items: {type: integer, minimum: 1}
+        minItems: 2
+        maxItems: 2
+        default: [5, 4]
+        examples: [[5, 4]]
+      raf_version:
+        type: string
+        enum: [A, B, C, D, N]
+        default: A
+      raf_approx_func:
+        type: string
+        enum: [gelu, relu, leaky_relu, leaky_relu_0.1, sigmoid, tanh, swish, silu, identity]
+        default: gelu
+      raf_trainable:
+        type: boolean
+        default: true
+      raf_input_scaling:
+        type: boolean
+        default: false
+      prelu_init:
+        type: number
+        default: 0.25
+        examples: [0.25]
+      elu_alpha:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      celu_alpha:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      swish_beta:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      leaky_relu_slope:
+        type: number
+        default: 0.01
+        examples: [0.01]
+      pelu_alpha:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      mpelu_alpha:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      mpelu_beta:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      felu_alpha:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      eelu_alpha:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      eelu_beta:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      pdelu_alpha:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      preu_alpha:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      preu_beta:
+        type: number
+        default: 1.0
+        examples: [1.0]
+      softexp_alpha:
+        type: number
+        default: 0.0
+        examples: [0.0]
+      maxout_pieces:
+        type: integer
+        minimum: 1
+        default: 2
+        examples: [2]

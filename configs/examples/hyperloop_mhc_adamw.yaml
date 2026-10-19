@@ -8,7 +8,6 @@ model:
     num_layers: 6
     num_loops: 3
     num_heads: 6
-    retention_heads: 6
     layer_pattern:
     - titan_attn
     - retnet
@@ -21,10 +20,6 @@ model:
   embedding:
     factorized:
       enabled: true
-  ffn_hidden_size: 1056
-  # Hyperloop Transformers (arXiv:2604.21254): loop-level hyper-connections
-  # over the looped middle block. Requires mhc.enabled=true and num_loops>=2.
-  # Here: 2 begin layers -> 2 looped middle layers x3 -> 2 end layers.
   mhc:
     enabled: true
     expansion_rate: 4
@@ -35,6 +30,11 @@ model:
     hyperloop_begin_layers: 2
     hyperloop_end_layers: 2
     hyperloop_res_parameterization: diagonal
+  ffn:
+    hidden_size: 1056
+  attention:
+    retnet:
+      heads: 6
 training:
   task: mlm
   num_epochs: 4

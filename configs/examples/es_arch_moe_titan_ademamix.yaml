@@ -6,23 +6,26 @@ model:
     num_layers: 10
     num_loops: 1
     num_heads: 12
-    retention_heads: 12
     layer_pattern:
     - titan_attn
     - retnet
-  num_experts: 8
-  top_k_experts: 2
-  use_bitnet: false
   norm:
     type: layer_norm
   embedding:
     conv:
       enabled: false
-  use_moe: true
-  ffn_hidden_size: 3072
   attention:
-    titan:
-      use_hope: true
+    retnet:
+      heads: 12
+  moe:
+    enabled: true
+    num_experts: 8
+    top_k: 2
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+  positional_encoding: hope
 training:
   task: mlm
   num_epochs: 4

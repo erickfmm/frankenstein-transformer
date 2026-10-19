@@ -58,8 +58,15 @@ properties:
     type: object
     title: Rescale
     title_es: Reescalado
-    description: Rescale images to this (height, width) before patch embedding.
-    description_es: Reescalar imágenes a este (alto, ancho) antes del patch embedding.
+    description: |-
+      Fallback target (height, width) when the top-level `image.image_size`
+      block is absent. For ViT configs `image.image_size` is required and takes
+      precedence; keep this only for dataset-only consumers.
+    description_es: |-
+      Objetivo de respaldo (alto, ancho) cuando el bloque top-level
+      `image.image_size` está ausente. Para configs ViT `image.image_size` es
+      obligatorio y tiene precedencia; mantener esto solo para consumidores
+      basados únicamente en el dataset.
     additionalProperties: false
     properties:
       height:

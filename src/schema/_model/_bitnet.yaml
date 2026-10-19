@@ -1,0 +1,65 @@
+type: object
+additionalProperties: false
+title: "BitNet (1.58-bit quantization)"
+title_es: "BitNet (cuantización de 1.58 bits)"
+description: |-
+  BitNet b1.58 ternary-weight quantization (Ma et al., arXiv:2402.17764).
+  When enabled, primary and gate `nn.Linear` layers are replaced by
+  ``BitLinear``: weights are quantized to ``{-1, 0, 1}`` via the
+  straight-through estimator and activations to int8, reducing weight memory
+  by roughly 10×.
+description_es: |-
+  Cuantización de pesos ternarios BitNet b1.58 (Ma et al., arXiv:2402.17764).
+  Cuando está habilitada, las capas `nn.Linear` primarias y de compuerta se
+  reemplazan por ``BitLinear``: los pesos se cuantizan a ``{-1, 0, 1}`` con el
+  estimador de paso directo y las activaciones a int8, reduciendo la memoria
+  de pesos ~10×.
+properties:
+  enabled:
+    type: boolean
+    title: "Enable BitNet"
+    title_es: "Habilitar BitNet"
+    description: |-
+      Enable ternary ``BitLinear`` weights for Q/K/V/O projections, FFN up/down,
+      embeddings, LM head, and recurrent-state gates. Best enabled from the
+      start of training; requires careful learning-rate tuning.
+    description_es: |-
+      Habilita pesos ternarios ``BitLinear`` para proyecciones Q/K/V/O, FFN
+      up/down, embeddings, cabeza LM y compuertas de estado recurrente. Se
+      recomienda habilitar desde el inicio del entrenamiento; requiere ajuste
+      cuidadoso del learning rate.
+    default: true
+    examples: [true, false]
+  routers:
+    type: boolean
+    title: "Quantize Routers/Scoring"
+    title_es: "Cuantizar Routers/Scoring"
+    description: |-
+      Also quantize routing/scoring projections (MoE router, MoD router, sparse
+      block-index/forecast projections, SparseK score net). Default ``false``
+      keeps them full-precision: top-k decisions are sensitive to ternary noise.
+      Requires `enabled: true`.
+    description_es: |-
+      Cuantiza también las proyecciones de ruteo/scoring (router MoE, router
+      MoD, índices/forecast de bloques sparse, red de score SparseK). Por
+      defecto ``false`` las mantiene en precisión completa: las decisiones
+      top-k son sensibles al ruido ternario. Requiere `enabled: true`.
+    default: false
+    examples: [false, true]
+  conv:
+    type: boolean
+    title: "Quantize Embedding Conv"
+    title_es: "Cuantizar Conv de Embedding"
+    description: |-
+      When enabled, also replace the factorized-embedding Conv1d pre-projection
+      with ``BitConv1d`` (ternary weights + int8 activations). Only applies when
+      `enabled: true` and `model.embedding.conv.enabled: true`. Default
+      ``false`` keeps the convolution full-precision.
+    description_es: |-
+      Cuando está habilitado, reemplaza también la Conv1d de pre-proyección del
+      embedding factorizado por ``BitConv1d`` (pesos ternarios + activaciones
+      int8). Solo aplica cuando `enabled: true` y
+      `model.embedding.conv.enabled: true`. Por defecto ``false`` mantiene la
+      convolución en precisión completa.
+    default: false
+    examples: [false, true]

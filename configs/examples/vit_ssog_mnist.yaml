@@ -26,12 +26,13 @@ model:
       max_offset: 1.0
       cold_init: true
       sigma_floor: 0.25
-    titan:
-      use_hope: false
-  use_moe: false
-  use_bitnet: false
-  ffn_activation: gelu
-  ffn_hidden_size: 512
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 512
+    activation: gelu
 image:
   image_size:
     height: 28

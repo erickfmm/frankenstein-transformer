@@ -247,7 +247,7 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     image_data = data.get("image", {}) or {}
     if not isinstance(image_data, dict):
         raise ValueError("image must be an object when provided")
-    vision_dataset_data = data.get("vision_dataset", data.get("dataset", {}) or {}) or {}
+    vision_dataset_data = data.get("vision_dataset", {}) or {}
     if not isinstance(vision_dataset_data, dict):
         raise ValueError("vision_dataset must be an object when provided")
     text_dataset_data = data.get("text_dataset", {}) or {}

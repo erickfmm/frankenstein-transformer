@@ -6,7 +6,6 @@ model:
     num_layers: 8
     num_loops: 1
     num_heads: 12
-    retention_heads: 12
     layer_pattern:
     - bigbird_attn
     - sparsek_attn
@@ -16,14 +15,19 @@ model:
     - sparsek_attn
     - bigbird_attn
     - sparsek_attn
-  use_bitnet: false
   norm:
     type: layer_norm
   embedding:
     conv:
       enabled: false
-  ffn_hidden_size: 3072
-  ffn_activation: gelu
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+    activation: gelu
+  attention:
+    retnet:
+      heads: 12
 training:
   task: mlm
   num_epochs: 4

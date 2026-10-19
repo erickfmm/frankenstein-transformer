@@ -7,21 +7,23 @@ model:
     num_loops: 1
     num_heads: 8
     num_kv_heads: 4
-    retention_heads: 8
     layer_pattern:
     - kda_attn
-  use_bitnet: false
   norm:
     type: layer_norm
   embedding:
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 2048
-  ffn_activation: gelu
   attention:
-    titan:
-      use_hope: false
+    retnet:
+      heads: 8
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 2048
+    activation: gelu
 training:
   task: mlm
   num_epochs: 4

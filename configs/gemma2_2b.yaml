@@ -11,7 +11,6 @@ model:
     - gqa_attn
     mode: decoder
     num_kv_heads: 4
-  use_bitnet: false
   norm:
     type: rms_norm
   embedding:
@@ -19,9 +18,13 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 9216
-  ffn_activation: gelu_tanh
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 9216
+    activation: gelu_tanh
 training:
   task: mlm
   batch_size: 1

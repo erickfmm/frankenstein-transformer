@@ -6,7 +6,6 @@ model:
     num_layers: 12
     num_loops: 2
     num_heads: 16
-    retention_heads: 8
     dropout: 0.1
     layer_pattern:
     - retnet
@@ -15,11 +14,6 @@ model:
     - mamba
     - titan_attn
     - ode
-  num_experts: 4
-  top_k_experts: 2
-  ode_solver: rk4
-  ode_steps: 4
-  use_bitnet: true
   norm:
     type: dynamic_tanh
   embedding:
@@ -27,12 +21,22 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: true
-  ffn_hidden_size: 2048
-  ffn_activation: silu
   attention:
-    titan:
-      use_hope: true
+    ode:
+      solver: rk4
+      steps: 4
+    retnet:
+      heads: 8
+  moe:
+    enabled: true
+    num_experts: 4
+    top_k: 2
+  bitnet:
+    enabled: true
+  ffn:
+    hidden_size: 2048
+    activation: silu
+  positional_encoding: hope
 training:
   task: mlm
   batch_size: 2

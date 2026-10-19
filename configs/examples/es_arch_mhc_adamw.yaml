@@ -6,7 +6,6 @@ model:
     num_layers: 6
     num_loops: 1
     num_heads: 6
-    retention_heads: 6
     layer_pattern:
     - standard_attn
     - retnet
@@ -14,19 +13,11 @@ model:
     - standard_attn
     - retnet
     - sigmoid_attn
-  num_experts: 4
-  top_k_experts: 2
-  ode_solver: rk4
-  ode_steps: 2
   norm:
     type: layer_norm
   embedding:
     factorized:
       enabled: true
-  ffn_hidden_size: 1536
-  # Manifold-Constrained Hyper-Connections (arXiv:2512.24880).
-  # Expands the residual stream by `expansion_rate` and constrains H[res]
-  # to the Birkhoff polytope (doubly stochastic) via Sinkhorn-Knopp.
   mhc:
     enabled: true
     expansion_rate: 4
@@ -34,6 +25,17 @@ model:
     gating_init: 0.01
     checkpoint: false
     full_prec_under_bitnet: true
+  moe:
+    num_experts: 4
+    top_k: 2
+  ffn:
+    hidden_size: 1536
+  attention:
+    ode:
+      solver: rk4
+      steps: 2
+    retnet:
+      heads: 6
 training:
   task: mlm
   num_epochs: 4

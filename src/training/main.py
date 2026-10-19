@@ -483,7 +483,7 @@ def _build_sbert_supervisor_child_argv(
     argv.extend(["--base-model", str(loaded.base_model)])
     argv.extend(["--output_dir", str(sbert_cfg.get("output_dir", "./output/sbert_base_model"))])
     argv.extend(["--batch_size", str(int(sbert_cfg.get("batch_size", 16)))])
-    argv.extend(["--epochs", str(int(sbert_cfg.get("epochs", 4)))])
+    argv.extend(["--epochs", str(int(sbert_cfg.get("num_epochs", sbert_cfg.get("epochs", 4))))])
     argv.extend(["--learning_rate", str(float(sbert_cfg.get("learning_rate", 2e-5)))])
     argv.extend(["--max_eval_samples", str(int(sbert_cfg.get("max_eval_samples", 10000)))])
     argv.extend(["--pooling_mode", str(sbert_cfg.get("pooling_mode", "mean"))])
@@ -494,7 +494,7 @@ def _build_sbert_supervisor_child_argv(
     gradient_accumulation_steps = sbert_cfg.get("gradient_accumulation_steps")
     if gradient_accumulation_steps is not None:
         argv.extend(["--gradient_accumulation_steps", str(int(gradient_accumulation_steps))])
-    max_grad_norm = sbert_cfg.get("max_grad_norm")
+    max_grad_norm = sbert_cfg.get("grad_clip_max_norm", sbert_cfg.get("max_grad_norm"))
     if max_grad_norm is not None:
         argv.extend(["--max_grad_norm", str(float(max_grad_norm))])
     dataset_name = str(sbert_cfg.get("dataset_name", "")).strip()
@@ -515,7 +515,7 @@ def _build_sbert_supervisor_child_argv(
     checkpoint_save_steps = sbert_cfg.get("checkpoint_save_steps")
     if checkpoint_save_steps is not None:
         argv.extend(["--checkpoint_save_steps", str(int(checkpoint_save_steps))])
-    max_seq_length = sbert_cfg.get("max_seq_length")
+    max_seq_length = sbert_cfg.get("max_length", sbert_cfg.get("max_seq_length"))
     if max_seq_length is not None:
         argv.extend(["--max_seq_length", str(int(max_seq_length))])
     if not bool(sbert_cfg.get("use_amp", True)):
@@ -556,7 +556,7 @@ def _build_sbert_supervisor_child_argv(
         optimizer_class = sbert_optimizer.get("optimizer_class")
         if isinstance(optimizer_class, str) and optimizer_class.strip():
             argv.extend(["--optimizer_class", str(optimizer_class).strip()])
-        optimizer_params = sbert_optimizer.get("parameters", {})
+        optimizer_params = sbert_optimizer.get("optimizer_kwargs", sbert_optimizer.get("parameters", {}))
         if isinstance(optimizer_params, dict):
             import json as _json
             for key, value in optimizer_params.items():

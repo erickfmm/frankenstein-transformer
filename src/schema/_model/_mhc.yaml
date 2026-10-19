@@ -55,6 +55,25 @@ description_es: |-
   ⚠️ mHC es incompatible con `use_mixture_of_depths` (el enrutamiento MoD de
   tokens opera sobre un flujo C-dimensional único, en conflicto con el flujo
   residual de n streams).
+
+  **Modo Hyperloop** (`hyperloop: true`, arXiv:2604.21254): en lugar del
+  cableado por subcapa anterior, las hiperconexiones se aplican una vez por
+  iteración de bucle sobre una pila particionada en ciclo medio
+  (inicio → intermedio en bucle → final), con parámetros por bucle, expansión
+  del flujo por copia y colapso por promedio, y `H^res` diagonal-sigmoide por
+  defecto. Ver la propiedad `hyperloop` más abajo. Hyperloop requiere
+  `enabled: true` y `dims.num_loops >= 2`; levanta la incompatibilidad con MoD
+  (las capas del bloque intermedio usan el camino C-dimensional estándar) pero
+  es incompatible con residuales AttnRes
+  (`residuals.type: full_attn|block_attn`).
+
+  **Combinación con AttnRes:** cuando `model.residuals.type` es `full_attn` o
+  `block_attn`, el campo `model.residuals.mhc_stream_mode` controla si la
+  atención de profundidad se aplica por stream o de forma conjunta.
+
+  **Checkpointing:** `checkpoint` (mHC) y `model.residuals.gradient_checkpoint`
+  son independientes; habilitar ambos maximiza el ahorro de memoria cuando se
+  combinan mHC y AttnRes.
 properties:
   enabled:
     type: boolean

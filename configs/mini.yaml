@@ -8,7 +8,6 @@ model:
     num_heads: 1
     layer_pattern:
     - standard_attn
-  use_bitnet: false
   norm:
     type: layer_norm
   embedding:
@@ -17,12 +16,13 @@ model:
       dim: 16
     conv:
       kernel: 32
-  use_moe: false
-  ffn_hidden_size: 512
-  ffn_activation: gelu
-  attention:
-    titan:
-      use_hope: false
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 512
+    activation: gelu
 training:
   task: mlm
   batch_size: 64

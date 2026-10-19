@@ -116,14 +116,6 @@
           source:
             const: hf_repo
 - if:
-    not:
-      required:
-      - base_model
-  then:
-    required:
-    - model_class
-    - model
-- if:
     properties:
       training:
         properties:

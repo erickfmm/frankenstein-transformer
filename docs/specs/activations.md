@@ -6,7 +6,7 @@
 
 The system supports **43 feed-forward activation functions** (40 elementwise
 plus 3 gated-FFN variants) across five families. Activations are selected via
-the `model.ffn_activation` schema field and dispatched at runtime by the
+the `model.ffn.activation` schema field and dispatched at runtime by the
 `get_activation` factory in `src/model/activation_function/factory.py`,
 mirroring the `get_norm` pattern used for normalization layers.
 
@@ -67,7 +67,7 @@ Mirrored in `src/schema/_model.yaml` (`ffn_activation.enum`) and
 
 The table below adds a plain-English description of **what each activation
 does** and **when you might choose it**. All names are accepted values for
-`model.ffn_activation`.
+`model.ffn.activation`.
 
 | Family | Name | What it does / When to use it |
 |---|---|---|
@@ -190,7 +190,7 @@ arXiv:2208.14111). A learnable Padé ratio `P(x)/Q(x)`:
 ## GLU Variants
 
 SwiGLU / GEGLU / ReGLU (Shazeer, arXiv:2002.05202) are gated FFN units, not
-elementwise activations. When `ffn_activation` is one of these, `HybridLayer`
+elementwise activations. When `ffn.activation` is one of these, `HybridLayer`
 swaps the dense/MoE FFN block for a `GatedFFN`:
 
 ```
@@ -210,7 +210,7 @@ built with the same projection class (BitLinear under BitNet).
 | `src/model/activation_function/learnable.py` | RAF, SwishTrainable, Maxout |
 | `src/model/activation_function/glu.py` | `GatedFFN`, `make_gated_ffn` |
 | `src/model/frankenstein_model.py` | `FrankensteinModelConfig.ffn_activation[_config]`, `HybridLayer` FFN wiring, `_validate_ffn_activation_config` |
-| `src/schema/_model.yaml` | `ffn_activation` enum + `ffn_activation_config` object |
+| `src/schema/_model.yaml` | `ffn.activation` enum + `ffn_activation_config` object |
 | `tests/test_activation_functions.py` | 45 tests: shape/gradient/range/correctness/factory/validation |
 | `configs/examples/activation_*.yaml` | Example presets (raf, swiglu, mish) |
 

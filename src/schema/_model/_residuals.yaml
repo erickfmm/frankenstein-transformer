@@ -276,6 +276,8 @@ properties:
       How the depth-wise attention interacts with mHC's ``n``-stream
       residual. Only relevant when both `residuals.type` is
       `full_attn` or `block_attn` AND `model.mhc.enabled` is `true`.
+      See also: `model.mhc.checkpoint` / `residuals.gradient_checkpoint`
+      (independent memory-saving switches).
 
       - `"independent"`: apply depth-wise attention **per stream**.
         Each of the ``n`` streams maintains its own attention weights
@@ -322,6 +324,8 @@ properties:
       the full per-block history (Block AttnRes) is too expensive.
 
       No effect when `residuals.type` is `standard` or `none`.
+      Independent from `model.mhc.checkpoint`; enable both when combining mHC
+      with AttnRes.
     description_es: |
       Si es `true`, envuelve el cómputo de atención de AttnRes en
       `torch.utils.checkpoint.checkpoint` para intercambiar memoria
@@ -331,5 +335,7 @@ properties:
       (Block AttnRes) es demasiado caro.
 
       Sin efecto cuando `residuals.type` es `standard` o `none`.
+      Independiente de `model.mhc.checkpoint`; habilitar ambos al combinar mHC
+      con AttnRes.
     default: false
     examples: [false]

@@ -163,7 +163,7 @@ properties:
     description_es: |
       Acumular sobre N mini-lotes. Lote efectivo = `batch_size × N`. Típico: 1–8. SBERT se beneficia de lotes efectivos más grandes.
     examples: [1, 4]
-  max_grad_norm:
+  grad_clip_max_norm:
     type: number
     title: "Max Gradient Norm"
     title_es: "Norma Máx de Gradiente"
@@ -172,7 +172,7 @@ properties:
     description_es: |
       Umbral de recorte de gradiente para SBERT. Típico: 0.5–2.0 (a menudo menor que MLM por sensibilidad de pérdida contrastiva). 0 = deshabilitado.
     examples: [1.0]
-  epochs:
+  num_epochs:
     type: integer
     title: "Epochs"
     title_es: "Épocas"
@@ -209,14 +209,21 @@ properties:
       Guardar checkpoint rodante cada N pasos. Típico: 1000–10000. 0 = deshabilitado (solo mejores checkpoints).
     examples: [1000]
   resume_from_checkpoint:
-    type: boolean
+    type: [string, "null"]
     title: "Resume from Checkpoint"
     title_es: "Reanudar desde Checkpoint"
     description: |
-      Resume from latest checkpoint in `output_dir/checkpoints/`. Restores optimizer, scheduler, and epoch state.
+      Resume SBERT training. `auto` resumes from the latest checkpoint in
+      `output_dir/checkpoints/`; `null` starts from scratch. The current SBERT
+      trainer only supports the latest-checkpoint form, so any non-null value
+      behaves like `auto`.
     description_es: |
-      Reanudar desde último checkpoint en `output_dir/checkpoints/`. Restaura optimizador, scheduler y estado de época.
-    examples: [false]
+      Reanuda el entrenamiento SBERT. `auto` reanuda desde el último checkpoint
+      en `output_dir/checkpoints/`; `null` empieza desde cero. El trainer SBERT
+      actual solo soporta la forma de último checkpoint, así que cualquier
+      valor no nulo se comporta como `auto`.
+    default: null
+    examples: [auto, null]
   learning_rate:
     type: number
     title: "Learning Rate"
@@ -227,7 +234,7 @@ properties:
       LR inicial para SBERT. Típico: 1e-5 a 1e-4. Fine-tuning: 1e-5–2e-5; desde cero: 5e-5–1e-4. 2e-5 funciona bien para fine-tuning.
     examples: [2.0e-5]
   max_train_samples:
-    type: integer
+    type: [integer, "null"]
     title: "Max Training Samples"
     title_es: "Máx Muestras de Entrenamiento"
     description: |
@@ -236,7 +243,7 @@ properties:
       Limitar entrenamiento a N muestras. Útil para debugging o experimentos rápidos. Solo conjunto de entrenamiento.
     examples: [100000]
   max_eval_samples:
-    type: integer
+    type: [integer, "null"]
     title: "Max Eval Samples"
     title_es: "Máx Muestras de Evaluación"
     description: |
@@ -244,8 +251,8 @@ properties:
     description_es: |
       Limitar evaluación a N muestras. Típico: 1000–10000. Acelera eval con conjuntos de validación grandes.
     examples: [10000]
-  max_seq_length:
-    type: integer
+  max_length:
+    type: [integer, "null"]
     title: "Max Sequence Length"
     title_es: "Longitud Máx de Secuencia"
     description: |
@@ -337,39 +344,10 @@ properties:
       - optimizer_class
     properties:
       optimizer_class:
-        type: string
-        title: "Optimizer Class"
-        title_es: "Clase de Optimizador"
-        description: "Optimizer algorithm from the project's optimizer registry. All optimizers subclass torch.optim.Optimizer. When specified, this optimizer replaces the default sentence-transformers AdamW. The optimizer class is passed to fit() as optimizer_cls. Supported values: turbo_muon (accelerated muon with Nesterov-spectral normalization), adamw (Adam with decoupled weight decay), lion (sign-based, memory efficient), muon (layer-wise momentum), radam (rectified Adam), adan (Nesterov-accelerated adaptive), adopt (momentum-based adaptive), ademamix (AdaMix momentum), mars_adamw (MARS regularized), cautious_adamw (gradient masking), lamb (LARS-style large batch), schedulefree_adamw (no LR schedule), shampoo (second-order), soap (sparse), anon (Adaptivity Non-restricted Optimizer with tunable adaptivity via gamma), apollo (low-rank projected gradient scaling), apollo_mini (rank-1 APOLLO tensor scaling), q_apollo (quantized APOLLO states), sgd_momentum (classic SGD), adafactor (memory-efficient), prodigy (adaptive, minimal tuning), sophia (Hessian-aware), galore_adamw (GaLore gradient compression)."
-        description_es: "Algoritmo de optimización del registro de optimizadores del proyecto. Todos los optimizadores heredan de `torch.optim.Optimizer`. Cuando se especifica, este optimizador reemplaza el AdamW por defecto de sentence-transformers. La clase de optimizador se pasa a `fit()` como `optimizer_cls`. Valores soportados: `turbo_muon` (Muon acelerado con normalización espectral de Nesterov), `adamw` (Adam con weight decay desacoplado), `lion` (basado en signo y eficiente en memoria), `muon` (momentum por capa), `radam` (Rectified Adam), `adan` (adaptativo acelerado por Nesterov), `adopt` (adaptativo basado en momentum), `ademamix` (momentum tipo AdaMix), `mars_adamw` (regularizado con MARS), `cautious_adamw` (enmascarado de gradientes), `lamb` (estilo LARS para lotes grandes), `schedulefree_adamw` (sin scheduler de LR), `shampoo` (de segundo orden), `soap` (disperso), `anon` (Adaptivity Non-restricted Optimizer con adaptividad ajustable vía gamma), `apollo` (escalado de gradiente proyectado de bajo rango), `apollo_mini` (escalado APOLLO tensorial rango-1), `q_apollo` (estados APOLLO cuantizados), `sgd_momentum` (SGD clásico), `adafactor` (eficiente en memoria), `prodigy` (adaptativo con ajuste mínimo), `sophia` (consciente del Hessiano), `galore_adamw` (compresión de gradiente GaLore)."
-        enum:
-          - sgd_momentum
-          - adamw
-          - adafactor
-          - galore_adamw
-          - prodigy
-          - lion
-          - sophia
-          - muon
-          - turbo_muon
-          - radam
-          - adan
-          - adopt
-          - ademamix
-          - mars_adamw
-          - cautious_adamw
-          - lamb
-          - schedulefree_adamw
-          - shampoo
-          - soap
-          - anon
-          - apollo
-          - apollo_mini
-          - q_apollo
-        examples: [turbo_muon, adamw, lion, anon]
-      parameters:
+        $ref: "_optimizer.yaml#/properties/optimizer_class"
+      optimizer_kwargs:
         type: object
-        title: "Optimizer Parameters"
+        title: "Optimizer Kwargs"
         title_es: "Parámetros del Optimizador"
         description: "Optimizer-specific hyperparameters passed to the optimizer constructor. Each optimizer supports different parameters. Common parameters: lr (learning rate, overridden by learning_rate field), momentum (for SGD/muon/turbo_muon), nesterov (for muon/turbo_muon), ns_steps (Nesterov-spectral steps for muon/turbo_muon), ns_eps (Nesterov-spectral epsilon for muon/turbo_muon), cautious_clip (for cautious_adamw), rho/update_k (for sophia), d_coef (for prodigy), rank/update_proj_gap (for galore_adamw), beta2_decay/clip_threshold/eps1/eps2 (for adafactor). Parameters are passed as key-value pairs."
         description_es: "Hiperparámetros específicos del optimizador que se pasan al constructor del optimizador. Cada optimizador soporta parámetros distintos. Parámetros comunes: `lr` (tasa de aprendizaje, sobrescrita por el campo `learning_rate`), `momentum` (para `sgd_momentum`/`muon`/`turbo_muon`), `nesterov` (para `muon`/`turbo_muon`), `ns_steps` (pasos espectrales de Nesterov para `muon`/`turbo_muon`), `ns_eps` (epsilon espectral de Nesterov para `muon`/`turbo_muon`), `cautious_clip` (para `cautious_adamw`), `rho`/`update_k` (para `sophia`), `d_coef` (para `prodigy`), `rank`/`update_proj_gap` (para `galore_adamw`), `beta2_decay`/`clip_threshold`/`eps1`/`eps2` (para `adafactor`). Los parámetros se pasan como pares clave-valor."

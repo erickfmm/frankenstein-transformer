@@ -11,10 +11,13 @@ model:
   positional_encoding: alibi
   positional_encoding_parameters:
     alibi: {}
-  use_bitnet: false
-  use_moe: false
-  ffn_hidden_size: 128
-  ffn_activation: gelu
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 128
+    activation: gelu
 training:
   task: mlm
   num_epochs: 1

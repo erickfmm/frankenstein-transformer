@@ -10,15 +10,15 @@ training:
       similarity: similarity
     output_dir: "./output/es_sbert_maria_max"
     batch_size: 12
-    epochs: 4
     warmup_steps: 800
     evaluation_steps: 4000
-    learning_rate: 2e-5
+    learning_rate: 2.0e-5
     max_train_samples: 500000
     max_eval_samples: 10000
-    max_seq_length: 512
     pooling_mode: max
     trust_remote_code: false
     use_amp: false
     resample_balanced: true
     resample_std: 0.3
+    num_epochs: 4
+    max_length: 512

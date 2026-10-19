@@ -6,7 +6,6 @@ model:
     num_layers: 8
     num_loops: 1
     num_heads: 12
-    retention_heads: 12
     layer_pattern:
     - nsa_attn
     - retnet_attn
@@ -16,11 +15,16 @@ model:
     - retnet_attn
     - nsa_attn
     - retnet_attn
-  use_bitnet: false
   embedding:
     conv:
       enabled: false
-  ffn_hidden_size: 3072
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+  attention:
+    retnet:
+      heads: 12
 training:
   task: mlm
   num_epochs: 4

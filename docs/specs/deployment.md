@@ -70,7 +70,7 @@ automatically honours the schema flags:
 
 | Schema flag | Default | What it controls |
 |---|---|---|
-| `use_bitnet` | `true` (FrankensteinModelConfig) / `false` (example) | Q/K/V/O, FFN up/down, embeddings `proj`, LM head, and all recurrent-state **gates** (alpha/beta/forget/erase/write/merge/gk) → `BitLinear` |
+| `bitnet.enabled` | `true` (FrankensteinModelConfig) / `false` (example) | Q/K/V/O, FFN up/down, embeddings `proj`, LM head, and all recurrent-state **gates** (alpha/beta/forget/erase/write/merge/gk) → `BitLinear` |
 | `bitnet_routers` | `false` | When `true`, also quantizes routing/scoring: MoE router, MoD router, sparse block-index/forecast, top-k score nets. Default `false` keeps them full-precision for routing stability |
 | `use_bitnet_conv` | `false` | When `true` (and `use_embedding_conv`), replaces the embedding `Conv1d` with `BitConv1d`. Off by default; the conv runs over the reduced embedding stream where ternary noise can be costly |
 
@@ -121,7 +121,7 @@ A deployment artifact directory contains:
 |---|---|
 | `config.json` | Model architecture configuration (JSON) |
 | `model_quantized.pt` | Quantized model weights (PyTorch format, ternary-packed) |
-| `deployment_info.json` | Metadata: `use_bitnet`, `bitnet_routers`, `use_bitnet_conv`, `baked_ternary_weights`, `baked_bitlinear_layers`, `quantization` description |
+| `deployment_info.json` | Metadata: `bitnet.enabled`, `bitnet_routers`, `use_bitnet_conv`, `baked_ternary_weights`, `baked_bitlinear_layers`, `quantization` description |
 
 `deployment_info.json` reflects the **actual** quantization flags rather
 than assuming BitNet unconditionally. For `--format standard`, weights are

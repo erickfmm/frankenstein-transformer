@@ -54,7 +54,8 @@ properties:
             patrones de enrutamiento distintos.
         examples: [8]
       routing_dim:
-        type: integer
+        type: [integer, "null"]
+        default: null
         title: "GMA Routing Dimension"
         title_es: "Dimensión de Enrutamiento GMA"
         description: |-

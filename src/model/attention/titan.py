@@ -82,9 +82,8 @@ class TitanAttention(nn.Module):
         self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
 
-        positional_encoding = str(getattr(config, "positional_encoding", "rope")).lower()
-        if positional_encoding is None:
-            positional_encoding = "hope" if bool(getattr(config, "use_hope", True)) else "rope"
+        positional_encoding = getattr(config, "positional_encoding", None) or "rope"
+        positional_encoding = str(positional_encoding).lower()
 
         self.pos_encoder = pos_encoder
         self.pe_type = positional_encoding

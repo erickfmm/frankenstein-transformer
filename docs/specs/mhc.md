@@ -131,7 +131,7 @@ true`.
 
 ## Constraints
 
-- mHC is **incompatible with `use_mixture_of_depths`** (MoD token routing
+- mHC is **incompatible with `mixture_of_depths.enabled`** (MoD token routing
   operates on a single `C`-dim stream, conflicting with the n-stream residual).
   A `ValueError` is raised if both are enabled.
 - The `φ_l` projection stays full-precision under BitNet by default
@@ -192,7 +192,7 @@ Wiring:
   finally averages the streams before the end slice.
 - `HybridLayer` disables its per-layer `mhc_attn`/`mhc_ffn` under Hyperloop
   (layers run the standard C-dim path), which **restores
-  `use_mixture_of_depths` compatibility** — MoD token routing lives inside
+  `mixture_of_depths.enabled` compatibility** — MoD token routing lives inside
   middle-block layers and never sees the n-stream residual.
 - `FrankensteinViT` wires the same loop-level path in `_run_encoder`.
 

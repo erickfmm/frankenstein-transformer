@@ -129,7 +129,7 @@ When `use_mixture_of_depths=true`, each transformer block scores tokens with a l
 
 | Field | Type | Range | Description |
 |---|---|---|---|
-| `use_mixture_of_depths` | bool | — | Enable MoD token routing |
+| `mixture_of_depths.enabled` | bool | — | Enable MoD token routing |
 | `mixture_of_depths_capacity_ratio` | float | (0, 1] | Fraction of tokens updated per layer |
 | `mixture_of_depths_router_aux_loss_weight` | float | ≥ 0 | Auxiliary loss weight for router regularization |
 
@@ -202,7 +202,7 @@ mixers to opt out.
 | Hyperbolic Rotary PE | `hope` | Rotation | Lorentz rotations with hyperbolic functions; monotonic attention decay with distance; RoPE is a special case | `hope_base` (10000), `hope_damping` (0.01) |
 | No Positional Encoding | `nope` | None | Explicit no-PE; model learns position implicitly from causal mask; outperforms explicit PE on length generalization | — |
 | Attention with Linear Biases | `alibi` | Score bias | Static distance-proportional penalty on attention scores; enables length extrapolation | `alibi_num_heads` (= `num_heads`) |
-| Bayesian Attention Mechanism | `bam` | Score bias | Generalized-Gaussian relative-position bias; learnable per-head shape (β) and scale (α); recovers ALiBi at β=1; optional SSMax logit rescale | `bam_theta_init` (0.0), `bam_learn_mu` (false), `bam_eps` (1e-5), `use_ssmax` (false), `ssmax_s_init` (1.0) |
+| Bayesian Attention Mechanism | `bam` | Score bias | Generalized-Gaussian relative-position bias; learnable per-head shape (β) and scale (α); recovers ALiBi at β=1; optional SSMax logit rescale | `bam_theta_init` (0.0), `bam_learn_mu` (false), `bam_eps` (1e-5), `ssmax.enabled` (false), `ssmax_s_init` (1.0) |
 | Parabolic Position Encoding | `pape` | Q/K aug. | Parabolic basis functions concatenated to Q/K; vision-centric, $n$-D, extrapolatable | `pape_num_parabolas` (4), `pape_num_positions` (1) |
 | PaPE Efficient | `pape_efficient` | Q/K aug. | Pure-PyTorch PaPE; no custom Triton kernels, same math | same as `pape` |
 | PaPE Rotation-Invariant | `pape_ri` | Q/K aug. | Rotation-invariant PaPE (PaPE-RI) | `pape_rotation_invariant` (false) |
@@ -214,7 +214,7 @@ mixers to opt out.
 The legacy `use_hope` boolean is deprecated and mapped to the new enum
 (`use_hope=True` → `hope`, `False` → `rope`). The ViT `pos_embedding_type`
 field is unified with this enum (`learned_1d` → `learned_absolute`).
-The top-level `use_ssmax` flag enables Scalable Softmax (SSMax), a transversal
+The top-level `ssmax.enabled` flag enables Scalable Softmax (SSMax), a transversal
 logit rescale `s·ln(n)` (learnable per-head `s`, init `ssmax_s_init`) that
 counteracts attention fading and composes with any PE in the enum.
 Full mathematical formulations are in
@@ -222,12 +222,12 @@ Full mathematical formulations are in
 
 ## MoE FFN Routing
 
-When `use_moe=true`, standard FFN layers are replaced with Mixture of Experts routing. A learned router selects `top_k_experts` from `num_experts` specialized FFN sub-networks per token.
+When `use_moe=true`, standard FFN layers are replaced with Mixture of Experts routing. A learned router selects `moe.top_k` from `moe.num_experts` specialized FFN sub-networks per token.
 
 | Field | Type | Range | Description |
 |---|---|---|---|
-| `use_moe` | bool | — | Enable MoE in FFN layers |
-| `num_experts` | int | ≥ 1 | Total expert count (typical: 4–8) |
-| `top_k_experts` | int | ≥ 1 | Experts activated per token (typical: 1–2) |
-| `ffn_hidden_size` | int | ≥ 1 | Hidden size per expert FFN |
-| `ffn_activation` | enum | `silu`, `gelu` | FFN non-linearity |
+| `moe.enabled` | bool | — | Enable MoE in FFN layers |
+| `moe.num_experts` | int | ≥ 1 | Total expert count (typical: 4–8) |
+| `moe.top_k` | int | ≥ 1 | Experts activated per token (typical: 1–2) |
+| `ffn.hidden_size` | int | ≥ 1 | Hidden size per expert FFN |
+| `ffn.activation` | enum | `silu`, `gelu` | FFN non-linearity |

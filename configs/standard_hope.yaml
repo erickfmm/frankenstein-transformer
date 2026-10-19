@@ -8,7 +8,6 @@ model:
     num_heads: 12
     layer_pattern:
     - titan_attn
-  use_bitnet: false
   norm:
     type: layer_norm
   embedding:
@@ -16,12 +15,14 @@ model:
       enabled: false
     conv:
       enabled: false
-  use_moe: false
-  ffn_hidden_size: 3072
-  ffn_activation: gelu
-  attention:
-    titan:
-      use_hope: true
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+    activation: gelu
+  positional_encoding: hope
 training:
   task: mlm
   batch_size: 4
