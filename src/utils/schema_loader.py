@@ -34,6 +34,10 @@ def resolve_schema(schema_path: str | Path) -> Dict[str, Any]:
 
 
 def _resolve_refs(node: Any, base_dir: Path) -> Any:
+    # NOTE: this resolver returns the referenced document (or fragment) and
+    # drops any sibling keywords next to ``$ref``. Draft 2020-12 permits
+    # siblings (they are ANDed), so do not attach metadata/constraints to a
+    # ``$ref`` object unless this resolver is upgraded to merge them.
     if isinstance(node, dict):
         if "$ref" in node:
             ref = node["$ref"]

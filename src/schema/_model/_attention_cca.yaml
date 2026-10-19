@@ -224,7 +224,3 @@ properties:
           `ccgqa_num_kv_heads` par y `ccgqa_kv_latent_rank` par.
           Por defecto: True.
         examples: [true]
-
-      # =====================================================================
-      # MiniMax Sparse Attention (arXiv:2606.13392) and SparDA (arXiv:2606.04511)
-      # =====================================================================

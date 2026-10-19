@@ -96,8 +96,3 @@ properties:
           **Impacto:** Afecta qué tokens colisionan en el espacio hash. Usar 42 para reproducibilidad
           reproducibility. Change if adverse collisions are suspected.
         examples: [42]
-
-      # =====================================================================
-      # Latent / KV-compression attention family (arXiv:2506.09342, 2605.15250,
-      # 2603.02188, 2603.30033, 2602.21371, 2506.17286, 2505.13544)
-      # =====================================================================

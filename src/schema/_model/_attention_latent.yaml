@@ -265,7 +265,3 @@ properties:
           por defecto es `mtla_merge_factor`. Stride menor = ventanas
           superpuestas; stride mayor = no superpuestas.
         examples: [2]
-
-      # =====================================================================
-      # Compressed Convolutional Attention (CCA) and CCGQA (arXiv:2510.04476)
-      # =====================================================================
