@@ -1,0 +1,8 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":24,"wrappingWidth":240}}}%%
+flowchart LR
+  subgraph dense["Dense attention: full pairwise interactions, O(n²) cost"]
+    standard["Standard<br/>softmax(QK<sup>T</sup>/√d)V"]
+    sigmoid["Sigmoid<br/>σ(QK<sup>T</sup>)V"]
+    gqa["GQA<br/>shared K, V heads"]
+    standard ~~~ sigmoid ~~~ gqa
+  end

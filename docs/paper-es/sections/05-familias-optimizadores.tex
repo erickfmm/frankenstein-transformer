@@ -1,24 +1,11 @@
 \section{Familias de Optimizadores y Dinámicas de Entrenamiento}
 \label{sec:optimizer-families}
 
-La optimización de arquitecturas transformer altamente parametrizadas presenta desafíos significativos debido a paisajes de pérdida no convexos, puntos de silla y heterogeneidad de bloques entre grupos de parámetros. Este sistema aborda estos desafíos mediante un marco unificado que soporta veintitrés familias de optimizadores que abarcan seis categorías algorítmicas: (1) líneas base clásicas (SGD, AdamW), (2) momento avanzado y reducción de varianza (Adan, ADOPT, AdEMAMix, MARS, Cautious), (3) variantes eficientes en memoria (Adafactor, GaLore, Lion, APOLLO, APOLLO-Mini, Q-APOLLO), (4) métodos sin programación y sin parámetros (Schedule-Free AdamW, Prodigy) más escalado de lotes grandes mediante LAMB, (5) conscientes de curvatura y segundo orden (Sophia, Shampoo, SOAP), (6) orientados a geometría (Muon, Turbo-Muon), y (7) optimizadores con adaptabilidad ajustable (Anon). Las descripciones algorítmicas detalladas, pseudocódigo y una tabla comparativa de memoria/complejidad para todos los optimizadores se proporcionan en el Apéndice~\ref{sec:annex-optimizers}.
+Optimizar arquitecturas transformer grandes se complica por paisajes no convexos, puntos de silla y grupos de parámetros heterogéneos. El sistema soporta veintitrés familias de optimizadores en siete categorías: líneas base clásicas (SGD con momentum, AdamW, RAdam); momentum y reducción de varianza (Adan, ADOPT, AdEMAMix, MARS, Cautious AdamW); métodos eficientes en memoria y de bajo rango (Adafactor, GaLore, Lion, APOLLO, APOLLO-Mini, Q-APOLLO); métodos sin programación y sin parámetros (Schedule-Free AdamW, Prodigy) con escalado para lotes grandes (LAMB); métodos conscientes de la curvatura y de segundo orden (Sophia, Shampoo, SOAP); métodos orientados a geometría (Muon, Turbo-Muon); y optimizadores de adaptividad ajustable (Anon). Los algoritmos, el pseudocódigo y las comparaciones de memoria y complejidad se recopilan en el Apéndice~\ref{sec:annex-optimizers}.
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=1.1cm and 1.0cm]
-\node[box, fill=blue!8] (start) {Elegir objetivo de optimizador};
-\node[box, fill=green!8, below left=of start, xshift=-1.5cm] (baseline) {Línea base confiable\\AdamW / RAdam};
-\node[box, fill=yellow!12, below=of start] (memory) {Menor memoria de optimizador\\Adafactor / GaLore / Lion};
-\node[box, fill=orange!12, below right=of start, xshift=1.5cm] (advanced) {Agresivo o estructurado\\Adan, ADOPT, Sophia,\\Shampoo, SOAP, Muon};
-\node[box, fill=red!8, below=of memory] (route) {Grupos con prefijo de esquema\\LR, decay de peso, betas, eps};
-\draw[line] (start) -- (baseline);
-\draw[line] (start) -- (memory);
-\draw[line] (start) -- (advanced);
-\draw[line] (baseline) -- (route);
-\draw[line] (memory) -- (route);
-\draw[line] (advanced) -- (route);
-\end{tikzpicture}}
-\caption{Selección de optimizador en la práctica: la clase determina la regla de actualización, mientras que el esquema controla cómo se aplican los hiperparámetros entre embeddings, normas, bloques recurrentes, bloques de atención y otros parámetros.}
+\fitfigure{\includegraphics{../paper/figures/optimizer-routing.pdf}}
+\caption{Selección de optimizador en la práctica: la clase determina la regla de actualización, mientras que el esquema controla cómo se aplican los hiperparámetros en embeddings, capas de normalización, bloques de atención y el resto de parámetros.}
 \label{fig:optimizer-routing}
 \end{figure}
-

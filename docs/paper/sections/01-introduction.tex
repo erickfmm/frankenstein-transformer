@@ -2,64 +2,32 @@
 
 \subsection{Motivation and Problem Statement}
 
-Transformer architectures have fundamentally transformed the landscape of sequence modeling across natural language processing \citep{vaswani_attention_2017}, computer vision, and computational biology. The success of models such as BERT \citep{devlin_bert_2019}, GPT, and their variants has established the transformer as the de facto standard for representation learning in deep learning. However, the rapid proliferation of architectural innovations presents significant practical challenges for researchers and practitioners.
+Transformer architectures are the dominant paradigm for sequence modeling in natural language processing \citep{vaswani_attention_2017}, computer vision, and computational biology, with models such as BERT \citep{devlin_bert_2019} and GPT establishing the standard for representation learning. The field has since diversified rapidly: recurrent and retentive blocks, sparse attention, gated mechanisms, latent projections, memory-augmented layers, fast-weight rules, and continuous-depth formulations each address a different limitation of dense attention, while the optimizer landscape has expanded beyond AdamW with variance-reduction, memory-efficient, schedule-free, second-order, and low-rank methods \citep{child_sparse_transformer_2019,sun_retentive_2023,gu_mamba_2023,behrouz_titans_2025,ramapuram_theory_2024,xie_adan_2022,pagliardini_ademamix_2024,yuan_mars_2024,shazeer_adafactor_2018,zhao_galore_2024,defazio_road_2024,gupta_shampoo_2018,vyas_soap_2024}.
 
-Recent years have witnessed an explosion of alternative attention and sequence-mixing mechanisms, each addressing specific limitations of standard softmax attention: quadratic computational complexity \citep{child_sparse_transformer_2019}, memory-efficient inference requirements \citep{sun_retentive_2023,gu_mamba_2023}, content-based selective state management \citep{behrouz_titans_2025}, and hardware-aware optimizations \citep{ramapuram_theory_2024}. Simultaneously, the optimization literature has diversified beyond classical AdamW, introducing variance-reduction techniques \citep{xie_adan_2022,pagliardini_ademamix_2024,yuan_mars_2024}, memory-efficient variants \citep{shazeer_adafactor_2018,zhao_galore_2024}, schedule-free approaches \citep{defazio_road_2024}, and second-order preconditioning methods \citep{gupta_shampoo_2018,vyas_soap_2024}.
+The practical consequence is a fragmented ecosystem. Comparing sequence mixers or optimizers under identical training conditions requires re-implementing each variant, wiring it into a training pipeline, and maintaining the result across framework changes. This effort hinders reproducibility, slows scientific progress, and raises the barrier to entry for new researchers.
 
-The practical consequence is a fragmented research ecosystem where experimental comparison across architectures and optimizers requires significant engineering effort. Researchers must implement and debug multiple variants from scratch, ensure consistent training pipelines, and manage complex hyperparameter spaces. This fragmentation hampers reproducibility, slows scientific progress, and increases the barrier to entry for new researchers.
+\subsection{Proposal and Contributions}
 
-This work addresses these challenges through a unified, configuration-driven experimentation toolkit available at \url{https://github.com/erickfmm/frankenstein-transformer} that provides:
+We propose \textbf{Frankenstein Transformer} (\url{https://github.com/erickfmm/frankenstein-transformer}), a configuration-driven toolkit that treats architecture, optimizer, and training choices as a single validated document. The project provides:
+
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Schema-First Design}: A strict, validated configuration contract that enforces reproducibility while supporting forty-three sequence mixer variants across eight families and twenty-three optimizer families.
-    \item \textbf{Architecture Agnostic Training}: Common training infrastructure supporting dense attention baselines (standard, sigmoid), recurrent alternatives (RetNet, Mamba, ODE-style blocks), adaptive depth routing (Mixture-of-Depths) \citep{zhu2026mixtureofdepthsattention}, conditional memory blocks (Engram) \citep{cheng2026conditionalmemoryscalablelookup}, manifold-constrained residual connections (mHC) \citep{xie_mhc_2025}, sparse attention patterns (Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA), gated mechanisms (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax), and fast-weight attention (Falcon-1/2/3 and Falcon-1A/2A/3A) \citep{zhang_falcon_2026}.
-    \item \textbf{Optimizer Routing Framework}: Prefixed hyperparameter groups enabling fine-grained control over embeddings, normalization layers, recurrent blocks, attention blocks, and other parameter subsets across diverse optimizers, including the APOLLO family (Apollo, Apollo-Mini, Q-Apollo) \citep{zhu2025apollosgdlikememoryadamwlevel}.
-    \item \textbf{End-to-End Workflows}: Integrated deployment via quantization (ternary weight packing, INT8 activations) and sentence-embedding capabilities inspired by SBERT \citep{reimers_sentence-bert_2019}.
-    \item \textbf{Interactive Configuration}: Web-based interface providing schema-driven form rendering, real-time validation, and CLI command generation.
-    \item \textbf{Reliability Tooling}: Comprehensive automated testing with unit-test suites, YAML preset validation, and CI automation across supported Python versions.
+    \item \textbf{Schema-first design}: a strict YAML contract supporting forty-three sequence mixers across eight families and twenty-three optimizer families, enforced before training begins.
+    \item \textbf{Architecture-agnostic training}: one pipeline for dense baselines, recurrent and retentive blocks, sparse patterns, gated mechanisms, latent compression, conditional memory, fast-weight attention, and geometric-field attention, with encoder and decoder modes \citep{zhu2026mixtureofdepthsattention,cheng2026conditionalmemoryscalablelookup,xie_mhc_2025,zhang_falcon_2026,pisoni_ssog_2026}.
+    \item \textbf{Optimizer routing}: prefixed hyperparameter groups that control embeddings, normalization layers, attention blocks, and remaining parameters independently for each optimizer family \citep{zhu2025apollosgdlikememoryadamwlevel}.
+    \item \textbf{End-to-end workflows}: training (including sentence-embedding objectives), deployment and export (quantized, standard, HuggingFace Transformers, and BitNet GGUF formats), inference, and a schema-driven web builder inspired by SBERT-style workflows \citep{reimers_sentence-bert_2019}.
+    \item \textbf{Vision support}: a Vision Transformer model class covering masked patch prediction, classification, and segmentation under the same mixer and optimizer infrastructure.
+    \item \textbf{Validation tooling}: unit tests, YAML preset validation, and continuous integration across supported Python versions.
 \end{enumerate}
 
-The project command surface is:
-\begin{center}
-\texttt{frankenstein-transformer}
-\end{center}
-with subcommands for encoder and decoder workflows:
-\texttt{train} (including SBERT-style sentence-embedding objectives via \texttt{training.task: sbert}), \texttt{deploy} (quantized/standard artifacts plus HuggingFace Transformers and BitNet GGUF export formats), \texttt{infer}, and \texttt{web-server}.
-
-The \texttt{web-server} command launches a Streamlit-based configuration builder that provides:
-\begin{itemize}[leftmargin=*]
-    \item Schema-driven form fields with parameter titles and detailed descriptions
-    \item Real-time tooltips and help text for each configuration option
-    \item Live YAML preview and download functionality
-    \item Generated CLI commands for training, deployment, inference, and SBERT workflows
-\end{itemize}
-
-This interactive interface serves as an alternative to manual YAML editing, improving usability for users exploring available configuration options and understanding their impact on model behavior and training dynamics.
-
-\subsection{Contributions}
-
-This work makes the following primary contributions:
-\begin{enumerate}[leftmargin=*]
-    \item \textbf{Unified Configuration Schema}: A YAML-based schema contract with strict validation that supports forty-three sequence mixer variants across eight families (dense, recurrent, sparse, gated, latent, memory-augmented, fast-weight, and geometric-field), alongside adaptive depth and conditional memory controls, while enforcing reproducibility through \texttt{additionalProperties: false} constraints.
-    \item \textbf{Comprehensive Architecture Support}: Implementation of modern transformer variants including standard softmax attention \citep{vaswani_attention_2017}, sigmoid attention \citep{ramapuram_theory_2024}, RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, ODE-style continuous transformers \citep{zhang_continuous_2021}, Titans memory-augmented attention \citep{behrouz_titans_2025}, Engram conditional memory layers \citep{cheng2026conditionalmemoryscalablelookup}, Mixture-of-Depths token routing \citep{zhu2026mixtureofdepthsattention}, sparse attention mechanisms \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}, gated attention architectures \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}, and fast-weight attention for continual learning \citep{zhang_falcon_2026}. System supports both encoder-mode training with bidirectional attention for masked language modeling (MLM) and decoder-mode training with causal masking for autoregressive next-token prediction.
-    \item \textbf{Optimizer Routing Framework}: Prefixed hyperparameter system enabling per-parameter-group control across twenty-three optimizers, including the adaptivity-tunable Anon \citep{anon2026anon}, variance-reduction methods (MARS, Adan, AdEMAMix, Cautious AdamW), memory-efficient variants (Adafactor, GaLore, Lion), schedule-free approaches (Schedule-Free AdamW), curvature-aware methods (Sophia), second-order preconditioners (Shampoo, SOAP), orthogonality-oriented optimizers (Muon, Turbo-Muon), large-batch scaling (LAMB), and the APOLLO family (Apollo, Apollo-Mini, Q-Apollo) \citep{zhu2025apollosgdlikememoryadamwlevel}.
-    \item \textbf{Quantization and Deployment}: Integrated deployment pipeline supporting ternary weight packing and INT8 activation quantization with size estimates following $1.58$-bit storage approximation.
-    \item \textbf{Sentence-Embedding Workflows}: SBERT-inspired training and inference pipelines supporting similarity scoring, retrieval, clustering, and persistent embedding export.
-    \item \textbf{Interactive Configuration Interface}: Streamlit-based web server providing schema-driven form generation, real-time validation, inline documentation, and CLI command generation.
-    \item \textbf{Automated Validation Pipeline}: Continuous integration and expanded unit testing that verify model training paths, optimizer/schema integration, and YAML example compatibility.
-\end{enumerate}
+The command surface is \texttt{frankenstein-transformer}, with four subcommands: \texttt{train}, \texttt{deploy}, \texttt{infer}, and \texttt{web-server}. The last launches a Streamlit configuration builder that renders schema metadata as forms, validates input live, previews the resulting YAML, and generates the equivalent CLI command, serving both as a configuration aid and as documentation of the available design space.
 
 \subsection{Reading Guide}
 
-This document is organized as a technical reference addressing four operational concerns:
+This document is organized as a technical reference:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Prerequisites}: Appendix~\ref{sec:annex-tutorial} provides an accessible introduction to transformers and attention mechanisms for readers new to the field.
-    \item \textbf{Configuration Contract}: Section~\ref{sec:config-centric-architecture} describes the YAML schema that enforces valid experiments and Section~\ref{sec:schema-validation} explains validation rules.
-    \item \textbf{Architecture Selection}: Section~\ref{sec:attention-families} provides comprehensive comparison of sequence mixer families; Appendices~\ref{sec:annex-transformer}, \ref{sec:annex-latent}, \ref{sec:annex-sparse}, and \ref{sec:annex-gated} synthesize supporting literature; Appendix~\ref{sec:annex-norm-bitnet-mod} details normalization variants, BitNet quantization, Mixture-of-Depths routing, and Engram conditional memory; Appendix~\ref{sec:annex-mhc} details manifold-constrained residual connections (mHC).
-    \item \textbf{Optimization Dynamics}: Section~\ref{sec:optimizer-families} details optimizer routing and training dynamics; Appendix~\ref{sec:annex-optimizers} provides comprehensive optimizer family analysis.
-    \item \textbf{Deployment and Inference}: Sections~\ref{sec:quantization} and~\ref{sec:sbert} describe quantized deployment and sentence-embedding workflows.
+    \item \textbf{Prerequisites}: Appendix~\ref{sec:annex-tutorial} introduces transformers and attention for readers new to the field.
+    \item \textbf{Configuration contract}: Section~\ref{sec:config-centric-architecture} describes the schema and Section~\ref{sec:schema-validation} its validation rules.
+    \item \textbf{Architecture selection}: Section~\ref{sec:attention-families} compares sequence-mixer families; Appendices~\ref{sec:annex-transformer}, \ref{sec:annex-latent}, \ref{sec:annex-sparse}, and \ref{sec:annex-gated} collect the supporting literature, with normalization, BitNet, and conditional-memory details in Appendix~\ref{sec:annex-norm-bitnet-mod} and manifold-constrained residuals in Appendix~\ref{sec:annex-mhc}.
+    \item \textbf{Optimization}: Section~\ref{sec:optimizer-families} summarizes optimizer routing; Appendix~\ref{sec:annex-optimizers} provides the full family analysis.
+    \item \textbf{Deployment and inference}: Sections~\ref{sec:quantization} and~\ref{sec:sbert} cover quantized deployment and sentence embeddings.
 \end{enumerate}
-
-\subsection{Web-Based Configuration Builder}
-
-In addition to direct YAML editing, this project provides a Streamlit-based web interface (accessed via \texttt{web-server} command) that improves configuration accessibility and discoverability. The interface dynamically generates schema-driven forms with inline parameter documentation, real-time YAML preview, and automatic CLI command generation for training, deployment, inference, and SBERT workflows. Schema metadata (titles and descriptions) are rendered systematically across all configuration sections, including model architecture, training runtime, optimizer hyperparameters, deployment, and SBERT-specific parameters. This approach reduces the need to memorize YAML structure, prevents typos through schema validation, and serves as both a configuration tool and a learning resource for users exploring novel architectures.
-

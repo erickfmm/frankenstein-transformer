@@ -1,0 +1,14 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  start["Choose optimizer objective"]
+  baseline["Reliable baseline<br/>AdamW / RAdam"]
+  memory["Lower optimizer memory<br/>Adafactor / GaLore / Lion"]
+  advanced["Aggressive or structured<br/>Adan, ADOPT, Sophia,<br/>Shampoo, SOAP, Muon"]
+  route["Schema-prefixed groups<br/>learning rate, weight decay, betas, eps"]
+
+  start --> baseline
+  start --> memory
+  start --> advanced
+  baseline --> route
+  memory --> route
+  advanced --> route

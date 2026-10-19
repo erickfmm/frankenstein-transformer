@@ -1,0 +1,31 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart TD
+  root["Sequence Mixer Registry (43 variants)"]
+
+  d["Dense (3)"] --> d1["standard_attn"] --> d2["sigmoid_attn"] --> d3["gqa_attn"]
+
+  r["Recurrent (5)"] --> r1["retnet / retnet_attn"] --> r2["mamba"] --> r3["ode"] --> r4["titan_attn"]
+
+  s["Sparse (9)"] --> s1["sparse_transformer_attn"] --> s2["longformer_attn"] --> s3["bigbird_attn"] --> s4["sparsek_attn"] --> s5["nsa_attn"] --> s6["sparge_attn"] --> s7["fasa_attn"] --> s8["msa_attn"] --> s9["sparda_attn"]
+
+  g["Gated (8)"] --> g1["gla_attn"] --> g2["deltanet_attn"] --> g3["gated_deltanet_attn"] --> g4["gated_deltanet2_attn"] --> g5["hgrn2_attn"] --> g6["fox_attn"] --> g7["gated_softmax_attn"] --> g8["kda_attn"]
+
+  l["Latent (10)"] --> l1["mla_attn"] --> l2["gqla_attn"] --> l3["mlra_attn"] --> l4["tucker_attn"] --> l5["iha_attn"] --> l6["gta_attn"] --> l7["mtla_attn"] --> l8["cca_attn"] --> l9["ccgqa_attn"] --> l10["gma_attn"]
+
+  m["Conditional memory (1)"] --> m1["engram_attn"]
+
+  f["Fast-weight (6)"] --> f1["falcon1_attn"] --> f2["falcon2_attn"] --> f3["falcon3_attn"] --> f4["falcon1a_attn"] --> f5["falcon2a_attn"] --> f6["falcon3a_attn"]
+
+  x["Geometric (1)"] --> x1["ssog_attn"]
+
+  root --> d
+  root --> r
+  root --> s
+  root --> g
+  root --> l
+  root --> m
+  root --> f
+  root --> x
+
+  classDef category fill:#e6eef7,stroke:#7f9bbf,font-weight:bold
+  class d,r,s,g,l,m,f,x category

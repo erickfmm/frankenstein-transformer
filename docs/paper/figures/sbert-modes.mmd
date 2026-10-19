@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":20,"rankSpacing":26}}}%%
+flowchart TD
+  encoder["Shared encoder"]
+  sim["Similarity<br/>cosine score"]
+  search["Search<br/>top-k retrieval"]
+  cluster["Cluster / encode<br/>offline analysis"]
+
+  encoder --> sim
+  encoder --> search
+  encoder --> cluster

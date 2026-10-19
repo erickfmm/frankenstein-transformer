@@ -1,22 +1,11 @@
 \section{Cuantización y Despliegue}
 \label{sec:quantization}
 
-El stack de despliegue utiliza empaquetado ternario de pesos más cuantización de activaciones INT8 para producir artefactos eficientes.
+La etapa de despliegue convierte un checkpoint entrenado en un artefacto compacto mediante empaquetado ternario de pesos \citep{wang_bitnet_2023} y escalado de activaciones INT8, con estimaciones de tamaño alineadas con objetivos de despliegue ligero \citep{samson_lightweight_2026,bravin_embbert_2026}. El mismo subcomando emite artefactos estándar o cuantizados, o exporta formatos HuggingFace Transformers y BitNet GGUF para runtimes externos. Las formulaciones y las estimaciones de tamaño se remiten al Apéndice~\ref{sec:annex-norm-bitnet-mod}.
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=1.3cm and 0.9cm]
-\node[box, fill=blue!8] (ckpt) {Checkpoint entrenado};
-\node[box, fill=yellow!10, right=of ckpt] (quant) {Empaquetado de pesos\\ternario / bajo bit};
-\node[box, fill=orange!12, right=of quant] (act) {Escalado de activaciones\\ruta INT8};
-\node[box, fill=green!8, right=of act] (artifact) {Artefacto desplegable\\huella de almacenamiento reducida};
-\draw[line] (ckpt) -- (quant);
-\draw[line] (quant) -- (act);
-\draw[line] (act) -- (artifact);
-\end{tikzpicture}}
-\caption{Ruta de despliegue desde un checkpoint entrenado hasta un artefacto compacto. El código base trata la cuantización como una transformación de la etapa de despliegue en lugar de una familia de modelos separada.}
+\fitfigure{\includegraphics{../paper/figures/deploy-flow.pdf}}
+\caption{Ruta de despliegue desde un checkpoint entrenado hasta un artefacto compacto. La cuantización es una transformación de la etapa de despliegue, no una familia de modelos separada.}
 \label{fig:deploy-flow}
 \end{figure}
-
-\subsection{Cuantización Ternaria y Escalado de Activaciones}
-La etapa de despliegue transforma un checkpoint entrenado en un artefacto compacto mediante empaquetado ternario de pesos estilo BitNet \citep{wang_bitnet_2023}, escalado de activaciones INT8 y aproximación de almacenamiento de 1.58 bits alineada con objetivos de despliegue ligero \citep{samson_lightweight_2026,bravin_embbert_2026}. Las formulaciones matemáticas del escalado ternario de pesos, la cuantización/des-cuantización de activaciones INT8 y las estimaciones de tamaño FP32/FP16/1.58 bits se difieren al Apéndice~\ref{sec:annex-norm-bitnet-mod}.

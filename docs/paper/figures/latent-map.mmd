@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":14,"rankSpacing":20}}}%%
+flowchart TD
+  subgraph latent["Compression factor: r ≪ d"]
+    kv["K, V (n × d)"]
+    down["Down-project<br/>d → r"]
+    lat["Latent K′, V′<br/>(n × r)"]
+    up["Up-project<br/>r → d"]
+    attn["Attention<br/>softmax(QK′<sup>T</sup>)V′"]
+    kv --> down --> lat --> up --> attn
+  end

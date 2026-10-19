@@ -1,0 +1,30 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":26,"rankSpacing":34}}}%%
+flowchart TD
+  yaml["YAML config"]
+  validation["Validation<br/>schema + rules"]
+  web["Web<br/>Streamlit"]
+  cli["CLI<br/>train / deploy / infer / web-server"]
+  model["Model<br/>43 mixers"]
+  train["Training<br/>AMP + scheduler"]
+  opt["Optimizer<br/>23 families"]
+  modelout["Model build<br/>pattern + loops"]
+  trainout["Train loop<br/>checks + logs"]
+  optout["Opt step<br/>group routing"]
+  deploy["Deploy<br/>quantization"]
+  sbert["SBERT<br/>search / cluster"]
+  export["Export<br/>transformers / gguf"]
+
+  yaml --> validation
+  validation --> web
+  validation --> cli
+  validation --> model
+  validation --> train
+  validation --> opt
+  model --> modelout
+  train --> trainout
+  opt --> optout
+  trainout --> deploy
+  optout --> sbert
+  modelout -.-> trainout
+  optout -.-> deploy
+  cli --> export

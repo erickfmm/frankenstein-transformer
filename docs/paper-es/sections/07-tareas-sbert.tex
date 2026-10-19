@@ -21,18 +21,10 @@ Modos posteriores soportados:
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=1.1cm and 1.0cm]
-\node[box, fill=blue!8] (encoder) {Codificador compartido};
-\node[box, fill=yellow!10, below left=of encoder, xshift=-1.2cm] (sim) {Similitud\\puntuación coseno};
-\node[box, fill=green!8, below=of encoder] (search) {Búsqueda\\recuperación top-$k$};
-\node[box, fill=orange!12, below right=of encoder, xshift=1.2cm] (cluster) {Cluster / codificar\\análisis offline};
-\draw[line] (encoder) -- (sim);
-\draw[line] (encoder) -- (search);
-\draw[line] (encoder) -- (cluster);
-\end{tikzpicture}}
+\fitfigure{\includegraphics{../paper/figures/sbert-modes.pdf}}
 \caption{Reutilización del flujo de trabajo SBERT. Un único codificador soporta puntuación de pares en línea, recuperación sobre corpus, clustering y exportación persistente de embeddings.}
 \label{fig:sbert-modes}
 \end{figure}
 
-El pseudocódigo del enrutador de modo de inferencia SBERT---despachando entre los modos de similitud, búsqueda, cluster y codificación sobre un codificador compartido---se difiere al Apéndice~\ref{sec:annex-norm-bitnet-mod}.
+El pseudocódigo del enrutador de modo de inferencia SBERT---despachando entre los modos de similitud, búsqueda, cluster y codificación sobre un codificador compartido---se remite al Apéndice~\ref{sec:annex-norm-bitnet-mod}.
 

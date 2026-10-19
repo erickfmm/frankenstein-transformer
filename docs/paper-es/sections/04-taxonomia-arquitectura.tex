@@ -1,259 +1,73 @@
-\section{Taxonomía de Arquitectura e Implementación}
+\section{Taxonomía de Arquitecturas e Implementación}
 \label{sec:architecture-taxonomy}
 
-\subsection{Familias de Atención y Mezcladores de Secuencias}
+\subsection{Familias de Atención y Mezcladores de Secuencia}
 \label{sec:attention-families}
 
-Este sistema implementa cuarenta y tres variantes de mezcladores de secuencia organizadas en ocho categorías funcionales que reflejan las tendencias de investigación en el diseño de modelado de secuencias. La organización taxonómica refleja la comprensión evolutiva de cómo equilibrar expresividad, eficiencia computacional y restricciones de memoria.
-
+El sistema implementa cuarenta y tres mezcladores de secuencia organizados en ocho categorías funcionales que reflejan cómo cada método equilibra expresividad, costo computacional y memoria.
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Líneas Base de Atención Densas} (3): La atención softmax estándar, la atención sigmoide y la Atención por Consultas Agrupadas (GQA) proporcionan contextualización global completa a costo computacional cuadrático, sirviendo como líneas base de referencia para comparación con alternativas más eficientes.
-    \item \textbf{Arquitecturas Recurrentes y Retentivas} (5): RetNet, Mamba, bloques estilo ODE, Titans y Engram mantienen representaciones de estado que permiten un costo de inferencia $\mathcal{O}(1)$ mientras preservan la expresividad mediante dinámicas recurrentes, parámetros selectivos o adaptación de memoria en tiempo de prueba.
-    \item \textbf{Patrones de Atención Dispersa} (9): Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA y SparDA reducen la complejidad cuadrática mediante dispersión estructurada, selección de tokens o estrategias de poda sin entrenamiento.
-    \item \textbf{Mecanismos de Memoria con Compuerta} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax y KDA introducen control dependiente de datos sobre la retención de memoria, el olvido y la fuerza de actualización.
-    \item \textbf{Compresión Latente y de Rango Bajo} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA y GMA comprimen las representaciones clave--valor en cuellos de botella latentes de rango bajo (o, para GMA, enrutan a través de una memoria latente de mezcla Gaussiana aprendida), intercambiando un pequeño error de reconstrucción por ahorros sustanciales de memoria y cómputo.
-    \item \textbf{Memoria Condicional} (1): Engram proporciona memoria en tiempo de prueba mediante operaciones de lectura/escritura aprendidas sobre un banco de memoria externo.
-    \item \textbf{Atención de Peso Rápido} (6): Falcon-1, Falcon-2, Falcon-3, Falcon-1A, Falcon-2A y Falcon-3A \citep{zhang_falcon_2026} tratan la transición recurrente del estado de peso rápido como una regla de aprendizaje continuo en línea bajo semántica de lectura tras escritura, con tamaños de paso normalizados, olvido por ridge explícito y repetición opcional con ventana deslizante acotada.
-    \item \textbf{Campo Geométrico} (1): SSOG \citep{pisoni_ssog_2026} aplica un campo geométrico/de dispersión estructurada sobre la matriz de atención, codificando sesgos inductivos espaciales o de estructura de grafo específicos del dominio que las otras siete familias no capturan.
+    \item \textbf{Líneas base densas} (3): atención softmax estándar, atención sigmoide y Grouped-Query Attention (GQA) ofrecen enrutamiento global completo a costo cuadrático.
+    \item \textbf{Recurrentes y retentivas} (5): RetNet, Mamba, bloques tipo ODE y Titans mantienen estado para inferencia en tiempo constante mediante recurrencia, espacios de estados selectivos, profundidad continua o memoria en tiempo de prueba.
+    \item \textbf{Patrones dispersos} (9): Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA y SparDA reducen el costo cuadrático mediante dispersión estructurada, selección de tokens o poda sin entrenamiento.
+    \item \textbf{Mecanismos con compuerta} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax y KDA introducen control dependiente de los datos sobre retención, olvido y fuerza de actualización.
+    \item \textbf{Compresión latente} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA y GMA comprimen el estado clave--valor en cuellos de botella de bajo rango o enrutan mediante una memoria latente de mezcla gaussiana.
+    \item \textbf{Memoria condicional} (1): Engram proporciona memoria de lectura/escritura en tiempo de prueba mediante búsquedas aprendidas.
+    \item \textbf{Atención de peso rápido} (6): Falcon-1/2/3 y Falcon-1A/2A/3A tratan la transición de estado recurrente como una regla de aprendizaje continuo en línea \citep{zhang_falcon_2026}.
+    \item \textbf{Campo geométrico} (1): SSOG aplica un prior geométrico estructurado sobre la matriz de atención \citep{pisoni_ssog_2026}.
 \end{enumerate}
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[
-    font=\scriptsize,
-    node distance=0.32cm and 0.55cm,
-    box/.append style={inner sep=3pt, minimum height=0.48cm}
-]
-% Root
-\node[box, fill=blue!15, minimum width=4.0cm] (root) {\textbf{Registro de Mezcladores de Secuencia (43 variantes)}};
-
-% Category headers --- 8 columns
-\node[box, fill=red!10, below left=1.0cm and 7.5cm of root, minimum width=2.0cm] (dense) {\textbf{Densas (3)}};
-\node[box, fill=green!10, below left=1.0cm and 4.5cm of root, minimum width=2.0cm] (recur) {\textbf{Recurrentes (5)}};
-\node[box, fill=yellow!12, below left=1.0cm and 1.5cm of root, minimum width=2.0cm] (sparse) {\textbf{Dispersas (9)}};
-\node[box, fill=purple!12, below right=1.0cm and 1.5cm of root, minimum width=2.0cm] (gated) {\textbf{Con Compuerta (8)}};
-\node[box, fill=cyan!12, below right=1.0cm and 4.5cm of root, minimum width=2.0cm] (latent) {\textbf{Latentes (10)}};
-\node[box, fill=orange!12, below right=1.0cm and 7.5cm of root, minimum width=2.0cm] (memory) {\textbf{Memoria (1)}};
-\node[box, fill=violet!12, below right=1.0cm and 10.5cm of root, minimum width=2.0cm] (fweight) {\textbf{Peso Rápido (6)}};
-\node[box, fill=gray!18, below right=1.0cm and 13.5cm of root, minimum width=2.0cm] (geometric) {\textbf{Geométrico (1)}};
-
-% Dense column (3)
-\node[box, fill=red!5, below=of dense] (d1) {\texttt{standard\_attn}};
-\node[box, fill=red!5, below=of d1] (d2) {\texttt{sigmoid\_attn}};
-\node[box, fill=red!5, below=of d2] (d3) {\texttt{gqa}};
-
-% Recurrent column (5)
-\node[box, fill=green!5, below=of recur] (r1) {\texttt{retnet / retnet\_attn}};
-\node[box, fill=green!5, below=of r1] (r2) {\texttt{mamba}};
-\node[box, fill=green!5, below=of r2] (r3) {\texttt{ode}};
-\node[box, fill=green!5, below=of r3] (r4) {\texttt{titan\_attn}};
-\node[box, fill=green!5, below=of r4] (r5) {\texttt{engram\_attn}};
-
-% Sparse column (9)
-\node[box, fill=yellow!6, below=of sparse] (s1) {\texttt{sparse\_transformer\_attn}};
-\node[box, fill=yellow!6, below=of s1] (s2) {\texttt{longformer\_attn}};
-\node[box, fill=yellow!6, below=of s2] (s3) {\texttt{bigbird\_attn}};
-\node[box, fill=yellow!6, below=of s3] (s4) {\texttt{sparsek\_attn}};
-\node[box, fill=yellow!6, below=of s4] (s5) {\texttt{nsa\_attn}};
-\node[box, fill=yellow!6, below=of s5] (s6) {\texttt{sparge\_attn}};
-\node[box, fill=yellow!6, below=of s6] (s7) {\texttt{fasa\_attn}};
-\node[box, fill=yellow!6, below=of s7] (s8) {\texttt{msa\_attn}};
-\node[box, fill=yellow!6, below=of s8] (s9) {\texttt{sparda\_attn}};
-
-% Gated column (8)
-\node[box, fill=purple!6, below=of gated] (g1) {\texttt{gla\_attn}};
-\node[box, fill=purple!6, below=of g1] (g2) {\texttt{deltanet\_attn}};
-\node[box, fill=purple!6, below=of g2] (g3) {\texttt{gated\_deltanet\_attn}};
-\node[box, fill=purple!6, below=of g3] (g4) {\texttt{gated\_deltanet2\_attn}};
-\node[box, fill=purple!6, below=of g4] (g5) {\texttt{hgrn2\_attn}};
-\node[box, fill=purple!6, below=of g5] (g6) {\texttt{fox\_attn}};
-\node[box, fill=purple!6, below=of g6] (g7) {\texttt{gated\_softmax\_attn}};
-\node[box, fill=purple!6, below=of g7] (g8) {\texttt{kda\_attn}};
-
-% Latent column (10)
-\node[box, fill=cyan!6, below=of latent] (l1) {\texttt{mla\_attn}};
-\node[box, fill=cyan!6, below=of l1] (l2) {\texttt{gqla\_attn}};
-\node[box, fill=cyan!6, below=of l2] (l3) {\texttt{mlra\_attn}};
-\node[box, fill=cyan!6, below=of l3] (l4) {\texttt{tucker\_attn}};
-\node[box, fill=cyan!6, below=of l4] (l5) {\texttt{iha\_attn}};
-\node[box, fill=cyan!6, below=of l5] (l6) {\texttt{gta\_attn}};
-\node[box, fill=cyan!6, below=of l6] (l7) {\texttt{mtla\_attn}};
-\node[box, fill=cyan!6, below=of l7] (l8) {\texttt{cca\_attn}};
-\node[box, fill=cyan!6, below=of l8] (l9) {\texttt{ccgqa\_attn}};
-\node[box, fill=cyan!6, below=of l9] (l10) {\texttt{gma\_attn}};
-
-% Memory column (1)
-\node[box, fill=orange!6, below=of memory] (m1) {\texttt{engram\_attn}};
-
-% Fast-weight column (6)
-\node[box, fill=violet!6, below=of fweight] (f1) {\texttt{falcon1\_attn}};
-\node[box, fill=violet!6, below=of f1] (f2) {\texttt{falcon2\_attn}};
-\node[box, fill=violet!6, below=of f2] (f3) {\texttt{falcon3\_attn}};
-\node[box, fill=violet!6, below=of f3] (f4) {\texttt{falcon1a\_attn}};
-\node[box, fill=violet!6, below=of f4] (f5) {\texttt{falcon2a\_attn}};
-\node[box, fill=violet!6, below=of f5] (f6) {\texttt{falcon3a\_attn}};
-
-% Geometric column (1)
-\node[box, fill=gray!8, below=of geometric] (geo1) {\texttt{ssog\_attn}};
-
-% Root-to-category links
-\draw[line] (root) -- (dense);
-\draw[line] (root) -- (recur);
-\draw[line] (root) -- (sparse);
-\draw[line] (root) -- (gated);
-\draw[line] (root) -- (latent);
-\draw[line] (root) -- (memory);
-\draw[line] (root) -- (fweight);
-\draw[line] (root) -- (geometric);
-
-% Category-to-list links --- Dense
-\draw[line] (dense) -- (d1);
-\draw[line] (d1) -- (d2);
-\draw[line] (d2) -- (d3);
-
-% Category-to-list links --- Recurrent
-\draw[line] (recur) -- (r1);
-\draw[line] (r1) -- (r2);
-\draw[line] (r2) -- (r3);
-\draw[line] (r3) -- (r4);
-\draw[line] (r4) -- (r5);
-
-% Category-to-list links --- Sparse
-\draw[line] (sparse) -- (s1);
-\draw[line] (s1) -- (s2);
-\draw[line] (s2) -- (s3);
-\draw[line] (s3) -- (s4);
-\draw[line] (s4) -- (s5);
-\draw[line] (s5) -- (s6);
-\draw[line] (s6) -- (s7);
-\draw[line] (s7) -- (s8);
-\draw[line] (s8) -- (s9);
-
-% Category-to-list links --- Gated
-\draw[line] (gated) -- (g1);
-\draw[line] (g1) -- (g2);
-\draw[line] (g2) -- (g3);
-\draw[line] (g3) -- (g4);
-\draw[line] (g4) -- (g5);
-\draw[line] (g5) -- (g6);
-\draw[line] (g6) -- (g7);
-\draw[line] (g7) -- (g8);
-
-% Category-to-list links --- Latent
-\draw[line] (latent) -- (l1);
-\draw[line] (l1) -- (l2);
-\draw[line] (l2) -- (l3);
-\draw[line] (l3) -- (l4);
-\draw[line] (l4) -- (l5);
-\draw[line] (l5) -- (l6);
-\draw[line] (l6) -- (l7);
-\draw[line] (l7) -- (l8);
-\draw[line] (l8) -- (l9);
-\draw[line] (l9) -- (l10);
-
-% Category-to-list links --- Memory
-\draw[line] (memory) -- (m1);
-
-% Category-to-list links --- Fast-weight
-\draw[line] (fweight) -- (f1);
-\draw[line] (f1) -- (f2);
-\draw[line] (f2) -- (f3);
-\draw[line] (f3) -- (f4);
-\draw[line] (f4) -- (f5);
-\draw[line] (f5) -- (f6);
-
-% Category-to-list links --- Geometric
-\draw[line] (geometric) -- (geo1);
-\end{tikzpicture}}
-\caption{Taxonomía completa de cuarenta y tres variantes de mezcladores de secuencia en ocho categorías funcionales. Las líneas base densas proporcionan enrutamiento global completo a costo cuadrático. Las arquitecturas recurrentes permiten inferencia en tiempo constante mediante compresión de estado. Las variantes dispersas reducen la complejidad mediante patrones estructurados o selección de tokens. Los mecanismos con compuerta introducen control dependiente de datos sobre la retención y el olvido de memoria. Los métodos latentes comprimen representaciones clave--valor en cuellos de botella de rango bajo o enrutan a través de latentes probabilísticos de mezcla Gaussiana. La memoria condicional proporciona lectura/escritura en tiempo de prueba sobre un banco de memoria externo. Los métodos de peso rápido tratan la transición de estado recurrente como una regla de aprendizaje continuo en línea. Los métodos de campo geométrico codifican sesgos inductivos espaciales o de estructura de grafo sobre la matriz de atención.}
+\fitfigure{\includegraphics{../paper/figures/mixer-taxonomy.pdf}}
+\caption{Taxonomía de los cuarenta y tres mezcladores de secuencia en ocho categorías funcionales. Las líneas base densas ofrecen enrutamiento global completo a costo cuadrático; los métodos recurrentes comprimen el estado para inferencia en tiempo constante; las variantes dispersas restringen el patrón de atención; los mecanismos con compuerta modulan retención y olvido; los métodos latentes comprimen las representaciones clave--valor; la memoria condicional añade búsquedas de lectura/escritura en tiempo de prueba; los métodos de peso rápido formulan la transición de estado como una regla de aprendizaje en línea; los métodos geométricos codifican priors estructurados.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
-\subsection{Familias Densas y Recurrentes}
-Las líneas base densas (softmax estándar \citep{vaswani_attention_2017} y sigmoide \citep{ramapuram_theory_2024}) y la familia recurrente/retentiva (RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, bloques continuos estilo ODE \citep{zhang_continuous_2021} y memoria en tiempo de prueba Titans \citep{behrouz_titans_2025}) proporcionan la compensación fundamental entre expresividad y eficiencia. Las formulaciones matemáticas, las formas paralela y recurrente, el pseudocódigo algorítmico y una tabla comparativa arquitectónica se recopilan en el Apéndice~\ref{sec:annex-transformer}. El algoritmo de despacho de mezclador guiado por patrón (incluyendo la política de cumplimiento sin entrenamiento para \texttt{fasa\_attn} y \texttt{sparge\_attn}) se detalla igualmente allí.
-
-\subsection{Familia de Atención Latente y de Rango Bajo}
-Una familia complementaria comprime el estado clave--valor por token en un latente de rango bajo: Atención Latente Multi-Cabeza (MLA), Atención Latente por Consultas Agrupadas (GQLA), Atención Multi-Cabeza de Rango Bajo (MLRA), Atención Tucker, Atención de Cabezas Entrelazadas (IHA), Atención laTenT por Cabezas Agrupadas (GTA) y Atención Latente Temporal Multi-Cabeza (MTLA). Estos métodos unifican diseños de consulta agrupada, latente, factorizado y latente temporal bajo un cuello de botella de rango bajo común. La Atención de Mezcla Gaussiana (GMA) toma una ruta diferente: reemplaza la interacción pareada $QK^\top$ con enrutamiento probabilístico a través de $K$ componentes de mezcla Gaussiana aprendidos por cabeza, escribiendo valores en una memoria latente de $K$ slots y leyendo de vuelta mediante responsabilidades posteriores, dando un almacenamiento de activaciones $\mathcal{O}(NK)$ para $K$ fijo. Las formulaciones completas, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-latent}.
-
-\subsection{Extensiones de Atención Dispersa}
-El registro de mezcladores incluye nueve bloques dispersos: \texttt{sparse\_transformer\_attn}, \texttt{longformer\_attn}, \texttt{bigbird\_attn}, \texttt{sparsek\_attn}, \texttt{nsa\_attn}, \texttt{sparge\_attn}, \texttt{fasa\_attn}, \texttt{msa\_attn} y \texttt{sparda\_attn} \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}. La implementación impone una política de ejecución explícita para métodos dispersos sin entrenamiento: \texttt{fasa\_attn} y \texttt{sparge\_attn} son solo para evaluación/inferencia y generan errores en tiempo de ejecución si se usan mientras el modelo está en modo de entrenamiento. Las formulaciones matemáticas, el pseudocódigo algorítmico, las características por bloque y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-sparse}.
+\subsection{Familias Densa y Recurrente}
+Las líneas base densas---softmax estándar \citep{vaswani_attention_2017} y atención sigmoide \citep{ramapuram_theory_2024}---y la familia recurrente---RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, bloques tipo ODE \citep{zhang_continuous_2021} y Titans \citep{behrouz_titans_2025}---definen el compromiso entre expresividad y eficiencia. Las formulaciones, las formas paralela y recurrente, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-transformer}.
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=0.9cm and 0.9cm]
-\node[box, fill=gray!10] (tokens) {Secuencia de tokens};
-\node[box, fill=blue!8, below left=1.1cm and 2.5cm of tokens] (local) {Local / ventana\\Longformer};
-\node[box, fill=yellow!10, below=1.1cm of tokens] (hybrid) {Grafo disperso híbrido\\BigBird / Sparse Transformer};
-\node[box, fill=orange!12, below right=1.1cm and 2.5cm of tokens] (select) {Poda selectiva\\SparseK / NSA / FASA / SpargeAttn};
-\draw[line] (tokens) -- (local);
-\draw[line] (tokens) -- (hybrid);
-\draw[line] (tokens) -- (select);
-\node[group, fit=(local)(hybrid)(select), label=below:{\small Tres estrategias de diseño disperso: localidad, dispersión de grafo estructurado y selección aprendida o predicha}] {};
-\end{tikzpicture}}
-\caption{Mapa conceptual de las estrategias de diseño de atención dispersa utilizadas en el código base. Diferentes métodos reducen el costo restringiendo vecindarios, construyendo grafos dispersos o seleccionando solo tokens/bloques de alto valor.}
-\label{fig:sparse-map}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\fitfigure{\begin{tikzpicture}[node distance=1.0cm and 1.2cm]
-\node[box, fill=red!8] (standard) {Estándar\\$\text{softmax}(QK^\top/\sqrt{d})V$};
-\node[box, fill=red!8, right=of standard] (sigmoid) {Sigmoide\\$\sigma(QK^\top)V$};
-\node[box, fill=red!8, right=of sigmoid] (gqa) {GQA\\Cabezas $K,V$ compartidas};
-\node[group, fit=(standard)(sigmoid)(gqa), label=above:{\small Atención Densa: interacciones completas por pares, costo $\mathcal{O}(n^2)$}] {};
-\end{tikzpicture}}
-\caption{Tres líneas base de atención densa. La atención softmax estándar y la sigmoide calculan matrices $QK^\top$ completas. La Atención por Consultas Agrupadas (GQA) comparte cabezas clave--valor entre grupos de consultas, reduciendo el ancho de banda de memoria mientras preserva la expresividad completa de la atención.}
+\fitfigure{\includegraphics{../paper/figures/dense-map.pdf}}
+\caption{Líneas base de atención densa. La atención estándar y la sigmoide calculan interacciones por pares completas; Grouped-Query Attention comparte cabezas clave--valor entre grupos de consultas, reduciendo el tráfico de memoria sin perder la expresividad de la atención completa.}
 \label{fig:dense-map}
 \end{figure}
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=1.0cm and 1.0cm]
-\node[box, fill=green!8] (retnet) {RetNet\\Dual paralelo/recurrente};
-\node[box, fill=green!8, right=of retnet] (mamba) {Mamba\\SSM selectivo};
-\node[box, fill=green!8, right=of mamba] (ode) {ODE\\Profundidad continua};
-\node[box, fill=green!8, right=of ode] (titans) {Titans\\Memoria en test};
-\node[group, fit=(retnet)(mamba)(ode)(titans), label=above:{\small Recurrente/Retentiva: con estado, inferencia $\mathcal{O}(1)$ por paso}] {};
-\end{tikzpicture}}
-\caption{Familia de arquitecturas recurrentes y retentivas. RetNet proporciona formas duales paralela y recurrente. Mamba utiliza parámetros selectivos de espacio de estados. Los bloques ODE modelan dinámicas de profundidad continua. Titans introduce adaptación de memoria en tiempo de prueba. Todas logran inferencia en tiempo constante por paso.}
+\fitfigure{\includegraphics{../paper/figures/recurrent-map.pdf}}
+\caption{Familia recurrente y retentiva. RetNet ofrece formas paralela y recurrente, Mamba usa parámetros selectivos de espacio de estados, los bloques ODE modelan profundidad continua y Titans añaden memoria en tiempo de prueba; todos logran inferencia en tiempo constante por paso.}
 \label{fig:recurrent-map}
 \end{figure}
 
+\subsection{Familia de Atención Latente y de Bajo Rango}
+Esta familia comprime el estado clave--valor por token en un latente de bajo rango: MLA, GQLA, MLRA, Tucker, IHA, GTA y MTLA unifican diseños agrupados, latentes, factorizados y temporales. CCA y CCGQA formulan la atención en un latente comprimido con agrupamiento desacoplado, mientras que GMA reemplaza la interacción por pares con enrutamiento probabilístico mediante componentes de mezcla gaussiana aprendidos. Las formulaciones, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-latent}.
+
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=1.0cm and 0.8cm]
-\node[box, fill=cyan!8] (kv) {$K,V \in \mathbb{R}^{n \times d}$};
-\node[box, fill=cyan!12, below=of kv] (down) {Proyección descendente\\$W_{\text{down}} \in \mathbb{R}^{d \times r}$};
-\node[box, fill=cyan!8, below=of down] (latent) {Latente $K',V' \in \mathbb{R}^{n \times r}$};
-\node[box, fill=cyan!12, below=of latent] (up) {Proyección ascendente\\$W_{\text{up}} \in \mathbb{R}^{r \times d}$};
-\node[box, fill=cyan!8, below=of up] (attn) {Atención\\$\text{softmax}(QK'^\top)V'$};
-\draw[line] (kv) -- (down);
-\draw[line] (down) -- (latent);
-\draw[line] (latent) -- (up);
-\draw[line] (up) -- (attn);
-\node[group, fit=(kv)(down)(latent)(up)(attn), label=right:{\small Factor de compresión: $r \ll d$}] {};
-\end{tikzpicture}}
-\caption{Concepto de atención latente y de rango bajo. Los pares clave--valor se comprimen mediante una proyección descendente a un espacio latente de rango bajo ($r \ll d$), donde la atención se calcula a costo reducido, y luego se proyectan de vuelta. Las variantes difieren en la estructura de factorización (MLA, GQLA, MLRA, Tucker), entrelazado de cabezas (IHA, GTA), compresión temporal (MTLA), formulaciones de covarianza cruzada (CCA, CCGQA) y enrutamiento probabilístico de mezcla Gaussiana (GMA).}
+\fitfigure{\includegraphics{../paper/figures/latent-map.pdf}}
+\caption{Atención latente y de bajo rango. Los pares clave--valor se proyectan a un espacio latente de bajo rango, donde la atención se calcula a menor costo, y se proyectan de vuelta. Las variantes difieren en factorización, intercalado de cabezas, compresión temporal, formulación de covarianza cruzada y enrutamiento probabilístico.}
 \label{fig:latent-map}
 \end{figure}
 
-\subsection{Extensiones de Atención con Compuerta}
-El registro de mezcladores incluye ocho bloques con compuerta: \texttt{gla\_attn}, \texttt{deltanet\_attn}, \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn}, \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{gated\_softmax\_attn} y \texttt{kda\_attn} \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025}. La idea unificadora es que las compuertas controlan \emph{qué información sobrevive}: algunas compuertas actúan sobre actualizaciones de estado recurrente (GLA, variantes de DeltaNet, HGRN2), mientras que otras modifican la ruta de atención completa (FoX y Gated Softmax). KDA extiende Gated DeltaNet con un mecanismo de compuerta (decaimiento) más fino y por canal sobre la actualización de estado de la regla delta $S_t = (I - \beta_t k_t k_t^\top)D_t S_{t-1} + \beta_t k_t v_t^\top$, donde $D_t = \mathrm{Diag}(d_t)$ aplica un decaimiento por canal. Esto hace que las compuertas sean especialmente útiles cuando el modelo debe equilibrar recuerdo, actualidad y memoria limitada. Las formulaciones matemáticas, el pseudocódigo algorítmico, una plantilla de compuerta genérica y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-gated}.
-
-Una sexta familia replantea la propia actualización recurrente de peso rápido como una regla de aprendizaje continuo en línea: el registro de mezcladores incluye seis bloques de peso rápido --- \texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn} y \texttt{falcon3a\_attn} \citep{zhang_falcon_2026}. Falcon unifica las escrituras aditivas estilo DeltaNet y de atención lineal bajo semántica de lectura tras escritura (RAW), con tamaños de paso normalizados $\eta_t = \beta_t/(\text{estadístico}_t + \lambda_t + \varepsilon)$, un arrastre derivado del objetivo $\gamma_t = 1 - \eta_t\lambda_t$ y repetición acotada con ventana deslizante en las variantes Falcon-3. Cada variante proporciona un escaneo recurrente de referencia y un kernel chunk-parallel estilo SSD, compartiendo un único bloque de configuración. Las formulaciones matemáticas, el pseudocódigo algorítmico, la renormalización de decaimiento positivo, las perillas de configuración y los resultados publicados se recopilan en el Apéndice~\ref{sec:annex-fast-weight}.
+\subsection{Extensiones de Atención Dispersa}
+El registro incluye nueve bloques dispersos \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026}. Dos métodos sin entrenamiento, \texttt{fasa\_attn} y \texttt{sparge\_attn}, son solo de evaluación y lanzan un error si se usan durante el entrenamiento. Las formulaciones, el pseudocódigo, las características por bloque y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-sparse}.
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=1.2cm and 1.0cm]
-\node[box, fill=green!8] (state) {Estado previo\\$S_{t-1}$};
-\node[box, fill=red!8, right=of state] (gate) {Compuerta(s)\\$\alpha_t,\beta_t,G_t,f_t$};
-\node[box, fill=blue!8, right=of gate] (write) {Nueva clave/valor\\o salida SDPA};
-\node[box, fill=yellow!12, below=of gate] (next) {Memoria actualizada / salida\\$S_t$ u $O_t$};
-\draw[line] (state) -- (gate);
-\draw[line] (gate) -- (write);
-\draw[line] (state) |- (next);
-\draw[line] (write) -- (next);
-\end{tikzpicture}}
-\caption{Plantilla de compuerta genérica. Una compuerta puede atenuar la memoria existente, regular la fuerza de escritura o modular las salidas de atención densa, dependiendo de la familia del bloque.}
+\fitfigure{\includegraphics{../paper/figures/sparse-map.pdf}}
+\caption{Decisiones de diseño en atención dispersa. Los métodos reducen el costo restringiendo vecindarios, construyendo grafos dispersos o seleccionando solo tokens o bloques de alto valor.}
+\label{fig:sparse-map}
+\end{figure}
+
+\subsection{Atención con Compuerta y de Peso Rápido}
+La familia con compuerta contiene ocho bloques \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025}. La compuerta controla qué información sobrevive, ya sea en las actualizaciones de estado recurrente (GLA, variantes de DeltaNet, HGRN2, KDA) o en la ruta de atención completa (FoX, Gated Softmax). Las formulaciones, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-gated}.
+
+La atención de peso rápido reformula la actualización recurrente como una regla de aprendizaje continuo en línea; las seis variantes Falcon \citep{zhang_falcon_2026} unifican la regresión estilo DeltaNet y las escrituras de atención lineal bajo semántica de lectura-tras-escritura con tamaños de paso normalizados y olvido explícito. Cada variante incluye un escaneo recurrente de referencia y un kernel paralelo por fragmentos. Las formulaciones, los parámetros de configuración y los resultados publicados se recopilan en el Apéndice~\ref{sec:annex-fast-weight}.
+
+\begin{figure}[t]
+\centering
+\fitfigure{\includegraphics{../paper/figures/gating-template.pdf}}
+\caption{Plantilla genérica de compuerta. Una compuerta puede decaer la memoria existente, regular la fuerza de escritura o modular las salidas de atención densa, según la familia de bloques.}
 \label{fig:gating-template}
 \end{figure}

@@ -21,15 +21,7 @@ Supported downstream modes:
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=1.1cm and 1.0cm]
-\node[box, fill=blue!8] (encoder) {Shared encoder};
-\node[box, fill=yellow!10, below left=of encoder, xshift=-1.2cm] (sim) {Similarity\\cosine score};
-\node[box, fill=green!8, below=of encoder] (search) {Search\\top-$k$ retrieval};
-\node[box, fill=orange!12, below right=of encoder, xshift=1.2cm] (cluster) {Cluster / encode\\offline analysis};
-\draw[line] (encoder) -- (sim);
-\draw[line] (encoder) -- (search);
-\draw[line] (encoder) -- (cluster);
-\end{tikzpicture}}
+\fitfigure{\includegraphics{figures/sbert-modes.pdf}}
 \caption{SBERT workflow reuse. A single encoder supports online pair scoring, corpus retrieval, clustering, and persistent embedding export.}
 \label{fig:sbert-modes}
 \end{figure}

@@ -1,0 +1,9 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":24,"wrappingWidth":240}}}%%
+flowchart LR
+  subgraph recurrent["Recurrent / retentive: stateful, O(1) per-step inference"]
+    retnet["RetNet<br/>dual parallel / recurrent"]
+    mamba["Mamba<br/>selective SSM"]
+    ode["ODE<br/>continuous depth"]
+    titans["Titans<br/>test-time memory"]
+    retnet ~~~ mamba ~~~ ode ~~~ titans
+  end

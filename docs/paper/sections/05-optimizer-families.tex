@@ -1,24 +1,11 @@
 \section{Optimizer Families and Training Dynamics}
 \label{sec:optimizer-families}
 
-Optimization of highly parameterized transformer architectures presents significant challenges due to non-convex loss landscapes, saddle points, and block heterogeneity across parameter groups. This system addresses these challenges through a unified framework supporting twenty-three optimizer families spanning six algorithmic categories: (1) classical baselines (SGD, AdamW), (2) advanced momentum and variance reduction (Adan, ADOPT, AdEMAMix, MARS, Cautious), (3) memory-efficient variants (Adafactor, GaLore, Lion, APOLLO, APOLLO-Mini, Q-APOLLO), (4) schedule-free and parameter-free methods (Schedule-Free AdamW, Prodigy) plus large-batch scaling through LAMB, (5) curvature-aware and second-order (Sophia, Shampoo, SOAP), (6) geometry-oriented (Muon, Turbo-Muon), and (7) adaptivity-tunable optimizers (Anon). Detailed algorithmic descriptions, pseudocode, and a memory/complexity comparison table for all optimizers are provided in Appendix~\ref{sec:annex-optimizers}.
+Optimizing large transformer architectures is complicated by non-convex landscapes, saddle points, and heterogeneous parameter groups. The system supports twenty-three optimizer families in seven categories: classical baselines (SGD with momentum, AdamW, RAdam); momentum and variance reduction (Adan, ADOPT, AdEMAMix, MARS, Cautious AdamW); memory-efficient and low-rank methods (Adafactor, GaLore, Lion, APOLLO, APOLLO-Mini, Q-APOLLO); schedule-free and parameter-free methods (Schedule-Free AdamW, Prodigy) with large-batch scaling (LAMB); curvature-aware and second-order methods (Sophia, Shampoo, SOAP); geometry-oriented methods (Muon, Turbo-Muon); and adaptivity-tunable optimizers (Anon). Algorithms, pseudocode, and memory and complexity comparisons are collected in Appendix~\ref{sec:annex-optimizers}.
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=1.1cm and 1.0cm]
-\node[box, fill=blue!8] (start) {Choose optimizer objective};
-\node[box, fill=green!8, below left=of start, xshift=-1.5cm] (baseline) {Reliable baseline\\AdamW / RAdam};
-\node[box, fill=yellow!12, below=of start] (memory) {Lower optimizer memory\\Adafactor / GaLore / Lion};
-\node[box, fill=orange!12, below right=of start, xshift=1.5cm] (advanced) {Aggressive or structured\\Adan, ADOPT, Sophia,\\Shampoo, SOAP, Muon};
-\node[box, fill=red!8, below=of memory] (route) {Schema-prefixed groups\\LR, weight decay, betas, eps};
-\draw[line] (start) -- (baseline);
-\draw[line] (start) -- (memory);
-\draw[line] (start) -- (advanced);
-\draw[line] (baseline) -- (route);
-\draw[line] (memory) -- (route);
-\draw[line] (advanced) -- (route);
-\end{tikzpicture}}
-\caption{Optimizer selection in practice: the class determines the update rule, while the schema controls how hyperparameters are applied across embeddings, norms, recurrent blocks, attention blocks, and other parameters.}
+\fitfigure{\includegraphics{figures/optimizer-routing.pdf}}
+\caption{Optimizer selection in practice: the class determines the update rule, while the schema controls how hyperparameters apply across embeddings, normalization layers, attention blocks, and the remaining parameters.}
 \label{fig:optimizer-routing}
 \end{figure}
-

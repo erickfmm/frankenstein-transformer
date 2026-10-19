@@ -41,7 +41,7 @@ A common thread across the tools surveyed above is their focus on fine-tuning ex
 \textbf{Frankenstein Transformer} fills this gap by providing a schema-first configuration system purpose-built for architecture experimentation. Its key differentiators include:
 
 \begin{itemize}[leftmargin=*]
-    \item \textbf{35+ sequence mixers} spanning dense attention, recurrent/retentive blocks, sparse attention patterns, gated mechanisms, adaptive depth routing, and conditional memory layers, all selectable via a single YAML field.
+    \item \textbf{43 sequence mixers} spanning dense attention, recurrent/retentive blocks, sparse attention patterns, gated mechanisms, adaptive depth routing, and conditional memory layers, all selectable via a single YAML field.
     \item \textbf{23 optimizer families} with a prefixed hyperparameter routing system that enables per-parameter-group control across embeddings, normalization layers, attention blocks, and feed-forward networks.
     \item \textbf{Dual training modes} supporting both encoder-style masked language modeling (MLM) and decoder-style autoregressive (AR) next-token prediction, with specialized fine-tuning workflows for each.
     \item \textbf{Strict schema validation} via \texttt{additionalProperties: false} constraints that prevent configuration errors before training begins, ensuring reproducibility across experiments.

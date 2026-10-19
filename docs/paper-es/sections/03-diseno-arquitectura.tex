@@ -1,158 +1,63 @@
-\section{Diseño y Arquitectura del Sistema}
+\section{Diseño del Sistema y Arquitectura}
 \label{sec:system-design}
 
-\subsection{Arquitectura Centrada en Configuración}
+\subsection{Arquitectura Centrada en la Configuración}
 \label{sec:config-centric-architecture}
 
-La decisión de diseño principal en este repositorio es que la experimentación es \emph{esquema primero}. En lugar de exponer una gran cantidad de indicadores laxamente verificados, el proyecto obliga a la topología del modelo, la familia de optimizadores, los límites de entrenamiento y las opciones de telemetría a través de un único documento de configuración validado. Esto reduce la ambigüedad al reproducir resultados y permite comparar muchas arquitecturas bajo una interfaz operativa consistente.
+La experimentación en este proyecto es \emph{primero el esquema}. En lugar de exponer banderas con validación laxa, la topología del modelo, la familia del optimizador, los límites de entrenamiento y la telemetría pasan por un único documento de configuración validado, lo que reduce la ambigüedad al reproducir resultados y permite que muchas arquitecturas compartan una misma interfaz operativa.
 
-El contrato autoritativo es \texttt{configs/schema.yaml}. Este impone tres objetos de primer nivel:
+El contrato autoritativo es \texttt{src/schema.yaml}, un esquema JSON modular cuyos módulos bajo \texttt{src/schema/} cubren los bloques de modelo, clase de modelo, tokenizer, optimizador, SBERT, entrenamiento y datasets. Los objetos de primer nivel son \texttt{base\_model}, \texttt{tokenizer}, \texttt{model\_class}, \texttt{model}, \texttt{training}, \texttt{image}, \texttt{vision\_dataset} y \texttt{text\_dataset}.
+
+\paragraph{Clase de modelo.} El campo \texttt{model\_class} selecciona entre tres variantes:
 \begin{itemize}[leftmargin=*]
-    \item \texttt{model\_class}
-    \item \texttt{model}
-    \item \texttt{training}
+    \item \textbf{\texttt{frankenstein}}: encoder de arquitectura mixta con toda la gama de mezcladores de secuencia, MoE y normalización avanzada, entrenado con masked language modeling.
+    \item \textbf{\texttt{frankensteindecoder}}: decoder causal autorregresivo para generación de siguiente token; el runtime fuerza el enmascaramiento de decoder.
+    \item \textbf{\texttt{frankenstein\_vit}}: Vision Transformer sobre parches de imagen para predicción de parches enmascarados, clasificación y segmentación; el runtime fuerza el enmascaramiento de encoder y la configuración requiere los bloques \texttt{image} y \texttt{vision\_dataset}.
 \end{itemize}
 
-\paragraph{Selección de Clase de Modelo.}
-El campo \texttt{model\_class} determina la variante arquitectónica instanciada por el pipeline de entrenamiento. Se soportan dos opciones:
-\begin{itemize}[leftmargin=*]
-    \item \textbf{frankenstein}: Modelos encoder de arquitectura mixta que soportan diversos mecanismos de atención (estándar, sigmoide, retentiva, espacio de estados, dispersa y mezcladores con compuerta) con MoE (Mezcla de Expertos) y características avanzadas. Optimizado para entrenamiento bidireccional tipo encoder con objetivos de modelado de lenguaje enmascarado (MLM).
-    \item \textbf{frankensteindecoder}: Decoder causal autorregresivo para generación de siguiente token estilo LLM. Permite el enmascaramiento de atención causal para tareas de generación secuencial de texto. Cuando se selecciona esta clase, en tiempo de ejecución se fuerza \texttt{mode='decoder'}.
-\end{itemize}
+\paragraph{Modo de entrenamiento.} \texttt{model.dims.mode} controla el enmascaramiento: \texttt{encoder} usa atención bidireccional para masked language modeling y \texttt{decoder} usa enmascaramiento causal para predicción autorregresiva.
 
-\paragraph{Selección de Modo de Entrenamiento.}
-El campo \texttt{model.mode} controla el comportamiento de enmascaramiento de atención en todo el modelo:
-\begin{itemize}[leftmargin=*]
-    \item \textbf{encoder}: Utiliza atención bidireccional donde todos los tokens atienden a todos los demás tokens en la secuencia. Adecuado para tareas de preentrenamiento de modelado de lenguaje enmascarado (MLM) donde el modelo aprende a predecir tokens enmascarados aleatoriamente basándose en el contexto completo.
-    \item \textbf{decoder}: Utiliza enmascaramiento causal donde cada token solo puede atender a tokens anteriores en la secuencia. Requerido para tareas autorregresivas (AR) de predicción del siguiente token, como modelado de lenguaje y generación de texto. Cuando \texttt{model\_class='frankensteindecoder'}, el sistema fuerza automáticamente \texttt{mode='decoder'} en tiempo de ejecución.
-\end{itemize}
+\paragraph{Selección de mezcladores.} \texttt{model.dims.layer\_pattern} es una lista ordenada de identificadores de mezclador tomados de las ocho familias descritas en la Sección~\ref{sec:architecture-taxonomy}; el esquema fija los identificadores aceptados y la enumeración completa aparece en la Figura~\ref{fig:comprehensive-taxonomy} y el Apéndice~\ref{sec:annex-summary-tables}.
 
-Este soporte de arquitectura dual permite al sistema manejar tanto preentrenamiento tipo encoder (MLM en contextos bidireccionales) como generación tipo decoder (predicción causal autorregresiva) a través de una interfaz de configuración unificada.
-
-\textbf{Selección de Patrones de Mezcladores de Secuencia}: El campo \texttt{layer\_pattern} acepta una lista ordenada de identificadores de mezcladores que abarcan ocho familias: líneas base densas (\texttt{standard\_attn}, \texttt{sigmoid\_attn}, \texttt{gqa}), recurrentes/retentivas (\texttt{retnet}, \texttt{retnet\_attn}, \texttt{mamba}, \texttt{ode}, \texttt{titan\_attn}), atención dispersa (\texttt{sparse\_transformer\_attn}, \texttt{longformer\_attn}, \texttt{bigbird\_attn}, \texttt{sparsek\_attn}, \texttt{nsa\_attn}, \texttt{sparge\_attn}, \texttt{fasa\_attn}, \texttt{msa\_attn}, \texttt{sparda\_attn}), mecanismos con compuerta (\texttt{gla\_attn}, \texttt{deltanet\_attn}, \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn}, \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{gated\_softmax\_attn}, \texttt{kda\_attn}), compresión latente (\texttt{mla\_attn}, \texttt{gqla\_attn}, \texttt{mlra\_attn}, \texttt{tucker\_attn}, \texttt{iha\_attn}, \texttt{gta\_attn}, \texttt{mtla\_attn}, \texttt{cca\_attn}, \texttt{ccgqa\_attn}, \texttt{gma\_attn}) memoria condicional (\texttt{engram\_attn}) atención de peso rápido (\texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn}, \texttt{falcon3a\_attn}) y campo geométrico (\texttt{ssog\_attn}). La taxonomía completa con referencias se proporciona en la Sección~\ref{sec:architecture-taxonomy} y el Apéndice~\ref{sec:annex-summary-tables}.
-
-El \texttt{training.optimizer.optimizer\_class} soporta una amplia familia de optimizadores:
-\texttt{sgd\_momentum}, \texttt{adamw}, \texttt{adafactor}, \texttt{galore\_adamw}, \texttt{prodigy}, \texttt{lion}, \texttt{sophia}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{lamb}, \texttt{schedulefree\_adamw}, \texttt{shampoo}, \texttt{soap}, \texttt{anon}, \texttt{apollo}, \texttt{apollo\_mini}, y \texttt{q\_apollo}.
+\paragraph{Selección de optimizador.} \texttt{training.optimizer.optimizer\_class} selecciona una de veintitrés familias de optimizadores, resumidas en la Sección~\ref{sec:optimizer-families} y detalladas en el Apéndice~\ref{sec:annex-optimizers}.
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[
-font=\scriptsize,
-box/.append style={inner sep=4pt, minimum height=0.62cm}
-]
-% Top level
-\node[box, fill=green!10, minimum width=1.9cm] (yaml) at (0,0) {\textbf{YAML Config}};
-\node[box, fill=green!8, minimum width=2.0cm] (validation) at (0,-1.55) {\textbf{Validation}\\\texttt{schema + rules}};
-\node[box, fill=blue!10, minimum width=1.9cm] (web) at (-3.9,-2.95) {\textbf{Web}\\\texttt{Streamlit}};
-\node[box, fill=blue!8, minimum width=2.1cm] (cli) at (3.9,-2.95) {\textbf{CLI}\\\texttt{train / deploy / infer / web-server}};
-% Main blocks
-\node[box, fill=orange!12, minimum width=1.9cm] (model) at (-2.6,-4.3) {\textbf{Model}\\35+ mixers};
-\node[box, fill=yellow!15, minimum width=2.0cm] (train) at (0,-4.3) {\textbf{Training}\\AMP + scheduler};
-\node[box, fill=red!12, minimum width=1.9cm] (opt) at (2.6,-4.3) {\textbf{Optimizer}\\23 families};
-% Outcomes
-\node[box, fill=purple!12, minimum width=2.0cm] (modelout) at (-2.6,-5.95) {\textbf{Model Build}\\pattern + loops};
-\node[box, fill=purple!10, minimum width=2.0cm] (trainout) at (0,-5.95) {\textbf{Train Loop}\\checks + logs};
-\node[box, fill=purple!10, minimum width=2.0cm] (optout) at (2.6,-5.95) {\textbf{Opt Step}\\group routing};
-% Deployment
-\node[box, fill=cyan!12, minimum width=2.0cm] (deploy) at (0,-7.75) {\textbf{Deploy}\\quantization};
-\node[box, fill=cyan!10, minimum width=2.0cm] (sbert) at (2.6,-7.75) {\textbf{SBERT}\\search/cluster};
-\node[box, fill=cyan!8, minimum width=2.0cm] (export) at (-2.6,-7.75) {\textbf{Export}\\deploy --format transformers / gguf};
-% Arrows
-\draw[line] (yaml) -- (validation);
-\draw[line] (validation) -- (web);
-\draw[line] (validation) -- (cli);
-\draw[line] (validation) -- (model);
-\draw[line] (validation) -- (train);
-\draw[line] (validation) -- (opt);
-\draw[line] (model) -- (modelout);
-\draw[line] (train) -- (trainout);
-\draw[line] (opt) -- (optout);
-\draw[line] (trainout) -- (deploy);
-\draw[line] (optout) -- (sbert);
-\draw[line, dashed] (modelout) -- (trainout);
-\draw[line, dashed] (optout.south) |- (deploy.east);
-\draw[line] (cli) -- (export);
-\end{tikzpicture}}
-\caption{Arquitectura del sistema: la configuración fluye a través de la validación, se divide en modelo/entrenamiento/optimizador, ejecuta en tiempo real y produce artefactos de despliegue/SBERT/exportación.}
+\fitfigure{\includegraphics{../paper/figures/system-architecture.pdf}}
+\caption{Arquitectura del sistema: la configuración pasa por la validación, se particiona en componentes de modelo, entrenamiento y optimizador, se ejecuta en runtime y produce artefactos de despliegue y SBERT.}
 \label{fig:system-architecture}
 \end{figure}
 
 \subsection{Alcance del Esquema y Reglas de Validación}
 \label{sec:schema-validation}
 
-El esquema es estricto: los objetos de primer nivel y anidados establecen \texttt{additionalProperties: false}. Esto garantiza que las claves desconocidas fallen rápidamente en lugar de ser ignoradas silenciosamente. El objeto \texttt{training.optimizer.parameters} está adicionalmente restringido por reglas de prefijo específicas del optimizador mediante verificaciones de patrón \texttt{allOf}+\texttt{if/then}.
-
-Los valores de normalización actualmente aceptados por el esquema son:
-\[
-\texttt{norm\_type} \in \{\texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm}, \texttt{prms\_norm}\}
-\]
+Los objetos de primer nivel y anidados fijan \texttt{additionalProperties: false}, de modo que las claves desconocidas fallan de inmediato en lugar de ignorarse silenciosamente. Los parámetros del optimizador se restringen además mediante reglas de prefijo por familia. La validación entre componentes rechaza combinaciones incompatibles antes del entrenamiento: el tamaño oculto debe ser divisible por el número de cabezas, el número de cabezas clave--valor debe dividir el número de cabezas, el tamaño del vocabulario debe coincidir con el tokenizer, un modelo base requiere una tarea y (para MLM) un tokenizer, cada tarea requiere su bloque de optimizador correspondiente, las banderas de routers de BitNet requieren BitNet habilitado, y las clases decoder y de visión fuerzan sus respectivos modos de enmascaramiento.
 
 \subsection{Esquema de Configuración}
-El esquema completo de configuración del modelo y entrenamiento, incluyendo todos los campos, tipos, rangos y reglas de validación, se documenta en el Apéndice~\ref{sec:annex-schema}. El esquema impone \texttt{additionalProperties: false} en todos los niveles, garantizando que las claves desconocidas fallen rápidamente.
+El esquema completo---campos, tipos, rangos y reglas de validación---se documenta en el Apéndice~\ref{sec:annex-schema}. Los bloques en bucle se configuran con \texttt{num\_layers} y \texttt{num\_loops}, lo que da \texttt{num\_layers}$\times$\texttt{num\_loops} capas lógicas con un conteo de parámetros fijo.
 
-La profundidad en bucle inducida por el esquema es:
-\[
-L_{\text{logical}} = \texttt{num\_layers} \times \texttt{num\_loops}
-\]
-que es la definición a nivel de configuración de los bloques en bucle.
+\subsection{Tareas de Entrenamiento}
 
-\subsection{Tipos de Tarea de Entrenamiento}
+\texttt{training.task} selecciona el objetivo: \texttt{mlm} (masked language modeling), \texttt{causal\_lm} (predicción autorregresiva de siguiente token, solo clase decoder), \texttt{sbert} (embeddings de oraciones), \texttt{text\_classification} (solo clase encoder) y las tareas de visión \texttt{patch\_prediction}, \texttt{classification} y \texttt{segmentation} (solo Vision Transformer). Las tareas de NLP consumen \texttt{text\_dataset}; las de visión consumen \texttt{vision\_dataset}. Los flujos de embeddings de oraciones se describen en la Sección~\ref{sec:sbert}.
 
-El campo \texttt{training.task} determina el objetivo de entrenamiento, trabajando en conjunto con \texttt{model.mode} para definir cómo aprende el modelo:
+\subsection{Seguridad de Entrenamiento y Semántica de Runtime}
 
-\paragraph{Modelado de Lenguaje Enmascarado (MLM).}
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Modo}: Requiere \texttt{mode='encoder'} para atención bidireccional.
-    \item \textbf{Objetivo}: Enmascarar aleatoriamente tokens en la secuencia de entrada (típicamente 15\%) y entrenar al modelo para predecir los tokens enmascarados basándose en el contexto bidireccional completo.
-    \item \textbf{Caso de Uso}: Preentrenamiento de encoders para aprendizaje de representaciones, siguiendo la metodología BERT \citep{devlin_bert_2019}. El modelo aprende representaciones bidireccionales que capturan contexto tanto de izquierda como de derecha.
-    \item \textbf{Configuración}: Utiliza el parámetro \texttt{mlm\_probability} para controlar la fracción de enmascaramiento.
-\end{itemize}
-
-\paragraph{Modelado de Lenguaje Causal (\texttt{causal\_lm}).}
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Modo}: Requiere \texttt{mode='decoder'} para enmascaramiento causal.
-    \item \textbf{Objetivo}: Predicción autorregresiva del siguiente token --- cada posición $i$ predice el token $i+1$ dados solo los tokens precedentes. La cross-entropy se calcula sobre todas las posiciones desplazadas sin enmascarar (no hay enmascaramiento), a diferencia del MLM que supervisa solo posiciones enmascaradas aleatoriamente.
-    \item \textbf{Caso de Uso}: Generación de lenguaje y tareas estilo LLM siguiendo la metodología GPT. El modelo aprende dependencias secuenciales con atención causal donde cada token solo puede atender a tokens precedentes.
-    \item \textbf{Clase de Modelo}: Establecer \texttt{task='causal\_lm'} y \texttt{model\_class='frankensteindecoder'}; el esquema y el runtime requieren la clase decoder para esta tarea (el enmascaramiento causal solo lo proporciona el decoder).
-    \item \textbf{Configuración}: Reutiliza \texttt{training.optimizer}; el dataset de streaming almacena las secuencias sin enmascarar (\texttt{labels == input\_ids}) para que el trainer pueda calcular la pérdida de siguiente token desplazada.
-\end{itemize}
-
-Este soporte de tareas permite la experimentación unificada tanto en preentrenamiento tipo encoder (MLM para comprensión bidireccional), generación tipo decoder (\texttt{causal\_lm} para predicción autorregresiva del siguiente token) como en embedding de oraciones (SBERT), dentro del mismo código base.
-
-\subsection{Configuración del Optimizador}
-El objeto \texttt{training.optimizer} selecciona entre 23 familias de optimizadores mediante \texttt{optimizer\_class} y proporciona control de hiperparámetros por grupo de parámetros a través de una convención de nombres con prefijos. El contrato completo de prefijos del optimizador y las familias soportadas se documentan en el Apéndice~\ref{sec:annex-schema}.
-
-\subsection{Seguridad de Entrenamiento y Semántica de Ejecución}
-
-Las características de seguridad a nivel de esquema incluyen acumulación, recorte, verificación de explosión post-recorte y reintentos por NaN:
-\[
-g_{\text{acc}}=\frac{1}{K}\sum_{i=1}^{K} g_i,\quad K=\texttt{gradient\_accumulation\_steps}
-\]
-\[
-g_{\text{clip}} = g_{\text{acc}}\cdot
-\min\left(1,\frac{\tau}{\|g_{\text{acc}}\|_2+\epsilon}\right),\quad
-\tau=\texttt{grad\_clip\_max\_norm}
-\]
-luego los guardas de desbordamiento usan \texttt{inf\_post\_clip\_threshold} y lógica de reintentos limitada por \texttt{max\_nan\_retries}.
-
-El pseudocódigo completo del paso de entrenamiento guiado por esquema---incluyendo acumulación de gradientes, recorte de norma global, guardas de explosión post-recorte, reintentos acotados de NaN/Inf, despacho del scheduler y rotación de checkpoints rodantes/mejores---se difiere al Apéndice~\ref{sec:annex-norm-bitnet-mod}.
+El paso de entrenamiento acumula gradientes sobre micro-lotes, recorta la norma global, verifica desbordamientos posteriores al recorte, reintenta un número acotado de veces ante valores no finitos, despacha el scheduler configurado y rota checkpoints rodantes y del mejor modelo. El pseudocódigo completo se remite al Apéndice~\ref{sec:annex-norm-bitnet-mod}.
 
 \subsection{Variantes de Normalización}
 \label{sec:normalization}
 
-La normalización controla la escala de activación a través de la profundidad y es también una cuestión de compatibilidad con el esquema, ya que los valores aceptados de \texttt{norm\_type} son \texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm} y \texttt{prms\_norm} (RMSNorm parcial). Las formulaciones matemáticas de LayerNorm, RMSNorm, pRMSNorm, Tanh Dinámico (DyT) \citep{zhu_transformers_2025} y Erf Dinámico (Derf) \citep{chen_stronger_2025}, junto con una tabla comparativa, se detallan en el Apéndice~\ref{sec:annex-norm-bitnet-mod}.
+La normalización es a la vez una decisión de modelado y una cuestión de compatibilidad del esquema. Los valores aceptados de \texttt{norm.type} son \texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm}, \texttt{prms\_norm} (RMSNorm parcial) y \texttt{flash\_norm} (RMSNorm sin pesos). Sus formulaciones y comparación se detallan en el Apéndice~\ref{sec:annex-norm-bitnet-mod}.
 
 \subsection{Arquitecturas de Flujo Residual}
 \label{sec:residual-stream}
 
-La conexión residual no es solo una elección de modelado, sino también una decisión de macro-diseño. El sistema expone cuatro estrategias de conexión residual mediante el sub-objeto \texttt{model.residuals} (clave plana \texttt{residual\_type}, por defecto \texttt{standard}):
-
+Las conexiones residuales se exponen como una decisión de macro-diseño mediante el bloque \texttt{model.residuals}:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Residual estándar} (\texttt{residual\_type="standard"}): el residual de identidad clásico \citep{he_deep_2016}, $x_{l+1} = x_l + F(x_l, W_l)$. Sin estado, sin parámetros extra.
-    \item \textbf{Sin residual} (\texttt{residual\_type="none"}, experimental): $x_{l+1} = F(x_l, W_l)$, eliminando la conexión skip por completo. Útil solo como sonda de ablación.
-    \item \textbf{Residuales de Atención} (\texttt{residual\_type="full\_attn"} o \texttt{"block\_attn"}) \citep{sun_attnres_2026}: reemplazan la suma residual de coeficiente unitario fijo por atención softmax aprendida sobre la profundidad. Cada capa atiende sobre todas las salidas de capas anteriores (Full AttnRes) o sobre un pequeño conjunto de representaciones acumuladas por bloque (Block AttnRes). Añade $L \cdot C$ parámetros (un vector de query aprendido $\mathbf{w}_l$ por capa). Los queries inicializados a cero hacen que la atención inicial sea un promedio equiponderado, igualando el residual estándar en el paso cero.
-    \item \textbf{Hyper-Connexiones Restringidas por Variedad} (\texttt{residual\_type} combinado con \texttt{mhc.enabled=true}, documentado por separado en el Apéndice~\ref{sec:annex-mhc}): el residual de n streams \citep{xie_mhc_2025} cuya matriz de mezcla de flujo se restringe al politopo de Birkhoff mediante Sinkhorn--Knopp.
+    \item \textbf{Estándar}: el residual de identidad clásico \citep{he_deep_2016}.
+    \item \textbf{Ninguno}: sin conexión de salto, conservado solo como sonda de ablación.
+    \item \textbf{Attention Residuals} (\texttt{full\_attn} o \texttt{block\_attn}): atención aprendida sobre la profundidad que reemplaza la suma residual fija, ya sea sobre todas las capas anteriores o sobre resúmenes por bloques \citep{sun_attnres_2026}.
+    \item \textbf{Hiper-conexiones con restricción de variedad} (\texttt{mhc.enabled}): un residual de $n$ flujos cuya matriz de mezcla se restringe al politopo de Birkhoff \citep{xie_mhc_2025}.
 \end{itemize}
 
-AttnRes se integra ortogonalmente con mHC y con Mixture-of-Depths: el campo \texttt{model.residuals.mhc\_stream\_mode} selecciona si la atención sobre la profundidad corre por stream (\texttt{independent}) o conjuntamente sobre la proyección aplanada $nC$ (\texttt{joint}) cuando mHC está activo. La formulación completa, las cuatro estrategias, el cableado de implementación y los resultados reportados se detallan en el Apéndice~\ref{sec:annex-attnres}. mHC por sí solo se detalla en el Apéndice~\ref{sec:annex-mhc}.
-
+Attention Residuals se compone con mHC y Mixture-of-Depths; las formulaciones, el cableado y los resultados reportados se recopilan en los Apéndices~\ref{sec:annex-attnres} y~\ref{sec:annex-mhc}.

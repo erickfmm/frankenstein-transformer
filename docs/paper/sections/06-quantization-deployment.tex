@@ -1,22 +1,11 @@
 \section{Quantization and Deployment}
 \label{sec:quantization}
 
-The deploy stack uses ternary weight packing plus INT8 activation quantization for efficient artifacts.
+The deploy stage converts a trained checkpoint into a compact artifact through ternary weight packing \citep{wang_bitnet_2023} and INT8 activation scaling, with size estimates aligned with lightweight deployment goals \citep{samson_lightweight_2026,bravin_embbert_2026}. The same subcommand emits standard or quantized artifacts, or exports HuggingFace Transformers and BitNet GGUF formats for external runtimes. The formulations and size estimates are deferred to Appendix~\ref{sec:annex-norm-bitnet-mod}.
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[node distance=1.3cm and 0.9cm]
-\node[box, fill=blue!8] (ckpt) {Trained checkpoint};
-\node[box, fill=yellow!10, right=of ckpt] (quant) {Weight packing\\ternary / low-bit};
-\node[box, fill=orange!12, right=of quant] (act) {Activation scaling\\INT8 path};
-\node[box, fill=green!8, right=of act] (artifact) {Deployable artifact\\smaller storage footprint};
-\draw[line] (ckpt) -- (quant);
-\draw[line] (quant) -- (act);
-\draw[line] (act) -- (artifact);
-\end{tikzpicture}}
-\caption{Deployment path from a trained checkpoint to a compact artifact. The codebase treats quantization as a deploy-stage transformation rather than a separate model family.}
+\fitfigure{\includegraphics{figures/deploy-flow.pdf}}
+\caption{Deployment path from a trained checkpoint to a compact artifact. Quantization is a deploy-stage transformation rather than a separate model family.}
 \label{fig:deploy-flow}
 \end{figure}
-
-\subsection{Ternary Quantization and Activation Scaling}
-The deploy-stage transforms a trained checkpoint into a compact artifact via BitNet-style ternary weight packing \citep{wang_bitnet_2023}, INT8 activation scaling, and 1.58-bit storage approximation aligned with lightweight deployment goals \citep{samson_lightweight_2026,bravin_embbert_2026}. The mathematical formulations of the ternary weight scaling, the INT8 activation quantization/dequantization, and the FP32/FP16/1.58-bit size estimates are deferred to Appendix~\ref{sec:annex-norm-bitnet-mod}.

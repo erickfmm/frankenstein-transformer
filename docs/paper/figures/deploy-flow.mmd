@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":20,"rankSpacing":26}}}%%
+flowchart LR
+  ckpt["Trained checkpoint"]
+  quant["Weight packing<br/>ternary / low-bit"]
+  act["Activation scaling<br/>INT8 path"]
+  artifact["Deployable artifact<br/>smaller storage footprint"]
+
+  ckpt --> quant
+  quant --> act
+  act --> artifact

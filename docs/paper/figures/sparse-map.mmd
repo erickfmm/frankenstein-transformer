@@ -1,0 +1,13 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":24,"rankSpacing":24,"wrappingWidth":230}}}%%
+flowchart TD
+  tokens["Token sequence"]
+
+  subgraph strategies["Sparse design strategies: locality, structured graph sparsity, and learned or predicted selection"]
+    local["Local / windowed<br/>Longformer"]
+    hybrid["Hybrid sparse graph<br/>BigBird / Sparse Transformer"]
+    select["Selective pruning<br/>SparseK / NSA / FASA<br/>SpargeAttn"]
+  end
+
+  tokens --> local
+  tokens --> hybrid
+  tokens --> select

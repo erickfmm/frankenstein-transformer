@@ -4,156 +4,60 @@
 \subsection{Configuration-Centric Architecture}
 \label{sec:config-centric-architecture}
 
-The core design choice in this repository is that experimentation is \emph{schema first}. Instead of exposing a large number of loosely checked flags, the project forces model topology, optimizer family, training limits, and telemetry options through a single validated configuration document. This reduces ambiguity when reproducing results and makes it possible to compare many architectures under a consistent operational interface.
+Experimentation in this project is \emph{schema first}. Rather than exposing loosely checked flags, model topology, optimizer family, training limits, and telemetry pass through a single validated configuration document, which reduces ambiguity when reproducing results and lets many architectures share one operational interface.
 
-The authoritative contract is \texttt{configs/schema.yaml}. It enforces three top-level objects:
+The authoritative contract is \texttt{src/schema.yaml}, a modular JSON Schema whose modules under \texttt{src/schema/} cover the model, model class, tokenizer, optimizer, SBERT, training, and dataset blocks. The top-level objects are \texttt{base\_model}, \texttt{tokenizer}, \texttt{model\_class}, \texttt{model}, \texttt{training}, \texttt{image}, \texttt{vision\_dataset}, and \texttt{text\_dataset}.
+
+\paragraph{Model class.} The \texttt{model\_class} field selects among three variants:
 \begin{itemize}[leftmargin=*]
-    \item \texttt{model\_class}
-    \item \texttt{model}
-    \item \texttt{training}
+    \item \textbf{\texttt{frankenstein}}: mixed-architecture encoder with the full range of sequence mixers, MoE, and advanced normalization, trained with masked language modeling.
+    \item \textbf{\texttt{frankensteindecoder}}: autoregressive causal decoder for next-token generation; the runtime forces decoder masking.
+    \item \textbf{\texttt{frankenstein\_vit}}: Vision Transformer over image patches for masked patch prediction, classification, and segmentation; the runtime forces encoder masking and the configuration requires the \texttt{image} and \texttt{vision\_dataset} blocks.
 \end{itemize}
 
-\paragraph{Model Class Selection.}
-The \texttt{model\_class} field determines the architectural variant instantiated by the training pipeline. Two options are supported:
-\begin{itemize}[leftmargin=*]
-    \item \textbf{frankenstein}: Mixed-architecture encoder models supporting diverse attention mechanisms (standard, sigmoid, retentive, state-space, sparse, and gated mixers) with MoE (Mixture of Experts) and advanced features. Optimized for bidirectional encoder-style training with masked language modeling (MLM) objectives.
-    \item \textbf{frankensteindecoder}: Autoregressive causal decoder for LLM-style next-token generation. Enables causal attention masking for sequential text generation tasks. When this class is selected, runtime enforces \texttt{mode='decoder'}. 
-\end{itemize}
+\paragraph{Training mode.} \texttt{model.dims.mode} controls masking: \texttt{encoder} uses bidirectional attention for masked language modeling, and \texttt{decoder} uses causal masking for autoregressive prediction.
 
-\paragraph{Training Mode Selection.}
-The \texttt{model.mode} field controls attention masking behavior across the model:
-\begin{itemize}[leftmargin=*]
-    \item \textbf{encoder}: Uses bidirectional attention where all tokens attend to all other tokens in the sequence. Suitable for masked language modeling (MLM) pre-training tasks where the model learns to predict randomly masked tokens based on full context.
-    \item \textbf{decoder}: Uses causal masking where each token can only attend to previous tokens in the sequence. Required for autoregressive (AR) next-token prediction tasks such as language modeling and text generation. When \texttt{model\_class='frankensteindecoder'}, the system automatically forces \texttt{mode='decoder'} at runtime.
-\end{itemize}
+\paragraph{Mixer selection.} \texttt{model.dims.layer\_pattern} is an ordered list of mixer identifiers drawn from the eight families described in Section~\ref{sec:architecture-taxonomy}; the schema fixes the accepted identifiers, and the complete enumeration appears in Figure~\ref{fig:comprehensive-taxonomy} and Appendix~\ref{sec:annex-summary-tables}.
 
-This dual architecture support enables the system to handle both encoder-style pre-training (MLM on bidirectional contexts) and decoder-style generation (causal autoregressive prediction) through a unified configuration interface.
-
-\textbf{Sequence Mixer Pattern Selection}: The \texttt{layer\_pattern} field accepts an ordered list of mixer identifiers spanning eight families: dense baselines (\texttt{standard\_attn}, \texttt{sigmoid\_attn}, \texttt{gqa}), recurrent/retentive (\texttt{retnet}, \texttt{retnet\_attn}, \texttt{mamba}, \texttt{ode}, \texttt{titan\_attn}), sparse attention (\texttt{sparse\_transformer\_attn}, \texttt{longformer\_attn}, \texttt{bigbird\_attn}, \texttt{sparsek\_attn}, \texttt{nsa\_attn}, \texttt{sparge\_attn}, \texttt{fasa\_attn}, \texttt{msa\_attn}, \texttt{sparda\_attn}), gated mechanisms (\texttt{gla\_attn}, \texttt{deltanet\_attn}, \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn}, \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{gated\_softmax\_attn}, \texttt{kda\_attn}), latent compression (\texttt{mla\_attn}, \texttt{gqla\_attn}, \texttt{mlra\_attn}, \texttt{tucker\_attn}, \texttt{iha\_attn}, \texttt{gta\_attn}, \texttt{mtla\_attn}, \texttt{cca\_attn}, \texttt{ccgqa\_attn}, \texttt{gma\_attn}), conditional memory (\texttt{engram\_attn}), fast-weight attention (\texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn}, \texttt{falcon3a\_attn}), and geometric field (\texttt{ssog\_attn}). The complete taxonomy with references is provided in Section~\ref{sec:architecture-taxonomy} and Appendix~\ref{sec:annex-summary-tables}.
-
-The \texttt{training.optimizer.optimizer\_class} supports a broad optimizer family:
-\texttt{sgd\_momentum}, \texttt{adamw}, \texttt{adafactor}, \texttt{galore\_adamw}, \texttt{prodigy}, \texttt{lion}, \texttt{sophia}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{lamb}, \texttt{schedulefree\_adamw}, \texttt{shampoo}, \texttt{soap}, \texttt{anon}, \texttt{apollo}, \texttt{apollo\_mini}, and \texttt{q\_apollo}.
+\paragraph{Optimizer selection.} \texttt{training.optimizer.optimizer\_class} selects one of twenty-three optimizer families, summarized in Section~\ref{sec:optimizer-families} and detailed in Appendix~\ref{sec:annex-optimizers}.
 
 \begin{figure}[t]
 \centering
-\fitfigure{\begin{tikzpicture}[
-font=\scriptsize,
-box/.append style={inner sep=4pt, minimum height=0.62cm}
-]
-% Top level
-\node[box, fill=green!10, minimum width=1.9cm] (yaml) at (0,0) {\textbf{YAML Config}};
-\node[box, fill=green!8, minimum width=2.0cm] (validation) at (0,-1.55) {\textbf{Validation}\\\texttt{schema + rules}};
-\node[box, fill=blue!10, minimum width=1.9cm] (web) at (-3.9,-2.95) {\textbf{Web}\\\texttt{Streamlit}};
-\node[box, fill=blue!8, minimum width=2.1cm] (cli) at (3.9,-2.95) {\textbf{CLI}\\\texttt{train / deploy / infer / web-server}};
-% Main blocks
-\node[box, fill=orange!12, minimum width=1.9cm] (model) at (-2.6,-4.3) {\textbf{Model}\\35+ mixers};
-\node[box, fill=yellow!15, minimum width=2.0cm] (train) at (0,-4.3) {\textbf{Training}\\AMP + scheduler};
-\node[box, fill=red!12, minimum width=1.9cm] (opt) at (2.6,-4.3) {\textbf{Optimizer}\\23 families};
-% Outcomes
-\node[box, fill=purple!12, minimum width=2.0cm] (modelout) at (-2.6,-5.95) {\textbf{Model Build}\\pattern + loops};
-\node[box, fill=purple!10, minimum width=2.0cm] (trainout) at (0,-5.95) {\textbf{Train Loop}\\checks + logs};
-\node[box, fill=purple!10, minimum width=2.0cm] (optout) at (2.6,-5.95) {\textbf{Opt Step}\\group routing};
-% Deployment
-\node[box, fill=cyan!12, minimum width=2.0cm] (deploy) at (0,-7.75) {\textbf{Deploy}\\quantization};
-\node[box, fill=cyan!10, minimum width=2.0cm] (sbert) at (2.6,-7.75) {\textbf{SBERT}\\search/cluster};
-\node[box, fill=cyan!8, minimum width=2.0cm] (export) at (-2.6,-7.75) {\textbf{Export}\\deploy --format transformers / gguf};
-% Arrows
-\draw[line] (yaml) -- (validation);
-\draw[line] (validation) -- (web);
-\draw[line] (validation) -- (cli);
-\draw[line] (validation) -- (model);
-\draw[line] (validation) -- (train);
-\draw[line] (validation) -- (opt);
-\draw[line] (model) -- (modelout);
-\draw[line] (train) -- (trainout);
-\draw[line] (opt) -- (optout);
-\draw[line] (trainout) -- (deploy);
-\draw[line] (optout) -- (sbert);
-\draw[line, dashed] (modelout) -- (trainout);
-\draw[line, dashed] (optout.south) |- (deploy.east);
-\draw[line] (cli) -- (export);
-\end{tikzpicture}}
-\caption{System architecture: configuration flows through validation, partitions into model/training/optimizer, executes runtime, produces deployment/SBERT artifacts.}
+\fitfigure{\includegraphics{figures/system-architecture.pdf}}
+\caption{System architecture: configuration flows through validation, partitions into model, training, and optimizer components, executes at runtime, and produces deployment and SBERT artifacts.}
 \label{fig:system-architecture}
 \end{figure}
 
 \subsection{Schema Scope and Validation Rules}
 \label{sec:schema-validation}
 
-The schema is strict: top-level and nested objects set \texttt{additionalProperties: false}. This guarantees that unknown keys fail fast instead of being silently ignored. The \texttt{training.optimizer.parameters} object is additionally constrained by optimizer-specific prefix rules through \texttt{allOf}+\texttt{if/then} pattern checks.
-
-Normalization values currently accepted by schema are:
-\[
-\texttt{norm\_type} \in \{\texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm}, \texttt{prms\_norm}\}
-\]
+Top-level and nested objects set \texttt{additionalProperties: false}, so unknown keys fail fast instead of being silently ignored. Optimizer parameters are further constrained by per-family prefix rules. Cross-component validation rejects incompatible combinations before training: hidden size must be divisible by the number of heads, the number of key--value heads must divide the number of heads, vocabulary size must match the tokenizer, a base model requires a task and (for MLM) a tokenizer, each task requires its matching optimizer block, BitNet router flags require BitNet to be enabled, and the decoder and vision classes force their respective masking modes.
 
 \subsection{Configuration Schema}
-The complete model and training configuration schema, including all fields, types, ranges, and validation rules, is documented in Appendix~\ref{sec:annex-schema}. The schema enforces \texttt{additionalProperties: false} at all levels, guaranteeing that unknown keys fail fast.
+The complete schema---fields, types, ranges, and validation rules---is documented in Appendix~\ref{sec:annex-schema}. Looped blocks are configured through \texttt{num\_layers} and \texttt{num\_loops}, giving \texttt{num\_layers}$\times$\texttt{num\_loops} logical layers at fixed parameter count.
 
-Looped depth induced by schema is:
-\[
-L_{\text{logical}} = \texttt{num\_layers} \times \texttt{num\_loops}
-\]
-which is the configuration-level definition of looped blocks.
+\subsection{Training Tasks}
 
-\subsection{Training Task Types}
-
-The \texttt{training.task} field determines the training objective, working in conjunction with \texttt{model.mode} to define how the model learns:
-
-\paragraph{Masked Language Modeling (MLM).}
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Mode}: Requires \texttt{mode='encoder'} for bidirectional attention.
-    \item \textbf{Objective}: Randomly mask tokens in input sequence (typically 15\%) and train model to predict masked tokens based on full bidirectional context.
-    \item \textbf{Use Case}: Pre-training encoders for representation learning, following BERT-style methodology \citep{devlin_bert_2019}. Model learns bidirectional representations capturing context from both left and right.
-    \item \textbf{Configuration}: Uses \texttt{mlm\_probability} parameter to control masking fraction.
-\end{itemize}
-
-\paragraph{Causal Language Modeling (\texttt{causal\_lm}).}
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Mode}: Requires \texttt{mode='decoder'} for causal masking.
-    \item \textbf{Objective}: Autoregressive next-token prediction --- each position $i$ predicts token $i+1$ given all preceding tokens only. Cross-entropy is computed over all shifted non-pad positions (no masking), in contrast to MLM which supervises only randomly masked positions.
-    \item \textbf{Use Case}: Language generation and LLM-style tasks following GPT methodology. Model learns sequential dependencies with causal attention where each token can only attend to preceding tokens.
-    \item \textbf{Model Class}: Set \texttt{task='causal\_lm'} and \texttt{model\_class='frankensteindecoder'}; the schema and runtime require the decoder class for this task (causal masking is only provided by the decoder).
-    \item \textbf{Configuration}: Reuses \texttt{training.optimizer}; the streaming dataset stores sequences unmasked (\texttt{labels == input\_ids}) so the trainer can compute the shifted next-token loss.
-\end{itemize}
-
-This task support enables unified experimentation across encoder-style pre-training (MLM for bidirectional understanding), decoder-style generation (\texttt{causal\_lm} for autoregressive next-token prediction), and sentence embedding (SBERT), all within the same codebase.
-
-
-\subsection{Optimizer Configuration}
-The \texttt{training.optimizer} object selects among 23 optimizer families via \texttt{optimizer\_class} and provides per-parameter-group hyperparameter control through a prefixed naming convention. The complete optimizer prefix contract and supported families are documented in Appendix~\ref{sec:annex-schema}.
+\texttt{training.task} selects the objective: \texttt{mlm} (masked language modeling), \texttt{causal\_lm} (autoregressive next-token prediction, decoder class only), \texttt{sbert} (sentence embeddings), \texttt{text\_classification} (encoder class only), and the vision tasks \texttt{patch\_prediction}, \texttt{classification}, and \texttt{segmentation} (Vision Transformer only). NLP tasks consume \texttt{text\_dataset}; vision tasks consume \texttt{vision\_dataset}. Sentence-embedding workflows are described in Section~\ref{sec:sbert}.
 
 \subsection{Training Safety and Runtime Semantics}
 
-Schema-level safety features include accumulation, clipping, post-clip explosion checks, and NaN retries:
-\[
-g_{\text{acc}}=\frac{1}{K}\sum_{i=1}^{K} g_i,\quad K=\texttt{gradient\_accumulation\_steps}
-\]
-\[
-g_{\text{clip}} = g_{\text{acc}}\cdot
-\min\left(1,\frac{\tau}{\|g_{\text{acc}}\|_2+\epsilon}\right),\quad
-\tau=\texttt{grad\_clip\_max\_norm}
-\]
-then overflow guards use \texttt{inf\_post\_clip\_threshold} and retry logic bounded by \texttt{max\_nan\_retries}.
-
-The complete pseudocode for the schema-driven training step---including gradient accumulation, global-norm clipping, post-clip explosion guards, bounded NaN/Inf retries, scheduler dispatch, and rolling/best checkpoint rotation---is deferred to Appendix~\ref{sec:annex-norm-bitnet-mod}.
+The training step accumulates gradients over micro-batches, clips the global norm, checks for post-clip overflow, retries a bounded number of times on non-finite values, dispatches the configured scheduler, and rotates rolling and best checkpoints. The full pseudocode is deferred to Appendix~\ref{sec:annex-norm-bitnet-mod}.
 
 \subsection{Normalization Variants}
 \label{sec:normalization}
 
-Normalization controls activation scale across depth and is also a schema compatibility question, since the accepted \texttt{norm\_type} values are \texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm}, and \texttt{prms\_norm} (partial RMSNorm). The mathematical formulations of LayerNorm, RMSNorm, pRMSNorm, Dynamic Tanh (DyT) \citep{zhu_transformers_2025}, and Dynamic Erf (Derf) \citep{chen_stronger_2025}, together with a comparison table, are detailed in Appendix~\ref{sec:annex-norm-bitnet-mod}.
+Normalization is both a modeling choice and a schema compatibility question. The accepted \texttt{norm.type} values are \texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm}, \texttt{prms\_norm} (partial RMSNorm), and \texttt{flash\_norm} (weightless RMSNorm). Their formulations and comparison are detailed in Appendix~\ref{sec:annex-norm-bitnet-mod}.
 
 \subsection{Residual-Stream Architectures}
 \label{sec:residual-stream}
 
-The residual connection is not only a modeling choice but also a macro-design decision. The system exposes four residual-connection strategies via the \texttt{model.residuals} sub-object (\texttt{residual\_type} flat key, default \texttt{standard}):
-
+Residual connections are exposed as a macro-design choice through the \texttt{model.residuals} block:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Standard residual} (\texttt{residual\_type="standard"}): the classical identity residual \citep{he_deep_2016}, $x_{l+1} = x_l + F(x_l, W_l)$. Stateless, no extra parameters.
-    \item \textbf{No residual} (\texttt{residual\_type="none"}, experimental): $x_{l+1} = F(x_l, W_l)$, dropping the skip connection entirely. Useful only as an ablation probe.
-    \item \textbf{Attention Residuals} (\texttt{residual\_type="full\_attn"} or \texttt{"block\_attn"}) \citep{sun_attnres_2026}: replace the fixed unit-coefficient residual sum with learned softmax attention over depth. Each layer attends over all previous layer outputs (Full AttnRes) or over a small set of block-wise accumulated representations (Block AttnRes). Adds $L \cdot C$ parameters (one learned query vector $\mathbf{w}_l$ per layer). Zero-init queries make the initial attention an equal-weight average, matching the standard residual at step zero.
-    \item \textbf{Manifold-Constrained Hyper-Connections} (\texttt{residual\_type} combined with \texttt{mhc.enabled=true}, documented separately in Appendix~\ref{sec:annex-mhc}): the n-stream residual \citep{xie_mhc_2025} whose stream-mixing matrix is constrained to the Birkhoff polytope via Sinkhorn--Knopp.
+    \item \textbf{Standard}: the classical identity residual \citep{he_deep_2016}.
+    \item \textbf{None}: no skip connection, retained only as an ablation probe.
+    \item \textbf{Attention Residuals} (\texttt{full\_attn} or \texttt{block\_attn}): learned attention over depth replaces the fixed residual sum, either over all previous layers or over block-wise summaries \citep{sun_attnres_2026}.
+    \item \textbf{Manifold-constrained hyper-connections} (\texttt{mhc.enabled}): an $n$-stream residual whose mixing matrix is constrained to the Birkhoff polytope \citep{xie_mhc_2025}.
 \end{itemize}
 
-AttnRes integrates orthogonally with mHC and with Mixture-of-Depths: the \texttt{model.residuals.mhc\_stream\_mode} field selects whether the depth-wise attention runs per stream (\texttt{independent}) or jointly over the flattened $nC$ projection (\texttt{joint}) when mHC is active. The full formulation, the four strategies, the implementation wiring, and the reported results are detailed in Appendix~\ref{sec:annex-attnres}. mHC alone is detailed in Appendix~\ref{sec:annex-mhc}.
-
+Attention Residuals compose with mHC and Mixture-of-Depths; the formulations, wiring, and reported results are collected in Appendices~\ref{sec:annex-attnres} and~\ref{sec:annex-mhc}.
