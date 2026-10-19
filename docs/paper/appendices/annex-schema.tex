@@ -5,12 +5,12 @@ The Frankenstein Transformer toolkit enforces a strict YAML configuration schema
 
 \subsection{Top-Level Structure}
 
-The root schema object has five top-level properties. All are optional except \texttt{training}, which is required:
+The root schema object has the following top-level properties. All are optional except \texttt{training}, which is required:
 
 \begin{itemize}[nosep]
     \item \texttt{base\_model} (string) --- HuggingFace model identifier or local path for continual pretraining or SBERT fine-tuning. When set, \texttt{model\_class} and \texttt{model} are not required (the architecture is inferred from the checkpoint).
     \item \texttt{tokenizer} (object) --- Tokenizer configuration, available to both the \texttt{base\_model} path and custom from-scratch models. Two modes are selected via \texttt{source}: \texttt{hf\_repo} (default) loads a pretrained tokenizer from \texttt{name\_or\_path}; \texttt{train\_from\_dataset} trains a new tokenizer from the dataset text (see \S\ref{subsec:tokenizer-config}). Required when using \texttt{base\_model} with the \texttt{mlm} task.
-    \item \texttt{model\_class} (enum) --- Model architecture variant: \texttt{frankenstein} (mixed-architecture encoder) or \texttt{frankensteindecoder} (autoregressive causal decoder). Required when \texttt{base\_model} is not set.
+    \item \texttt{model\_class} (enum) --- Model architecture variant: \texttt{frankenstein} (mixed-architecture encoder), \texttt{frankensteindecoder} (autoregressive causal decoder), or \texttt{frankenstein\_vit} (vision transformer). Required when \texttt{base\_model} is not set.
     \item \texttt{model} (object) --- Model architecture parameters (see \S\ref{subsec:model-config}). Required when \texttt{base\_model} is not set.
     \item \texttt{training} (object, \textbf{required}) --- Training configuration (see \S\ref{subsec:training-config}).
 \end{itemize}
@@ -47,13 +47,12 @@ dims.hidden\_size & int $\ge 1$ (required) & Hidden dimension. Must be divisible
 dims.num\_layers & int $\ge 1$ (required) & Number of physical transformer layers. Typical: 6--24. \\
 dims.num\_loops & int $\ge 1$ & Logical loop count. Each layer in \texttt{layer\_pattern} runs \texttt{num\_loops} times. Default: 1. \\
 dims.num\_heads & int $\ge 1$ (required) & Number of parallel attention heads. Must divide \texttt{hidden\_size} evenly. \\
-dims.retention\_heads & int $\ge 1$ & Number of heads for RetNet layers. Must divide \texttt{hidden\_size} evenly. \\
 dims.dropout & float [0,1] & Global dropout rate. Typical: 0.1 (BERT standard). \\
-dims.layer\_pattern & array of enum (required) & Ordered sequence of layer types. Length must equal \texttt{num\_layers}. 35+ mixer types available (see Table~\ref{tab:layer-pattern}). \\
+dims.layer\_pattern & array of enum (required) & Ordered sequence of layer types. Length must equal \texttt{num\_layers}. 43 mixer codes available (see Table~\ref{tab:layer-pattern}). \\
 \midrule
 \multicolumn{3}{l}{\textit{model.norm.*}} \\
 \midrule
-norm.type & enum & Normalization strategy: \texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm}, \texttt{prms\_norm}. \\
+norm.type & enum & Normalization strategy: \texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm}, \texttt{prms\_norm}, \texttt{flash\_norm}. \\
 norm.partial\_ratio & float (0,1] & Fraction of hidden dims for pRMSNorm estimation. Default: 0.0625. \\
 \midrule
 \multicolumn{3}{l}{\textit{model.embedding.factorized.*}} \\
@@ -66,14 +65,14 @@ embedding.factorized.dim & int $\ge 1$ & Intermediate dimension for factorized e
 embedding.conv.enabled & bool & Apply Conv1d over token embeddings to capture local n-gram patterns. \\
 embedding.conv.kernel & int $\ge 1$ & Kernel size for embedding Conv1d. Typical: 3. \\
 \midrule
-\multicolumn{3}{l}{\textit{model.attention.titan.*}} \\
+\multicolumn{3}{l}{\textit{model.attention.ode.*}} \\
 \midrule
-attention.titan.positional\_encoding & enum (hope, rope) & Positional encoding method for \texttt{titan\_attn} layers. \\
-attention.titan.use\_hope & bool & Legacy flag for HoPE in \texttt{titan\_attn}. Deprecated; prefer \texttt{positional\_encoding}. \\
-attention.titan.hope.base & float $\ge 0$ & Base frequency scale for HoPE. Typical: 10000. \\
-attention.titan.hope.damping & float $\ge 0$ & Damping coefficient for HoPE attention decay. Typical: 0.01. \\
-attention.titan.rope.base & float $\ge 0$ & Base frequency for RoPE. Typical: 10000. \\
-attention.titan.rope.scaling & float $\ge 0$ & Multiplier for RoPE position indices. Typical: 1.0. \\
+attention.ode.solver & enum (rk4, euler) & Numerical integration method for ODE layers. Default: rk4. \\
+attention.ode.steps & int $\ge 1$ & Integration steps between consecutive transformer layers. Default: 2. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.attention.retnet.*}} \\
+\midrule
+attention.retnet.heads & int $\ge 1$ & Retention heads for \texttt{retnet}/\texttt{retnet\_attn} layers. Must divide \texttt{hidden\_size}. Default: 8. \\
 \midrule
 \multicolumn{3}{l}{\textit{model.attention.mla.*}} \\
 \midrule
@@ -161,30 +160,48 @@ mhc.gating\_init & float $> 0$ & Initial value of the mHC gating scalars $\alpha
 mhc.checkpoint & bool & Gradient checkpointing on mHC layers to mitigate the $\sim n\times$ activation-memory increase. Default: \texttt{false}. \\
 mhc.full\_prec\_under\_bitnet & bool & Keep the mHC coefficient projection full-precision under BitNet. Default: \texttt{true}. \\
 \midrule
-\multicolumn{3}{l}{\textit{model.* (flat top-level)}} \\
+\multicolumn{3}{l}{\textit{model.moe.*}} \\
 \midrule
-use\_moe & bool & Enable Mixture of Experts in FFN layers. \\
-num\_experts & int $\ge 1$ & Total number of expert networks in MoE layers. Requires \texttt{use\_moe=true}. \\
-top\_k\_experts & int $\ge 1$ & Number of experts activated per token in MoE. Must be $\le$ \texttt{num\_experts}. \\
-use\_bitnet & bool & Enable BitLinear ternary weight quantization. Default: \texttt{true}. \\
-bitnet\_routers & bool & Also quantize routing/scoring projections. Requires \texttt{use\_bitnet=true}. Default: \texttt{false}. \\
-use\_bitnet\_conv & bool & Quantize embedding Conv1d with BitConv1d. Requires \texttt{use\_bitnet=true} and \texttt{embedding.conv.enabled=true}. Default: \texttt{false}. \\
-use\_mixture\_of\_depths & bool & Enable Mixture-of-Depths token routing. \\
-mixture\_of\_depths\_capacity\_ratio & float (0,1] & Fraction of tokens updated per layer in MoD. \\
-mixture\_of\_depths\_router\_aux\_loss\_weight & float $\ge 0$ & Weight for MoD router auxiliary loss. \\
-ffn\_hidden\_size & int $\ge 1$ & Intermediate dimension of feed-forward layers. Typical: $4\times$ \texttt{hidden\_size}. \\
-ffn\_activation & enum (silu, gelu) & Non-linear activation for FFN layers. \\
-ffn\_activation\_config & object & Nested parameters for learnable activations (RAF degrees/version/init, PReLU init, etc.). \\
-ode\_solver & enum (rk4, euler) & Numerical integration method for ODE layers. \\
-ode\_steps & int $\ge 1$ & Number of integration steps for ODE layers. Typical: 2--4. \\
+moe.enabled & bool & Enable Mixture of Experts in FFN layers. Default: \texttt{true}. \\
+moe.num\_experts & int $\ge 1$ & Total number of expert networks. Default: 8. \\
+moe.top\_k & int $\ge 1$ & Experts activated per token. Must be $\le$ \texttt{num\_experts}. Default: 2. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.bitnet.*}} \\
+\midrule
+bitnet.enabled & bool & Enable BitLinear ternary weight quantization. Default: \texttt{true}. \\
+bitnet.routers & bool & Also quantize routing/scoring projections. Requires \texttt{bitnet.enabled=true}. Default: \texttt{false}. \\
+bitnet.conv & bool & Quantize embedding Conv1d with BitConv1d. Requires \texttt{bitnet.enabled=true} and \texttt{embedding.conv.enabled=true}. Default: \texttt{false}. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.mixture\_of\_depths.*}} \\
+\midrule
+mixture\_of\_depths.enabled & bool & Enable Mixture-of-Depths token routing. Default: \texttt{false}. \\
+mixture\_of\_depths.capacity\_ratio & float (0,1] & Fraction of tokens updated per layer. Default: 0.5. \\
+mixture\_of\_depths.router\_aux\_loss\_weight & float $\ge 0$ & Weight for the router auxiliary loss. Default: 0.0. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.ssmax.*}} \\
+\midrule
+ssmax.enabled & bool & Enable Scalable Softmax (arXiv:2505.22842). Default: \texttt{false}. \\
+ssmax.s\_init & float $> 0$ & Initial per-head SSMax scalar. Default: 1.0. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.ffn.*}} \\
+\midrule
+ffn.hidden\_size & int $\ge 1$ & Intermediate FFN dimension. Default: $2\times$ \texttt{hidden\_size}. \\
+ffn.activation & enum & FFN non-linearity (43 values). Default: \texttt{silu}. \\
+ffn.activation\_config & object & Parameters for learnable/parametric activations. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.classification\_head.*}} \\
+\midrule
+classification\_head.enabled & bool & Enable the NLP sequence-classification head. Default: \texttt{false}. \\
+classification\_head.num\_labels & int or null & Number of classes. \\
+classification\_head.pooling\_mode & enum (cls, gap) & Pooling for the classification head. Default: \texttt{cls}. \\
 \end{longtable}
 
-Fields are grouped under hierarchical sub-objects (\texttt{dims}, \texttt{norm}, \texttt{embedding.factorized}, \texttt{embedding.conv}, \texttt{attention.titan}, \texttt{attention.mla}, \texttt{attention.gqla}, etc.); each sub-header row marks the prefix in effect for the rows that follow it. Fields listed under \texttt{model.*} remain flat top-level keys.
+Fields are grouped under hierarchical sub-objects (\texttt{dims}, \texttt{norm}, \texttt{embedding}, \texttt{attention}, \texttt{moe}, \texttt{bitnet}, \texttt{mixture\_of\_depths}, \texttt{ssmax}, \texttt{ffn}, \texttt{classification\_head}, \texttt{mhc}, \texttt{residuals}); each sub-header row marks the prefix in effect for the rows that follow it. There are no flat feature keys at \texttt{model.*}.
 
 \subsubsection{Layer Pattern Enumeration}
 \label{tab:layer-pattern}
 
-The \texttt{model.dims.layer\_pattern} array accepts the following 36 mixer types. Each element defines one physical layer in the model stack. Table~\ref{tab:layer-pattern-enum} lists all available types with their training and inference support.
+The \texttt{model.dims.layer\_pattern} array accepts the following 43 mixer codes. Each element defines one physical layer in the model stack. Table~\ref{tab:layer-pattern-enum} lists all available types with their training and inference support.
 
 \begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{5.5cm}cc}
 \toprule
@@ -238,6 +255,7 @@ mtla\_attn & Multi-head Temporal Latent Attention --- temporal KV merge & \check
 cca\_attn & Compressed Convolutional Attention --- latent-space attention + convs & \checkmark & \checkmark \\
 ccgqa\_attn & Compressed Convolutional Grouped Query Attention --- CCA + GQA in latent & \checkmark & \checkmark \\
 gma\_attn & Gaussian Mixture Attention --- probabilistic latent routing, $\mathcal{O}(NK)$ linear-time & \checkmark & \checkmark \\
+ssog\_attn & Separable Sum of Gaussians --- Gaussian field over relative position, near-linear $\mathcal{O}(R N \sqrt{N})$ & \checkmark & \checkmark \\
 \end{longtable}
 
 \subsection{Training Configuration}
@@ -429,22 +447,22 @@ The \texttt{training.sbert} object configures Sentence-BERT fine-tuning. It is r
     \item \texttt{output\_dir} (string) --- Directory for SBERT artifacts.
     \item \texttt{batch\_size} (int) --- Examples per batch. Typical: 16--64.
     \item \texttt{gradient\_accumulation\_steps} (int) --- Accumulation steps for SBERT.
-    \item \texttt{max\_grad\_norm} (float) --- Gradient clipping threshold. Typical: 0.5--2.0.
-    \item \texttt{epochs} (int) --- Complete passes through SBERT dataset. Typical: 1--10.
+    \item \texttt{grad\_clip\_max\_norm} (float) --- Gradient clipping threshold. Typical: 0.5--2.0.
+    \item \texttt{num\_epochs} (int) --- Complete passes through SBERT dataset. Typical: 1--10.
     \item \texttt{warmup\_steps} (int) --- Steps for LR warmup.
     \item \texttt{evaluation\_steps} (int) --- Evaluate every N steps.
     \item \texttt{checkpoint\_save\_steps} (int) --- Save rolling checkpoint every N steps.
-    \item \texttt{resume\_from\_checkpoint} (bool) --- Resume from latest checkpoint.
+    \item \texttt{resume\_from\_checkpoint} (string or null) --- \texttt{auto} resumes from the latest checkpoint; \texttt{null} starts fresh.
     \item \texttt{learning\_rate} (float) --- Initial LR. Typical: $1\times10^{-5}$ to $1\times10^{-4}$.
     \item \texttt{max\_train\_samples} / \texttt{max\_eval\_samples} (int) --- Limit training/evaluation samples.
-    \item \texttt{max\_seq\_length} (int) --- Max token length for input texts. Typical: 128--512.
+    \item \texttt{max\_length} (int) --- Max token length for input texts. Typical: 128--512.
     \item \texttt{pooling\_mode} (enum) --- \texttt{mean}, \texttt{cls}, or \texttt{max}.
     \item \texttt{trust\_remote\_code} (bool) --- Allow custom code from model repo.
     \item \texttt{use\_amp} (bool) --- Enable FP16 mixed precision.
     \item \texttt{resample\_balanced} (bool) --- Resample to balanced distribution over similarity scores.
     \item \texttt{standardize\_scores} (bool) --- Z-score normalize similarity scores.
     \item \texttt{resample\_std} (float) --- Target std dev when \texttt{standardize\_scores=true}.
-    \item \texttt{optimizer} (object) --- Custom optimizer for SBERT (same classes as MLM training).
+    \item \texttt{optimizer} (object) --- Custom optimizer for SBERT (same classes as MLM training); constructor kwargs go under \texttt{optimizer.optimizer\_kwargs}.
     \item \texttt{wandb\_project} (string) --- Weights \& Biases project name for telemetry.
 \end{itemize}
 
@@ -460,8 +478,8 @@ The schema enforces the following cross-component validation rules, implemented 
     \item When \texttt{base\_model} is set, \texttt{training.task} is required. If \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} is also required --- unless \texttt{tokenizer.source=train\_from\_dataset}, in which case the tokenizer is trained from the corpus and no name is needed.
     \item \texttt{tokenizer.source=train\_from\_dataset} requires the \texttt{tokenizer.training} sub-object (with \texttt{vocab\_size} for \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}) and is mutually exclusive with \texttt{tokenizer.name\_or\_path}. The trained vocabulary overrides \texttt{model.dims.vocab\_size} before model construction.
     \item \texttt{task: mlm} requires \texttt{training.optimizer}; \texttt{task: sbert} requires \texttt{training.sbert}; \texttt{task: causal\_lm} requires \texttt{training.optimizer} and \texttt{model\_class='frankensteindecoder'}.
-    \item \texttt{bitnet\_routers=true} requires \texttt{use\_bitnet=true}. The flag has no effect otherwise.
-    \item \texttt{use\_mhc=true} (mHC n-stream residual) and \texttt{use\_mixture\_of\_depths=true} are mutually exclusive. Enabling both raises a \texttt{ValueError}: MoD token routing operates on a single $C$-dimensional stream, which conflicts with the n-stream residual.
+    \item \texttt{bitnet.routers=true} requires \texttt{bitnet.enabled=true}. The flag has no effect otherwise.
+    \item \texttt{mhc.enabled=true} (mHC n-stream residual) and \texttt{mixture\_of\_depths.enabled=true} are mutually exclusive. Enabling both raises a \texttt{ValueError}: MoD token routing operates on a single $C$-dimensional stream, which conflicts with the n-stream residual.
     \item \texttt{fasa\_attn} and \texttt{sparge\_attn} are evaluation-only layer types. They raise \texttt{RuntimeError} if used during training. They must not appear in \texttt{model.dims.layer\_pattern} for training runs.
     \item \texttt{model\_class: frankensteindecoder} forces \texttt{model.dims.mode: decoder} at runtime. Setting \texttt{model.dims.mode: encoder} with this class is overridden.
     \item Either \texttt{base\_model} must be present, or both \texttt{model\_class} and \texttt{model} must be present. The schema rejects configurations that provide neither or an incomplete combination.

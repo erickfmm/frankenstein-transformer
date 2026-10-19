@@ -27,7 +27,7 @@ Este sistema implementa cuarenta y tres variantes de mezcladores de secuencia or
 % Root
 \node[box, fill=blue!15, minimum width=4.0cm] (root) {\textbf{Registro de Mezcladores de Secuencia (43 variantes)}};
 
-% Category headers — 8 columns
+% Category headers --- 8 columns
 \node[box, fill=red!10, below left=1.0cm and 7.5cm of root, minimum width=2.0cm] (dense) {\textbf{Densas (3)}};
 \node[box, fill=green!10, below left=1.0cm and 4.5cm of root, minimum width=2.0cm] (recur) {\textbf{Recurrentes (5)}};
 \node[box, fill=yellow!12, below left=1.0cm and 1.5cm of root, minimum width=2.0cm] (sparse) {\textbf{Dispersas (9)}};
@@ -106,19 +106,19 @@ Este sistema implementa cuarenta y tres variantes de mezcladores de secuencia or
 \draw[line] (root) -- (fweight);
 \draw[line] (root) -- (geometric);
 
-% Category-to-list links — Dense
+% Category-to-list links --- Dense
 \draw[line] (dense) -- (d1);
 \draw[line] (d1) -- (d2);
 \draw[line] (d2) -- (d3);
 
-% Category-to-list links — Recurrent
+% Category-to-list links --- Recurrent
 \draw[line] (recur) -- (r1);
 \draw[line] (r1) -- (r2);
 \draw[line] (r2) -- (r3);
 \draw[line] (r3) -- (r4);
 \draw[line] (r4) -- (r5);
 
-% Category-to-list links — Sparse
+% Category-to-list links --- Sparse
 \draw[line] (sparse) -- (s1);
 \draw[line] (s1) -- (s2);
 \draw[line] (s2) -- (s3);
@@ -129,7 +129,7 @@ Este sistema implementa cuarenta y tres variantes de mezcladores de secuencia or
 \draw[line] (s7) -- (s8);
 \draw[line] (s8) -- (s9);
 
-% Category-to-list links — Gated
+% Category-to-list links --- Gated
 \draw[line] (gated) -- (g1);
 \draw[line] (g1) -- (g2);
 \draw[line] (g2) -- (g3);
@@ -139,7 +139,7 @@ Este sistema implementa cuarenta y tres variantes de mezcladores de secuencia or
 \draw[line] (g6) -- (g7);
 \draw[line] (g7) -- (g8);
 
-% Category-to-list links — Latent
+% Category-to-list links --- Latent
 \draw[line] (latent) -- (l1);
 \draw[line] (l1) -- (l2);
 \draw[line] (l2) -- (l3);
@@ -151,10 +151,10 @@ Este sistema implementa cuarenta y tres variantes de mezcladores de secuencia or
 \draw[line] (l8) -- (l9);
 \draw[line] (l9) -- (l10);
 
-% Category-to-list links — Memory
+% Category-to-list links --- Memory
 \draw[line] (memory) -- (m1);
 
-% Category-to-list links — Fast-weight
+% Category-to-list links --- Fast-weight
 \draw[line] (fweight) -- (f1);
 \draw[line] (f1) -- (f2);
 \draw[line] (f2) -- (f3);
@@ -162,7 +162,7 @@ Este sistema implementa cuarenta y tres variantes de mezcladores de secuencia or
 \draw[line] (f4) -- (f5);
 \draw[line] (f5) -- (f6);
 
-% Category-to-list links — Geometric
+% Category-to-list links --- Geometric
 \draw[line] (geometric) -- (geo1);
 \end{tikzpicture}}
 \caption{Taxonomía completa de cuarenta y tres variantes de mezcladores de secuencia en ocho categorías funcionales. Las líneas base densas proporcionan enrutamiento global completo a costo cuadrático. Las arquitecturas recurrentes permiten inferencia en tiempo constante mediante compresión de estado. Las variantes dispersas reducen la complejidad mediante patrones estructurados o selección de tokens. Los mecanismos con compuerta introducen control dependiente de datos sobre la retención y el olvido de memoria. Los métodos latentes comprimen representaciones clave--valor en cuellos de botella de rango bajo o enrutan a través de latentes probabilísticos de mezcla Gaussiana. La memoria condicional proporciona lectura/escritura en tiempo de prueba sobre un banco de memoria externo. Los métodos de peso rápido tratan la transición de estado recurrente como una regla de aprendizaje continuo en línea. Los métodos de campo geométrico codifican sesgos inductivos espaciales o de estructura de grafo sobre la matriz de atención.}

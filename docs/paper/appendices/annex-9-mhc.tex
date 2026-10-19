@@ -217,7 +217,7 @@ RMSNorm, Loss-Free load balancing) from 3B to 27B parameters
 \label{sec:annex-hyperloop}
 
 The \emph{Hyperloop Transformer} \citep{zeitoun_hyperloop_2026} combines
-looped Transformers — which reuse layer weights across depth — with
+looped Transformers --- which reuse layer weights across depth --- with
 \emph{loop-level} hyper-connections, targeting parameter efficiency rather
 than raw depth. The layer stack is partitioned \emph{middle-cycle} into a
 begin block (run once), a looped middle block, and an end block (run once);
@@ -240,18 +240,18 @@ H^{\text{res}}_l &= \mathrm{diag}\bigl(\sigma(\alpha^{\text{res}}_l (W^{\text{re
 W^{\text{res}}_l &\in \mathbb{R}^{n \times nC}
 \end{align*}
 (the diagonal $H^{\text{res}}$ substitutes mHC's $\mathrm{sinkhorn}(\cdot)$
-over a dense $n^2 \times nC$ projection with a sigmoid over a diagonal gate —
+over a dense $n^2 \times nC$ projection with a sigmoid over a diagonal gate ---
 the paper's Table~6 ablation finds this both cheaper \emph{and} more
 accurate: 14.40 perplexity versus 14.59 Sinkhorn and 14.61 identity).
 
 Four properties distinguish the Hyperloop wiring from per-sublayer mHC
 (\S\ref{sec:annex-mhc}): (1) hyper-connections fire once per
-\emph{loop}, not after every sub-layer — also the most performant placement
+\emph{loop}, not after every sub-layer --- also the most performant placement
 in the paper's Table~5 ablation; (2) the stream is created by \emph{copying}
 the begin-block output $n$ times and collapsed by \emph{averaging} the
 streams before the end block, replacing mHC's learned in/out projections;
 (3) the parameters are \emph{per loop}, relaxing the strict weight sharing of
-ordinary looped Transformers — the paper's representation-similarity analysis
+ordinary looped Transformers --- the paper's representation-similarity analysis
 (Table~8) shows looped-layer representations deviate more across loops, which
 it identifies as the source of the quality gains; and (4) $H^{\text{res}}$
 defaults to the diagonal-sigmoid parameterization.
@@ -281,7 +281,7 @@ it \emph{instead of} the \texttt{mhc\_in\_proj}/\texttt{mhc\_out\_proj}
 pair; the forward pass runs begin $\to$ copy $\to$ per-loop read/middle/update
 $\to$ average $\to$ end. \texttt{HybridLayer} disables its per-layer
 \texttt{mhc\_attn}/\texttt{mhc\_ffn} modules under Hyperloop, so middle-block
-layers run the standard $C$-dimensional path — which restores \textbf{Mixture-of-Depths
+layers run the standard $C$-dimensional path --- which restores \textbf{Mixture-of-Depths
 compatibility} (per-layer mHC forbids MoD). Hyperloop is incompatible with
 the AttnRes residuals (\texttt{residuals.type} \texttt{full\_attn} /
 \texttt{block\_attn}), which assume a per-logical-layer n-stream residual.

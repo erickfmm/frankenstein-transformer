@@ -47,13 +47,12 @@ dims.hidden\_size & int $\ge 1$ (obligatorio) & Dimensión oculta. Debe ser divi
 dims.num\_layers & int $\ge 1$ (obligatorio) & Número de capas físicas del transformer. Típico: 6--24. \\
 dims.num\_loops & int $\ge 1$ & Número de bucles lógicos. Cada capa en \texttt{layer\_pattern} se ejecuta \texttt{num\_loops} veces. Por defecto: 1. \\
 dims.num\_heads & int $\ge 1$ (obligatorio) & Número de cabezas de atención paralelas. Debe dividir \texttt{hidden\_size} exactamente. \\
-dims.retention\_heads & int $\ge 1$ & Número de cabezas para capas RetNet. Debe dividir \texttt{hidden\_size} exactamente. \\
 dims.dropout & float [0,1] & Tasa de dropout global. Típico: 0.1 (estándar BERT). \\
-dims.layer\_pattern & array of enum (obligatorio) & Secuencia ordenada de tipos de capa. La longitud debe igualar \texttt{num\_layers}. Más de 36 tipos de mezclador disponibles (ver Tabla~\ref{tab:layer-pattern}). \\
+dims.layer\_pattern & array of enum (obligatorio) & Secuencia ordenada de tipos de capa. La longitud debe igualar \texttt{num\_layers}. 43 códigos de mezclador disponibles (ver Tabla~\ref{tab:layer-pattern}). \\
 \midrule
 \multicolumn{3}{l}{\textit{model.norm.*}} \\
 \midrule
-norm.type & enum & Estrategia de normalización: \texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm}, \texttt{prms\_norm}. \\
+norm.type & enum & Estrategia de normalización: \texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}, \texttt{rms\_norm}, \texttt{prms\_norm}, \texttt{flash\_norm}. \\
 norm.partial\_ratio & float (0,1] & Fracción de dimensiones ocultas para estimación pRMSNorm. Por defecto: 0.0625. \\
 \midrule
 \multicolumn{3}{l}{\textit{model.embedding.factorized.*}} \\
@@ -66,14 +65,14 @@ embedding.factorized.dim & int $\ge 1$ & Dimensión intermedia para embeddings f
 embedding.conv.enabled & bool & Aplicar Conv1d sobre embeddings de tokens para capturar patrones locales de n-gramas. \\
 embedding.conv.kernel & int $\ge 1$ & Tamaño de kernel para Conv1d de embedding. Típico: 3. \\
 \midrule
-\multicolumn{3}{l}{\textit{model.attention.titan.*}} \\
+\multicolumn{3}{l}{\textit{model.attention.ode.*}} \\
 \midrule
-attention.titan.positional\_encoding & enum (hope, rope) & Método de codificación posicional para capas \texttt{titan\_attn}. \\
-attention.titan.use\_hope & bool & Bandera heredada para HoPE en \texttt{titan\_attn}. Obsoleta; preferir \texttt{positional\_encoding}. \\
-attention.titan.hope.base & float $\ge 0$ & Escala de frecuencia base para HoPE. Típico: 10000. \\
-attention.titan.hope.damping & float $\ge 0$ & Coeficiente de amortiguación para decaimiento de atención HoPE. Típico: 0.01. \\
-attention.titan.rope.base & float $\ge 0$ & Frecuencia base para RoPE. Típico: 10000. \\
-attention.titan.rope.scaling & float $\ge 0$ & Multiplicador para índices de posición RoPE. Típico: 1.0. \\
+attention.ode.solver & enum (rk4, euler) & Método de integración numérica para capas ODE. Por defecto: rk4. \\
+attention.ode.steps & int $\ge 1$ & Pasos de integración entre capas transformer consecutivas. Por defecto: 2. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.attention.retnet.*}} \\
+\midrule
+attention.retnet.heads & int $\ge 1$ & Cabezas de retención para capas \texttt{retnet}/\texttt{retnet\_attn}. Debe dividir \texttt{hidden\_size}. Por defecto: 8. \\
 \midrule
 \multicolumn{3}{l}{\textit{model.attention.mla.*}} \\
 \midrule
@@ -161,30 +160,48 @@ mhc.gating\_init & float $> 0$ & Valor inicial de los escalares de compuerta mHC
 mhc.checkpoint & bool & Gradient checkpointing en capas mHC para mitigar el aumento de $\sim n\times$ en memoria de activaciones. Por defecto: \texttt{false}. \\
 mhc.full\_prec\_under\_bitnet & bool & Mantener la proyección de coeficientes mHC en precisión completa bajo BitNet. Por defecto: \texttt{true}. \\
 \midrule
-\multicolumn{3}{l}{\textit{model.* (nivel superior plano)}} \\
+\multicolumn{3}{l}{\textit{model.moe.*}} \\
 \midrule
-use\_moe & bool & Activar Mezcla de Expertos en capas FFN. \\
-num\_experts & int $\ge 1$ & Número total de redes expertas en capas MoE. Requiere \texttt{use\_moe=true}. \\
-top\_k\_experts & int $\ge 1$ & Número de expertos activados por token en MoE. Debe ser $\le$ \texttt{num\_experts}. \\
-use\_bitnet & bool & Activar cuantización ternaria de pesos BitLinear. Por defecto: \texttt{true}. \\
-bitnet\_routers & bool & Cuantizar también proyecciones de enrutamiento/puntuación. Requiere \texttt{use\_bitnet=true}. Por defecto: \texttt{false}. \\
-use\_bitnet\_conv & bool & Cuantizar Conv1d de embedding con BitConv1d. Requiere \texttt{use\_bitnet=true} y \texttt{embedding.conv.enabled=true}. Por defecto: \texttt{false}. \\
-use\_mixture\_of\_depths & bool & Activar enrutamiento de tokens Mixture-of-Depths. \\
-mixture\_of\_depths\_capacity\_ratio & float (0,1] & Fracción de tokens actualizados por capa en MoD. \\
-mixture\_of\_depths\_router\_aux\_loss\_weight & float $\ge 0$ & Peso para la pérdida auxiliar del enrutador MoD. \\
-ffn\_hidden\_size & int $\ge 1$ & Dimensión intermedia de capas feed-forward. Típico: $4\times$ \texttt{hidden\_size}. \\
-ffn\_activation & enum (silu, gelu) & Activación no lineal para capas FFN. \\
-ffn\_activation\_config & object & Parámetros anidados para activaciones aprendibles (grados/versión/init de RAF, init PReLU, etc.). \\
-ode\_solver & enum (rk4, euler) & Método de integración numérica para capas ODE. \\
-ode\_steps & int $\ge 1$ & Número de pasos de integración para capas ODE. Típico: 2--4. \\
+moe.enabled & bool & Activar Mezcla de Expertos en capas FFN. Por defecto: \texttt{true}. \\
+moe.num\_experts & int $\ge 1$ & Número total de redes expertas. Por defecto: 8. \\
+moe.top\_k & int $\ge 1$ & Expertos activados por token. Debe ser $\le$ \texttt{num\_experts}. Por defecto: 2. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.bitnet.*}} \\
+\midrule
+bitnet.enabled & bool & Activar cuantización ternaria BitLinear. Por defecto: \texttt{true}. \\
+bitnet.routers & bool & Cuantizar también proyecciones de enrutamiento/puntuación. Requiere \texttt{bitnet.enabled=true}. Por defecto: \texttt{false}. \\
+bitnet.conv & bool & Cuantizar Conv1d de embedding con BitConv1d. Requiere \texttt{bitnet.enabled=true} y \texttt{embedding.conv.enabled=true}. Por defecto: \texttt{false}. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.mixture\_of\_depths.*}} \\
+\midrule
+mixture\_of\_depths.enabled & bool & Activar ruteo de tokens Mixture-of-Depths. Por defecto: \texttt{false}. \\
+mixture\_of\_depths.capacity\_ratio & float (0,1] & Fracción de tokens actualizados por capa. Por defecto: 0.5. \\
+mixture\_of\_depths.router\_aux\_loss\_weight & float $\ge 0$ & Peso de la pérdida auxiliar del router. Por defecto: 0.0. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.ssmax.*}} \\
+\midrule
+ssmax.enabled & bool & Activar Scalable Softmax (arXiv:2505.22842). Por defecto: \texttt{false}. \\
+ssmax.s\_init & float $> 0$ & Escalar SSMax inicial por cabeza. Por defecto: 1.0. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.ffn.*}} \\
+\midrule
+ffn.hidden\_size & int $\ge 1$ & Dimensión intermedia FFN. Por defecto: $2\times$ \texttt{hidden\_size}. \\
+ffn.activation & enum & No linealidad FFN (43 valores). Por defecto: \texttt{silu}. \\
+ffn.activation\_config & object & Parámetros para activaciones aprendibles/paramétricas. \\
+\midrule
+\multicolumn{3}{l}{\textit{model.classification\_head.*}} \\
+\midrule
+classification\_head.enabled & bool & Activar la cabeza de clasificación NLP. Por defecto: \texttt{false}. \\
+classification\_head.num\_labels & int o null & Número de clases. \\
+classification\_head.pooling\_mode & enum (cls, gap) & Pooling de la cabeza de clasificación. Por defecto: \texttt{cls}. \\
 \end{longtable}
 
-Los campos se agrupan bajo sub-objetos jerárquicos (\texttt{dims}, \texttt{norm}, \texttt{embedding.factorized}, \texttt{embedding.conv}, \texttt{attention.titan}, \texttt{attention.mla}, \texttt{attention.gqla}, etc.); cada fila de sub-encabezado marca el prefijo vigente para las filas que le siguen. Los campos listados bajo \texttt{model.*} permanecen como claves planas de nivel superior.
+Los campos se agrupan bajo sub-objetos jerárquicos (\texttt{dims}, \texttt{norm}, \texttt{embedding}, \texttt{attention}, \texttt{moe}, \texttt{bitnet}, \texttt{mixture\_of\_depths}, \texttt{ssmax}, \texttt{ffn}, \texttt{classification\_head}, \texttt{mhc}, \texttt{residuals}); cada fila de sub-encabezado marca el prefijo vigente para las filas que le siguen. No hay claves de características planas en \texttt{model.*}.
 
 \subsubsection{Enumeración del Patrón de Capas}
 \label{tab:layer-pattern}
 
-El array \texttt{model.dims.layer\_pattern} acepta los siguientes 36 tipos de mezclador. Cada elemento define una capa física en la pila del modelo. La Tabla~\ref{tab:layer-pattern-enum} enumera todos los tipos disponibles con su soporte de entrenamiento e inferencia.
+El array \texttt{model.dims.layer\_pattern} acepta los siguientes 43 códigos de mezclador. Cada elemento define una capa física en la pila del modelo. La Tabla~\ref{tab:layer-pattern-enum} enumera todos los tipos disponibles con su soporte de entrenamiento e inferencia.
 
 \begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{5.5cm}cc}
 \toprule
@@ -429,15 +446,15 @@ El objeto \texttt{training.sbert} configura el ajuste fino Sentence-BERT. Es obl
     \item \texttt{output\_dir} (string) --- Directorio para artefactos SBERT.
     \item \texttt{batch\_size} (int) --- Ejemplos por lote. Típico: 16--64.
     \item \texttt{gradient\_accumulation\_steps} (int) --- Pasos de acumulación para SBERT.
-    \item \texttt{max\_grad\_norm} (float) --- Umbral de recorte de gradiente. Típico: 0.5--2.0.
-    \item \texttt{epochs} (int) --- Pasadas completas por el dataset SBERT. Típico: 1--10.
+    \item \texttt{grad\_clip\_max\_norm} (float) --- Umbral de recorte de gradiente. Típico: 0.5--2.0.
+    \item \texttt{num\_epochs} (int) --- Pasadas completas por el dataset SBERT. Típico: 1--10.
     \item \texttt{warmup\_steps} (int) --- Pasos para calentamiento de LR.
     \item \texttt{evaluation\_steps} (int) --- Evaluar cada N pasos.
     \item \texttt{checkpoint\_save\_steps} (int) --- Guardar checkpoint rotativo cada N pasos.
-    \item \texttt{resume\_from\_checkpoint} (bool) --- Reanudar desde el último checkpoint.
+    \item \texttt{resume\_from\_checkpoint} (string o null) --- \texttt{auto} reanuda desde el último checkpoint; \texttt{null} empieza desde cero.
     \item \texttt{learning\_rate} (float) --- LR inicial. Típico: $1\times10^{-5}$ a $1\times10^{-4}$.
     \item \texttt{max\_train\_samples} / \texttt{max\_eval\_samples} (int) --- Limitar muestras de entrenamiento/evaluación.
-    \item \texttt{max\_seq\_length} (int) --- Longitud máxima de tokens para textos de entrada. Típico: 128--512.
+    \item \texttt{max\_length} (int) --- Longitud máxima de tokens para textos de entrada. Típico: 128--512.
     \item \texttt{pooling\_mode} (enum) --- \texttt{mean}, \texttt{cls} o \texttt{max}.
     \item \texttt{trust\_remote\_code} (bool) --- Permitir código personalizado del repositorio del modelo.
     \item \texttt{use\_amp} (bool) --- Activar precisión mixta FP16.
@@ -460,7 +477,7 @@ El esquema impone las siguientes reglas de validación entre componentes, implem
     \item Cuando \texttt{base\_model} está configurado, \texttt{training.task} es obligatorio. Si \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} también es obligatorio --- salvo cuando \texttt{tokenizer.source=train\_from\_dataset}, en cuyo caso el tokenizador se entrena desde el corpus y no se necesita nombre.
     \item \texttt{tokenizer.source=train\_from\_dataset} requiere el sub-objeto \texttt{tokenizer.training} (con \texttt{vocab\_size} para \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}) y es mutuamente excluyente con \texttt{tokenizer.name\_or\_path}. El vocabulario entrenado sobrescribe \texttt{model.dims.vocab\_size} antes de construir el modelo.
     \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}; \texttt{task: causal\_lm} requiere \texttt{training.optimizer} y \texttt{model\_class='frankensteindecoder'}.
-    \item \texttt{bitnet\_routers=true} requiere \texttt{use\_bitnet=true}. La bandera no tiene efecto en caso contrario.
+    \item \texttt{bitnet.routers=true} requiere \texttt{bitnet.enabled=true}. La bandera no tiene efecto en caso contrario.
     \item \texttt{use\_mhc=true} (flujo residual de $n$ streams mHC) y \texttt{use\_mixture\_of\_depths=true} son mutuamente excluyentes. Habilitar ambos lanza un \texttt{ValueError}: el enrutamiento MoD de tokens opera sobre un flujo $C$-dimensional único, en conflicto con el flujo residual de $n$ streams.
     \item \texttt{fasa\_attn} y \texttt{sparge\_attn} son tipos de capa solo para evaluación. Lanzan \texttt{RuntimeError} si se usan durante el entrenamiento. No deben aparecer en \texttt{model.dims.layer\_pattern} para ejecuciones de entrenamiento.
     \item \texttt{model\_class: frankensteindecoder} fuerza \texttt{model.dims.mode: decoder} en tiempo de ejecución. Establecer \texttt{model.dims.mode: encoder} con esta clase se sobrescribe.

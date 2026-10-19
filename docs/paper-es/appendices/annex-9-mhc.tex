@@ -230,8 +230,8 @@ RMSNorm, balance de carga sin pérdida auxiliar) de 3B a 27B parámetros
 \label{sec:annex-hyperloop-es}
 
 El \emph{Hyperloop Transformer} \citep{zeitoun_hyperloop_2026} combina
-Transformers en bucle — que reutilizan los pesos de capa a través de la
-profundidad — con hiperconexiones \emph{a nivel de bucle}, orientándose a la
+Transformers en bucle --- que reutilizan los pesos de capa a través de la
+profundidad --- con hiperconexiones \emph{a nivel de bucle}, orientándose a la
 eficiencia de parámetros en lugar de a la profundidad bruta. La pila de capas
 se particiona en \emph{ciclo medio}: un bloque inicial (se ejecuta una vez),
 un bloque intermedio en bucle y un bloque final (se ejecuta una vez); el
@@ -255,18 +255,18 @@ W^{\text{res}}_l &\in \mathbb{R}^{n \times nC}
 \end{align*}
 (el $H^{\text{res}}$ diagonal sustituye el $\mathrm{sinkhorn}(\cdot)$ de mHC
 sobre una proyección densa $n^2 \times nC$ por una sigmoide sobre una
-compuerta diagonal — la ablación de la Tabla~6 del paper muestra que esto es
+compuerta diagonal --- la ablación de la Tabla~6 del paper muestra que esto es
 a la vez más barato \emph{y} más preciso: 14.40 de perplejidad frente a 14.59
 Sinkhorn y 14.61 identity).
 
 Cuatro propiedades distinguen el cableado Hyperloop del mHC por subcapa
 (\S\ref{sec:annex-mhc}): (1) las hiperconexiones se disparan una vez por
-\emph{bucle}, no tras cada subcapa — también la ubicación más eficaz en la
+\emph{bucle}, no tras cada subcapa --- también la ubicación más eficaz en la
 ablación de la Tabla~5 del paper; (2) el flujo se crea \emph{copiando} la
 salida del bloque inicial $n$ veces y se colapsa \emph{promediando} los
 streams antes del bloque final, reemplazando las proyecciones aprendidas de
 mHC; (3) los parámetros son \emph{por bucle}, relajando la compartición
-estricta de pesos de los Transformers en bucle ordinarios — el análisis de
+estricta de pesos de los Transformers en bucle ordinarios --- el análisis de
 similitud de representaciones del paper (Tabla~8) muestra que las
 representaciones de las capas en bucle se desvían más entre bucles, lo que
 identifica como la fuente de las ganancias de calidad; y (4) $H^{\text{res}}$
@@ -300,7 +300,7 @@ Transformer en bucle simple). \texttt{FrankensteinEncoder} (y
 ejecuta inicial $\to$ copia $\to$ lectura/capa/actualización por bucle
 $\to$ promedio $\to$ final. \texttt{HybridLayer} desactiva sus módulos por
 capa \texttt{mhc\_attn}/\texttt{mhc\_ffn} bajo Hyperloop, de modo que las
-capas del bloque intermedio ejecutan la ruta $C$-dimensional estándar — lo
+capas del bloque intermedio ejecutan la ruta $C$-dimensional estándar --- lo
 cual \textbf{restaura la compatibilidad con Mixture-of-Depths} (el mHC por
 capa prohíbe MoD). Hyperloop es incompatible con los residuales AttnRes
 (\texttt{residuals.type} \texttt{full\_attn} / \texttt{block\_attn}), que
