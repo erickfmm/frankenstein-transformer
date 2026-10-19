@@ -1,0 +1,101 @@
+name: Publish dashai-frankenstein to PyPI
+
+# Triggered by tags matching dashai-v* (e.g. dashai-v0.6.0).
+# Builds the plugin wheel/sdist and publishes via PyPI Trusted Publishing
+# (OIDC, no stored tokens).
+#
+# One-time setup on PyPI/TestPyPI:
+#   publisher: GitHub
+#   owner:     erickfmm
+#   repo:      frankenstein-transformer
+#   workflow:  publish-dashai.yml
+#   environment: pypi (and testpypi for TestPyPI)
+#   subdirectory/project path: dashai-frankenstein
+
+on:
+  push:
+    tags:
+      - "dashai-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashai-frankenstein
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: pip install --upgrade build twine
+      - name: Clean stale artifacts
+        run: rm -rf dist/ build/ *.egg-info
+      - name: Build distributions
+        run: python -m build
+      - name: Check metadata
+        run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashai-dist
+          path: dashai-frankenstein/dist/
+          retention-days: 14
+
+  publish-testpypi:
+    name: Publish to TestPyPI (sanity check)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dashai-dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+          verbose: true
+
+  publish-pypi:
+    name: Publish to PyPI (production)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dashai-dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          verbose: true
+
+  github-release:
+    name: Create GitHub Release
+    needs: [publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dashai-dist
+          path: dist/
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release create "$TAG" --title "$TAG" --generate-notes dist/*
