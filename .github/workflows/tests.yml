@@ -51,10 +51,12 @@ jobs:
           pip install -r /tmp/requirements-ci.txt
 
       # Only on the legacy leg: downgrade transformers to the 4.x series
-      # (sentence-transformers>=5.2 still allows transformers>=4.41).
+      # (sentence-transformers>=5.2 still allows transformers>=4.41). Pin
+      # huggingface_hub <1 too: hub 1.x removed BucketNotFoundError, which the
+      # transformers-4/datasets combination still imports at collection time.
       - name: Pin transformers 4.x (legacy leg)
         if: matrix.transformers-pin == '<5'
-        run: pip install "transformers<5"
+        run: pip install "transformers<5" "huggingface_hub<1"
 
       # Install the package itself without pulling in deps (torch already
       # installed as CPU above; --no-deps avoids overriding it with cu118).
