@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  k["K = Wk·x<br/>[B,n,H]"]
+  v["V = Wv·x<br/>[B,n,H]"]
+  s["scores = QKᵀ/√d + b<br/>[B,nh,n]"]
+  a["A = σ(scores)"]
+  o["O = A·V<br/>[B,n,H]"]
+
+  x -- "Wq" --> q
+  x -- "Wk" --> k
+  x -- "Wv" --> v
+  q -- "QKᵀ" --> s
+  k -- "QKᵀ" --> s
+  s -- "sigmoid" --> a
+  a -- "A·V" --> o
+  v -- "A·V" --> o

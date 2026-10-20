@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V = W·x<br/>[B,n,H]"]
+  f["forget<br/>fₜ = σ(Wf·x)"]
+  d["log-bias<br/>Dᵢⱼ = Σₗ log fₗ"]
+  s["scores = QKᵀ/√d + D"]
+  sm["softmax<br/>(scores)"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "Wf" --> f
+  f -- "cumsum" --> d
+  qkv -- "add bias" --> s
+  d -- "add bias" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  qkv -- "V" --> o

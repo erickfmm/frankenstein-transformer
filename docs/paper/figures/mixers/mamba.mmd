@@ -1,0 +1,17 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  conv["conv1d<br/>(causal)"]
+  sel["select<br/>Δ, B, C"]
+  disc["discretize<br/>Ā, B̄ (ZOH)"]
+  hp["hₜ₋₁<br/>[d,N]"]
+  ht["hₜ = Ā·hₜ₋₁ + B̄·x"]
+  o["O = C·hₜ<br/>[B,n,H]"]
+
+  x -- "conv" --> conv
+  conv -- "select" --> sel
+  sel -- "ZOH" --> disc
+  disc -- "scan" --> ht
+  hp -- "carry" --> ht
+  ht -. "next" .-> hp
+  ht -- "read" --> o

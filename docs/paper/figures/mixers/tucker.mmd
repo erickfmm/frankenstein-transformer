@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  tq["Q = Tucker_q(x)<br/>[q_rank]"]
+  tkv["K, V = Tucker_kv(x)<br/>[kv_rank]"]
+  rec["reconstruct<br/>Q, K, V [B,n,H]"]
+  s["scores = QKᵀ/√d"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "q_rank" --> tq
+  x -- "kv_rank" --> tkv
+  tq -- "recon" --> rec
+  tkv -- "recon" --> rec
+  rec -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  rec -- "V" --> o

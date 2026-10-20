@@ -27,6 +27,13 @@ que es $L_t$-suave con $L_t = \|x_t\|^2 + \lambda_t$.
 
 \subsubsection{Falcon-1: Regresión NLMS Escalar}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon1.pdf}}
+\caption{Flujo de datos de Falcon-1: el par clave/valor alineado al prefijo impulsa una actualización escalar NLMS por regla delta del estado de pesos rápidos.}
+\label{fig:mixer-falcon1}
+\end{figure}
+
 La variante escalar de la regla delta --- la recursión NLMS clásica del filtrado adaptativo, mejorada con el flujo desplazado y un ridge explícito:
 \[
 S_t = (1 - \eta_t \lambda_t)\, S_{t-1} + \eta_t\, x_t \big(v_t - S_{t-1}^\top x_t\big)^\top,
@@ -37,6 +44,13 @@ Con $\varepsilon = 0$, $\lambda_t = 0$ y la asignación sin desplazar $x_t = \ph
 
 \subsubsection{Falcon-2: Regresión NLMS por Columnas}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon2.pdf}}
+\caption{Flujo de datos de Falcon-2: tamaños de paso NLMS por columna actualizan el estado de pesos rápidos canal a canal.}
+\label{fig:mixer-falcon2}
+\end{figure}
+
 La pérdida ridge se descompone a lo largo de las coordenadas de valor, de modo que cada canal de valor $j$ recibe su propio tamaño de paso compartiendo el normalizador NLMS:
 \[
 \eta_{j,t} = \frac{\beta_{j,t}}{\|x_t\|^2 + \lambda_t + \varepsilon},
@@ -46,6 +60,13 @@ S_t = S_{t-1}\big(I - \lambda_t \operatorname{Diag}(\boldsymbol{\eta}_t)\big) + 
 El kernel chunk-parallel forma el Gram de claves compartido $G = X^\top X$ y resuelve el lote de sistemas triangulares unitarios inferiores por canal $L_j = I + \operatorname{tril}\big(G \odot (\Sigma_j \Sigma_j^\top), -1\big)$ con $\Sigma = \sqrt{\tilde{\boldsymbol{\eta}}}$ (Algoritmo~1). Definida pero no evaluada por separado en el artículo.
 
 \subsubsection{Falcon-3: Regresión de Minilote con Ventana Deslizante}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon3.pdf}}
+\caption{Flujo de datos de Falcon-3: una ventana deslizante de pares alineados al prefijo aporta el estadístico espectral y la escritura por minilote.}
+\label{fig:mixer-falcon3}
+\end{figure}
 
 Repetición acotada (bounded rehearsal): cada paso regresa la memoria rápida sobre los últimos $B_t \le B$ pares prefix-alineados, con \emph{todos los residuos de ventana evaluados en el estado pre-actualización} $S_{t-1}$:
 \[
@@ -69,6 +90,20 @@ produce escrituras puramente aditivas (hebbianas) con ganancias normalizadas por
 
 \subsubsection{Falcon-1A y Falcon-2A}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon1a.pdf}}
+\caption{Flujo de datos de Falcon-1A: una escritura aditiva (hebbiana) normalizada por energía con decaimiento derivado.}
+\label{fig:mixer-falcon1a}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon2a.pdf}}
+\caption{Flujo de datos de Falcon-2A: escrituras aditivas por columna con decaimiento por canal.}
+\label{fig:mixer-falcon2a}
+\end{figure}
+
 \[
 \text{Falcon-1A:}\quad S_t = \gamma_t S_{t-1} + \eta_t\, x_t v_t^\top,
 \quad \gamma_t = 1 - \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma);
@@ -78,6 +113,13 @@ produce escrituras puramente aditivas (hebbianas) con ganancias normalizadas por
 Con $\lambda_t = 0$ y la asignación sin desplazar esto es exactamente la atención lineal estándar / acumulación Mamba-2; el flujo desplazado lo convierte en la variante next-latent desplazada un paso. El denominador de la familia A no lo exige la curvatura (el objetivo es lineal) --- conserva la escritura normalizada por energía como estabilizador de magnitud. La forma chunk-parallel es atención lineal con máscara de decaimiento $M_{t,i} = \eta_i \prod_{r=i+1}^{t} \gamma_r$ (máscaras por canal para Falcon-2A).
 
 \subsubsection{Falcon-3A: Producto Interno con Ventana Deslizante}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon3a.pdf}}
+\caption{Flujo de datos de Falcon-3A: un estadístico de energía media en ventana deslizante normaliza la escritura aditiva de la ventana.}
+\label{fig:mixer-falcon3a}
+\end{figure}
 
 La variante aditiva con ventana --- la mejor configuración de extrapolación de longitud de la familia:
 \[

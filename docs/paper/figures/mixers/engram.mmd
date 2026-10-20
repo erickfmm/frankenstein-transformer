@@ -1,0 +1,17 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  conv["causal depthwise conv<br/>k = kernel_size"]
+  ngram["N-gram contexts<br/>orders 2…N"]
+  lookup["hash lookup<br/>H heads per order"]
+  mem["hash tables<br/>(per order, per head)"]
+  sum["Σ lookups<br/>+ conv"]
+  o["y<br/>[B,n,H]"]
+
+  x -- "conv" --> conv
+  conv -- "windows" --> ngram
+  ngram -- "hash" --> lookup
+  mem -- "retrieve" --> lookup
+  lookup -- "combine" --> sum
+  conv -- "short range" --> sum
+  sum --> o

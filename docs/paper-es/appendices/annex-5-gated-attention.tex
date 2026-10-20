@@ -17,6 +17,13 @@ Este apéndice sintetiza ocho arquitecturas principales de atención con compuer
 
 \subsection{1. Atención Lineal con Compuerta (GLA)}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/gla.pdf}}
+\caption{Flujo de datos de GLA: una compuerta sigmoide decae el estado recurrente antes de sumar el producto externo clave/valor.}
+\label{fig:mixer-gla}
+\end{figure}
+
 \subsubsection{Fundamento Matemático}
 
 La Atención Lineal con Compuerta \citep{yang_gla_2023} aumenta la atención lineal estándar (que usa un estado recurrente con valor de matriz) con decaimiento multiplicativo dependiente de los datos. La atención lineal estándar reformula el mecanismo softmax tradicional como una recurrencia sobre estados ocultos:
@@ -83,6 +90,13 @@ Selectividad & Decaimiento dependiente de los datos por dimensión de clave. & L
 \end{table}
 
 \subsection{2. DeltaNet: Atención Lineal con Corrección de Errores}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/deltanet.pdf}}
+\caption{Flujo de datos de DeltaNet: la compuerta beta aplica una regla delta correctora de errores al estado recurrente.}
+\label{fig:mixer-deltanet}
+\end{figure}
 
 \subsubsection{Fundamento Matemático}
 
@@ -153,6 +167,13 @@ Rendimiento & La representación WY permite entrenamiento eficiente por fragment
 
 \subsection{3. Gated DeltaNet: Síntesis de Compuerta y Corrección de Errores}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/gated-deltanet.pdf}}
+\caption{Flujo de datos de Gated DeltaNet: las compuertas de decaimiento y escritura modulan la actualización del estado por regla delta.}
+\label{fig:mixer-gated-deltanet}
+\end{figure}
+
 \subsubsection{Fundamento Matemático}
 
 Gated DeltaNet \citep{yang_gated_deltanet_2024} sintetiza las fortalezas de GLA y DeltaNet combinando una \textbf{compuerta de decaimiento} $\alpha_t$ (de GLA) con la \textbf{compuerta de intensidad de escritura} $\beta_t$ (de DeltaNet):
@@ -214,6 +235,13 @@ Gated DeltaNet logra el mejor equilibrio entre diversas tareas a costa de un ren
 
 \subsection{4. HGRN2: Compuerta Jerárquica con Expansión de Producto Externo}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/hgrn2.pdf}}
+\caption{Flujo de datos de HGRN2: una compuerta jerárquica mezcla el estado transportado con el producto externo clave/valor.}
+\label{fig:mixer-hgrn2}
+\end{figure}
+
 \subsubsection{Fundamento Matemático}
 
 HGRN2 \citep{qin_hgrn2_2024} usa una expansión de estado basada en producto externo con \textbf{compuertas de olvido acotadas inferiormente de forma jerárquica}. La actualización de estado es:
@@ -253,6 +281,13 @@ La estructura jerárquica anima a diferentes capas a especializarse en diferente
 A escala de 3B en 100B tokens, HGRN2 supera ligeramente a Mamba2 y a los Transformers con arquitectura LLaMA en modelado de lenguaje. La compuerta jerárquica proporciona modelado temporal multi-escala sin variantes arquitectónicas explícitas por capa. Sin embargo, la compuerta diagonal con valor vectorial (en oposición a la selección elemento a elemento) proporciona menos flexibilidad por elemento que las variantes de regla delta.
 
 \subsection{5. Forgetting Transformer (FoX): Compuerta en el Espacio de Logits Softmax}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/fox.pdf}}
+\caption{Flujo de datos de FoX: una compuerta de olvido aprendida se convierte en un sesgo aditivo en el espacio de logits.}
+\label{fig:mixer-fox}
+\end{figure}
 
 \subsubsection{Fundamento Matemático}
 
@@ -318,6 +353,13 @@ FoX logra resultados de última generación en extrapolación de longitud, recup
 
 \subsection{6. Atención con Compuerta (Post-SDPA Sigmoide)}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/gated-softmax.pdf}}
+\caption{Flujo de datos de la atención con compuerta posterior a SDPA: una compuerta sigmoide escala la salida del softmax antes de la proyección.}
+\label{fig:mixer-gated-softmax}
+\end{figure}
+
 \subsubsection{Fundamento Matemático}
 
 El Mejor Artículo de NeurIPS 2025 del equipo de Qwen propone aplicar una compuerta sigmoide \textbf{después} de la atención de producto punto escalado (SDPA):
@@ -371,6 +413,13 @@ donde el puntaje de compuerta $\sigma(\mathbf{X} \mathbf{W}_\theta)$ puede tener
 \normalsize
 
 \subsection{7. Gated DeltaNet-2: Borrado y Escritura Canalizados Decouplados}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/gated-deltanet2.pdf}}
+\caption{Flujo de datos de Gated DeltaNet-2: compuertas desacopladas de borrado y escritura por canal actúan dentro de la regla delta.}
+\label{fig:mixer-gated-deltanet2}
+\end{figure}
 
 \subsubsection{Fundamento Matemático}
 
@@ -446,6 +495,13 @@ Memoria & Estado de inferencia constante $\mathcal{O}(d^2)$. & Rango de borrado 
 \normalsize
 
 \subsection{8. Kimi Delta Attention (KDA): Compuerta de Decaimiento Canalizada para la Regla Delta}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/kda.pdf}}
+\caption{Flujo de datos de KDA: el decaimiento por canal y una compuerta escalar de escritura modulan la actualización del estado por regla delta.}
+\label{fig:mixer-kda}
+\end{figure}
 
 \subsubsection{Fundamento Matemático}
 

@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  conv["1D conv"]
+  c["c = W_down·conv(x)<br/>[r]"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  gqa["GQA(Q, c)<br/>→ K, V"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "conv" --> conv
+  conv -- "W_down" --> c
+  x -- "Wq" --> q
+  q -- "GQA" --> gqa
+  c -- "GQA" --> gqa
+  gqa -- "softmax" --> sm
+  sm -- "Wo" --> o
+  gqa -- "V" --> o

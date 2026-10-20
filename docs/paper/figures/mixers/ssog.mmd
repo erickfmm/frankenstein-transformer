@@ -1,0 +1,19 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,gh·gw,H] raster"]
+  v["V = Wv·x<br/>[B,gh,gw,nh,hd]"]
+  atoms["atoms μ, σ, λ<br/>[nh,R,5]"]
+  probes["probes<br/>Δμ, Δσ, λ = W·x"]
+  row["row pass<br/>Σ gauss(col)"]
+  col["col pass<br/>Σ gauss(row)"]
+  y["y = field·V<br/>[B,n,nh,hd]"]
+  o["O = Wo·y<br/>[B,n,H]"]
+
+  x -- "Wv" --> v
+  x -- "lookat" --> probes
+  v -- "1D filter" --> row
+  atoms -- "1D filter" --> row
+  probes -- "1D filter" --> row
+  row -- "1D filter" --> col
+  col -- "soft(λ,T)" --> y
+  y -- "Wo" --> o

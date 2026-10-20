@@ -1,0 +1,19 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V<br/>[B,n,H]"]
+  spar["local +<br/>random graph"]
+  glob["+ global<br/>tokens"]
+  s["masked scores<br/>= graph⊗QKᵀ"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "graph" --> spar
+  x -- "global" --> glob
+  qkv -- "mask" --> s
+  spar -- "mask" --> s
+  glob -- "mask" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  qkv -- "V" --> o

@@ -1,0 +1,23 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V = W·x<br/>+ shortconv"]
+  gates["gates βₜ, λ̄ₜ<br/>= Wg·x"]
+  xt["xₜ = φ(kₜ₋₁)<br/>(RAW shift)"]
+  sp["Sₜ₋₁<br/>[dx,dv]"]
+  eta["ηₜ = βₜ/(‖xₜ‖²+λₜ+ε)"]
+  st["Sₜ = γₜSₜ₋₁ + ηₜ·xₜ·vₜᵀ<br/>γₜ = 1 − min(ηₜλₜ, 1−ε)"]
+  ot["oₜ = Sₜᵀ·φ(qₜ)<br/>(read-after-write)"]
+  o["O = Wo·oₜ<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "Wg" --> gates
+  qkv -- "shift" --> xt
+  xt -- "NLMS" --> eta
+  gates -- "NLMS" --> eta
+  eta -- "outer product" --> st
+  sp -- "carry" --> st
+  st -. "next" .-> sp
+  st -- "read" --> ot
+  qkv -- "φ(qₜ)" --> ot
+  ot -- "Wo" --> o

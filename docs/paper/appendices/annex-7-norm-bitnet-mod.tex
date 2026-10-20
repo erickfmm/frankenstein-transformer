@@ -184,6 +184,13 @@ When \texttt{use\_mixture\_of\_depths=true}, each transformer block scores token
 
 \subsection{Engram Conditional Memory}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/engram.pdf}}
+\caption{Dataflow of Engram conditional memory: a causal depthwise convolution supplies short-range context, N-gram hash lookups retrieve per-order embeddings, and the lookups are summed with the convolution output.}
+\label{fig:mixer-engram}
+\end{figure}
+
 Engram (\texttt{engram\_attn}) implements conditional memory via scalable N-gram lookup \citep{cheng2026conditionalmemoryscalablelookup}. It builds hash-based lookup tables for N-gram contexts from size 2 up to \texttt{engram\_max\_ngram\_size}, with independent hash heads per N-gram order. A causal depthwise convolution (\texttt{engram\_kernel\_size}) provides short-range context before the N-gram lookup.
 
 \begin{algorithmic}[1]

@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  ckv["c_KV = W_down·x<br/>[B,n,r]"]
+  kv["K, V = W_up·c_KV<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  rope["RoPE(Q, K)"]
+  s["scores = QKᵀ/√d"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "W_down" --> ckv
+  ckv -- "W_up" --> kv
+  x -- "Wq" --> q
+  q -- "RoPE" --> rope
+  kv -- "RoPE" --> rope
+  rope -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  kv -- "V" --> o

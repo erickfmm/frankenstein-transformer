@@ -5,6 +5,13 @@ This annex covers SSOG (Separable Sum of Gaussians), a geometric-field attention
 
 Because a 2D Gaussian factorises into a product of two 1D Gaussians, applying the field is two 1D filter passes per atom (rows, then columns of a $\sqrt{N} \times \sqrt{N}$ token raster) followed by a $\lambda$-mix contraction. The induced $N \times N$ attention matrix never exists, so the attention-specific cost is $\mathcal{O}(R \cdot N \sqrt{N} \cdot d)$ for $R$ atoms instead of $\mathcal{O}(N^2 \cdot d)$. SSOG also skips the query and key projections entirely, paying $2d^2$ of projections per layer instead of the $4d^2$ of SDPA. In the reference recipe the full mechanism beats its matched SDPA twin on ImageNet-1k (65.28\% vs 64.34\% at $\sim$3M params; 72.02\% vs 71.84\% at $\sim$12M) while being $\sim$20\% smaller and $\sim$30\% cheaper per forward, and by +17 points on CIFAR-100 at matched recipe.
 
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/ssog.pdf}}
+\caption{Dataflow of SSOG: values pass through separable row and column Gaussian filter passes per atom, with optional content steering of the atom parameters.}
+\label{fig:mixer-ssog}
+\end{figure}
 \subsection{Mathematical Formulation}
 Let tokens be the row-major raster of a $G_h \times G_w$ grid. The attention weight from token $p$ to token $q$ is the softmax-tempered log-sum-exp of the atom log-weights evaluated at their displacement:
 \[

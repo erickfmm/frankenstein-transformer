@@ -6,6 +6,13 @@ This annex synthesizes the dense, recurrent, and memory-augmented transformer fa
 \subsection{Dense Attention Baselines: Standard and Sigmoid}
 
 \subsubsection{Standard Softmax Attention}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/standard.pdf}}
+\caption{Dataflow of standard softmax attention: parallel Q/K/V projections, scaled dot-product scores, row-wise softmax, and output projection.}
+\label{fig:mixer-standard}
+\end{figure}
 Standard multi-head self-attention \citep{vaswani_attention_2017} computes scaled dot-product similarity between token embeddings:
 
 \begin{algorithmic}[1]
@@ -25,6 +32,13 @@ For autoregressive generation, KV caching stores past keys and values to avoid $
 \end{itemize}
 
 \subsubsection{Sigmoid Attention}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/sigmoid.pdf}}
+\caption{Dataflow of sigmoid attention: an element-wise sigmoid replaces the row-wise softmax, so attention weights need not sum to one.}
+\label{fig:mixer-sigmoid}
+\end{figure}
 Sigmoid attention replaces row-wise softmax with element-wise sigmoid activation \citep{ramapuram_theory_2024}:
 
 \begin{algorithmic}[1]
@@ -44,6 +58,13 @@ Unlike softmax, sigmoid does not enforce a probability distribution (weights nee
 \end{itemize}
 
 \subsubsection{Grouped-Query Attention (GQA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/gqa.pdf}}
+\caption{Dataflow of grouped-query attention: keys and values are projected to fewer heads, expanded by repeat-interleave, and shared across each group of query heads.}
+\label{fig:mixer-gqa}
+\end{figure}
 Grouped-query attention \citep{ainslie_gqa_2023} bridges multi-head attention (MHA) and multi-query attention (MQA) by partitioning query heads into groups, each sharing a single key-value head. If $h$ is the total number of attention heads, $h_k$ is the number of key-value heads, and $G = h / h_k$ is the group size, then every group of $G$ query heads shares one KV head:
 
 \begin{algorithmic}[1]
@@ -67,6 +88,13 @@ GQA interpolates smoothly between MHA ($h_k = h$, $G = 1$) and MQA ($h_k = 1$, $
 \subsection{Recurrent and Retentive Architectures}
 
 \subsubsection{Retentive Networks (RetNet)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/retnet.pdf}}
+\caption{Dataflow of RetNet: parallel Q/K/V projections feed a decayed state recurrence; the state carries across steps and the output reads it with the query.}
+\label{fig:mixer-retnet}
+\end{figure}
 RetNet \citep{sun_retentive_2023} unifies three computation paradigms: parallel training, recurrent inference, and chunkwise deployment. Its core innovation is the \textbf{retention mechanism}, which uses a fixed exponential decay matrix to model temporal importance:
 
 \begin{algorithmic}[1]
@@ -94,6 +122,13 @@ The decay scalar $\gamma \in (0,1)$ controls the temporal window. RetNet uses \t
 \end{itemize}
 
 \subsubsection{Mamba: Selective State-Space Models}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/mamba.pdf}}
+\caption{Dataflow of Mamba: a causal convolution feeds input-dependent $\Delta$, $B$, $C$ selections, ZOH discretization, and a selective state-space scan whose state carries across steps.}
+\label{fig:mixer-mamba}
+\end{figure}
 Mamba \citep{gu_mamba_2023} frames recurrence as a continuous-time dynamical system with input-dependent parameters, achieving both linear training and constant-time inference:
 
 \begin{algorithmic}[1]
@@ -122,6 +157,13 @@ The critical innovation is that $\mathbf{A}$ (the system matrix) is \textit{not}
 \subsection{Continuous-Depth Transformers: ODE Integration}
 
 \subsubsection{ODE Transformer}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/ode.pdf}}
+\caption{Dataflow of the ODE transformer block: the hidden state is integrated through one or more Euler/RK4 steps before the output is read.}
+\label{fig:mixer-ode}
+\end{figure}
 The ODE Transformer \citep{zhang_continuous_2021} interprets network depth as numerical integration of a continuous dynamical system, using higher-order Runge-Kutta solvers to reduce truncation error:
 
 \begin{algorithmic}[1]
@@ -151,6 +193,13 @@ This formulation reduces the effective number of parameters through weight shari
 \end{itemize}
 
 \subsection{Test-Time Memory: Titans}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/titan.pdf}}
+\caption{Dataflow of Titans test-time memory: dense Q/K/V attention runs over a local window while read and write gates update an associative memory that carries across steps.}
+\label{fig:mixer-titan}
+\end{figure}
 
 The Titans architecture \citep{behrouz_titans_2025} introduces an orthogonal dimension: instead of static weights, the model maintains a learnable memory that is \textit{updated during inference} based on a surprise-driven signal:
 

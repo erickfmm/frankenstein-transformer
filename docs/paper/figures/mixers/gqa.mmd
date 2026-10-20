@@ -1,0 +1,21 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  k["K = Wk·x<br/>[B,n,H]"]
+  v["V = Wv·x<br/>[B,n,H]"]
+  rep["repeat_kv(K, V)<br/>→ [B,n,H]"]
+  s["scores = QKᵀ/√d"]
+  sm["softmax<br/>(scores)"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "Wq" --> q
+  x -- "Wk (shared)" --> k
+  x -- "Wv (shared)" --> v
+  k -- "repeat" --> rep
+  v -- "repeat" --> rep
+  q -- "QKᵀ" --> s
+  rep -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  rep -- "V" --> o

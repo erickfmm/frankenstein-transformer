@@ -17,4 +17,15 @@ for src in *.mmd; do
     --size "$width"
 done
 
+# Per-mixer dataflow diagrams (one per sequence mixer) live in mixers/ and are
+# embedded by the attention annexes of both papers.
+for src in mixers/*.mmd; do
+  out="${src%.mmd}.pdf"
+  echo "==> $src -> $out (width 1400px)"
+  pnpm dlx @mermaid-js/mermaid-cli \
+    -i "$src" -o "$out" \
+    -p puppeteer-config.json \
+    --size 1400
+done
+
 echo "All diagrams rebuilt."

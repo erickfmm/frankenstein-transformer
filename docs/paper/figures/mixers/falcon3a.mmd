@@ -1,0 +1,25 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V = W·x<br/>+ shortconv"]
+  gates["gates βₜ, λ̄ₜ<br/>= Wg·x"]
+  xt["xₜ = φ(kₜ₋₁)<br/>(RAW shift)"]
+  sp["Sₜ₋₁<br/>[dx,dv]"]
+  nbar["window<br/>N̄ₜ⁽ᴮ⁾ = (1/Bₜ)Σxⱼvⱼᵀ"]
+  ebar["Ēₜ⁽ᴮ⁾ = (1/Bₜ)Σ‖xⱼ‖²<br/>ηₜ = β̄ₜ/(Ēₜ⁽ᴮ⁾+λₜ+ε)"]
+  st["Sₜ = γₜSₜ₋₁ + ηₜ·N̄ₜ⁽ᴮ⁾<br/>γₜ = 1 − min(ηₜλₜ, 1−ε)"]
+  ot["oₜ = Sₜᵀ·φ(qₜ)<br/>(read-after-write)"]
+  o["O = Wo·oₜ<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "Wg" --> gates
+  qkv -- "shift" --> xt
+  xt -- "B replays" --> nbar
+  nbar -- "energy B" --> ebar
+  gates -- "energy B" --> ebar
+  ebar -- "window write" --> st
+  sp -- "carry" --> st
+  st -. "next" .-> sp
+  st -- "read" --> ot
+  qkv -- "φ(qₜ)" --> ot
+  ot -- "Wo" --> o

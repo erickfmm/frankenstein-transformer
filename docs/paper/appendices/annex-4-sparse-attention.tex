@@ -7,6 +7,13 @@ Sparse attention mechanisms address the prohibitive $\mathcal{O}(n^2)$ computati
 
 \subsection{Sparse Transformer: Factorized Strided and Fixed Patterns}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/sparse-transformer.pdf}}
+\caption{Dataflow of the Sparse Transformer: a strided factorized pattern masks the score matrix before softmax.}
+\label{fig:mixer-sparse-transformer}
+\end{figure}
+
 \subsubsection{Mathematical Formulation}
 
 The Sparse Transformer \citep{child_sparse_transformer_2019} reduces quadratic complexity to $\mathcal{O}(n\sqrt{n})$ by factorizing sparse attention into two complementary sparse heads. Let $n$ be the sequence length and $l = \lfloor\sqrt{n}\rfloor$ be the stride.
@@ -69,6 +76,13 @@ The key insight is that with the two factorized heads operating in parallel acro
 
 \subsection{Longformer: Sliding Window, Dilation, and Global Tokens}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/longformer.pdf}}
+\caption{Dataflow of Longformer: sliding-window and global-token masks are applied to the score matrix before softmax.}
+\label{fig:mixer-longformer}
+\end{figure}
+
 \subsubsection{Mathematical Formulation}
 
 Longformer \citep{beltagy_longformer_2020} achieves linear $\mathcal{O}(n \cdot w)$ complexity by combining three complementary attention patterns.
@@ -127,6 +141,13 @@ The three patterns are applied via separate projections. The local and global at
 \end{itemize}
 
 \subsection{BigBird: Random, Local, and Global Sparse Graph}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/bigbird.pdf}}
+\caption{Dataflow of BigBird: local, random, and global adjacency masks the score matrix before softmax.}
+\label{fig:mixer-bigbird}
+\end{figure}
 
 \subsubsection{Mathematical Formulation}
 
@@ -198,6 +219,13 @@ The authors prove that with $O(1)$ random connections and global tokens, the spa
 
 \subsection{SparseK Attention: Differentiable \texorpdfstring{Top-$k$}{Top-k} Selection}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/sparsek.pdf}}
+\caption{Dataflow of SparseK: a differentiable top-$k$ selector keeps only the highest-scoring keys before softmax.}
+\label{fig:mixer-sparsek}
+\end{figure}
+
 \subsubsection{Mathematical Formulation}
 
 SparseK \citep{lou_sparsek_2024} enables learnable sparsity via a \textbf{differentiable top-$k$ operator}. A scoring network $\phi_\theta$ evaluates key-value pair importance:
@@ -258,6 +286,13 @@ where $K_{\text{sel}}, V_{\text{sel}}$ contain only the top-$k$ entries (those w
 \end{itemize}
 
 \subsection{NSA (Native Sparse Attention): Hardware-Aligned Hierarchical Branches}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/nsa.pdf}}
+\caption{Dataflow of NSA: hierarchical block scoring and selection restrict the score matrix to selected blocks.}
+\label{fig:mixer-nsa}
+\end{figure}
 
 \subsubsection{Mathematical Formulation}
 
@@ -332,6 +367,13 @@ y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \ti
 
 \subsection{FASA: Frequency-Aware Sparse Attention}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/fasa.pdf}}
+\caption{Dataflow of FASA: a frequency-aware prune stage (evaluation only) drops low-value key blocks before softmax.}
+\label{fig:mixer-fasa}
+\end{figure}
+
 \subsubsection{Mathematical Formulation}
 
 FASA \citep{wang_fasa_2026} is a \textbf{training-free inference-time method} that exploits rotary position embedding (RoPE) structure. Under RoPE, the token embedding is rotated by $\theta_i = B^{-2(i-1)/d}$, decomposing the $d$-dimensional space into $d/2$ frequency chunks (FCs).
@@ -397,6 +439,13 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 \end{itemize}
 
 \subsection{SpargeAttn: Two-Stage Block-Level Filtering}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/sparge.pdf}}
+\caption{Dataflow of SpargeAttn: a sparse predictor (evaluation only) prunes key blocks before softmax.}
+\label{fig:mixer-sparge}
+\end{figure}
 
 \subsubsection{Mathematical Formulation}
 
@@ -464,6 +513,13 @@ where $m_{\text{old}}, m_{\text{new}}$ are online softmax running maxima (comput
 
 \subsection{MSA (MiniMax Sparse Attention): Blockwise Sparse Attention with Lightweight Index Branch}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/msa.pdf}}
+\caption{Dataflow of MSA: a block-sparse mask restricts the score matrix before softmax.}
+\label{fig:mixer-msa}
+\end{figure}
+
 \subsubsection{Mathematical Formulation}
 
 MSA \citep{lai_minimax_2026} is a blockwise sparse attention mechanism built on grouped-query attention (GQA) that combines a lightweight \textbf{Index Branch} for block selection with a \textbf{Main Branch} for exact block-sparse softmax attention over the selected blocks. Let $N$ be the sequence length, $B_k = 128$ the block size, and $k = 16$ the number of blocks selected per query (yielding a fixed per-query budget of $k \cdot B_k = 2048$ tokens regardless of $N$).
@@ -517,6 +573,13 @@ where $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ gather the full-p
 \end{itemize}
 
 \subsection{SparDA (Sparse Decoupled Attention): Forecast-Guided Lookahead Block Selection}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/sparda.pdf}}
+\caption{Dataflow of SparDA: a forecast projection guides lookahead block selection before softmax.}
+\label{fig:mixer-sparda}
+\end{figure}
 
 \subsubsection{Mathematical Formulation}
 

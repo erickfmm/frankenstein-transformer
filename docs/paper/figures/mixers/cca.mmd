@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  conv["1D conv"]
+  c["c = W_down·conv(x)<br/>[r]"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  att["latent attn<br/>= Q·c"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "conv" --> conv
+  conv -- "W_down" --> c
+  x -- "Wq" --> q
+  q -- "QKᵀ" --> att
+  c -- "QKᵀ" --> att
+  att -- "softmax" --> sm
+  sm -- "Wo" --> o
+  c -- "V" --> o

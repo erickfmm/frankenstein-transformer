@@ -6,6 +6,13 @@ Este anexo sintetiza las familias densas, recurrentes y aumentadas con memoria d
 \subsection{Atención Densa de Referencia: Estándar y Sigmoide}
 
 \subsubsection{Atención Softmax Estándar}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/standard.pdf}}
+\caption{Flujo de datos de la atención softmax estándar: proyecciones Q/K/V paralelas, puntuaciones de producto escalar escaladas, softmax por filas y proyección de salida.}
+\label{fig:mixer-standard}
+\end{figure}
 La atención multi-cabeza estándar \citep{vaswani_attention_2017} calcula la similitud de producto punto escalado entre embeddings de tokens:
 
 \begin{algorithmic}[1]
@@ -25,6 +32,13 @@ Para generación autorregresiva, el almacenamiento en caché KV guarda claves y 
 \end{itemize}
 
 \subsubsection{Atención Sigmoide}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/sigmoid.pdf}}
+\caption{Flujo de datos de la atención sigmoide: una sigmoide elemento a elemento sustituye al softmax por filas, de modo que los pesos de atención no tienen por qué sumar uno.}
+\label{fig:mixer-sigmoid}
+\end{figure}
 La atención sigmoide reemplaza el softmax por filas con una activación sigmoide elemento a elemento \citep{ramapuram_theory_2024}:
 
 \begin{algorithmic}[1]
@@ -44,6 +58,13 @@ A diferencia de softmax, la sigmoide no impone una distribución de probabilidad
 \end{itemize}
 
 \subsubsection{Atención por Consultas Agrupadas (GQA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/gqa.pdf}}
+\caption{Flujo de datos de la atención por consultas agrupadas: las claves y los valores se proyectan a menos cabezas, se expanden mediante repetición entrelazada y se comparten en cada grupo de cabezas de consulta.}
+\label{fig:mixer-gqa}
+\end{figure}
 La atención por consultas agrupadas (GQA) \citep{ainslie_gqa_2023} tiende un puente entre la atención multi-cabeza (MHA) y la atención multi-consulta (MQA) al particionar las cabezas de consulta en grupos, cada uno compartiendo una sola cabeza clave-valor. Si $h$ es el número total de cabezas de atención, $h_k$ es el número de cabezas clave-valor, y $G = h / h_k$ es el tamaño del grupo, entonces cada grupo de $G$ cabezas de consulta comparte una cabeza KV:
 
 \begin{algorithmic}[1]
@@ -67,6 +88,13 @@ GQA interpola suavemente entre MHA ($h_k = h$, $G = 1$) y MQA ($h_k = 1$, $G = h
 \subsection{Arquitecturas Recurrentes y Retentivas}
 
 \subsubsection{Redes Retentivas (RetNet)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/retnet.pdf}}
+\caption{Flujo de datos de RetNet: proyecciones Q/K/V paralelas alimentan una recurrencia de estado con decaimiento; el estado se propaga entre pasos y la salida lo lee con la consulta.}
+\label{fig:mixer-retnet}
+\end{figure}
 RetNet \citep{sun_retentive_2023} unifica tres paradigmas de cómputo: entrenamiento paralelo, inferencia recurrente y despliegue por fragmentos. Su innovación central es el \textbf{mecanismo de retención}, que utiliza una matriz de decaimiento exponencial fija para modelar la importancia temporal:
 
 \begin{algorithmic}[1]
@@ -94,6 +122,13 @@ El escalar de decaimiento $\gamma \in (0,1)$ controla la ventana temporal. RetNe
 \end{itemize}
 
 \subsubsection{Mamba: Modelos de Espacio de Estado Selectivos}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/mamba.pdf}}
+\caption{Flujo de datos de Mamba: una convolución causal alimenta selecciones de $\Delta$, $B$ y $C$ dependientes de la entrada, la discretización ZOH y un escaneo selectivo de espacio de estados cuyo estado se propaga entre pasos.}
+\label{fig:mixer-mamba}
+\end{figure}
 Mamba \citep{gu_mamba_2023} enmarca la recurrencia como un sistema dinámico de tiempo continuo con parámetros dependientes de la entrada, logrando tanto entrenamiento lineal como inferencia en tiempo constante:
 
 \begin{algorithmic}[1]
@@ -122,6 +157,13 @@ La innovación crítica es que $\mathbf{A}$ (la matriz del sistema) \textit{no} 
 \subsection{Transformers de Profundidad Continua: Integración EDO}
 
 \subsubsection{Transformer EDO}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/ode.pdf}}
+\caption{Flujo de datos del bloque transformer EDO: el estado oculto se integra mediante uno o más pasos de Euler/RK4 antes de leer la salida.}
+\label{fig:mixer-ode}
+\end{figure}
 El Transformer EDO \citep{zhang_continuous_2021} interpreta la profundidad de la red como integración numérica de un sistema dinámico continuo, utilizando solucionadores Runge-Kutta de orden superior para reducir el error de truncamiento:
 
 \begin{algorithmic}[1]
@@ -151,6 +193,13 @@ Esta formulación reduce el número efectivo de parámetros mediante el uso comp
 \end{itemize}
 
 \subsection{Memoria en Tiempo de Prueba: Titans}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/titan.pdf}}
+\caption{Flujo de datos de la memoria en tiempo de prueba de Titans: la atención densa Q/K/V opera sobre una ventana local mientras compuertas de lectura y escritura actualizan una memoria asociativa que se propaga entre pasos.}
+\label{fig:mixer-titan}
+\end{figure}
 
 La arquitectura Titans \citep{behrouz_titans_2025} introduce una dimensión ortogonal: en lugar de pesos estáticos, el modelo mantiene una memoria aprendible que se \textit{actualiza durante la inferencia} basada en una señal impulsada por sorpresa:
 

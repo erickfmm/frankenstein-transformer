@@ -184,6 +184,13 @@ Cuando \texttt{use\_mixture\_of\_depths=true}, cada bloque del transformer punt�
 
 \subsection{Memoria Condicional Engram}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/engram.pdf}}
+\caption{Flujo de datos de la memoria condicional de Engram: una convolución causal depthwise aporta contexto de corto alcance, las búsquedas hash de N-gramas recuperan embeddings por orden, y las búsquedas se suman a la salida de la convolución.}
+\label{fig:mixer-engram}
+\end{figure}
+
 Engram (\texttt{engram\_attn}) implementa memoria condicional mediante búsqueda N-gram escalable \citep{cheng2026conditionalmemoryscalablelookup}. Construye tablas de búsqueda basadas en hash para contextos N-gram desde tamaño 2 hasta \texttt{engram\_max\_ngram\_size}, con cabezas hash independientes por orden N-gram. Una convolución causal depthwise (\texttt{engram\_kernel\_size}) proporciona contexto de corto alcance antes de la búsqueda N-gram.
 
 \begin{algorithmic}[1]

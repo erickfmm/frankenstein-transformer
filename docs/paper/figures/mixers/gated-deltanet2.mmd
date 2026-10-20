@@ -1,0 +1,23 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V = W·x<br/>[B,n,H]"]
+  b["erase<br/>bₜ = σ(Wb·x) [dk]"]
+  w["write<br/>wₜ = σ(Ww·x) [dv]"]
+  d["decay<br/>Dₜ = Diag(αₜ)"]
+  sp["Sₜ₋₁<br/>[dk,dv]"]
+  st["Sₜ = (I − kₜ(bₜ⊙kₜ)ᵀ)·Dₜ·Sₜ₋₁<br/>+ kₜ(wₜ⊙vₜ)ᵀ"]
+  o["O = Q·Sₜ<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "Wb" --> b
+  x -- "Ww" --> w
+  x -- "Wα" --> d
+  qkv -- "update" --> st
+  b -- "update" --> st
+  w -- "update" --> st
+  d -- "update" --> st
+  sp -- "carry" --> st
+  st -. "next" .-> sp
+  st -- "read" --> o
+  qkv -- "Q" --> o

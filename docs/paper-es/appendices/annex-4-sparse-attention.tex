@@ -7,6 +7,13 @@ Los mecanismos de atención dispersa abordan la prohibitiva complejidad computac
 
 \subsection{Sparse Transformer: Patrones Estrideados y Fijos Factorizados}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/sparse-transformer.pdf}}
+\caption{Flujo de datos del Sparse Transformer: un patrón factorial con zancada enmascara la matriz de puntuaciones antes del softmax.}
+\label{fig:mixer-sparse-transformer}
+\end{figure}
+
 \subsubsection{Formulación Matemática}
 
 Sparse Transformer \citep{child_sparse_transformer_2019} reduce la complejidad cuadrática a $\mathcal{O}(n\sqrt{n})$ factorizando la atención dispersa en dos cabezas dispersas complementarias. Sea $n$ la longitud de la secuencia y $l = \lfloor\sqrt{n}\rfloor$ el stride.
@@ -69,6 +76,13 @@ La idea clave es que con las dos cabezas factorizadas operando en paralelo a tra
 
 \subsection{Longformer: Ventana Deslizante, Dilatación y Tokens Globales}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/longformer.pdf}}
+\caption{Flujo de datos de Longformer: las máscaras de ventana deslizante y de tokens globales se aplican a la matriz de puntuaciones antes del softmax.}
+\label{fig:mixer-longformer}
+\end{figure}
+
 \subsubsection{Formulación Matemática}
 
 Longformer \citep{beltagy_longformer_2020} logra una complejidad lineal $\mathcal{O}(n \cdot w)$ combinando tres patrones de atención complementarios.
@@ -127,6 +141,13 @@ Los tres patrones se aplican mediante proyecciones separadas. La atención local
 \end{itemize}
 
 \subsection{BigBird: Grafo Disperso Aleatorio, Local y Global}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/bigbird.pdf}}
+\caption{Flujo de datos de BigBird: la adyacencia local, aleatoria y global enmascara la matriz de puntuaciones antes del softmax.}
+\label{fig:mixer-bigbird}
+\end{figure}
 
 \subsubsection{Formulación Matemática}
 
@@ -198,6 +219,13 @@ Los autores demuestran que con $O(1)$ conexiones aleatorias y tokens globales, e
 
 \subsection{Atención SparseK: Selección Diferencial \texorpdfstring{Top-$k$}{Top-k}}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/sparsek.pdf}}
+\caption{Flujo de datos de SparseK: un selector top-$k$ diferenciable conserva solo las claves con mayor puntuación antes del softmax.}
+\label{fig:mixer-sparsek}
+\end{figure}
+
 \subsubsection{Formulación Matemática}
 
 SparseK \citep{lou_sparsek_2024} permite dispersidad aprendible mediante un \textbf{operador top-$k$ diferenciable}. Una red de puntuación $\phi_\theta$ evalúa la importancia de cada par clave-valor:
@@ -258,6 +286,13 @@ donde $K_{\text{sel}}, V_{\text{sel}}$ contienen solo las entradas top-$k$ (aque
 \end{itemize}
 
 \subsection{NSA (Native Sparse Attention): Ramas Jerárquicas Alineadas con el Hardware}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/nsa.pdf}}
+\caption{Flujo de datos de NSA: la puntuación y selección jerárquica de bloques restringen la matriz de puntuaciones a los bloques elegidos.}
+\label{fig:mixer-nsa}
+\end{figure}
 
 \subsubsection{Formulación Matemática}
 
@@ -332,6 +367,13 @@ y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \ti
 
 \subsection{FASA: Atención Dispersa Consciente de la Frecuencia}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/fasa.pdf}}
+\caption{Flujo de datos de FASA: una etapa de poda sensible a la frecuencia (solo evaluación) descarta bloques de claves de bajo valor antes del softmax.}
+\label{fig:mixer-fasa}
+\end{figure}
+
 \subsubsection{Formulación Matemática}
 
 FASA \citep{wang_fasa_2026} es un \textbf{método en tiempo de inferencia sin entrenamiento} que explota la estructura del embedding de posición rotatorio (RoPE). Bajo RoPE, el embedding del token se rota por $\theta_i = B^{-2(i-1)/d}$, descomponiendo el espacio $d$-dimensional en $d/2$ fragmentos de frecuencia (FC).
@@ -397,6 +439,13 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 \end{itemize}
 
 \subsection{SpargeAttn: Filtrado de Dos Etapas a Nivel de Bloques}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/sparge.pdf}}
+\caption{Flujo de datos de SpargeAttn: un predictor disperso (solo evaluación) poda bloques de claves antes del softmax.}
+\label{fig:mixer-sparge}
+\end{figure}
 
 \subsubsection{Formulación Matemática}
 
@@ -464,6 +513,13 @@ donde $m_{\text{antiguo}}, m_{\text{nuevo}}$ son máximos del softmax en línea 
 
 \subsection{MSA (MiniMax Sparse Attention): Atención Dispersa por Bloques con Rama de Índice Ligera}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/msa.pdf}}
+\caption{Flujo de datos de MSA: una máscara de bloques dispersos restringe la matriz de puntuaciones antes del softmax.}
+\label{fig:mixer-msa}
+\end{figure}
+
 \subsubsection{Formulación Matemática}
 
 MSA \citep{lai_minimax_2026} es un mecanismo de atención dispersa por bloques construido sobre atención agrupada por consultas (GQA) que combina una \textbf{Rama de Índice} ligera para la selección de bloques con una \textbf{Rama Principal} para atención softmax dispersa por bloques exacta sobre los bloques seleccionados. Sea $N$ la longitud de la secuencia, $B_k = 128$ el tamaño de bloque, y $k = 16$ el número de bloques seleccionados por consulta (lo que yield un presupuesto fijo por consulta de $k \cdot B_k = 2048$ tokens independientemente de $N$).
@@ -517,6 +573,13 @@ donde $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ reúnen los tenso
 \end{itemize}
 
 \subsection{SparDA (Atención Dispersa Desacoplada): Selección de Bloques Anticipada Guiada por Pronóstico}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/sparda.pdf}}
+\caption{Flujo de datos de SparDA: una proyección de pronóstico guía la selección anticipada de bloques antes del softmax.}
+\label{fig:mixer-sparda}
+\end{figure}
 
 \subsubsection{Formulación Matemática}
 

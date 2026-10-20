@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V = W·x<br/>[B,n,H]"]
+  d["decay Dₜ =<br/>exp(a − softplus(δ)) [dk]"]
+  beta["write<br/>βₜ = σ(Wβ·x)"]
+  sp["Sₜ₋₁<br/>[dk,dv]"]
+  st["Sₜ = (I − βₜkₜkₜᵀ)·Dₜ·Sₜ₋₁<br/>+ βₜvₜkₜᵀ"]
+  o["O = Sₜᵀ·Q<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "channel" --> d
+  x -- "Wβ" --> beta
+  qkv -- "delta rule" --> st
+  d -- "delta rule" --> st
+  beta -- "delta rule" --> st
+  sp -- "carry" --> st
+  st -. "next" .-> sp
+  st -- "read" --> o
+  qkv -- "Q" --> o

@@ -17,6 +17,13 @@ This appendix synthesizes eight major gated-attention architectures published 20
 
 \subsection{1. Gated Linear Attention (GLA)}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/gla.pdf}}
+\caption{Dataflow of GLA: a sigmoid gate decays the recurrent state before the key/value outer product is added.}
+\label{fig:mixer-gla}
+\end{figure}
+
 \subsubsection{Mathematical Foundation}
 
 Gated Linear Attention \citep{yang_gla_2023} augments vanilla linear attention (which uses a matrix-valued recurrent state) with data-dependent multiplicative decay. Standard linear attention reformulates the traditional softmax mechanism as a recurrence over hidden states:
@@ -83,6 +90,13 @@ Selectivity & Per-key-dimension data-dependent decay. & Gate structure limits pe
 \end{table}
 
 \subsection{2. DeltaNet: Error-Correcting Linear Attention}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/deltanet.pdf}}
+\caption{Dataflow of DeltaNet: the beta gate applies an error-correcting delta rule to the recurrent state.}
+\label{fig:mixer-deltanet}
+\end{figure}
 
 \subsubsection{Mathematical Foundation}
 
@@ -151,6 +165,13 @@ Throughput & WY representation enables efficient chunkwise training. & Slightly 
 
 \subsection{3. Gated DeltaNet: Synthesis of Gating and Error Correction}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/gated-deltanet.pdf}}
+\caption{Dataflow of Gated DeltaNet: decay and write gates modulate the delta-rule state update.}
+\label{fig:mixer-gated-deltanet}
+\end{figure}
+
 \subsubsection{Mathematical Foundation}
 
 Gated DeltaNet \citep{yang_gated_deltanet_2024} synthesizes the strengths of GLA and DeltaNet by combining a \textbf{decay gate} $\alpha_t$ (from GLA) with the \textbf{writing strength gate} $\beta_t$ (from DeltaNet):
@@ -212,6 +233,13 @@ Gated DeltaNet achieves the best balance across diverse tasks at the cost of sli
 
 \subsection{4. HGRN2: Hierarchical Gating with Outer-Product Expansion}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/hgrn2.pdf}}
+\caption{Dataflow of HGRN2: a hierarchical gate mixes the carried state with the key/value outer product.}
+\label{fig:mixer-hgrn2}
+\end{figure}
+
 \subsubsection{Mathematical Foundation}
 
 HGRN2 \citep{qin_hgrn2_2024} uses an outer-product-based state expansion with \textbf{hierarchically lower-bounded forget gates}. The state update is:
@@ -251,6 +279,13 @@ The hierarchical structure encourages different layers to specialize to differen
 At 3B scale on 100B tokens, HGRN2 slightly outperforms Mamba2 and LLaMA-architecture Transformers on language modeling. The hierarchical gating provides multi-scale temporal modeling without explicit layer-wise architectural variants. However, vector-valued diagonal gating (as opposed to element-wise selection) provides less per-item flexibility than delta-rule variants.
 
 \subsection{5. Forgetting Transformer (FoX): Gating in Softmax Logit Space}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/fox.pdf}}
+\caption{Dataflow of FoX: a learned forget gate becomes an additive log-bias on the score matrix.}
+\label{fig:mixer-fox}
+\end{figure}
 
 \subsubsection{Mathematical Foundation}
 
@@ -315,6 +350,13 @@ FoX achieves state-of-the-art results on length extrapolation, near-perfect need
 
 \subsection{6. Gated Attention (Post-SDPA Sigmoid Gating)}
 
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/gated-softmax.pdf}}
+\caption{Dataflow of post-SDPA gated attention: a sigmoid gate scales the softmax output before the projection.}
+\label{fig:mixer-gated-softmax}
+\end{figure}
+
 \subsubsection{Mathematical Foundation}
 
 The NeurIPS 2025 Best Paper by the Qwen team proposes applying a sigmoid gate \textbf{after} scaled dot-product attention (SDPA):
@@ -368,6 +410,13 @@ where the gate score $\sigma(\mathbf{X} \mathbf{W}_\theta)$ can have shape $\mat
 \normalsize
 
 \subsection{7. Gated DeltaNet-2: Decoupled Channel-wise Erase and Write}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/gated-deltanet2.pdf}}
+\caption{Dataflow of Gated DeltaNet-2: decoupled channel-wise erase and write gates act inside the delta rule.}
+\label{fig:mixer-gated-deltanet2}
+\end{figure}
 
 \subsubsection{Mathematical Foundation}
 
@@ -443,6 +492,13 @@ Memory & Constant $\mathcal{O}(d^2)$ inference state. & Neg-eigenvalue erase ran
 \normalsize
 
 \subsection{8. Kimi Delta Attention (KDA): Channel-wise Decay Gating for the Delta Rule}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/kda.pdf}}
+\caption{Dataflow of KDA: channel-wise decay and a scalar write gate modulate the delta-rule state update.}
+\label{fig:mixer-kda}
+\end{figure}
 
 \subsubsection{Mathematical Foundation}
 

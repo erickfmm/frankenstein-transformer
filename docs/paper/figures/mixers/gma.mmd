@@ -1,0 +1,26 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,nh,dr]"]
+  k["K = Wk·x<br/>[B,nh,dr]"]
+  v["V = Wv·x<br/>[B,nh,dv]"]
+  gmm["GMM μ, σ², π<br/>per head [K]"]
+  respk["resp_k =<br/>norm(π·N(K; μ, σ²))"]
+  bigM["M = Σₜ respₖ·V<br/>[K,dv]"]
+  z["Z = Σₜ respₖ<br/>[K]"]
+  respq["resp_q =<br/>norm(π·N(Q; μ, σ²))"]
+  o["O = Wo·(resp_q·M /<br/>(resp_q·Z + ε))  [B,n,H]"]
+
+  x -- "Wq" --> q
+  x -- "Wk" --> k
+  x -- "Wv" --> v
+  k -- "responsibilities" --> respk
+  gmm -- "responsibilities" --> respk
+  respk -- "write" --> bigM
+  v -- "write" --> bigM
+  respk -- "normalizer" --> z
+  q -- "responsibilities" --> respq
+  gmm -- "responsibilities" --> respq
+  bigM -- "read" --> o
+  z -- "read" --> o
+  respq -- "read" --> o

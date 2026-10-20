@@ -4,6 +4,13 @@
 Este anexo cubre la familia de mecanismos de atención de compresión latente / de rango bajo de KV. Estas arquitecturas comprimen el estado clave--valor por token en un vector latente de rango bajo que es la única cantidad materializada en el caché KV durante la decodificación, luego reconstruyen las claves y valores completos de todas las cabezas al vuelo. La familia unifica diseños de consulta agrupada, latente, factorizado y latente temporal bajo un cuello de botella de rango bajo común.
 
 \subsection{Atención Latente Multi-Cabeza (MLA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/mla.pdf}}
+\caption{Flujo de datos de la atención latente multi-cabeza: las claves y los valores se proyectan hacia abajo a un latente de rango bajo, se proyectan de vuelta y se atienden con la consulta tras RoPE.}
+\label{fig:mixer-mla}
+\end{figure}
 La Atención Latente Multi-Cabeza (MLA, por sus siglas en inglés) \citep{mehta_mla_2025} comprime el estado clave--valor por token en un único vector latente de rango bajo $c_{KV}$ de rango $r_{kv}$, el cual es la única cantidad materializada en el caché KV durante la decodificación. Un par de matrices de up-proyección reconstruye las claves y valores completos de todas las cabezas al vuelo, mientras que RoPE se aplica a los tensores de consulta y clave descomprimidos para preservar la estructura posicional. Los autores muestran que el ancho latente óptimo de Pareto se sitúa cerca de $r_{kv} = d_{\text{oculto}} / 2$, punto en el cual MLA reduce a la mitad el caché KV pero iguala la calidad de la atención multi-cabeza (MHA) en modelos pequeños.
 
 \subsubsection{Formulación Matemática}
@@ -39,6 +46,13 @@ q = W_{Q}\, x.
 \end{itemize}
 
 \subsection{Atención Latente por Consultas Agrupadas (GQLA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/gqla.pdf}}
+\caption{Flujo de datos de la atención latente por consultas agrupadas: la caché latente compartida se proyecta hacia arriba a cabezas de clave/valor y se combina con consultas agrupadas.}
+\label{fig:mixer-gqla}
+\end{figure}
 La Atención Latente por Consultas Agrupadas (GQLA, por sus siglas en inglés) \citep{meng_gqla_2026} es una modificación mínima de MLA que expone dos rutas de decodificación algebraicamente equivalentes sobre los mismos pesos entrenados: una ruta MQA-absorb (que fusiona la up-proyección en la consulta, óptima en hardware tipo H100) y una ruta GQA-expanded (que materializa claves/valores completos, óptima en hardware H20 / predicción multi-token). Las dos rutas son matemáticamente idénticas porque la up-proyección es lineal, de modo que $\texttt{softmax}(q_{\text{absorbido}} \cdot c_{KV}^\top) = \texttt{softmax}((q \cdot W_{UK}^\top) \cdot c_{KV}^\top)$, permitiendo un despacho adaptativo al hardware sin reentrenamiento.
 
 \subsubsection{Formulación Matemática}
@@ -80,6 +94,13 @@ c_{KV} = W_{DKV}\, x, \qquad k = W_{UK}\, c_{KV}, \qquad v = W_{UV}\, c_{KV}, \q
 \end{itemize}
 
 \subsection{Atención Multi-Cabeza de Rango Bajo (MLRA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/mlra.pdf}}
+\caption{Flujo de datos de la atención multi-cabeza de rango bajo: el latente se particiona entre sub-cabezas, cada una con su propia proyección ascendente, antes de la atención.}
+\label{fig:mixer-mlra}
+\end{figure}
 La Atención Multi-Cabeza de Rango Bajo (MLRA, por sus siglas en inglés) \citep{liu_mlra_2026} refactoriza el latente único de MLA en $L$ sub-cabezas disjuntas cada una de rango $r/L$, de modo que el caché KV puede particionarse entre $L$ dispositivos para una decodificación tensor-paralela de 4 vías (cada dispositivo carga sólo $1/L$ del caché). Las up-proyecciones por sub-cabeza reconstruyen la porción correspondiente de las cabezas completas y se concatenan, logrando una aceleración de decodificación de 2.8$\times$ sobre MLA preservando el presupuesto latente global.
 
 \subsubsection{Formulación Matemática}
@@ -116,6 +137,13 @@ k = [k_1; \ldots; k_L], \quad v = [v_1; \ldots; v_L].
 \end{itemize}
 
 \subsection{Atención Tucker}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/tucker.pdf}}
+\caption{Flujo de datos de la atención Tucker: las consultas y las claves/valores se proyectan mediante factores de Tucker y se reconstruyen antes del producto escalar escalado.}
+\label{fig:mixer-tucker}
+\end{figure}
 La Atención Tucker \citep{klein_tucker_2026} unifica MHA, GQA y MLA bajo una única factorización estilo Tucker de los tensores de pesos de consulta/clave/valor con rangos independientes $q_{\text{rank}}, k_{\text{rank}}, v_{\text{rank}}$. Se recupera MHA cuando todos los rangos igualan el tamaño oculto, GQA cuando $k_{\text{rank}} = v_{\text{rank}} < d$, y MLA cuando $k_{\text{rank}} = v_{\text{rank}}$ es igual al rango latente. Como la factorización es una repas lineal de pesos, el método es totalmente compatible con FlashAttention y RoPE, y produce un orden de magnitud menos parámetros para métricas comparables.
 
 \subsubsection{Formulación Matemática}
@@ -150,6 +178,13 @@ Casos especiales: MHA $\Leftrightarrow q_{\text{rank}} = k_{\text{rank}} = v_{\t
 \end{itemize}
 
 \subsection{Atención de Cabezas Entrelazadas (IHA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/iha.pdf}}
+\caption{Flujo de datos de la atención de cabezas entrelazadas: las cabezas se entrelazan en una representación latente de clave/valor que la consulta atiende.}
+\label{fig:mixer-iha}
+\end{figure}
 La Atención de Cabezas Entrelazadas (IHA, por sus siglas en inglés) \citep{duvvuri_iha_2026} construye $P$ pseudo-cabezas por cabeza original (típicamente $P = H$) donde cada consulta/clave/valor pseudo es una combinación lineal aprendida de todas las $H$ cabezas originales. Esto induce hasta $P^2$ patrones de atención distintos por cabeza con una sobrecarga de $\mathcal{O}(H^2 P)$. Teóricamente, IHA necesita sólo $\Theta(\sqrt{k}\, n^2)$ parámetros frente a $\Theta(k\, n^2)$ de MHA en la tarea Polinomial; empíricamente entrega $+10$--$20\%$ en RULER de recuperación multi-clave, $+5.8\%$ en GSM8K y $+2.8\%$ en MATH-500.
 
 \subsubsection{Formulación Matemática}
@@ -185,6 +220,13 @@ v_{\text{pseudo}}[p] = \sum_{h} \text{mix}_v[p, h]\, v[h].
 \end{itemize}
 
 \subsection{Atención laTenT por Cabezas Agrupadas (GTA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/gta.pdf}}
+\caption{Flujo de datos de la atención latente por cabezas agrupadas: un mapa compartido produce el estado latente de clave/valor que consumen las cabezas agrupadas.}
+\label{fig:mixer-gta}
+\end{figure}
 La Atención laTenT por Cabezas Agrupadas (GTA, por sus siglas en inglés) \citep{sun_gta_2025} combina dos compresiones: (1) un \emph{mapa de atención compartido} --- un tensor de puntajes de atención por grupo de cabezas, reutilizado entre todas las cabezas del grupo, reduciendo el caché de claves; y (2) un \emph{decodificador de valores no lineal} --- el caché de valores se comprime a un latente mediante una down-proyección y se reconstruye por una up-proyección con compuerta SiLU antes de la proyección de salida. GTA reduce los FLOPs de atención hasta 62.5\% frente a GQA, encoge el caché KV hasta 70\%, y produce una aceleración de inferencia de 2$\times$ de extremo a extremo.
 
 \subsubsection{Formulación Matemática}
@@ -220,6 +262,13 @@ v_{\text{latente}} = W_{DV}\, x, \qquad v = \text{SiLU}(W_{UV}\, v_{\text{latent
 \end{itemize}
 
 \subsection{Atención Latente Temporal Multi-Cabeza (MTLA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/mtla.pdf}}
+\caption{Flujo de datos de la atención latente temporal multi-cabeza: una etapa de compresión temporal produce el estado latente de clave/valor que atiende la consulta.}
+\label{fig:mixer-mtla}
+\end{figure}
 La Atención Latente Temporal Multi-Cabeza (MTLA, por sus siglas en inglés) \citep{deng_mtla_2025} extiende MLA a lo largo del eje temporal: una hyper-red fusiona dinámicamente $m$ vectores temporalmente adyacentes del caché KV en un único slot, reduciendo la longitud temporal por un factor de $m$. Una máscara causal consciente del stride mantiene el entrenamiento paralelo consistente con la inferencia autorregresiva, produciendo una aceleración de decodificación de 5.3$\times$ y una reducción de memoria GPU de 8.3$\times$ frente a MHA en traducción de voz En--De.
 
 \subsubsection{Formulación Matemática}
@@ -259,6 +308,13 @@ donde $s$ es el stride y $m$ la ventana de fusión. Las consultas atienden sobre
 \subsection{Comparación y Síntesis Arquitectónica}
 
 \subsection{Atención Convolucional Comprimida (CCA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/cca.pdf}}
+\caption{Flujo de datos de la atención convolucional comprimida: una convolución 1D alimenta una compresión latente $c$ que la consulta atiende directamente.}
+\label{fig:mixer-cca}
+\end{figure}
 La Atención Convolucional Comprimida (CCA, por sus siglas en inglés) \citep{figliola_cca_2025} adopta un enfoque fundamentalmente diferente para la atención latente: en lugar de comprimir el caché KV y luego up-proyectar al ancho completo antes de atender (como MLA/GQLA/MLRA), CCA proyecta consultas, claves y valores a un latente compartido y realiza la operación de atención \emph{completa} dentro de él. No hay matrices de up-proyección para Q/K/V --- sólo una única up-proyección de salida $\tilde{W}_O$ mapea la salida latente de vuelta al flujo residual. Esto reduce simultáneamente parámetros, caché KV, \textbf{y} FLOPs de atención por el factor de compresión $C = E/\tilde{e}$, mientras que MLA sólo reduce el caché.
 
 Para hacer viable la atención en el latente comprimido, CCA introduce tres innovaciones: (1) dos convoluciones causales sobre el tensor empaquetado q/k (una convolución de secuencia depth-wise y una convolución agrupada de canales por cabeza), (2) q-k-mean (añade la media pre-convolución de q y k a los valores post-convolución), y (3) value-shift (cada cabeza recibe la mitad de sus valores del token actual y la mitad del token anterior mediante dos proyecciones independientes). Tras estos pasos, se aplica normalización L2 de QK y una temperatura de clave aprendible $\beta$, RoPE se aplica \emph{directamente en el latente} (sin cabeza RoPE separada), y se computa la atención softmax estándar.
@@ -290,6 +346,13 @@ Para hacer viable la atención en el latente comprimido, CCA introduce tres inno
 \end{itemize}
 
 \subsection{Atención Convolucional Comprimida por Consultas Agrupadas (CCGQA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/ccgqa.pdf}}
+\caption{Flujo de datos de la atención convolucional comprimida con consultas agrupadas: el latente de la convolución alimenta una expansión de clave/valor con consultas agrupadas.}
+\label{fig:mixer-ccgqa}
+\end{figure}
 La Atención Convolucional Comprimida por Consultas Agrupadas (CCGQA, por sus siglas en inglés) \citep{figliola_cca_2025} extiende CCA con compartición de cabezas clave/valor estilo GQA aplicada \emph{dentro} del latente comprimido, y \textbf{desacopla} las tasas de compresión de query y KV: las consultas se comprimen por $C_1$ y las claves/valores por $C_2 \geq C_1$. La dimensión latente por cabeza $d_h$ debe coincidir entre cabezas de query y clave, imponiendo la restricción $C_2 / C_1 = n_h / n_{kv}$. Las cabezas KV se comparten por grupo (replicadas para coincidir con las cabezas de query), y el sesgo qk-mean usa operadores de broadcast/reducción $B_{\text{group}}$ (replicar cabezas KV a cabezas query) y $E_{\text{group}}$ (promediar cabezas query dentro de cada grupo). CCGQA logra la mejor pérdida reportada a 8$\times$ reducción de caché KV sin pérdida de calidad frente a MHA.
 
 \subsubsection{Características Clave}
@@ -304,6 +367,13 @@ La Atención Convolucional Comprimida por Consultas Agrupadas (CCGQA, por sus si
 La familia latente muestra una progresión clara a lo largo de dos ejes: (i) \textbf{compresión de rango}, pasando de cabezas completas (MHA) a un latente compartido (MLA) a sub-cabezas latentes particionadas (MLRA), y (ii) \textbf{adaptividad de despliegue}, pasando de una sola ruta de decodificación a despacho adaptativo al hardware (GQLA) y fusión temporal de caché (MTLA). La Atención Tucker proporciona el marco algebraico unificador: MHA, GQA y MLA son todos casos especiales de una factorización Tucker con elecciones de rango apropiadas. CCA y CCGQA toman un enfoque fundamentalmente diferente: en lugar de comprimir el caché KV y luego up-proyectar para atención a ancho completo (MLA/GQLA/MLRA), realizan atención \emph{completamente dentro} del espacio latente comprimido, reduciendo no sólo el caché sino también los FLOPs de atención por el factor de compresión. CCGQA además desacopla las tasas de compresión de query y KV, logrando la mejor pérdida reportada a 8$\times$ reducción de caché KV. La Atención de Mezcla Gaussiana (GMA) cambia la filosofía de enrutamiento por completo: en lugar de un cuello de botella lineal de rango bajo, enruta a través de $K$ componentes Gaussianos probabilísticos aprendidos, logrando mezcla de secuencias en tiempo lineal $\mathcal{O}(NK)$ para $K$ fijo manteniendo una interpretación de atención normalizada.
 
 \subsection{Atención de Mezcla Gaussiana (GMA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/gma.pdf}}
+\caption{Flujo de datos de la atención de mezcla gaussiana: las responsabilidades gaussianas por cabeza enrutan claves y valores hacia una memoria de $K$ ranuras que la consulta lee de vuelta, normalizada por $Z$.}
+\label{fig:mixer-gma}
+\end{figure}
 La Atención de Mezcla Gaussiana (GMA, por sus siglas en inglés) \citep{huang_gma_2026} reemplaza la interacción pareada explícita $QK^\top$ de la atención de producto punto estándar con enrutamiento probabilístico a través de $K$ componentes de mezcla Gaussiana aprendidos por cabeza. Las consultas y claves se mapean a vectores de \emph{responsabilidad} posteriores sobre un espacio de enrutamiento latente compartido; su solapamiento define una afinidad implícita en el espacio de responsabilidades, mientras que los valores se escriben y leen de una memoria latente de $K$ slots. Al explotar la asociatividad de la multiplicación matricial, GMA evita materializar la matriz de afinidad $N \times N$ inducida y en su lugar usa dos matrices de responsabilidad $N \times K$ cuyo almacenamiento de activaciones dominante escala como $\mathcal{O}(NK)$ en lugar de $\mathcal{O}(N^2)$ para $K$ fijo. Los parámetros de la mezcla Gaussiana---medias de componentes $\mu$, covarianzas diagonales (reparametrizadas vía $\sigma^2 = \text{softplus}(\omega) + \epsilon_\sigma$) y logits de prior de mezcla $\alpha$ (con $\pi = \text{softmax}(\alpha)$)---son parámetros aprendibles totalmente diferenciables optimizados por retropropagación estándar, sin bucle EM ni pérdida auxiliar de clustering.
 
 \subsubsection{Formulación Matemática}

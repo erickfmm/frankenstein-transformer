@@ -1,0 +1,26 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V = W·x<br/>+ shortconv"]
+  gates["gates βₜ, λ̄ₜ<br/>= Wg·x"]
+  xt["xₜ = φ(kₜ₋₁)<br/>(RAW shift)"]
+  sp["Sₜ₋₁<br/>[dx,dv]"]
+  mu["window<br/>μₜ⁽ᴮ⁾ = λmax(Σxⱼxⱼᵀ)/B"]
+  rr["window residuals<br/>rⱼ = vⱼ − Sₜ₋₁ᵀxⱼ"]
+  st["Sₜ = (1−ηₜλₜ)Sₜ₋₁<br/>+ (ηₜ/Bₜ)Σⱼxⱼrⱼᵀ"]
+  ot["oₜ = Sₜᵀ·φ(qₜ)<br/>(read-after-write)"]
+  o["O = Wo·oₜ<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "Wg" --> gates
+  qkv -- "shift" --> xt
+  xt -- "spectral B" --> mu
+  mu -- "B replays" --> rr
+  sp -- "B replays" --> rr
+  gates -- "minibatch" --> st
+  rr -- "minibatch" --> st
+  sp -- "carry" --> st
+  st -. "next" .-> sp
+  st -- "read" --> ot
+  qkv -- "φ(qₜ)" --> ot
+  ot -- "Wo" --> o

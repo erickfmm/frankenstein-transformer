@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  c["c_KV = W_down·x<br/>[B,n,r]"]
+  part["partition<br/>L sub-heads"]
+  kv["Kᵢ, Vᵢ = W_up^(i)·cᵢ"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  s["scores = QKᵀ/√d"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "W_down" --> c
+  c -- "split" --> part
+  part -- "W_up" --> kv
+  x -- "Wq" --> q
+  q -- "QKᵀ" --> s
+  kv -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  kv -- "V" --> o

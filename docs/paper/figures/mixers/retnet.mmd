@@ -1,0 +1,16 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V = W·x<br/>[B,n,r·H]"]
+  dec["decay γ<br/>+ cumsum"]
+  sp["Sₜ₋₁<br/>[r·H,H]"]
+  st["Sₜ = γ⊗Sₜ₋₁ + KᵀV"]
+  o["O = Q·Sₜ<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  qkv -- "parallel" --> dec
+  dec -- "update" --> st
+  sp -- "carry" --> st
+  st -. "next" .-> sp
+  st -- "read" --> o
+  qkv -- "Q" --> o

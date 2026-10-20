@@ -5,6 +5,13 @@ Este anexo cubre SSOG (Separable Sum of Gaussians), un mixer de atención de cam
 
 Dado que una Gaussiana 2D se factoriza en un producto de dos Gaussianas 1D, aplicar el campo son dos pasadas de filtro 1D por átomo (filas y luego columnas de un raster de tokens de $\sqrt{N} \times \sqrt{N}$) seguidas de una contracción de mezcla $\lambda$. La matriz de atención $N \times N$ inducida nunca existe, por lo que el costo específico de atención es $\mathcal{O}(R \cdot N \sqrt{N} \cdot d)$ para $R$ átomos en lugar de $\mathcal{O}(N^2 \cdot d)$. SSOG también omite por completo las proyecciones de consulta y clave, pagando $2d^2$ de proyecciones por capa en lugar de los $4d^2$ de SDPA. En la receta de referencia, el mecanismo completo supera a su gemelo SDPA igualado en ImageNet-1k (65{,}28\% vs 64{,}34\% con $\sim$3M de parámetros; 72{,}02\% vs 71{,}84\% con $\sim$12M) siendo $\sim$20\% más pequeño y $\sim$30\% más barato por pasada, y por +17 puntos en CIFAR-100 con receta igualada.
 
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/ssog.pdf}}
+\caption{Flujo de datos de SSOG: los valores pasan por pasadas separables de filtrado gaussiano por filas y columnas para cada átomo, con direccionamiento opcional de los parámetros del átomo por contenido.}
+\label{fig:mixer-ssog}
+\end{figure}
 \subsection{Formulación Matemática}
 Sea el raster row-major de una rejilla $G_h \times G_w$ los tokens. El peso de atención del token $p$ al token $q$ es el log-sum-exp con softmax y temperatura de los log-pesos de los átomos evaluados en su desplazamiento:
 \[

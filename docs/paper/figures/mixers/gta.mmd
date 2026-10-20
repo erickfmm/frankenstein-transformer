@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  map["shared<br/>map"]
+  lat["latent<br/>K, V"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  s["scores = QKᵀ/√d"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "map" --> map
+  map -- "latent" --> lat
+  x -- "Wq" --> q
+  q -- "QKᵀ" --> s
+  lat -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  lat -- "V" --> o

@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  k["K = Wk·x<br/>[B,n,H]"]
+  v["V = Wv·x<br/>[B,n,H]"]
+  s["scores = QKᵀ/√d<br/>[B,nh,n]"]
+  sm["softmax<br/>(scores)"]
+  a["A<br/>= softmax · V"]
+  o["O = Wo·A<br/>[B,n,H]"]
+
+  x -- "Wq" --> q
+  x -- "Wk" --> k
+  x -- "Wv" --> v
+  q -- "QKᵀ" --> s
+  k -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "A·V" --> a
+  v -- "A·V" --> a
+  a -- "Wo" --> o

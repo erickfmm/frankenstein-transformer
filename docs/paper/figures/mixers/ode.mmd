@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x0["x₀<br/>[B,n,H]"]
+  f1["f(θ)<br/>step 1"]
+  f2["f(θ)<br/>step 2 …"]
+  xt["xₜ<br/>[B,n,H]"]
+
+  x0 -- "euler / rk4" --> f1
+  f1 -- "step" --> f2
+  f2 -- "integrate" --> xt
