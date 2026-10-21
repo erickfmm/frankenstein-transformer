@@ -522,6 +522,26 @@ NaN retries, CSV/NVML telemetry, the GPU thermal guard (`gpu_temp_*`), and
 optional GaLore settings. The guard pauses at `gpu_temp_pause_threshold_c`
 (default 90 °C) and resumes at `gpu_temp_resume_threshold_c` (80 °C).
 
+**Per-block gradient norms.** With `enable_block_grad_norms: true` (default),
+each logged step records the L2 gradient norm of every canonical parameter
+block — `embeddings`, `pos`, `attention`, `ffn`, `norm`, `head`, `mhc`,
+`router`, `residual`, `other` — as `grad_norm_<block>` CSV columns and in the
+`metrics_callback` payload. The taxonomy is defined once in
+`src/utils/param_categories.py` and shared with
+`full_tests/param_count_check.py`, so it matches the website parameter
+estimator breakdown. Mixer-internal norms (QK-norm, GroupNorm) count as
+`attention`; MoE experts count as `ffn`, exactly as in the estimator. The
+legacy CSV schema (which had `experts`/`ode`/`retnet`/`mamba`/`norms` columns)
+rotates automatically under `csv_rotate_on_schema_change: true`.
+
+**Weights & Biases.** `training.wandb_project` (unset by default) enables W&B
+step logging; `training.wandb_mode` is `online`/`offline`/`disabled`. When
+`enable_block_grad_norms` is also true, each block is logged as
+`grad_norm/<block>` alongside loss, LR, `grad_norm`, clip ratio, step time,
+tokens/s and GPU telemetry. W&B lives in the optional `wandb` extra
+(`pip install -e ".[wandb]"`); without it, a configured project emits a
+one-time warning and training continues.
+
 ### 8.3 CLI surface
 
 The CLI exposes exactly four subcommands. `--device` is the only runtime

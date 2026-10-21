@@ -33,37 +33,7 @@ import torch  # noqa: E402
 
 from engine import build_model  # noqa: E402
 from training.config_loader import load_training_config  # noqa: E402
-
-
-def _categorize(name: str) -> str:
-    """Map a top-level-ish module path to a breakdown category."""
-    # Decoder wraps everything in `backbone.`; ViT has its own extras.
-    n = name.split("layers.")[0].rstrip(".")
-    leaf = name.rsplit(".", 1)[-1]
-    if n in ("emb", "backbone.emb", "patch_embed"):
-        return "embeddings"
-    if "pos_encoder" in name:
-        return "pos"
-    if leaf in ("mixer",) or ".mixer." in name or n.endswith(".mixer"):
-        return "attention"
-    if leaf in ("ffn",) or ".ffn." in name or n.startswith("ffn") or ".experts" in name or ".router" in name or leaf == "experts":
-        # experts/router handled below; keep ffn separate
-        pass
-    if leaf in ("norm1", "norm2", "final_norm") or n.endswith("final_norm"):
-        return "norm"
-    if "mhc" in name or "hyperloop" in name:
-        return "mhc"
-    if leaf in ("router", "depth_router"):
-        return "router"
-    if leaf in ("residual",):
-        return "residual"
-    if leaf in ("head", "cls_head", "classification_head", "patch_pred_head", "seg_head", "seg_upsampler"):
-        return "head"
-    if leaf in ("ffn",) or ".ffn." in name or ".experts" in name:
-        return "ffn"
-    if leaf in ("cls_token", "mask_token"):
-        return "other"
-    return "other"
+from utils.param_categories import categorize_param as _categorize  # noqa: E402
 
 
 def count_model(model: torch.nn.Module) -> Dict[str, int]:

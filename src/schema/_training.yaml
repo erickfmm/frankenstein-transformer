@@ -795,13 +795,13 @@ properties:
     default: true
     title: Per-Block Gradient Norms
     title_es: Normas de Gradiente por Bloque
-    description: 'Log gradient norms per block (embeddings, attention, FFN, etc.) in CSV. `true` for debugging, `false` for production.
+    description: 'Log L2 gradient norms for every parameter block — embeddings, pos, attention, ffn, norm, head, mhc, router, residual and other — to the CSV metrics log, and to Weights & Biases as `grad_norm/<block>` when `wandb_project` is set. Blocks match the website parameter estimator breakdown. `true` for debugging, `false` for production.
 
 
       **Impact:** Detailed insight into gradient flow through model components.
 
       '
-    description_es: 'Registrar normas de gradiente por bloque (embeddings, atención, FFN, etc.) en CSV. `true` para debugging, `false` para producción.
+    description_es: 'Registrar normas L2 de gradiente para cada bloque de parámetros — embeddings, pos, atención, ffn, norm, head, mhc, router, residual y other — en el log CSV, y en Weights & Biases como `grad_norm/<bloque>` cuando `wandb_project` está definido. Los bloques coinciden con el desglose del estimador de parámetros del sitio web. `true` para debugging, `false` para producción.
 
 
       **Impacto:** Insight detallado del flujo de gradientes a través de componentes del modelo.
@@ -809,6 +809,48 @@ properties:
       '
     examples:
     - true
+  wandb_project:
+    type: [string, "null"]
+    default: null
+    title: Weights & Biases Project
+    title_es: Proyecto de Weights & Biases
+    description: 'Weights & Biases project name. When set, step metrics and per-block gradient norms (`grad_norm/<block>`, only with `enable_block_grad_norms=true`) are logged to W&B. Requires the optional `wandb` extra (`pip install -e ".[wandb]"`); unset or `null` disables W&B logging.
+
+
+      **Impact:** Remote experiment tracking; no effect on training when unset.
+
+      '
+    description_es: 'Nombre del proyecto de Weights & Biases. Cuando se define, las métricas por paso y las normas de gradiente por bloque (`grad_norm/<bloque>`, solo con `enable_block_grad_norms=true`) se registran en W&B. Requiere el extra opcional `wandb` (`pip install -e ".[wandb]"`); sin definir o `null` desactiva el registro en W&B.
+
+
+      **Impacto:** Seguimiento remoto de experimentos; sin efecto en el entrenamiento cuando no se define.
+
+      '
+    examples:
+    - my-experiment
+  wandb_mode:
+    type: string
+    enum:
+    - online
+    - offline
+    - disabled
+    default: "online"
+    title: Weights & Biases Mode
+    title_es: Modo de Weights & Biases
+    description: 'W&B run mode: `online` streams to the W&B service, `offline` writes a local run directory, `disabled` turns logging off while still requiring the package. Only used when `wandb_project` is set.
+
+
+      **Impact:** Allows offline/air-gapped experiment tracking.
+
+      '
+    description_es: 'Modo de ejecución de W&B: `online` transmite al servicio de W&B, `offline` escribe un directorio local de la ejecución, `disabled` desactiva el registro aunque el paquete siga siendo necesario. Solo se usa cuando `wandb_project` está definido.
+
+
+      **Impacto:** Permite seguimiento de experimentos sin conexión.
+
+      '
+    examples:
+    - online
   telemetry_log_interval:
     type: integer
     default: 1

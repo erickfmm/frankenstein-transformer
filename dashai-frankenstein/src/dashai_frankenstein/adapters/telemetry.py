@@ -10,7 +10,7 @@ flat per-step dict emitted at ``trainer.py`` (34 fields mirroring the CSV
 columns) and the per-epoch summary dict, and writes:
 
 - **STEP level**: every scalar telemetry field of the step payload as its
-  own metric row (loss, accuracy, learning_rate, grad_norm, all 11
+  own metric row (loss, accuracy, learning_rate, grad_norm, the 10
   per-block grad-norm buckets, GPU temperature/power/utilization/memory,
   throughput, AMP scaler state, stability flags...). The step index is the
   trainer's ``global_step`` (one row per optimizer update).
@@ -55,15 +55,14 @@ STEP_FIELDS = (
     "gpu_util_pct",
     "gpu_mem_used_mib",
     "grad_norm_embeddings",
+    "grad_norm_pos",
     "grad_norm_attention",
     "grad_norm_ffn",
-    "grad_norm_experts",
-    "grad_norm_router",
-    "grad_norm_ode",
-    "grad_norm_retnet",
-    "grad_norm_mamba",
-    "grad_norm_norms",
+    "grad_norm_norm",
     "grad_norm_head",
+    "grad_norm_mhc",
+    "grad_norm_router",
+    "grad_norm_residual",
     "grad_norm_other",
     "step_time_ms",
     "tokens_per_sec",

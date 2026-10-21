@@ -443,7 +443,9 @@ model_class: frankenstein_text_decoder
 - `csv_rotate_on_schema_change`: rotate old CSV when header schema changes.
 - `gpu_metrics_backend`: GPU telemetry backend (`nvml` or `none`).
 - `nvml_device_index`: GPU index for NVML metrics.
-- `enable_block_grad_norms`: include fixed per-block grad norm columns.
+- `enable_block_grad_norms`: include one `grad_norm_<block>` column per canonical block (`embeddings`, `pos`, `attention`, `ffn`, `norm`, `head`, `mhc`, `router`, `residual`, `other`) and log them to W&B as `grad_norm/<block>` when `wandb_project` is set.
+- `wandb_project`: Weights & Biases project name; unset/`null` disables W&B. Requires the optional `wandb` extra (`pip install -e ".[wandb]"`).
+- `wandb_mode`: W&B run mode (`online`, `offline`, `disabled`); default `online`.
 - `telemetry_log_interval`: interval in optimizer steps for heavy telemetry fields.
 - `gpu_temp_guard_enabled`: enable strict thermal guard for CUDA training.
 - `switch_on_thermal`: when `true`, critical thermal events move training to CPU and resume on GPU after cooldown.

@@ -35,6 +35,7 @@ try:
         GPUTemperatureGuard,
         RESUME_AUTO,
     )
+    from ..utils.param_categories import BLOCK_CATEGORIES, categorize_param
     from ..model.optimizer.factory import build_optimizer
 except ImportError:
     from utils.storage_manager import StorageManager
@@ -44,6 +45,7 @@ except ImportError:
         GPUTemperatureGuard,
         RESUME_AUTO,
     )
+    from utils.param_categories import BLOCK_CATEGORIES, categorize_param
     from model.optimizer.factory import build_optimizer
 
 
@@ -59,6 +61,10 @@ class TrainingConfig:
         gpu_metrics_backend: GPU telemetry backend (``"nvml"`` or ``"none"``).
         nvml_device_index: NVML device index for multi-GPU systems.
         enable_block_grad_norms: Whether to collect per-block gradient norms.
+        wandb_project: Optional Weights & Biases project name. ``None``
+            disables W&B logging.
+        wandb_mode: W&B run mode (``"online"``, ``"offline"`` or
+            ``"disabled"``).
         telemetry_log_interval: Steps between heavy telemetry collection.
         gpu_temp_guard_enabled: Whether GPU thermal guard is enabled.
         switch_on_thermal: Whether GPU→CPU thermal switching is enabled.
@@ -109,6 +115,9 @@ class TrainingConfig:
     gpu_metrics_backend: str = "nvml"
     nvml_device_index: int = 0
     enable_block_grad_norms: bool = True
+    # Weights & Biases (optional; requires the `wandb` extra)
+    wandb_project: Optional[str] = None
+    wandb_mode: str = "online"
     telemetry_log_interval: int = 1
     gpu_temp_guard_enabled: bool = True
     switch_on_thermal: bool = False
@@ -255,6 +264,13 @@ class TitanTrainer:
         self.csv_file = None
         self.csv_writer = None
         self.csv_columns = self._get_csv_columns()
+
+        # Optional Weights & Biases run, initialized lazily on the first log
+        # write so a missing package or offline environment never blocks
+        # training.
+        self._wandb_module = None
+        self._wandb_initialized = False
+        self._wandb_unavailable_logged = False
 
         # Optional NVML state (best-effort telemetry)
         self._nvml_module = None
@@ -403,10 +419,7 @@ class TitanTrainer:
             'scaler_scale', 'gpu_memory_gb', 'gpu_cached_gb',
             'has_nan', 'has_inf', 'has_zero', 'repair_action',
             'gpu_temp_c', 'gpu_power_w', 'gpu_util_pct', 'gpu_mem_used_mib',
-            'grad_norm_embeddings', 'grad_norm_attention', 'grad_norm_ffn',
-            'grad_norm_experts', 'grad_norm_router', 'grad_norm_ode',
-            'grad_norm_retnet', 'grad_norm_mamba', 'grad_norm_norms',
-            'grad_norm_head', 'grad_norm_other',
+            *[f'grad_norm_{category}' for category in BLOCK_CATEGORIES],
             'step_time_ms', 'tokens_per_sec', 'clip_ratio', 'effective_batch_size'
         ]
 
@@ -419,19 +432,7 @@ class TitanTrainer:
         }
 
     def _get_default_block_grad_norms(self) -> Dict[str, float]:
-        return {
-            "embeddings": 0.0,
-            "attention": 0.0,
-            "ffn": 0.0,
-            "experts": 0.0,
-            "router": 0.0,
-            "ode": 0.0,
-            "retnet": 0.0,
-            "mamba": 0.0,
-            "norms": 0.0,
-            "head": 0.0,
-            "other": 0.0,
-        }
+        return {category: 0.0 for category in BLOCK_CATEGORIES}
 
     def _append_repair_action(self, current: str, extra: str) -> str:
         cur = str(current or "none").strip() or "none"
@@ -601,38 +602,11 @@ class TitanTrainer:
         return telemetry
 
     def _bucket_for_param_name(self, param_name: str) -> str:
-        name = param_name.lower()
-        if "router" in name:
-            return "router"
-        if "experts" in name:
-            return "experts"
-        if "embed" in name or ".emb." in name or "factorized_embedding" in name:
-            return "embeddings"
-        if "ode" in name:
-            return "ode"
-        if "retnet" in name or "retention" in name:
-            return "retnet"
-        if "mamba" in name:
-            return "mamba"
-        if "ffn" in name:
-            return "ffn"
-        if "norm" in name:
-            return "norms"
-        if name.startswith("head") or ".head." in name:
-            return "head"
-        if (
-            "attn" in name
-            or "attention" in name
-            or "q_proj" in name
-            or "k_proj" in name
-            or "v_proj" in name
-            or "out_proj" in name
-        ):
-            return "attention"
-        return "other"
+        """Map a parameter name to its canonical block category."""
+        return categorize_param(param_name)
 
     def _collect_block_grad_norms(self) -> Dict[str, float]:
-        """Collect L2 gradient norms by fixed logical component buckets."""
+        """Collect L2 gradient norms by canonical parameter block."""
         bucket_sq_sums = {k: 0.0 for k in self._get_default_block_grad_norms().keys()}
         if not self.training_config.enable_block_grad_norms:
             return self._get_default_block_grad_norms()
@@ -645,6 +619,100 @@ class TitanTrainer:
             bucket_sq_sums[bucket] += float((grad.float().pow(2).sum()).item())
 
         return {key: math.sqrt(max(val, 0.0)) for key, val in bucket_sq_sums.items()}
+
+    def _ensure_wandb_run(self):
+        """Return an initialized ``wandb`` module, or ``None`` when disabled.
+
+        W&B is optional: when ``training.wandb_project`` is unset the logger
+        stays off, and when the ``wandb`` package is not installed a single
+        warning is emitted and training continues unaffected.
+        """
+        if self._wandb_initialized:
+            return self._wandb_module
+        self._wandb_initialized = True
+
+        project = str(self.training_config.wandb_project or "").strip()
+        if not project:
+            return None
+
+        try:
+            import wandb  # type: ignore[import-not-found]
+        except ImportError:
+            if not self._wandb_unavailable_logged:
+                logging.warning(
+                    "training.wandb_project is set but the 'wandb' package is "
+                    "not installed; skipping W&B logging. Install it with "
+                    "`pip install -e '.[wandb]'`."
+                )
+                self._wandb_unavailable_logged = True
+            return None
+
+        try:
+            wandb.init(
+                project=project,
+                mode=str(self.training_config.wandb_mode or "online"),
+                config={
+                    "task": self.task,
+                    "device": str(self.device),
+                    "model_class": self.model.__class__.__name__,
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network/backends vary
+            logging.warning("Failed to initialize the W&B run: %s", exc)
+            return None
+
+        self._wandb_module = wandb
+        return wandb
+
+    def _log_step_to_wandb(
+        self,
+        *,
+        loss: float,
+        accuracy: float,
+        lr: float,
+        grad_norm: float,
+        scaler_scale: float,
+        telemetry: Dict[str, float],
+        grad_buckets: Dict[str, float],
+        step_time_ms: float,
+        tokens_per_sec: float,
+        clip_ratio: float,
+        effective_batch_size: int,
+    ) -> None:
+        """Log step metrics (and per-block grad norms) to Weights & Biases.
+
+        Per-block gradient norms are emitted as ``grad_norm/<block>`` only
+        when ``enable_block_grad_norms`` is set; the remaining step metrics
+        are always emitted once a W&B project is configured.
+        """
+        wandb = self._ensure_wandb_run()
+        if wandb is None:
+            return
+
+        payload: Dict[str, Any] = {
+            "loss": float(loss),
+            "accuracy": float(accuracy),
+            "learning_rate": float(lr),
+            "grad_norm": float(grad_norm),
+            "scaler_scale": float(scaler_scale),
+            "clip_ratio": float(clip_ratio),
+            "step_time_ms": float(step_time_ms),
+            "tokens_per_sec": float(tokens_per_sec),
+            "effective_batch_size": int(effective_batch_size),
+            "gpu_temp_c": float(telemetry["gpu_temp_c"]),
+            "gpu_power_w": float(telemetry["gpu_power_w"]),
+            "gpu_util_pct": float(telemetry["gpu_util_pct"]),
+            "gpu_mem_used_mib": float(telemetry["gpu_mem_used_mib"]),
+        }
+        if self.training_config.enable_block_grad_norms:
+            payload.update(
+                {f"grad_norm/{block}": float(value) for block, value in grad_buckets.items()}
+            )
+
+        try:
+            wandb.log(payload, step=int(self.global_step))
+        except Exception as exc:  # pragma: no cover - network/backends vary
+            logging.warning("W&B logging failed at step %s: %s", self.global_step, exc)
     
     def _log_step_to_csv(self, epoch: int, step: int, loss: float, accuracy: float,
                          lr: float, grad_norm: float = 0.0,
@@ -684,17 +752,7 @@ class TitanTrainer:
             f"{float(telemetry['gpu_power_w']):.2f}",
             f"{float(telemetry['gpu_util_pct']):.2f}",
             f"{float(telemetry['gpu_mem_used_mib']):.2f}",
-            f"{float(grad_buckets['embeddings']):.6f}",
-            f"{float(grad_buckets['attention']):.6f}",
-            f"{float(grad_buckets['ffn']):.6f}",
-            f"{float(grad_buckets['experts']):.6f}",
-            f"{float(grad_buckets['router']):.6f}",
-            f"{float(grad_buckets['ode']):.6f}",
-            f"{float(grad_buckets['retnet']):.6f}",
-            f"{float(grad_buckets['mamba']):.6f}",
-            f"{float(grad_buckets['norms']):.6f}",
-            f"{float(grad_buckets['head']):.6f}",
-            f"{float(grad_buckets['other']):.6f}",
+            *[f"{float(grad_buckets[category]):.6f}" for category in BLOCK_CATEGORIES],
             f"{float(step_time_ms):.2f}",
             f"{float(tokens_per_sec):.2f}",
             f"{float(clip_ratio):.6f}",
@@ -727,22 +785,29 @@ class TitanTrainer:
                 "gpu_power_w": float(telemetry["gpu_power_w"]),
                 "gpu_util_pct": float(telemetry["gpu_util_pct"]),
                 "gpu_mem_used_mib": float(telemetry["gpu_mem_used_mib"]),
-                "grad_norm_embeddings": float(grad_buckets["embeddings"]),
-                "grad_norm_attention": float(grad_buckets["attention"]),
-                "grad_norm_ffn": float(grad_buckets["ffn"]),
-                "grad_norm_experts": float(grad_buckets["experts"]),
-                "grad_norm_router": float(grad_buckets["router"]),
-                "grad_norm_ode": float(grad_buckets["ode"]),
-                "grad_norm_retnet": float(grad_buckets["retnet"]),
-                "grad_norm_mamba": float(grad_buckets["mamba"]),
-                "grad_norm_norms": float(grad_buckets["norms"]),
-                "grad_norm_head": float(grad_buckets["head"]),
-                "grad_norm_other": float(grad_buckets["other"]),
+                **{
+                    f"grad_norm_{category}": float(grad_buckets[category])
+                    for category in BLOCK_CATEGORIES
+                },
                 "step_time_ms": step_time_ms,
                 "tokens_per_sec": tokens_per_sec,
                 "clip_ratio": clip_ratio,
                 "effective_batch_size": effective_batch_size,
             })
+
+        self._log_step_to_wandb(
+            loss=loss,
+            accuracy=accuracy,
+            lr=lr,
+            grad_norm=grad_norm,
+            scaler_scale=self.scaler.get_scale(),
+            telemetry=telemetry,
+            grad_buckets=grad_buckets,
+            step_time_ms=step_time_ms,
+            tokens_per_sec=tokens_per_sec,
+            clip_ratio=clip_ratio,
+            effective_batch_size=effective_batch_size,
+        )
     
     def _check_for_nan(self, loss: torch.Tensor, step: int, batch: dict) -> bool:
         """Check if loss is NaN and log debug information if detected"""
@@ -1970,6 +2035,12 @@ class TitanTrainer:
         if self.csv_file:
             self.csv_file.close()
             logging.info(f"📊 CSV log closed: {self.training_config.csv_log_path}")
+        if self._wandb_module is not None:
+            try:
+                self._wandb_module.finish()
+            except Exception as exc:  # pragma: no cover - network/backends vary
+                logging.warning("Failed to finish the W&B run: %s", exc)
+            self._wandb_module = None
     
     def save_checkpoint(self, epoch: int, suffix: str = "", path: str = "checkpoints") -> str:
         """Save a comprehensive training checkpoint.

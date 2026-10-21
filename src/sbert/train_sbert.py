@@ -14,6 +14,7 @@ import re
 import time
 import subprocess
 import inspect
+import math
 
 # Tesla P40 (sm_61) and other legacy GPUs are often unstable with Triton/Inductor paths.
 # Set FRANKENSTEIN_DISABLE_TRITON=0 to re-enable explicitly.
@@ -44,12 +45,14 @@ try:
     from ..model.optimizer.factory import OPTIMIZER_REGISTRY
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..utils.gpu_temp_guard import GPUTemperatureGuard
+    from ..utils.param_categories import BLOCK_CATEGORIES, categorize_param
 except ImportError:
     from model.config import FrankensteinModelConfig
     from model.frankenstein_encoder import FrankensteinEncoder
     from model.optimizer.factory import OPTIMIZER_REGISTRY
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from utils.gpu_temp_guard import GPUTemperatureGuard
+    from utils.param_categories import BLOCK_CATEGORIES, categorize_param
 
 # Setup logging
 logging.basicConfig(
@@ -430,6 +433,12 @@ class SBERTTrainer:
         self.csv_columns = self._get_csv_columns()
         self.csv_file = None
         self.csv_writer = None
+        # Optional Weights & Biases run, initialized lazily on the first log
+        # write so a missing package or offline environment never blocks
+        # training.
+        self._wandb_module = None
+        self._wandb_initialized = False
+        self._wandb_unavailable_logged = False
         self._nvml_module = None
         self._nvml_handle = None
         self._nvml_disabled = False
@@ -496,10 +505,7 @@ class SBERTTrainer:
             'scaler_scale', 'gpu_memory_gb', 'gpu_cached_gb',
             'has_nan', 'has_inf', 'has_zero', 'repair_action',
             'gpu_temp_c', 'gpu_power_w', 'gpu_util_pct', 'gpu_mem_used_mib',
-            'grad_norm_embeddings', 'grad_norm_attention', 'grad_norm_ffn',
-            'grad_norm_experts', 'grad_norm_router', 'grad_norm_ode',
-            'grad_norm_retnet', 'grad_norm_mamba', 'grad_norm_norms',
-            'grad_norm_head', 'grad_norm_other',
+            *[f'grad_norm_{category}' for category in BLOCK_CATEGORIES],
             'step_time_ms', 'tokens_per_sec', 'clip_ratio', 'effective_batch_size'
         ]
 
@@ -636,16 +642,31 @@ class SBERTTrainer:
         return telemetry
 
     def _get_default_block_grad_norms(self) -> Dict[str, float]:
-        return {
-            "embeddings": 0.0,
-            "attention": 0.0,
-            "ffn": 0.0,
-            "experts": 0.0,
-            "router": 0.0,
-            "norms": 0.0,
-            "head": 0.0,
-            "other": 0.0,
-        }
+        return {category: 0.0 for category in BLOCK_CATEGORIES}
+
+    def _bucket_for_param_name(self, param_name: str) -> str:
+        """Map a parameter name to its canonical block category."""
+        return categorize_param(param_name)
+
+    def _collect_block_grad_norms(self) -> Dict[str, float]:
+        """Collect L2 gradient norms by canonical parameter block.
+
+        Gradients are only available when the SBERT step callback fires
+        between a backward pass and the next ``zero_grad``; missing
+        gradients contribute zero to their block.
+        """
+        bucket_sq_sums = {k: 0.0 for k in self._get_default_block_grad_norms().keys()}
+        if not self.enable_block_grad_norms:
+            return self._get_default_block_grad_norms()
+
+        for name, param in self.model.named_parameters():
+            if param.grad is None:
+                continue
+            grad = param.grad.detach()
+            bucket = self._bucket_for_param_name(name)
+            bucket_sq_sums[bucket] += float((grad.float().pow(2).sum()).item())
+
+        return {key: math.sqrt(max(val, 0.0)) for key, val in bucket_sq_sums.items()}
 
     def _log_step_to_csv(
         self,
@@ -674,7 +695,11 @@ class SBERTTrainer:
         telemetry = self._get_gpu_telemetry()
         if self._last_guard_temp_c is not None:
             telemetry["gpu_temp_c"] = float(self._last_guard_temp_c)
-        grad_buckets = self._get_default_block_grad_norms()
+        grad_buckets = (
+            self._collect_block_grad_norms()
+            if self.enable_block_grad_norms
+            else self._get_default_block_grad_norms()
+        )
 
         self.csv_writer.writerow([
             datetime.now().isoformat(),
@@ -696,20 +721,117 @@ class SBERTTrainer:
             f"{float(telemetry['gpu_power_w']):.2f}",
             f"{float(telemetry['gpu_util_pct']):.2f}",
             f"{float(telemetry['gpu_mem_used_mib']):.2f}",
-            f"{float(grad_buckets['embeddings']):.6f}",
-            f"{float(grad_buckets['attention']):.6f}",
-            f"{float(grad_buckets['ffn']):.6f}",
-            f"{float(grad_buckets['experts']):.6f}",
-            f"{float(grad_buckets['router']):.6f}",
-            f"{float(grad_buckets['norms']):.6f}",
-            f"{float(grad_buckets['head']):.6f}",
-            f"{float(grad_buckets['other']):.6f}",
+            *[f"{float(grad_buckets[category]):.6f}" for category in BLOCK_CATEGORIES],
             f"{float(step_time_ms):.2f}",
             f"{float(tokens_per_sec):.2f}",
             f"{float(clip_ratio):.6f}",
             int(effective_batch_size),
         ])
         self.csv_file.flush()
+
+        self._log_step_to_wandb(
+            loss=loss,
+            accuracy=accuracy,
+            lr=lr,
+            grad_norm=grad_norm,
+            telemetry=telemetry,
+            grad_buckets=grad_buckets,
+            step_time_ms=step_time_ms,
+            tokens_per_sec=tokens_per_sec,
+            clip_ratio=clip_ratio,
+            effective_batch_size=effective_batch_size,
+        )
+
+    def _ensure_wandb_run(self):
+        """Return an initialized ``wandb`` module, or ``None`` when disabled.
+
+        W&B is optional: when ``wandb_project`` is unset the logger stays off,
+        and when the ``wandb`` package is not installed a single warning is
+        emitted and training continues unaffected.
+        """
+        if self._wandb_initialized:
+            return self._wandb_module
+        self._wandb_initialized = True
+
+        project = str(self.wandb_project or "").strip()
+        if not project:
+            return None
+
+        try:
+            import wandb  # type: ignore[import-not-found]
+        except ImportError:
+            if not self._wandb_unavailable_logged:
+                logger.warning(
+                    "wandb_project is set but the 'wandb' package is not "
+                    "installed; skipping W&B logging. Install it with "
+                    "`pip install -e '.[wandb]'`."
+                )
+                self._wandb_unavailable_logged = True
+            return None
+
+        try:
+            wandb.init(
+                project=project,
+                config={
+                    "task": "sbert",
+                    "device": str(self.device),
+                    "dataset_type": str(self.dataset_type),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network/backends vary
+            logger.warning("Failed to initialize the W&B run: %s", exc)
+            return None
+
+        self._wandb_module = wandb
+        return wandb
+
+    def _log_step_to_wandb(
+        self,
+        *,
+        loss: float,
+        accuracy: float,
+        lr: float,
+        grad_norm: float,
+        telemetry: Dict[str, float],
+        grad_buckets: Dict[str, float],
+        step_time_ms: float,
+        tokens_per_sec: float,
+        clip_ratio: float,
+        effective_batch_size: int,
+    ) -> None:
+        """Log step metrics (and per-block grad norms) to Weights & Biases.
+
+        Per-block gradient norms are emitted as ``grad_norm/<block>`` only
+        when ``enable_block_grad_norms`` is set; the remaining step metrics
+        are always emitted once a W&B project is configured.
+        """
+        wandb = self._ensure_wandb_run()
+        if wandb is None:
+            return
+
+        payload: Dict[str, Any] = {
+            "loss": float(loss),
+            "accuracy": float(accuracy),
+            "learning_rate": float(lr),
+            "grad_norm": float(grad_norm),
+            "clip_ratio": float(clip_ratio),
+            "step_time_ms": float(step_time_ms),
+            "tokens_per_sec": float(tokens_per_sec),
+            "effective_batch_size": int(effective_batch_size),
+            "gpu_temp_c": float(telemetry["gpu_temp_c"]),
+            "gpu_power_w": float(telemetry["gpu_power_w"]),
+            "gpu_util_pct": float(telemetry["gpu_util_pct"]),
+            "gpu_mem_used_mib": float(telemetry["gpu_mem_used_mib"]),
+        }
+        if self.enable_block_grad_norms:
+            payload.update(
+                {f"grad_norm/{block}": float(value) for block, value in grad_buckets.items()}
+            )
+
+        try:
+            wandb.log(payload, step=int(self.global_step))
+        except Exception as exc:  # pragma: no cover - network/backends vary
+            logger.warning("W&B logging failed at step %s: %s", self.global_step, exc)
 
     @staticmethod
     def _is_main_thread() -> bool:
@@ -779,6 +901,12 @@ class SBERTTrainer:
         if self.csv_file:
             self.csv_file.close()
             logger.info("CSV log closed: %s", self.csv_log_path)
+        if self._wandb_module is not None:
+            try:
+                self._wandb_module.finish()
+            except Exception as exc:  # pragma: no cover - network/backends vary
+                logger.warning("Failed to finish the W&B run: %s", exc)
+            self._wandb_module = None
     
     def load_dataset(
         self,
