@@ -108,9 +108,9 @@ List available named presets: `frankenstein-transformer train --list-configs`
 |-------------|------|----------|
 | `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 42 mixer types |
 | `frankenstein_text_decoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
-| `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `dataset:` blocks |
+| `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `vision_dataset:` blocks |
 
-See [configs/README.md](configs/README.md) for preset details and [docs/specs/](docs/specs/) for architecture deep-dives.
+See [configs/README.md](configs/README.md) for preset details and [docs/architecture.md](docs/architecture.md) for the architecture spec and extension guide.
 
 ## CLI Command Reference
 
@@ -138,7 +138,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 ⚠️ `sparge_attn` and `fasa_attn` are **eval-only** — training raises a runtime error.
 
-Configure via `layer_pattern` in YAML. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/specs/attention-mixers.md](docs/specs/attention-mixers.md) for the taxonomy deep-dive.
+Configure via `layer_pattern` in YAML. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
 
 ## Optimizer Categories
 
@@ -169,14 +169,14 @@ This engine powers the **`dashai-frankenstein` plugin**, which registers Franken
 |----------|---------|
 | [configs/README.md](configs/README.md) | Schema walkthrough, preset details, optimizer parameter reference |
 | [src/schema.yaml](src/schema.yaml) | Authoritative training config schema (source of truth) |
-| [docs/README.md](docs/README.md) | CLI reference and workflow guide |
+| [docs/README.md](docs/README.md) | Documentation index and build instructions |
 | [docs/paper/paper.pdf](docs/paper/paper.pdf) | Technical report (English) |
 | [docs/paper-es/paper-es.pdf](docs/paper-es/paper-es.pdf) | Technical report (Spanish) |
-| [docs/specs/](docs/specs/) | Architecture and feature specifications |
-| [docs/specs/vision.md](docs/specs/vision.md) | Vision Transformer (frankenstein_vit) spec — patch prediction, classification, segmentation |
-| [docs/specs/attention-mixers.md](docs/specs/attention-mixers.md) | Mixer taxonomy (42 variants / 8 categories) and selection guide |
+| [docs/architecture.md](docs/architecture.md) | Canonical implementation spec: architecture, state, extension guide |
+| [docs/architecture.md](docs/architecture.md#711-vision-transformer-image-vision_dataset) | Vision Transformer (frankenstein_vit) — patch prediction, classification, segmentation |
+| [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) | Mixer registry (43 variants / 8 families) and selection guide |
 | [docs/dashai-plugin-audit.md](docs/dashai-plugin-audit.md) | DashAI plugin integration design and status |
-| [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specs, API, papers, bibliography) |
+| [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specification, API, papers, bibliography) |
 | [docs/transformers_compatibility.md](docs/transformers_compatibility.md) | HuggingFace export compatibility guide |
 
 ## Quick Training Example
@@ -278,7 +278,7 @@ training:
 
 Run: `frankenstein-transformer train --config vit_config.yaml --device auto`
 
-See [configs/frankenstein_vit_base.yaml](configs/frankenstein_vit_base.yaml) for the full ViT-Base/16 preset and [docs/specs/vision.md](docs/specs/vision.md) for the complete specification.
+See [configs/frankenstein_vit_base.yaml](configs/frankenstein_vit_base.yaml) for the full ViT-Base/16 preset and [docs/architecture.md](docs/architecture.md#711-vision-transformer-image-vision_dataset) for the complete specification.
 
 ## License
 

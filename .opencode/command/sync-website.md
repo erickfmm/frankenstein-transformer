@@ -39,7 +39,7 @@ bash .opencode/command/sync-website-state.sh
 | `docs/paper/{paper.tex,paper.bbl,paper.pdf}` | `paper/en/…` | + `sections/*.tex`, `appendices/*.tex` |
 | `docs/paper-es/{paper-es.tex,paper-es.bbl,paper-es.pdf}` | `paper/es/…` | + `sections/*.tex`, `appendices/*.tex` |
 | `docs/bibliography/**` | `paper/bibliography/**` | `.bib` + `.md` |
-| `docs/specs/**` | `paper/specs/**` | |
+| `docs/architecture.md` | `paper/specs/architecture.md` | canonical implementation spec |
 | `src/streamlit_gui/{app.py,__init__.py}` | `streamlit_gui/` | |
 | `src/utils/schema_loader.py` | `utils/schema_loader.py` | |
 
@@ -62,13 +62,17 @@ git clone https://github.com/erickfmm/erickfmm.github.io.git erickfmm.github.io
 Decision rules per status — apply them to whatever the report shows:
 
 - `MISSING_SITE <file>` → copy main → mirror (`cp` or `mkdir -p` + `cp`; **rsync is not installed on this machine**).
-- `DIFF <file>` → copy main → mirror (main repo wins: schema, presets, paper sources, specs, bibliography, `app.py`, `schema_loader.py`).
+- `DIFF <file>` → copy main → mirror (main repo wins: schema, presets, paper sources, canonical spec, bibliography, `app.py`, `schema_loader.py`).
 - `ONLY_SITE <file>` ending in `.yaml` under `examples/` → a preset that exists only on the website:
-  1. Validate it: `uv run --extra cu118 --extra train python -c "import sys; sys.path.insert(0,'.'); from src.training.config_loader import load_training_config; load_training_config('<mirror file>')"` must succeed.
+  1. Validate it: `uv run --extra cpu --extra train python -c "import sys; sys.path.insert(0,'.'); from src.training.config_loader import load_training_config; load_training_config('<mirror file>')"` must succeed.
   2. If valid → **reverse-sync**: copy it into `configs/` (or `configs/examples/` when under `examples/examples/`) so CI smoke-tests it, and keep the mirror copy. This is the only case where files flow mirror → main.
   3. If invalid → **STOP and ask the user** before touching anything.
+- `ONLY_SITE <file>` under `paper/specs/` other than `architecture.md` → an orphan
+  of the removed `docs/specs/` tree (the main repo no longer produces it).
+  **Delete it** with `git -C erickfmm.github.io rm <file>`; this is the only
+  pre-authorized deletion. Re-run the state script afterwards.
 - `ONLY_SITE <file>` of any other kind → do not delete; list it in the final report and ask.
-- Never delete mirror files unless the user explicitly confirms; "delete strays" is not part of the default sync.
+- Never delete other mirror files unless the user explicitly confirms; "delete strays" is not part of the default sync.
 
 ### 2. Apply the sync
 
@@ -110,7 +114,7 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 1. **Regenerate parameter ground truth** (CPU, meta device — builds every preset through the real engine; also covers presets reverse-synced in step 1):
 
    ```bash
-   uv run --extra cu118 --extra train python full_tests/param_count_check.py
+   uv run --extra cpu --extra train python full_tests/param_count_check.py
    ```
 
    Must print `… configs counted, 0 failures`.
@@ -128,7 +132,7 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 3. **YAML/JSON validity of the mirror**: the state script's `schema-refs` and `example-yaml` probes must PASS (schema `$ref` resolution + every `examples/**/*.yaml` through `load_training_config`). Additionally verify the JSON serialization the page produces round-trips:
 
    ```bash
-   uv run --extra cu118 --extra train python - <<'PY'
+   uv run --extra cpu --extra train python - <<'PY'
    import glob, json, sys, yaml
    bad = 0
    for p in glob.glob('erickfmm.github.io/frankenstein-transformer/examples/**/*.yaml', recursive=True):
@@ -143,7 +147,7 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 4. **Command-tab CLI validity** — every command the page can generate must parse with the real parser (no torch needed):
 
    ```bash
-   uv run --extra cu118 --extra train python - <<'PY'
+   uv run --extra cpu --extra train python - <<'PY'
    import sys; sys.path.insert(0, '.')
    from src.cli import build_parser
    cmds = [
@@ -169,7 +173,7 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 
 ### 6. Finish
 
-- **Leave both repos uncommitted.** Never commit, never push, never stage. If the user wants to commit the mirror, point them to `/make-a-commit` (note: it commits **and pushes to main**) and let them run it themselves.
+- **Leave both repos uncommitted.** Never commit, never push, never stage unless the user explicitly asks in the same request. If they do, commit each repo separately on `main` and push; otherwise point them to `/make-a-commit` (note: it commits **and pushes to main**) and let them run it themselves.
 - Print a final report: decisions taken per drift class (files copied, presets reverse-synced, index.html fixes), Validation Gate results (estimator max drift %, probes), remaining `git -C erickfmm.github.io status --short` output, and any open questions.
 - If anything remains unresolved (invalid site-only preset, unreachable validation), end with a clear failure summary instead of a partial success claim.
 
@@ -177,5 +181,5 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 
 - Read state first, write second; re-run the state script after each major step to verify progress.
 - Minimal diffs in `index.html` — fix exactly what a probe flags; do not reformat or refactor the page.
-- Never delete files without explicit user confirmation; never touch git history in either repo.
+- Never delete files without explicit user confirmation, except the pre-authorized `paper/specs/` orphans above; never rewrite git history in either repo.
 - The main repo is the source of truth for content; the mirror is the source of truth only for `index.html`, `ft-param-estimator.js`, `ft-diagram.js` and the paper build pipeline (`flatten_tex.py`, HTML outputs).

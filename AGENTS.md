@@ -1,85 +1,126 @@
 # AGENTS.md
 
-- **Project name**: `frankenstein-transformer`
+- **Project**: `frankenstein-transformer` — schema-first, config-driven toolkit for transformer experiments (mixers, optimizers, norms, positional encodings, model classes).
+- **Canonical implementation spec**: [`docs/architecture.md`](docs/architecture.md). Read it before any non-trivial change.
+- **Theory source of truth**: the LaTeX papers under `docs/paper/` and `docs/paper-es/`. The markdown docs never override them.
+- **Removed**: `docs/specs/` no longer exists. Do not recreate it; put implementation/spec content in `docs/architecture.md`.
 
-## Environment & Commands
+## Environment & commands (CPU-first)
 
-- **Env manager**: `uv` — project `.venv/` at repo root (Python 3.13, resolved via `uv.lock`). Prefix commands: `uv run --extra cu118 --extra train <cmd>`. The torch extras (`cpu`/`cu118`/`cu126`/`cu128`) are mutually exclusive (`[tool.uv] conflicts` in `pyproject.toml`) — install exactly ONE; `cu118` is the local default (Tesla P40). Always pass the same extras to `uv run`: a bare `uv run` re-syncs without extras and swaps torch off the cu118 wheel.
-- **Install (local, CUDA 11.8 torch)**: `uv sync --extra cu118 --extra train` — the uv equivalent of `pip install -e ".[cu118]"` plus the sbert/web extras; the `dev` dependency-group brings pytest automatically. If torch ever fails to import with a missing `libcudnn.so`/`libnccl.so`, the uv cache served a gutted wheel — repair with `uv sync --extra cu118 --extra train --reinstall-package nvidia-cudnn-cu11 --reinstall-package nvidia-nccl-cu11 --refresh-package nvidia-cudnn-cu11 --refresh-package nvidia-nccl-cu11`.
-- **Run all tests**: `uv run --extra cu118 --extra train python -m pytest tests/ --continue-on-collection-errors -v --tb=short -p no:warnings`
-- **Run a single test**: `uv run --extra cu118 --extra train python -m pytest tests/test_optimizer_factory.py -v` or `tests/test_foo.py::TestClass::test_method`
-- **CLI**: `uv run --extra cu118 --extra train frankenstein-transformer <subcommand>` (subcommands: `train`, `deploy`, `infer`, `web-server`)
-- **Web UI**: `frankenstein-transformer web-server` (Streamlit schema-driven YAML builder)
-- **Website mirror sync**: `/sync-website` (opencode command in `.opencode/command/sync-website.md`) — mirrors `src/schema*`, `configs/`, `docs/paper*`, `docs/{bibliography,specs}`, `streamlit_gui/`, `utils/schema_loader.py` into the gitignored nested clone `erickfmm.github.io/` (GitHub Pages repo, `frankenstein-transformer/` subfolder), then validates: JS param estimator ≤1% vs engine ground truth (`full_tests/param_count_check.py` + `param_estimate_check.mjs --tol 0.01`), schema `$ref` resolution, YAML/JSON validity of every mirrored preset, and Command-tab CLI validity vs `src/cli.py`. Read-only state report: `bash .opencode/command/sync-website-state.sh`. The mirror stays uncommitted; the page's `index.html` / `ft-param-estimator.js` / `ft-diagram.js` are mirror-only (edited there, never synced from main).
-- **No linter/formatter configured** — match surrounding style; all modules use `from __future__ import annotations` and absolute imports from `src/`.
+- **Develop and test on CPU.** Use `--extra cpu` for tests, schema/config work, docs, and CI reproduction. Tests must never require CUDA; GPU code is guarded by `TORCH_AVAILABLE`.
+  - Install: `uv sync --extra cpu --extra train`
+  - Run: `uv run --extra cpu --extra train <cmd>`
+  - All tests: `uv run --extra cpu --extra train python -m pytest tests/ --continue-on-collection-errors -v --tb=short -p no:warnings`
+  - Single test: `uv run --extra cpu --extra train python -m pytest tests/test_optimizer_factory.py -v`
+- **GPU only for real training/inference** (Tesla P40): `uv sync --extra cu118 --extra train`, then `uv run --extra cu118 --extra train frankenstein-transformer train --config …`. The torch extras (`cpu`/`cu118`/`cu126`/`cu128`) are mutually exclusive; a bare `uv run` resyncs without extras and swaps torch — always pass the same extras.
+- **CLI**: `uv run --extra cpu --extra train frankenstein-transformer {train,deploy,infer,web-server}`. `web-server` is the Streamlit YAML builder.
+- **Style**: no linter/formatter configured. Match surrounding code; `from __future__ import annotations`; absolute `src.` imports; Google-style docstrings.
+- **CI**: Python 3.10–3.12, CPU torch 2.6.0 first, then `requirements.txt` with torch/extra-index lines stripped, then `pip install -e . --no-deps`.
 
-### CI quirks (`.github/workflows/tests.yml`)
+## Where things live
 
-- Matrix is **Python 3.10/3.11/3.12** (uv dev env is 3.13 — keep code compatible across 3.10–3.13).
-- CI installs **CPU-only torch first** (`torch==2.6.0+cpu`), then `requirements.txt` with torch/extra-index lines stripped, then `pip install -e . --no-deps`. Never assume a CUDA torch in tests.
-- GPU code paths are guarded by `TORCH_AVAILABLE = find_spec("torch") is not None`; tests skip cleanly without CUDA.
-
-## Architecture
-
-- **Entrypoint**: `src/cli.py` → `frankenstein-transformer` (registered in `pyproject.toml` `[project.scripts]`).
-- **Package root**: `src/` — `model/`, `training/`, `deploy/`, `sbert/`, `tokenizer/`, `streamlit_gui/`, `utils/`.
-- **Model core**: `src/model/frankenstein_model.py` — `FrankensteinModelConfig` dataclass + `FrankensteinTransformer` backbone. This is the single largest coupling point.
-- **Schema (source of truth)**: `src/schema.yaml` is the JSON-Schema entry; it `$ref`s into the **modular** `src/schema/` directory (`_model.yaml`, `_training.yaml`, `_optimizer.yaml`, `_model_class.yaml`, `_tokenizer.yaml`, `_sbert.yaml`, `_base_model.yaml`, `_conditional_rules.yaml`, `_examples.yaml`). The `_model.yaml` is itself an aggregator that `$ref`s into the `src/schema/_model/` subdirectory (`_dims.yaml`, `_norm.yaml`, `_embedding.yaml`, `_positional_encoding.yaml`, `_attention_latent.yaml`, `_attention_cca.yaml`, `_attention_sparse.yaml`, `_attention_engram.yaml`, `_attention_gma.yaml`, `_attention_ssog.yaml`, `_attention_falcon.yaml`, `_attention_ode.yaml`, `_attention_retnet.yaml`, `_moe.yaml`, `_bitnet.yaml`, `_mixture_of_depths.yaml`, `_ssmax.yaml`, `_ffn.yaml`, `_classification_head.yaml`, `_mhc.yaml`, `_residuals.yaml`) mirroring `src/model/`. ⚠️ There is **no** `configs/schema.yaml` — older docs reference it; the real file is `src/schema.yaml`.
-- **Hierarchical model schema**: The YAML `model:` block is fully nested: `model.dims.*` (core dims + `layer_pattern` + `mode`), `model.norm.*` (`type`, `partial_ratio`), `model.embedding.{factorized,conv}.*`, `model.attention.<mixer>.*` (per-mixer subkeys: `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`, `cca`, `ccgqa`, `msa`, `sparda`, `engram`, `gma`, `ssog`, `falcon`, `ode`, `retnet`), `model.moe.*`, `model.bitnet.*`, `model.mixture_of_depths.*`, `model.ssmax.*`, `model.ffn.*`, `model.classification_head.*`, `model.positional_encoding*`, `model.mhc.*`, `model.residuals.*`. **No flat `model.use_*` feature keys remain.** `FrankensteinModelConfig` remains a **flat** dataclass internally; the loader flattens via `src/utils/config_flatten.py` (`flatten_model_dict`) before `FrankensteinModelConfig(**kwargs)`.
-- **Strict schema**: `additionalProperties: false` at top level and at every nested object. Adding a config key without extending the schema → validation failure.
-- **Training presets**: `configs/*.yaml` (named: `frankenstein_text_encoder`, `frankenstein_text_decoder`, `standard`, `tinybert`, `embbert`, …) and `configs/examples/*.yaml` (optimizer × architecture combos).
-- **Norm layers**: `src/model/norm/` — `factory.py` dispatches on `norm.type`; implementations in `derf.py`, `dynamic_tanh.py`, `rms.py` (RMSNorm + pRMSNorm).
-- **Optimizers**: `src/model/optimizer/` — `factory.py` builds the optimizer; one file per family.
-- **Attention mixers**: `src/model/attention/` — families live in subpackages `gated/`, `latent/`, `sparse/` plus top-level modules (`standard.py`, `sigmoid.py`, `titan.py`, `retnet.py`, `ode.py`, `engram.py`, `grouped_query_attention.py`, `common.py`). `common.py` hosts `BitLinear`/`BitConv1d`.
-
-## Hard Constraints (respect these always)
-
-1. **Schema is the source of truth.** Every config field must exist in `src/schema/_*.yaml`. Never accept a YAML key the schema doesn't define; never add a code path that reads an undocumented key.
-2. **Cross-component compatibility must hold.** Enforced partly by `src/schema/_conditional_rules.yaml` and partly at runtime:
-   - `model.dims.hidden_size` must be divisible by `model.dims.num_heads`.
-   - `model.dims.num_kv_heads` (for `gqa_attn`) must divide `model.dims.num_heads` exactly.
-   - `model.dims.vocab_size` must match the tokenizer's vocab (mismatch corrupts token IDs).
-   - `base_model` path requires `training.task` and, for MLM, `tokenizer.name_or_path`.
-   - `task: mlm` requires `training.optimizer`; `task: sbert` requires `training.sbert`.
-3. **Respect BitNet.** `bitnet.enabled` **defaults to `True`** — primary/gate `nn.Linear` are replaced by `BitLinear` (ternary weights) unless explicitly disabled. `bitnet.routers=true` **requires** `bitnet.enabled=true` (enforced in `config_loader._validate_bitnet_flags`). `bitnet.conv` only applies when both `bitnet.enabled` and `model.embedding.conv.enabled` are true. Changing BitNet wiring touches `src/model/attention/common.py`, `src/model/config.py`, `frankenstein_model.py`, and `src/deploy/quantization.py` + `bitnet_gguf_export.py`.
-4. **`model.norm.type` enum is `[layer_norm, dynamic_tanh, derf, rms_norm, prms_norm, flash_norm]`.** `rms_norm` (RMSNorm) and `prms_norm` (partial RMSNorm, arXiv:1910.07467) are implemented in `src/model/norm/rms.py` and dispatched by `norm/factory.py`. `prms_norm` uses the `model.norm.partial_ratio` config field (default `0.0625`, range `(0, 1]`) — validated in `FrankensteinModelConfig.__post_init__` (flattened from `norm.partial_ratio`). `flash_norm` (FlashNorm, arXiv:2407.09577) is implemented in `src/model/norm/flash.py` as a *weightless* RMSNorm (no learnable per-dim scale `g`); it composes with partial-RMS via `model.norm.flashnorm_partial_ratio` (default `0.0`, range `[0, 1]`) — validated in `FrankensteinModelConfig.__post_init__` (flattened from `norm.flashnorm_partial_ratio`). When `norm_type == "flash_norm"` and FFN is non-GLU + non-MoE, `HybridLayer` fuses the pre-FFN norm into the FFN's first projection via `FlashNormLinear` (or `FlashNormBitLinear` under BitNet) — Prop. 2 of the paper (deferred RMS). GLU/MoE paths keep a standalone `FlashNorm` for `norm2`.
-5. **`fasa_attn` and `sparge_attn` are eval-only.** They raise `RuntimeError` during training (`TRAINING_FREE_LAYERS` set in `frankenstein_model.py`). Never put them in a training `model.dims.layer_pattern`.
-6. **`model_class: frankenstein_text_decoder` forces `model.dims.mode: decoder`** at runtime (preset in `frankenstein_model.py`). Don't set `mode: encoder` with this class.
-7. **Optimizer parameters use prefixed keys**: `<optimizer_class>-<group>_<param>` (e.g. `adamw-lr_embeddings`, `muon-ns_steps`, `sgd_momentum-momentum`). The prefix list lives in `src/schema/_optimizer.yaml` under `by_optimizer`. A new optimizer must add a `prefix` entry there. Parameter groups are: `embeddings`, `norms`, `attention`, `other` (the `ode`/`retnet`/`mamba` groups were removed; their params route into `attention`).
-8. **`training.task` is required** (`mlm` or `sbert`). Legacy top-level optimizer keys are gone — use `training.optimizer` (MLM) or `training.sbert` (SBERT).
-9. **Both `configs/*.yaml` and `configs/examples/*.yaml` are smoke-tested** by `tests/test_yaml_examples.py` (one injected test per file). Adding a new optimizer family or mixer **requires** an example YAML or CI breaks. The `examples.md` file is skipped (only `*.yaml`/`*.yml` are globbed).
-10. **`ffn.activation` enum is the source of truth** (43 values in `src/schema/_model/_ffn.yaml`, mirrored in `src/model/activation_function/factory.py` `ALL_ACTIVATIONS`). Adding an activation requires extending the enum **and** the factory dispatch **and** `FrankensteinModelConfig` validation. GLU variants (`swiglu`/`geglu`/`reglu`) are gated FFN units — `get_activation` raises on them; `HybridLayer` builds a `GatedFFN` instead. The `ffn.activation_config` nested object (`additionalProperties: false`) groups learnable-activation params (RAF degrees/version/init, PReLU init, etc.). See `docs/specs/activations.md`.
-
-## Where to Edit by Feature Type
-
-Read recent commits on these paths first (`git log --oneline -20 -- <path>`).
-
-| Feature / Fix | Primary files to read & edit |
+| Topic | Path |
 |---|---|
-| Add a new **attention mixer** | `src/model/attention/<family>/new_attn.py`, `src/model/attention/__init__.py`, `src/model/frankenstein_model.py` (registry dict), `src/schema/_model/_dims.yaml` (`layer_pattern` enum) + a new `src/schema/_model/_attention_<mixer>.yaml` if the mixer has config knobs (and `$ref` it from `_model.yaml`), `src/utils/config_flatten.py` (add the mixer to `MIXER_MAP`), `configs/examples/` (add example), `tests/test_schema_attention_layers.py`, `tests/test_attention_refactor.py` |
-| Add a new **optimizer** | `src/model/optimizer/<new_opt>.py`, `src/model/optimizer/factory.py`, `src/model/optimizer/__init__.py`, `src/schema/_optimizer.yaml` (enum + `by_optimizer` prefix entry), `configs/examples/` (add example), `tests/test_optimizer_factory.py`, `tests/test_yaml_examples.py` |
-| Modify **training config / schema** | `src/schema/_*.yaml` / `src/schema/_model/_*.yaml` (the relevant submodule), `src/training/config_loader.py`, `src/utils/config_flatten.py` (if nesting changes), `configs/README.md`, `src/streamlit_gui/app.py`, `tests/test_config_loader.py`, `tests/test_yaml_examples.py` |
-| Modify **text dataset loading (text_dataset)** | `src/schema/_text_dataset.yaml`, `src/training/text_dataset_builder.py`, `src/engine.py` (host-dataset dispatch), `tests/test_text_dataset_builder.py` |
-| Modify **DashAI plugin (dashai-frankenstein)** | `dashai-frankenstein/src/dashai_frankenstein/` (models/, tasks/, adapters/, config.py), `dashai-frankenstein/tests/`, parent engine contract `src/engine.py` + `src/engine_hf_tokenizer.py`; schema checkbox lives in `FrankensteinPassthroughSchema` (`config.py`) |
-| Modify **model architecture / FrankensteinModelConfig** | `src/model/frankenstein_model.py`, `src/schema/_model/_*.yaml` + `src/utils/config_flatten.py` (if nesting changes), `tests/test_model_config.py`, `tests/test_model_variants.py` |
-| Modify **training loop / trainer** | `src/training/trainer.py`, `src/training/main.py`, `tests/test_mlm_masking.py`, `tests/test_model_training_fake_data.py` |
-| Modify **SBERT training/inference** | `src/sbert/train_sbert.py`, `src/sbert/inference_sbert.py`, `src/schema/_sbert.yaml`, `configs/modernbert_sbert*.yaml`, `tests/test_sbert_thermal_offload.py` |
-| Modify **Vision Transformer (frankenstein_vit)** | `src/model/frankenstein_vit.py`, `src/model/config.py` (vision fields), `src/schema/_image.yaml`, `src/schema/_vision_dataset.yaml`, `src/schema/_vision_*.yaml`, `src/utils/config_flatten.py` (`flatten_image_dict`), `src/training/vision_dataset.py`, `src/training/trainer.py` (vision loss methods), `src/training/main.py` (`_run_vision_task`), `src/deploy/{deploy,inference,transformers_export}.py` (ViT branches), `configs/frankenstein_vit_base.yaml`, `configs/examples/vit_*.yaml`, `tests/test_frankenstein_vit.py`, `tests/test_vision_dataset.py`, `tests/test_vision_loss.py`, `docs/specs/vision.md` |
-| Modify **BitNet / deployment / quantization** | `src/deploy/deploy.py`, `src/deploy/inference.py`, `src/deploy/quantization.py`, `src/deploy/bitnet_gguf_export.py`, `src/model/attention/common.py` (`BitLinear`/`BitConv1d`), `src/model/frankenstein_model.py` (BitNet wiring), `tests/test_bitnet_*.py` |
-| Modify **CLI / entrypoint** | `src/cli.py`, `pyproject.toml` (scripts entry), `tests/test_cli_parser.py`, `tests/test_cli_gpu_temp_flags.py` |
-| Add/modify **GPU thermal guard** | `src/utils/gpu_temp_guard.py`, `src/training/trainer.py`, `src/cli.py`, `tests/test_gpu_temp_guard*.py` |
-| Modify **positional encodings** | `src/model/attention/rope.py`, `src/model/attention/hope.py`, `src/model/attention/common.py`, `src/schema/_model/_positional_encoding.yaml` (`positional_encoding` enum + parameters), `tests/test_positional_encodings.py` |
-| Modify **normalization layers** | `src/model/norm/factory.py`, `src/model/norm/<impl>.py` (`rms.py`, `derf.py`, `dynamic_tanh.py`), `src/schema/_model/_norm.yaml` (`type` enum), `tests/test_common_modules.py` |
-| Modify **activation functions** | `src/model/activation_function/factory.py`, `src/model/activation_function/<family>.py` (`common.py`, `rectified.py`, `exponential.py`, `learnable.py`, `glu.py`), `src/model/frankenstein_model.py` (`HybridLayer` FFN wiring, `_validate_ffn_activation_config`), `src/schema/_model/_ffn.yaml` (`activation` enum + `activation_config` object), `configs/examples/activation_*.yaml`, `tests/test_activation_functions.py`, `docs/specs/activations.md`, paper `docs/paper*/appendices/annex-8-*.tex` + `annex-summary-tables.tex` |
-| Modify **streaming dataset** | `src/training/streaming_mlm_dataset.py`, `src/utils/storage_manager.py` |
-| Modify **Streamlit web interface** | `src/streamlit_gui/app.py` |
-| Update **paper / docs** | `docs/paper.tex`, `docs/paper-es.tex`, `docs/bibliography/*.bib`, `docs/bibliography/*.md`, `docs/specs/*.md` |
-| Sync / fix the **website mirror** | `/sync-website` command (`.opencode/command/sync-website.md` + `sync-website-state.sh`); mirror-only files live in `erickfmm.github.io/frankenstein-transformer/` (`index.html`, `ft-param-estimator.js`, `ft-diagram.js`, `paper/flatten_tex.py`); ground-truth tools `full_tests/param_count_check.py` + `param_estimate_check.mjs` |
+| Schema entrypoint / modules | `src/schema.yaml`, `src/schema/**` |
+| Flat model config | `src/model/config.py` (`FrankensteinModelConfig`) |
+| Mixer registry + `HybridLayer` | `src/model/hybrid_layer.py` |
+| Mixer implementations | `src/model/attention/{gated,latent,sparse}/`, top-level modules |
+| Nested → flat config | `src/utils/config_flatten.py` |
+| Optimizers + factory | `src/model/optimizer/{factory.py,<family>.py}` |
+| Norms + factory | `src/model/norm/{factory.py,<impl>.py}` |
+| Positional encodings | `src/model/embeddings/` |
+| Activations | `src/model/activation_function/` |
+| Residuals / mHC / Hyperloop | `src/model/residuals/`, `src/model/mhc.py`, `hyperloop.py` |
+| Model classes | `src/model/frankenstein_{encoder,decoder,vit}.py`, `src/model/__init__.py` |
+| Validation / task dispatch | `src/training/config_loader.py`, `src/training/main.py` |
+| Training loop | `src/training/trainer.py` |
+| Framework-neutral builder | `src/engine.py` (`build_model`) |
+| Deployment / export / inference | `src/deploy/` |
+| SBERT | `src/sbert/` |
+| Streamlit UI | `src/streamlit_gui/app.py` |
+| Presets | `configs/*.yaml`, `configs/examples/*.yaml` |
+| Tests | `tests/` (46 files; see gates below) |
+| Theory / citations | `docs/paper*/`, `docs/bibliography/` |
+| Website mirror sync | `.opencode/command/sync-website.md` |
 
-## Documentation
+> `src/model/frankenstein_model.py` **does not exist** (split into the files above; a regression test fails if it is recreated).
 
-- **Docstrings**: Google-style (Args, Returns, Raises, Attributes). Sphinx autodoc renders them to Read the Docs (`docs/source/api/`).
-- **Generate API docs locally**: `bash docs/build_docs.sh` (Sphinx → `docs/_build/html`); Read the Docs hosts the same at https://frankenstein-transformer.readthedocs.io
-- **Specs**: `docs/specs/*.md` — architecture, attention-mixers, optimizers, schema-reference, cli-reference, deployment, sbert-workflows, training-safety. Update the relevant spec when adding a mixer/optimizer.
-- **Academic refs**: `docs/paper.tex`, `docs/bibliography/*.md` contain formulations and citations for all mixers/optimizers.
-- **Config reference**: `configs/README.md` has the full optimizer parameter reference and preset walkthrough.
+## Hard rules
+
+1. **Schema is the contract.** Every YAML key must exist in `src/schema/**` (`additionalProperties: false`). Never read an undocumented key.
+2. **Invariants**: `hidden_size % num_heads == 0`; `num_kv_heads` divides `num_heads`; `len(layer_pattern) == num_layers`; `vocab_size` matches the tokenizer.
+3. **BitNet is on by default** (`bitnet.enabled: true`). `bitnet.routers: true` requires `bitnet.enabled: true`; `bitnet.conv` requires BitNet + `embedding.conv.enabled`.
+4. **Normalization**: enum `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`. `prms_norm` uses `norm.partial_ratio`; `flash_norm` composes with `norm.flashnorm_partial_ratio`.
+5. **`fasa_attn` / `sparge_attn` are eval-only** (`HybridLayer.TRAINING_FREE_LAYERS`). Never put them in a training preset.
+6. **Forced modes**: `frankenstein_text_decoder` → `mode: decoder`; `frankenstein_vit` → `mode: encoder`. `training.task: causal_lm` requires the decoder; vision tasks require the ViT.
+7. **Optimizer keys are prefixed**: `<optimizer>-<group>_<param>` or `<optimizer>-<param>`. Groups: `embeddings`, `norms`, `attention`, `other`. A new family needs an enum value, a `by_optimizer` prefix, and a matching `if/then` rule.
+8. **`training.task` is required**, one of `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`. No legacy top-level optimizer keys.
+9. **All presets are smoke-tested** (`configs/*.yaml` + `configs/examples/*.yaml`). A new mixer/optimizer needs an example YAML.
+10. **The activation enum is the source of truth** (43 values). GLU variants (`swiglu`/`geglu`/`reglu`) are handled by `GatedFFN`, not `get_activation()`.
+11. **mHC and Mixture-of-Depths are mutually exclusive.** Do not enable both.
+
+## Extending: files in order
+
+| Feature | Touch (in order) |
+|---|---|
+| **Mixer** | `src/model/attention/<family>/<name>.py` → `attention/<family>/__init__.py` + `attention/__init__.py` → `hybrid_layer.py` registry → `_dims.yaml` enum + both description tables → optional `_attention_<mixer>.yaml` + `_model.yaml` `$ref` → `config_flatten._ATTENTION_MIXER_RENAMES` → `model/config.py` fields → `configs/examples/` → tests |
+| **Optimizer** | `src/model/optimizer/<name>.py` → `optimizer/__init__.py` → `factory.py` (`OPTIMIZER_REGISTRY`, `OPTIMIZER_ALLOWED_KEYS`) → `_optimizer.yaml` enum + `by_optimizer` → `_training.yaml` prefix rule → example → `test_optimizer_factory.py` → `configs/README.md` |
+| **Norm** | `src/model/norm/<name>.py` → `norm/factory.py` → `_norm.yaml` enum/params → `config_flatten.py` + `model/config.py` → `_DEFAULT_PAIRS` → `configs/examples/norm_*.yaml` → `test_common_modules.py` |
+| **Positional encoding** | `src/model/embeddings/<name>.py` → `embeddings/factory.py` → `_positional_encoding.yaml` → `config_flatten._flatten_pe_parameters` → `model/config.py` → `configs/examples/pe_*.yaml` → `test_positional_encodings.py` |
+| **Activation** | `src/model/activation_function/<family>.py` → `factory.py` (`ALL_ACTIVATIONS`) → `_ffn.yaml` enum/`activation_config` → `model/config.py` validation → `configs/examples/activation_*.yaml` → `test_activation_functions.py` |
+| **Residual** | `src/model/residuals/<name>.py` → `residuals/factory.py` → `_residuals.yaml` → flatten/config → example → `test_residuals.py` |
+| **Model class** | `src/model/frankenstein_<class>.py` → `model/__init__.py` → `_model_class.yaml` → `config_loader.py` rules → `engine.py` + `training/main.py` → `deploy/*` → `cli.py` choices → preset + example → `test_model_variants.py` |
+| **Config field** | schema module → `config_flatten.py` (if nested) → `model/config.py` → `_DEFAULT_PAIRS` (if default) → example YAML → `docs/architecture.md` §7 |
+| **Dataset/task** | `src/schema/_<name>.yaml` + `schema.yaml` `$ref` → `src/training/<builder>.py` → `engine.py` → `config_loader.py` + `trainer.py` loss → example → dataset tests |
+
+## Gates (must stay green)
+
+- `tests/test_schema_consistency.py` — presets validate, mixer enum ↔ bilingual table, optimizer prefixes ↔ `if/then`, schema defaults ↔ dataclass.
+- `tests/test_yaml_examples.py` — auto-globs both config directories.
+- `tests/test_schema_attention_layers.py` — mixer enum + `attention.*` sub-keys.
+- `tests/test_optimizer_factory.py`, `test_optimizer_base.py` — registry/allowed keys/step.
+- `tests/test_common_modules.py`, `test_positional_encodings.py`, `test_activation_functions.py`, `test_residuals.py`.
+- `tests/test_naming_conventions.py` — no legacy names, no `frankenstein_model.py` shim.
+- `tests/test_frankenstein_vit.py`, `test_vision_dataset.py`, `test_vision_loss.py`.
+
+## Decisions
+
+| # | Decision |
+|---|---|
+| D1 | Schema is the executable contract; `additionalProperties: false` everywhere |
+| D2 | One flat `FrankensteinModelConfig` + explicit flattener (no nested runtime config) |
+| D3 | Model core split into `config.py` / `hybrid_layer.py` / encoder / decoder / ViT; no `frankenstein_model.py` |
+| D4 | BitNet enabled by default |
+| D5 | `fasa_attn` / `sparge_attn` are eval-only |
+| D6 | mHC and Mixture-of-Depths are mutually exclusive |
+| D7 | CPU-first development and testing; CUDA only for real runs |
+| D8 | Every preset/example is schema-smoke-tested |
+| D9 | Optimizer prefixes are enumerated and cross-checked with conditional rules |
+| D10 | Model classes force their modes (`decoder`, `vit`) |
+| D11 | Paper = theory source of truth; `docs/architecture.md` = canonical implementation spec |
+| D12 | `AGENTS.md` points to code/tests; it does not restate the spec |
+
+## Skills
+
+Repo-local skills live in `.agents/skills/<name>/SKILL.md`; load the matching one before specialist work.
+
+| Skill | Use when |
+|---|---|
+| `pytorch-patterns` | Model, trainer, optimizer or attention code |
+| `python-testing-patterns` | Writing/fixing tests or CI |
+| `bash-defensive-patterns` | Shell scripts and automation |
+| `developing-with-streamlit` | `src/streamlit_gui/` |
+| `docstring` | Adding/updating Google-style docstrings |
+| `python-executor` | Sandboxed data/script execution |
+| `pandas-data-analysis`, `pandas-pro` | Dataset/analysis work |
+| `research-paper-writer` | `docs/paper*` and annexes |
+| `frontend-design`, `seo`, `accessibility` | Website mirror (`erickfmm.github.io/`) |
+
+Environment-provided skills (`hf-cli`, `opencode`, `report`, `understand*`, `officecli`, `find-skills`) are available globally.
+
+## Docs
+
+- Implementation spec + extension recipes: [`docs/architecture.md`](docs/architecture.md).
+- Presets/optimizer parameters: [`configs/README.md`](configs/README.md).
+- Theory, formulations, citations: `docs/paper/`, `docs/paper-es/`, `docs/bibliography/`.
+- Build API docs: `bash docs/build_docs.sh` (Sphinx → `docs/_build/html`).

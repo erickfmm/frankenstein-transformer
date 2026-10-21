@@ -125,9 +125,18 @@ pair_file "$PE/paper-es.pdf" "$SITE/paper/es/paper-es.pdf" "docs/paper-es/paper-
 pair_tree "$PE/sections" "$SITE/paper/es/sections" "docs/paper-es/sections" "paper/es/sections" -type f -name "*.tex"
 pair_tree "$PE/appendices" "$SITE/paper/es/appendices" "docs/paper-es/appendices" "paper/es/appendices" -type f -name "*.tex"
 
-# bibliography + specs
+# bibliography + canonical implementation spec
 pair_tree "$REPO_ROOT/docs/bibliography" "$SITE/paper/bibliography" "docs/bibliography" "paper/bibliography" -type f
-pair_tree "$REPO_ROOT/docs/specs" "$SITE/paper/specs" "docs/specs" "paper/specs" -type f
+pair_file "$REPO_ROOT/docs/architecture.md" "$SITE/paper/specs/architecture.md" "docs/architecture.md" "paper/specs/architecture.md"
+
+# docs/specs/ was removed: any other file under paper/specs/ is an orphan.
+if [[ -d "$SITE/paper/specs" ]]; then
+  while IFS= read -r f; do
+    rel="${f#"$SITE/paper/specs/"}"
+    [[ "$rel" == "architecture.md" ]] && continue
+    emit ONLY_SITE "docs/specs/$rel (removed)" "paper/specs/$rel"
+  done < <(find "$SITE/paper/specs" -type f | sort)
+fi
 
 # streamlit gui + schema loader
 pair_file "$REPO_ROOT/src/streamlit_gui/app.py" "$SITE/streamlit_gui/app.py" "src/streamlit_gui/app.py" "streamlit_gui/app.py"
@@ -263,7 +272,7 @@ echo "[python-probes]"
 uv_ok="no"
 if command -v uv >/dev/null 2>&1; then
   uv_ok="yes"
-  out=$(uv run --project "$REPO_ROOT" --extra cu118 --extra train python -c "
+  out=$(uv run --project "$REPO_ROOT" --extra cpu --extra train python -c "
 import sys
 sys.path.insert(0, r'$REPO_ROOT')
 try:
@@ -279,7 +288,7 @@ except Exception as e:
     *) probe FAIL schema-refs "${out#SCHEMA_REFS=FAIL: }" ;;
   esac
 
-  out=$(uv run --project "$REPO_ROOT" --extra cu118 --extra train python -c "
+  out=$(uv run --project "$REPO_ROOT" --extra cpu --extra train python -c "
 import glob, os, sys
 sys.path.insert(0, r'$REPO_ROOT')
 from src.training.config_loader import load_training_config

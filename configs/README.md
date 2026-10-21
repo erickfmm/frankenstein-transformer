@@ -354,7 +354,8 @@ Per-mixer sub-objects: `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
 `model.mhc` configures mHC (arXiv:2512.24880), an opt-in replacement for the
 standard residual connection that expands the residual stream width by a factor
 `n` and constrains the stream-mixing matrix `H[res]` to the Birkhoff polytope
-(doubly stochastic) via Sinkhorn-Knopp. See `docs/specs/mhc.md`.
+(doubly stochastic) via Sinkhorn-Knopp. See
+[`docs/architecture.md`](../docs/architecture.md#78-residuals-mhc-and-hyperloop-modelresiduals-modelmhc).
 
 - `model.mhc.enabled`: enable mHC (`use_mhc`). Default `false`.
 - `model.mhc.expansion_rate`: stream expansion factor `n` (`mhc_expansion_rate`). Default `4`.
