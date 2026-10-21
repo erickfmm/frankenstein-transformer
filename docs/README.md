@@ -14,7 +14,7 @@ architecture guide.
 | [`architecture.md`](architecture.md) | **Canonical implementation spec** and extension guide (Mermaid diagrams, component tables, recipes) |
 | [`../configs/README.md`](../configs/README.md) | Presets and the full optimizer-parameter reference |
 | [`paper/`](paper/), [`paper-es/`](paper-es/) | **Source of truth for theory**, formulations and citations |
-| [`bibliography/`](bibliography/) | Per-family literature notes and `.bib` files |
+| [`bibliography/`](bibliography/) | BibTeX databases (`.bib`) used by the papers |
 | [`source/`](source/) | Sphinx sources (API autodoc, papers, hosted docs) |
 | [`../AGENTS.md`](../AGENTS.md) | Agent-facing rules, where-to-find map, decisions, skills |
 | [`dashai-plugin-audit.md`](dashai-plugin-audit.md) | DashAI plugin integration design |

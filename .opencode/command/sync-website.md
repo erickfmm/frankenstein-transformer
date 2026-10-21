@@ -38,7 +38,7 @@ bash .opencode/command/sync-website-state.sh
 | `configs/examples/**` | `examples/examples/**` | full recursion, including `examples.md` |
 | `docs/paper/{paper.tex,paper.bbl,paper.pdf}` | `paper/en/…` | + `sections/*.tex`, `appendices/*.tex` |
 | `docs/paper-es/{paper-es.tex,paper-es.bbl,paper-es.pdf}` | `paper/es/…` | + `sections/*.tex`, `appendices/*.tex` |
-| `docs/bibliography/**` | `paper/bibliography/**` | `.bib` + `.md` |
+| `docs/bibliography/**` | `paper/bibliography/**` | `.bib` only |
 | `docs/architecture.md` | `paper/specs/architecture.md` | canonical implementation spec |
 | `src/streamlit_gui/{app.py,__init__.py}` | `streamlit_gui/` | |
 | `src/utils/schema_loader.py` | `utils/schema_loader.py` | |
@@ -67,10 +67,11 @@ Decision rules per status — apply them to whatever the report shows:
   1. Validate it: `uv run --extra cpu --extra train python -c "import sys; sys.path.insert(0,'.'); from src.training.config_loader import load_training_config; load_training_config('<mirror file>')"` must succeed.
   2. If valid → **reverse-sync**: copy it into `configs/` (or `configs/examples/` when under `examples/examples/`) so CI smoke-tests it, and keep the mirror copy. This is the only case where files flow mirror → main.
   3. If invalid → **STOP and ask the user** before touching anything.
-- `ONLY_SITE <file>` under `paper/specs/` other than `architecture.md` → an orphan
-  of the removed `docs/specs/` tree (the main repo no longer produces it).
-  **Delete it** with `git -C erickfmm.github.io rm <file>`; this is the only
-  pre-authorized deletion. Re-run the state script afterwards.
+- `ONLY_SITE <file>` under `paper/specs/` other than `architecture.md`, or under
+  `paper/bibliography/` ending in `.md` → an orphan of removed upstream trees
+  (`docs/specs/` was deleted; bibliography reviews were superseded by the paper
+  annexes). **Delete it** with `git -C erickfmm.github.io rm <file>`; these are
+  the only pre-authorized deletions. Re-run the state script afterwards.
 - `ONLY_SITE <file>` of any other kind → do not delete; list it in the final report and ask.
 - Never delete other mirror files unless the user explicitly confirms; "delete strays" is not part of the default sync.
 
@@ -181,5 +182,5 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 
 - Read state first, write second; re-run the state script after each major step to verify progress.
 - Minimal diffs in `index.html` — fix exactly what a probe flags; do not reformat or refactor the page.
-- Never delete files without explicit user confirmation, except the pre-authorized `paper/specs/` orphans above; never rewrite git history in either repo.
+- Never delete files without explicit user confirmation, except the pre-authorized `paper/specs/` and `paper/bibliography/*.md` orphans above; never rewrite git history in either repo.
 - The main repo is the source of truth for content; the mirror is the source of truth only for `index.html`, `ft-param-estimator.js`, `ft-diagram.js` and the paper build pipeline (`flatten_tex.py`, HTML outputs).

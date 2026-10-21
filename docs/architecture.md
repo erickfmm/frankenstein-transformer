@@ -758,5 +758,6 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 - [`docs/paper/`](paper/) and [`docs/paper-es/`](paper-es/) — **source of truth
   for theory**: mathematical formulations and annexes (mixers, optimizers,
   activations, mHC, positional encodings).
-- [`docs/bibliography/`](bibliography/) — per-family literature notes.
+- [`docs/bibliography/`](bibliography/) — BibTeX databases (`.bib`) used by the
+  papers; literature reviews live in the paper annexes, not as separate docs.
 - `src/schema/**` — the executable specification.
