@@ -201,8 +201,8 @@ def build_model(
     """Build a Frankenstein model from a model class name and config.
 
     Args:
-        model_class: ``"frankensteindecoder"``, ``"frankenstein_vit"``, or any
-            other value (``"frankenstein"``) for the encoder.
+        model_class: ``"frankenstein_text_decoder"``, ``"frankenstein_vit"``,
+            or any other value (``"frankenstein_text_encoder"``) for the encoder.
         config: :class:`FrankensteinModelConfig`.
         num_labels: Optional number of classes to enable the encoder's
             sequence-level classification head (DashAI Strategy A). Only
@@ -216,7 +216,15 @@ def build_model(
         if int(num_labels) >= 1:
             config.classification_head = True
 
-    if model_class == "frankensteindecoder":
+    # The pre-rename values are rejected loudly: silently falling back to the
+    # encoder for a legacy decoder checkpoint would change model semantics.
+    if model_class in {"frankenstein", "frankensteindecoder"}:
+        raise ValueError(
+            f"model_class={model_class!r} was renamed; use "
+            "'frankenstein_text_encoder' or 'frankenstein_text_decoder'."
+        )
+
+    if model_class == "frankenstein_text_decoder":
         config.mode = "decoder"
         model = FrankensteinDecoder(config)
     elif model_class == "frankenstein_vit":
@@ -549,11 +557,11 @@ def _train_from_config_path(
             loaded.model_config.vocab_size = len(tokenizer)
         model = build_model(loaded.model_class, loaded.model_config)
         runtime_config = loaded.model_config
-        model_descriptor = loaded.model_class or "frankenstein"
+        model_descriptor = loaded.model_class or "frankenstein_text_encoder"
     else:
         model, tokenizer = _build_legacy(loaded)
         runtime_config = loaded.model_config
-        model_descriptor = loaded.model_class or "frankenstein"
+        model_descriptor = loaded.model_class or "frankenstein_text_encoder"
 
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -895,7 +903,7 @@ def _build_trained_tokenizer_model(
         config.vocab_size = len(tokenizer)
         model = build_model(loaded.model_class, config)
         runtime_config = config
-        model_descriptor = loaded.model_class or "frankenstein"
+        model_descriptor = loaded.model_class or "frankenstein_text_encoder"
 
     return model, tokenizer, runtime_config, model_descriptor
 

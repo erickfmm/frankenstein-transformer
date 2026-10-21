@@ -79,7 +79,7 @@ class BuildModelTests(unittest.TestCase):
 
     def test_build_decoder_forces_decoder_mode(self):
         cfg = _mini_cfg(mode="encoder")
-        build_model("frankensteindecoder", cfg)
+        build_model("frankenstein_text_decoder", cfg)
         self.assertEqual(cfg.mode, "decoder")
 
     def test_build_model_is_in_engine_all(self):
@@ -300,7 +300,7 @@ class TrainedTokenizerModelTests(unittest.TestCase):
 
         return LoadedTrainingConfig(
             task="mlm",
-            model_class="frankenstein",
+            model_class="frankenstein_text_encoder",
             model_config=_mini_cfg(vocab_size=10),
             base_model=None,
             tokenizer_config={
@@ -327,7 +327,7 @@ class TrainedTokenizerModelTests(unittest.TestCase):
             loaded, dataset=self.TEXTS, task="mlm"
         )
         self.assertEqual(len(tokenizer), runtime_config.vocab_size)
-        self.assertEqual(descriptor, "frankenstein")
+        self.assertEqual(descriptor, "frankenstein_text_encoder")
         # The embedding matrix matches the trained vocabulary.
         emb = model.emb if hasattr(model, "emb") else None
         if emb is not None and hasattr(emb, "num_embeddings"):

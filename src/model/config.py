@@ -391,7 +391,7 @@ class FrankensteinModelConfig:
             ``use_embedding_conv`` is True. Default: 3.
         mode: Model mode. ``"encoder"`` for bidirectional (MLM) or
             ``"decoder"`` for autoregressive causal generation. The
-            ``model_class=frankensteindecoder`` preset forces ``mode=decoder``
+            ``model_class=frankenstein_text_decoder`` preset forces ``mode=decoder``
             at runtime. Default: ``"encoder"``.
         engram_max_ngram_size: Highest N-gram order for Engram memory layers
             (range 2..max). Default: 3.

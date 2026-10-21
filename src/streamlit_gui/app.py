@@ -962,10 +962,10 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     # Causal-LM requires the decoder model class. Enforce at config build time.
     if config.get("training", {}).get("task") == "causal_lm":
         if "base_model" not in config:
-            config["model_class"] = "frankensteindecoder"
+            config["model_class"] = "frankenstein_text_decoder"
             st.warning(
                 "Training task 'causal_lm' requires the decoder model class. "
-                "'model_class' has been set to 'frankensteindecoder'."
+                "'model_class' has been set to 'frankenstein_text_decoder'."
             )
 
     return config

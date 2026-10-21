@@ -10,8 +10,8 @@ El contrato autoritativo es \texttt{src/schema.yaml}, un esquema JSON modular cu
 
 \paragraph{Clase de modelo.} El campo \texttt{model\_class} selecciona entre tres variantes:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{\texttt{frankenstein}}: encoder de arquitectura mixta con toda la gama de mezcladores de secuencia, MoE y normalización avanzada, entrenado con masked language modeling.
-    \item \textbf{\texttt{frankensteindecoder}}: decoder causal autorregresivo para generación de siguiente token; el runtime fuerza el enmascaramiento de decoder.
+    \item \textbf{\texttt{frankenstein\_text\_encoder}}: encoder de arquitectura mixta con toda la gama de mezcladores de secuencia, MoE y normalización avanzada, entrenado con masked language modeling.
+    \item \textbf{\texttt{frankenstein\_text\_decoder}}: decoder causal autorregresivo para generación de siguiente token; el runtime fuerza el enmascaramiento de decoder.
     \item \textbf{\texttt{frankenstein\_vit}}: Vision Transformer sobre parches de imagen para predicción de parches enmascarados, clasificación y segmentación; el runtime fuerza el enmascaramiento de encoder y la configuración requiere los bloques \texttt{image} y \texttt{vision\_dataset}.
 \end{itemize}
 

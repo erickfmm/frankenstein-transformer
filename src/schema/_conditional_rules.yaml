@@ -38,7 +38,7 @@
         required:
         - optimizer
       model_class:
-        const: frankensteindecoder
+        const: frankenstein_text_decoder
     required:
     - model_class
 - if:
@@ -53,7 +53,7 @@
         required:
         - optimizer
       model_class:
-        const: frankenstein
+        const: frankenstein_text_encoder
     required:
     - model_class
     - model

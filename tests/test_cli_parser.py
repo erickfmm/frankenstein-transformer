@@ -32,7 +32,7 @@ class BuildParserStructureTests(unittest.TestCase):
         self.assertEqual(args.command, "train")
         self.assertEqual(args.device, "auto")
         self.assertIsNone(args.config)
-        self.assertEqual(args.config_name, "frankenstein")
+        self.assertEqual(args.config_name, "frankenstein_text_encoder")
         self.assertFalse(args.list_configs)
 
     def test_train_subcommand_device_choices(self):
@@ -138,7 +138,7 @@ class MainDispatchTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         mocked.assert_called_once()
         forwarded = mocked.call_args[0][0]
-        self.assertEqual(forwarded, ["--device", "auto", "--config-name", "frankenstein"])
+        self.assertEqual(forwarded, ["--device", "auto", "--config-name", "frankenstein_text_encoder"])
 
     def test_train_forwards_config_and_device(self):
         mocked = Mock(return_value=0)

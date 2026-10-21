@@ -114,7 +114,7 @@ class FrankensteinCausalLMModel(BaseModel):
         validate_training_json(json_text)
 
         model, loaded, _ = build_model_from_json(
-            json_text, model_class_override="frankensteindecoder"
+            json_text, model_class_override="frankenstein_text_decoder"
         )
 
         runtime = getattr(loaded, "training_runtime", {}) or {}
@@ -136,7 +136,7 @@ class FrankensteinCausalLMModel(BaseModel):
             if tok_vocab != int(model.emb.num_embeddings):
                 model, loaded, _ = build_model_from_json(
                     json_text,
-                    model_class_override="frankensteindecoder",
+                    model_class_override="frankenstein_text_decoder",
                     vocab_size_override=tok_vocab,
                 )
 

@@ -2,7 +2,7 @@
 
 Wraps :class:`FrankensteinDecoder` (which exposes ``forward`` and
 ``generate``) as a DashAI ``BaseGenerativeModel`` bound to
-``TextToTextGenerationTask``. Forces ``model_class: frankensteindecoder`` (which
+``TextToTextGenerationTask``. Forces ``model_class: frankenstein_text_decoder`` (which
 forces ``mode: decoder``). Generation is autoregressive top-k sampling via the
 decoder's own ``generate`` method; tokenization/detokenization uses an HF
 tokenizer resolved from the config.
@@ -94,7 +94,7 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
         validate_training_json(json_text)
 
         model, loaded, _ = build_model_from_json(
-            json_text, model_class_override="frankensteindecoder"
+            json_text, model_class_override="frankenstein_text_decoder"
         )
         runtime = getattr(loaded, "training_runtime", {}) or {}
         device = resolve_device(runtime.get("device", "auto"))
@@ -112,7 +112,7 @@ class FrankensteinDecoderModel(BaseGenerativeModel):
             if tok_vocab != int(model.backbone.emb.num_embeddings):
                 model, loaded, _ = build_model_from_json(
                     json_text,
-                    model_class_override="frankensteindecoder",
+                    model_class_override="frankenstein_text_decoder",
                     vocab_size_override=tok_vocab,
                 )
 

@@ -109,7 +109,7 @@ def main() -> int:
                 model = build_model(loaded.model_class, loaded.model_config)
             cats = count_model(model)
             results[name] = {
-                "model_class": loaded.model_class or "frankenstein",
+                "model_class": loaded.model_class or "frankenstein_text_encoder",
                 "layer_pattern": list(getattr(loaded.model_config, "layer_pattern", []) or []),
                 "cats": cats,
                 "config": raw,

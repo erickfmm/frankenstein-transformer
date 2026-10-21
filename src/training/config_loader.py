@@ -172,8 +172,8 @@ class LoadedTrainingConfig:
     Attributes:
         task: Training task identifier (``"mlm"``, ``"sbert"``, or
             ``"causal_lm"``).
-        model_class: Model class name (``"frankenstein"``,
-            ``"frankensteindecoder"``, or ``"base_model"``).
+        model_class: Model class name (``"frankenstein_text_encoder"``,
+            ``"frankenstein_text_decoder"``, or ``"base_model"``).
         model_config: :class:`FrankensteinModelConfig` for custom models, or ``None``
             when ``base_model`` is used.
         base_model: HuggingFace model identifier/path when using a
@@ -230,10 +230,15 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     if model_class is not None:
         model_class = str(model_class).strip().lower()
 
-    valid_model_classes = {"frankenstein", "frankensteindecoder", "frankenstein_vit"}
+    valid_model_classes = {
+        "frankenstein_text_encoder",
+        "frankenstein_text_decoder",
+        "frankenstein_vit",
+    }
     if model_class is not None and model_class not in valid_model_classes:
         raise ValueError(
-            "model_class must be one of: frankenstein, frankensteindecoder, frankenstein_vit"
+            "model_class must be one of: frankenstein_text_encoder, "
+            "frankenstein_text_decoder, frankenstein_vit"
         )
 
     model_data = data.get("model", {}) or {}
@@ -279,7 +284,7 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         _validate_ffn_activation(model_data)
         model_config = FrankensteinModelConfig(**model_data)
         if not model_class:
-            model_class = "frankenstein"
+            model_class = "frankenstein_text_encoder"
     else:
         # model/model_class are intentionally ignored when base_model is set.
         model_class = model_class or "base_model"
@@ -303,16 +308,16 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
 
     # Causal-LM requires the decoder model class (causal masking). Enforce
     # this at runtime in addition to the schema conditional rule.
-    if task == "causal_lm" and model_class != "frankensteindecoder":
+    if task == "causal_lm" and model_class != "frankenstein_text_decoder":
         raise ValueError(
-            "training.task=causal_lm requires model_class=frankensteindecoder "
+            "training.task=causal_lm requires model_class=frankenstein_text_decoder "
             "(causal/autoregressive masking is only provided by the decoder)"
         )
 
     # Text classification uses the encoder's Strategy-A classification head.
-    if task == "text_classification" and model_class not in (None, "frankenstein"):
+    if task == "text_classification" and model_class not in (None, "frankenstein_text_encoder"):
         raise ValueError(
-            "training.task=text_classification requires model_class=frankenstein "
+            "training.task=text_classification requires model_class=frankenstein_text_encoder "
             "(the sequence-level classification head is only provided by the encoder)"
         )
 

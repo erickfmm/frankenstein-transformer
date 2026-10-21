@@ -210,7 +210,7 @@ def make_attention_pair_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         })
         model = _ensure_ssog_grid(model, training)
         combo_id = f"attn_{a}__{b}"
-        configs.append((combo_id, {"model_class": "frankenstein", "model": model, "training": training}))
+        configs.append((combo_id, {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
     return configs
 
 
@@ -220,7 +220,7 @@ def make_single_attention_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         model, training = _base_config(vocab_size, num_layers=1, num_loops=1)
         model = _deep_update(model, {"dims": {"layer_pattern": [a]}})
         model = _ensure_ssog_grid(model, training)
-        configs.append((f"attn_single_{a}", {"model_class": "frankenstein", "model": model, "training": training}))
+        configs.append((f"attn_single_{a}", {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
     return configs
 
 
@@ -230,7 +230,7 @@ def make_optimizer_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
         model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
         training = _with_optimizer(training, opt)
-        configs.append((f"opt_{opt}", {"model_class": "frankenstein", "model": model, "training": training}))
+        configs.append((f"opt_{opt}", {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
     return configs
 
 
@@ -245,7 +245,7 @@ def make_norm_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         if norm == "flash_norm":
             norm_block["flashnorm_partial_ratio"] = 0.0
         model = _deep_update(model, {"norm": norm_block})
-        configs.append((f"norm_{norm}", {"model_class": "frankenstein", "model": model, "training": training}))
+        configs.append((f"norm_{norm}", {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
     return configs
 
 
@@ -284,7 +284,7 @@ def make_positional_encoding_configs(vocab_size: int) -> List[Tuple[str, dict]]:
                 pe: {"base": 10000.0, "scaling": 1.0} if pe == "rope" else {"base": 10000.0, "damping": 0.01},
             }
         model = _deep_update(model, overrides)
-        configs.append((f"pe_{pe}", {"model_class": "frankenstein", "model": model, "training": training}))
+        configs.append((f"pe_{pe}", {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
     return configs
 
 
@@ -296,7 +296,7 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
         model = _deep_update(model, overrides)
         model = _ensure_ssog_grid(model, training)
-        configs.append((cid, {"model_class": "frankenstein", "model": model, "training": training}))
+        configs.append((cid, {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
 
     add("trans_bitnet_on", {"use_bitnet": True})
     add("trans_bitnet_routers", {"use_bitnet": True, "bitnet_routers": True, "use_moe": True, "num_experts": 2, "top_k_experts": 1})
@@ -334,14 +334,14 @@ def make_task_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # Encoder MLM (default path)
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
     model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
-    configs.append(("task_mlm_encoder", {"model_class": "frankenstein", "model": model, "training": training}))
+    configs.append(("task_mlm_encoder", {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
 
     # Decoder causal LM
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
     model = _deep_update(model, {"dims": {"mode": "decoder", "layer_pattern": ["standard_attn", "titan_attn"]}})
     training = training.copy()
     training["task"] = "causal_lm"
-    configs.append(("task_causal_lm_decoder", {"model_class": "frankensteindecoder", "model": model, "training": training}))
+    configs.append(("task_causal_lm_decoder", {"model_class": "frankenstein_text_decoder", "model": model, "training": training}))
     return configs
 
 
@@ -352,7 +352,7 @@ def make_batch_size_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
         training = training.copy()
         training["batch_size"] = bs
-        configs.append((f"batch_size_{bs}", {"model_class": "frankenstein", "model": model, "training": training}))
+        configs.append((f"batch_size_{bs}", {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
     return configs
 
 
@@ -529,7 +529,7 @@ def make_tokenizer_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         if algo != "unigram":
             tok_training["vocab_size"] = vocab_size
         configs.append((f"tokenizer_train_{algo}", {
-            "model_class": "frankenstein",
+            "model_class": "frankenstein_text_encoder",
             "model": model,
             "tokenizer": {
                 "source": "train_from_dataset",
@@ -810,7 +810,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         bitnet_id = "bitnet_std_attn_for_gguf"
         logging.info("Running dedicated %s training", bitnet_id)
         bitnet_result = helpers.run_training(
-            config={"model_class": "frankenstein", "model": model, "training": training},
+            config={"model_class": "frankenstein_text_encoder", "model": model, "training": training},
             combo_id=bitnet_id,
             batch_size=1,
             **train_kwargs,

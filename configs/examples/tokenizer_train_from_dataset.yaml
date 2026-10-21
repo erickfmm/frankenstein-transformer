@@ -1,4 +1,4 @@
-model_class: frankenstein
+model_class: frankenstein_text_encoder
 model:
   dims:
     hidden_size: 256

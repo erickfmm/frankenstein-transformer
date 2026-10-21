@@ -10,7 +10,7 @@ El objeto raíz del esquema tiene cinco propiedades de nivel superior. Todas son
 \begin{itemize}[nosep]
     \item \texttt{base\_model} (string) --- Identificador de modelo HuggingFace o ruta local para preentrenamiento continuo o ajuste fino SBERT. Cuando se establece, \texttt{model\_class} y \texttt{model} no son obligatorios (la arquitectura se infiere del checkpoint).
     \item \texttt{tokenizer} (object) --- Configuración del tokenizador, disponible tanto para la ruta \texttt{base\_model} como para modelos personalizados desde cero. Dos modos se seleccionan mediante \texttt{source}: \texttt{hf\_repo} (por defecto) carga un tokenizador preentrenado desde \texttt{name\_or\_path}; \texttt{train\_from\_dataset} entrena un tokenizador nuevo desde el texto del dataset (ver \S\ref{subsec:tokenizer-config}). Obligatorio cuando se usa \texttt{base\_model} con la tarea \texttt{mlm}.
-    \item \texttt{model\_class} (enum) --- Variante de arquitectura del modelo: \texttt{frankenstein} (codificador de arquitectura mixta) o \texttt{frankensteindecoder} (decodificador causal autorregresivo). Obligatorio cuando \texttt{base\_model} no está establecido.
+    \item \texttt{model\_class} (enum) --- Variante de arquitectura del modelo: \texttt{frankenstein\_text\_encoder} (codificador de arquitectura mixta) o \texttt{frankenstein\_text\_decoder} (decodificador causal autorregresivo). Obligatorio cuando \texttt{base\_model} no está establecido.
     \item \texttt{model} (object) --- Parámetros de arquitectura del modelo (ver \S\ref{subsec:model-config}). Obligatorio cuando \texttt{base\_model} no está establecido.
     \item \texttt{training} (object, \textbf{obligatorio}) --- Configuración de entrenamiento (ver \S\ref{subsec:training-config}).
 \end{itemize}
@@ -278,7 +278,7 @@ El objeto \texttt{training} controla todo el pipeline de entrenamiento. El únic
 \caption{Campos completos de configuración de entrenamiento.}
 \label{tab:training-fields}
 \endlastfoot
-task & enum (mlm, sbert, causal\_lm) (obligatorio) & Objetivo de entrenamiento. \texttt{mlm} = Modelado de Lenguaje Enmascarado; \texttt{sbert} = ajuste fino Sentence-BERT; \texttt{causal\_lm} = predicción autorregresiva del siguiente token (requiere \texttt{model\_class='frankensteindecoder'}). \\
+task & enum (mlm, sbert, causal\_lm) (obligatorio) & Objetivo de entrenamiento. \texttt{mlm} = Modelado de Lenguaje Enmascarado; \texttt{sbert} = ajuste fino Sentence-BERT; \texttt{causal\_lm} = predicción autorregresiva del siguiente token (requiere \texttt{model\_class='frankenstein\_text\_decoder'}). \\
 num\_epochs & int $\ge 1$ & Pasadas completas por el dataset de entrenamiento (solo MLM). \\
 batch\_size & int $\ge 1$ & Ejemplos por paso del optimizador (antes de acumulación de gradientes). \\
 dataloader\_workers & int $\ge 0$ & Procesos trabajadores paralelos para carga de datos. \\
@@ -476,10 +476,10 @@ El esquema impone las siguientes reglas de validación entre componentes, implem
     \item \texttt{vocab\_size} debe coincidir con el tamaño de vocabulario del tokenizador. Una discrepancia causa corrupción de IDs de token y fallo de entrenamiento irrecuperable.
     \item Cuando \texttt{base\_model} está configurado, \texttt{training.task} es obligatorio. Si \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} también es obligatorio --- salvo cuando \texttt{tokenizer.source=train\_from\_dataset}, en cuyo caso el tokenizador se entrena desde el corpus y no se necesita nombre.
     \item \texttt{tokenizer.source=train\_from\_dataset} requiere el sub-objeto \texttt{tokenizer.training} (con \texttt{vocab\_size} para \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}) y es mutuamente excluyente con \texttt{tokenizer.name\_or\_path}. El vocabulario entrenado sobrescribe \texttt{model.dims.vocab\_size} antes de construir el modelo.
-    \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}; \texttt{task: causal\_lm} requiere \texttt{training.optimizer} y \texttt{model\_class='frankensteindecoder'}.
+    \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}; \texttt{task: causal\_lm} requiere \texttt{training.optimizer} y \texttt{model\_class='frankenstein\_text\_decoder'}.
     \item \texttt{bitnet.routers=true} requiere \texttt{bitnet.enabled=true}. La bandera no tiene efecto en caso contrario.
     \item \texttt{use\_mhc=true} (flujo residual de $n$ streams mHC) y \texttt{use\_mixture\_of\_depths=true} son mutuamente excluyentes. Habilitar ambos lanza un \texttt{ValueError}: el enrutamiento MoD de tokens opera sobre un flujo $C$-dimensional único, en conflicto con el flujo residual de $n$ streams.
     \item \texttt{fasa\_attn} y \texttt{sparge\_attn} son tipos de capa solo para evaluación. Lanzan \texttt{RuntimeError} si se usan durante el entrenamiento. No deben aparecer en \texttt{model.dims.layer\_pattern} para ejecuciones de entrenamiento.
-    \item \texttt{model\_class: frankensteindecoder} fuerza \texttt{model.dims.mode: decoder} en tiempo de ejecución. Establecer \texttt{model.dims.mode: encoder} con esta clase se sobrescribe.
+    \item \texttt{model\_class: frankenstein\_text\_decoder} fuerza \texttt{model.dims.mode: decoder} en tiempo de ejecución. Establecer \texttt{model.dims.mode: encoder} con esta clase se sobrescribe.
     \item O bien \texttt{base\_model} debe estar presente, o bien tanto \texttt{model\_class} como \texttt{model} deben estar presentes. El esquema rechaza configuraciones que no proporcionen ninguno o una combinación incompleta.
 \end{enumerate}

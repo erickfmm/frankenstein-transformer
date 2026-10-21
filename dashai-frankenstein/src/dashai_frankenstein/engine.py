@@ -135,7 +135,7 @@ def build_model_from_json(
     frankenstein_json : str
         A full Frankenstein training config as a single-line JSON string.
     model_class_override : str, optional
-        Force a ``model_class`` (e.g. ``"frankensteindecoder"``).
+        Force a ``model_class`` (e.g. ``"frankenstein_text_decoder"``).
     num_labels : int, optional
         Number of classes for the encoder classification head.
     tokenizer_name_or_path : str, optional

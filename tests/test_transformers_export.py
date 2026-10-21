@@ -58,7 +58,7 @@ class TransformersExportTests(unittest.TestCase):
             )
 
             yaml_payload = {
-                "model_class": "frankenstein",
+                "model_class": "frankenstein_text_encoder",
                 "model": {
                     "vocab_size": 32,
                     "hidden_size": 16,
@@ -136,7 +136,7 @@ class TransformersExportTests(unittest.TestCase):
             train_yaml.write_text(
                 yaml.safe_dump(
                     {
-                        "model_class": "frankenstein",
+                        "model_class": "frankenstein_text_encoder",
                         "model": {"layer_pattern": ["standard_attn"]},
                         "training": {"task": "sbert"},
                     }

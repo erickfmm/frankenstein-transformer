@@ -1218,7 +1218,7 @@ class TitanTrainer:
         Cross-entropy is computed over **all** shifted non-pad positions
         (no masking, unlike :meth:`compute_mlm_loss`). The model is expected
         to apply causal attention internally (i.e. ``model_class`` is
-        ``frankensteindecoder`` / ``mode == "decoder"``).
+        ``frankenstein_text_decoder`` / ``mode == "decoder"``).
 
         Args:
             input_ids: Token ID tensor of shape ``(B, S)``.

@@ -77,7 +77,7 @@ class FrankensteinPassthroughSchema(BaseSchema):
     frankenstein_json: schema_field(
         string_field(),
         placeholder=(
-            '{"model_class": "frankenstein", "model": {"dims": '
+            '{"model_class": "frankenstein_text_encoder", "model": {"dims": '
             '{"hidden_size": 128, "num_layers": 2}}}'
         ),
         description=MultilingualString(

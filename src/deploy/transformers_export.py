@@ -47,7 +47,7 @@ class FrankensteinConfig(PretrainedConfig):
 
     def __init__(
         self,
-        model_class: str = "frankenstein",
+        model_class: str = "frankenstein_text_encoder",
         task: str = "mlm",
         frankenstein_config: Dict[str, Any] | None = None,
         **kwargs: Any,
@@ -109,8 +109,8 @@ def _to_model_config(config: FrankensteinConfig) -> FrankensteinModelConfig:
 
 def _build_core_model(config: FrankensteinConfig) -> nn.Module:
     model_cfg = _to_model_config(config)
-    model_class = str(getattr(config, "model_class", "frankenstein")).lower()
-    if model_class == "frankensteindecoder":
+    model_class = str(getattr(config, "model_class", "frankenstein_text_encoder")).lower()
+    if model_class == "frankenstein_text_decoder":
         if model_cfg.mode != "decoder":
             model_cfg.mode = "decoder"
         return FrankensteinDecoder(model_cfg)
@@ -260,7 +260,7 @@ def _bake_state_dict(
 
     model_cfg = FrankensteinModelConfig(**flatten_model_dict(model_config))
     mc = str(model_class).lower()
-    if mc == "frankensteindecoder" or model_cfg.mode == "decoder":
+    if mc == "frankenstein_text_decoder" or model_cfg.mode == "decoder":
         if model_cfg.mode != "decoder":
             model_cfg.mode = "decoder"
         model = FrankensteinDecoder(model_cfg)
@@ -466,8 +466,8 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
     if not model_config:
         raise ValueError("Unable to infer model config from YAML `model` section or checkpoint `config`")
 
-    model_class = str(yaml_data.get("model_class") or "frankenstein").strip().lower()
-    if model_class == "frankensteindecoder":
+    model_class = str(yaml_data.get("model_class") or "frankenstein_text_encoder").strip().lower()
+    if model_class == "frankenstein_text_decoder":
         model_config["mode"] = "decoder"
 
     training_block = yaml_data.get("training", {}) or {}
@@ -490,7 +490,7 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
 
     modeling_class = (
         "FrankensteinForCausalLM"
-        if model_config.get("mode") == "decoder" or model_class == "frankensteindecoder"
+        if model_config.get("mode") == "decoder" or model_class == "frankenstein_text_decoder"
         else "FrankensteinForMaskedLM"
     )
     hf_config = _build_transformers_config(

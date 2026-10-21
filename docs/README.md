@@ -66,7 +66,7 @@ Common execution device choice:
 Usage patterns:
 
 ```bash
-frankenstein-transformer train --config-name frankenstein --device auto
+frankenstein-transformer train --config-name frankenstein_text_encoder --device auto
 frankenstein-transformer train --config path/to/config.yaml --device auto
 frankenstein-transformer train --list-configs
 ```
@@ -95,8 +95,8 @@ Top-level required keys:
 
 Allowed values:
 
-- `frankenstein` — full-featured mixed-architecture encoder (17+ mixers, MoE, advanced normalization); best for MLM pre-training
-- `frankensteindecoder` — autoregressive causal decoder for LLM-style next-token generation; **forces `mode: decoder`** at runtime
+- `frankenstein_text_encoder` — full-featured mixed-architecture encoder (17+ mixers, MoE, advanced normalization); best for MLM pre-training
+- `frankenstein_text_decoder` — autoregressive causal decoder for LLM-style next-token generation; **forces `mode: decoder`** at runtime
 
 ### 3.2 `model` section
 
@@ -168,7 +168,7 @@ frankenstein-transformer deploy --checkpoint ckpt.pt --output deployed_model_qua
 ### 4.1 Hugging Face Transformers export
 
 ```bash
-frankenstein-transformer deploy --checkpoint deployed_model --yaml configs/frankenstein.yaml --output hf_model --format transformers
+frankenstein-transformer deploy --checkpoint deployed_model --yaml configs/frankenstein_text_encoder.yaml --output hf_model --format transformers
 ```
 
 Flags: `--checkpoint` (required), `--yaml` (required), `--output` (required), `--format transformers`.
@@ -178,7 +178,7 @@ Flags: `--checkpoint` (required), `--yaml` (required), `--output` (required), `-
 ```bash
 frankenstein-transformer deploy --checkpoint deployed_model.pt --yaml configs/mini.yaml --output model.gguf --format gguf
 # Compatibility check only:
-frankenstein-transformer deploy --checkpoint deployed_model.pt --yaml configs/frankenstein.yaml --output model.gguf --format gguf --check
+frankenstein-transformer deploy --checkpoint deployed_model.pt --yaml configs/frankenstein_text_encoder.yaml --output model.gguf --format gguf --check
 ```
 
 Flags: `--checkpoint` (required), `--yaml` (required), `--output` (required), `--format gguf`, `--check`.
@@ -228,7 +228,7 @@ Flags: `--server-port` (default 8501), `--server-address` (default `localhost`),
 
 ## 8. Recommended Workflow
 
-1. Select or create a YAML config that validates against `src/schema.yaml`. Named presets live in `configs/` (`frankenstein`, `frankensteindecoder`, `standard`, `tinybert`, `embbert`, …); optimizer × architecture combos live in `configs/examples/`.
+1. Select or create a YAML config that validates against `src/schema.yaml`. Named presets live in `configs/` (`frankenstein_text_encoder`, `frankenstein_text_decoder`, `standard`, `tinybert`, `embbert`, …); optimizer × architecture combos live in `configs/examples/`.
 2. Run `train`.
 3. Export with `deploy --format transformers` (Hugging Face folder) or `deploy --format gguf` (BitNet GGUF file); plain `deploy` produces quantized/standard artifacts.
 4. Run `infer` for runtime validation and benchmark.

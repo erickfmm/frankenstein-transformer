@@ -1,45 +1,32 @@
-model_class: frankenstein
+model_class: frankenstein_text_decoder
 model:
   dims:
     vocab_size: 50000
-    hidden_size: 1024
+    hidden_size: 768
     num_layers: 12
-    num_loops: 2
-    num_heads: 16
-    dropout: 0.1
+    num_loops: 1
+    num_heads: 12
     layer_pattern:
-    - retnet
     - titan_attn
-    - retnet
-    - mamba
-    - titan_attn
-    - ode
+    mode: decoder
   norm:
-    type: dynamic_tanh
+    type: layer_norm
   embedding:
     factorized:
       enabled: false
     conv:
       enabled: false
-  attention:
-    ode:
-      solver: rk4
-      steps: 4
-    retnet:
-      heads: 8
   moe:
-    enabled: true
-    num_experts: 4
-    top_k: 2
+    enabled: false
   bitnet:
-    enabled: true
+    enabled: false
   ffn:
-    hidden_size: 2048
+    hidden_size: 3072
     activation: silu
-  positional_encoding: hope
+  positional_encoding: rope
 training:
   task: mlm
-  batch_size: 2
+  batch_size: 4
   dataloader_workers: 2
   max_length: 512
   mlm_probability: 0.15

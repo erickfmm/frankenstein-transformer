@@ -151,7 +151,7 @@ class YamlExamplesContentTests(unittest.TestCase):
 
     def test_mini_cautious_adamw_model_class(self):
         cfg = self._load("es_arch_mini_cautious_adamw.yaml")
-        self.assertEqual(cfg.model_class, "frankenstein")
+        self.assertEqual(cfg.model_class, "frankenstein_text_encoder")
 
     def test_moe_titan_has_use_moe_true(self):
         cfg = self._load("es_arch_moe_titan_ademamix.yaml")
@@ -167,7 +167,7 @@ class YamlExamplesContentTests(unittest.TestCase):
         self.assertFalse(cfg.model_config.bitnet_routers)
         self.assertFalse(cfg.model_config.use_bitnet_conv)
         self.assertEqual(cfg.model_config.mode, "decoder")
-        self.assertEqual(cfg.model_class, "frankensteindecoder")
+        self.assertEqual(cfg.model_class, "frankenstein_text_decoder")
 
     def test_pe_rope_config(self):
         cfg = self._load("pe_rope.yaml")

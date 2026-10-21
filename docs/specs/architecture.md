@@ -29,7 +29,7 @@ Configuration flows through validation, partitions into model/training/optimizer
    flags, etc.).
 2. **Build the model** — the nested `model:` block is flattened by
    `utils/config_flatten.py` into flat kwargs, then `FrankensteinModelConfig`
-   and `FrankensteinTransformer` (or `frankensteindecoder` /
+   and `FrankensteinTransformer` (or `frankenstein_text_decoder` /
    `frankenstein_vit`) construct the network. A `base_model` may be loaded
    instead for continual pretraining.
 3. **Prepare data** — the tokenizer is trained or loaded, then the streaming
@@ -43,17 +43,17 @@ Configuration flows through validation, partitions into model/training/optimizer
 
 | Class | Type | Description |
 |---|---|---|
-| `frankenstein` | Mixed-architecture encoder | Full-featured encoder with all 36 mixer types, MoE, advanced normalization. Optimized for bidirectional MLM. |
-| `frankensteindecoder` | Autoregressive causal decoder | LLM-style next-token generation. **Runtime forces `mode='decoder'`**. Enables causal attention masking. |
+| `frankenstein_text_encoder` | Mixed-architecture encoder | Full-featured encoder with all 36 mixer types, MoE, advanced normalization. Optimized for bidirectional MLM. |
+| `frankenstein_text_decoder` | Autoregressive causal decoder | LLM-style next-token generation. **Runtime forces `mode='decoder'`**. Enables causal attention masking. |
 
 ## Training Modes
 
 | Mode | Attention Masking | Task | Model Class Compatibility |
 |---|---|---|---|
-| `encoder` | Bidirectional (all tokens attend to all) | MLM (masked language modeling) | `frankenstein` |
-| `decoder` | Causal (token attends only to previous) | AR (autoregressive next-token) | `frankensteindecoder` (forced), `frankenstein` |
+| `encoder` | Bidirectional (all tokens attend to all) | MLM (masked language modeling) | `frankenstein_text_encoder` |
+| `decoder` | Causal (token attends only to previous) | AR (autoregressive next-token) | `frankenstein_text_decoder` (forced), `frankenstein_text_encoder` |
 
-When `model_class='frankensteindecoder'`, the system automatically forces `mode='decoder'` at runtime.
+When `model_class='frankenstein_text_decoder'`, the system automatically forces `mode='decoder'` at runtime.
 
 ## Continual Pretraining with `base_model`
 

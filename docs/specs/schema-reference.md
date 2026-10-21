@@ -10,7 +10,7 @@ The schema (`src/schema.yaml`) enforces **`additionalProperties: false`** at all
 
 | Section | Required | Description |
 |---|---|---|
-| `model_class` | No (optional when `base_model` set) | Architecture variant: `frankenstein`, `frankensteindecoder` |
+| `model_class` | No (optional when `base_model` set) | Architecture variant: `frankenstein_text_encoder`, `frankenstein_text_decoder` |
 | `model` | No (optional when `base_model` set) | FrankensteinModelConfig model parameters |
 | `training` | **Yes** | Training hyperparameters and runtime configuration |
 | `base_model` | No | HuggingFace model identifier for continual pretraining |
@@ -290,7 +290,7 @@ carries task-specific knobs:
 3. **`fasa_attn` and `sparge_attn`** are eval-only blocks. Training with either raises a runtime error.
 4. **Optimizer parameters** use prefixed keys: `<optimizer_class>-<group>_<param>`.
 5. **`training.task`** is required (`mlm`, `sbert`, `causal_lm`, or a vision task). Legacy top-level optimizer keys are not accepted.
-6. **`model_class: frankensteindecoder`** forces `mode: decoder` at runtime.
+6. **`model_class: frankenstein_text_decoder`** forces `mode: decoder` at runtime.
 7. **`layer_pattern` length must equal `num_layers`**.
 8. **mHC is incompatible with MoD** (`mixture_of_depths.enabled`) — enabling both raises a `ValueError`.
 9. **`bitnet.routers: true` requires `bitnet.enabled: true`** — enforced at config load.

@@ -10,8 +10,8 @@ The authoritative contract is \texttt{src/schema.yaml}, a modular JSON Schema wh
 
 \paragraph{Model class.} The \texttt{model\_class} field selects among three variants:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{\texttt{frankenstein}}: mixed-architecture encoder with the full range of sequence mixers, MoE, and advanced normalization, trained with masked language modeling.
-    \item \textbf{\texttt{frankensteindecoder}}: autoregressive causal decoder for next-token generation; the runtime forces decoder masking.
+    \item \textbf{\texttt{frankenstein\_text\_encoder}}: mixed-architecture encoder with the full range of sequence mixers, MoE, and advanced normalization, trained with masked language modeling.
+    \item \textbf{\texttt{frankenstein\_text\_decoder}}: autoregressive causal decoder for next-token generation; the runtime forces decoder masking.
     \item \textbf{\texttt{frankenstein\_vit}}: Vision Transformer over image patches for masked patch prediction, classification, and segmentation; the runtime forces encoder masking and the configuration requires the \texttt{image} and \texttt{vision\_dataset} blocks.
 \end{itemize}
 

@@ -114,8 +114,8 @@ def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> "Tuple[torc
     """Load a custom Frankenstein model with SentencePiece tokenizer.
 
     Trains or loads an SPM tokenizer, then constructs the model based on
-    ``model_class`` (``"frankensteindecoder"``, or default
-    ``"frankenstein"``).
+    ``model_class`` (``"frankenstein_text_decoder"``, or default
+    ``"frankenstein_text_encoder"``).
 
     Args:
         loaded: Validated :class:`LoadedTrainingConfig` with ``model_config``.
@@ -170,7 +170,7 @@ def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> "Tuple[torc
     if not config.layer_pattern:
         config.layer_pattern = stable_layer_pattern
 
-    if loaded.model_class == "frankensteindecoder":
+    if loaded.model_class == "frankenstein_text_decoder":
         config.mode = "decoder"
         model = FrankensteinDecoder(config)
     elif loaded.model_class == "frankenstein_vit":

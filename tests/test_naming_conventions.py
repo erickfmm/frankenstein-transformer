@@ -83,27 +83,27 @@ class TestSchemaModelClassEnum(unittest.TestCase):
         self.enum = set(props.get("enum", []))
 
     def test_enum_contains_well_spelled_decoder(self):
-        self.assertIn("frankensteindecoder", self.enum)
+        self.assertIn("frankenstein_text_decoder", self.enum)
 
     def test_enum_contains_vit(self):
         self.assertIn("frankenstein_vit", self.enum)
 
     def test_enum_does_not_contain_misspelled_decoder(self):
-        self.assertNotIn("frankesteindecoder", self.enum)
+        self.assertNotIn("frankestein_text_decoder", self.enum)
 
     def test_enum_contains_encoder(self):
-        self.assertIn("frankenstein", self.enum)
+        self.assertIn("frankenstein_text_encoder", self.enum)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class TestConfigLoaderAcceptsNewNames(unittest.TestCase):
-    """``config_loader`` validation must accept ``frankensteindecoder``."""
+    """``config_loader`` validation must accept ``frankenstein_text_decoder``."""
 
     def test_decoder_preset_loads(self):
         from src.training.config_loader import load_training_config
-        path = _REPO_ROOT / "configs" / "frankensteindecoder.yaml"
+        path = _REPO_ROOT / "configs" / "frankenstein_text_decoder.yaml"
         loaded = load_training_config(str(path))
-        self.assertEqual(loaded.model_class, "frankensteindecoder")
+        self.assertEqual(loaded.model_class, "frankenstein_text_decoder")
 
     def test_rejects_misspelled_decoder(self):
         from src.training.config_loader import load_training_config
@@ -112,7 +112,7 @@ class TestConfigLoaderAcceptsNewNames(unittest.TestCase):
             mode="w", suffix=".yaml", delete=False
         ) as f:
             f.write(
-                'model_class: frankesteindecoder\n'
+                'model_class: frankestein_text_decoder\n'
                 'model:\n'
                 '  dims:\n'
                 '    vocab_size: 100\n'

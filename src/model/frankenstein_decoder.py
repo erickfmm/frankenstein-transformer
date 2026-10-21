@@ -30,7 +30,7 @@ class FrankensteinDecoder(nn.Module):
     MoE, BitNet, factorized embeddings, looped depth, Mixture-of-Depths, and
     Engram memory.
 
-    The ``model_class=frankensteindecoder`` preset forces ``mode=decoder`` at
+    The ``model_class=frankenstein_text_decoder`` preset forces ``mode=decoder`` at
     runtime, overriding any user-provided mode.
 
     Attributes:

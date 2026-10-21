@@ -45,7 +45,7 @@ These still hold and the integration must respect them:
 2. **Cross-component compatibility** (divisibility of `hidden_size` by `num_heads`, `num_kv_heads` | `num_heads`, vocab/tokenizer match, `task` ↔ optimizer/sbert rules, etc.).
 3. **BitNet defaults to `True`**; `bitnet_routers` requires `use_bitnet`.
 4. **`fasa_attn`/`sparge_attn` are eval-only** (raise in training).
-5. **`frankensteindecoder` forces `mode: decoder`.**
+5. **`frankenstein_text_decoder` forces `mode: decoder`.**
 6. **Optimizer prefixed keys** `<class>-<group>_<param>`.
 7. **`training.task` is required** (`mlm`/`sbert`/vision/causal).
 8. **Adding a mixer/optimizer requires an example YAML** (smoke-tested in CI).
@@ -124,8 +124,8 @@ Map Frankenstein's 3 model classes × tasks to **multiple DashAI components in o
 
 | Frankenstein | DashAI component | Base | Binds to DashAI Task |
 |---|---|---|---|
-| `frankenstein` (encoder/MLM) | `FrankensteinMLMModel` | `BaseModel` | `TextClassificationTask` |
-| `frankensteindecoder` (causal) | `FrankensteinDecoderModel` | `BaseGenerativeModel` | `TextToTextGenerationTask` |
+| `frankenstein_text_encoder` (encoder/MLM) | `FrankensteinMLMModel` | `BaseModel` | `TextClassificationTask` |
+| `frankenstein_text_decoder` (causal) | `FrankensteinDecoderModel` | `BaseGenerativeModel` | `TextToTextGenerationTask` |
 | `frankenstein_vit` classification | `FrankensteinViTClassifier` | `BaseModel` | `ImageClassificationTask` |
 | `frankenstein_vit` segmentation | `FrankensteinViTSegmenter` | `BaseModel` | `SegmentationTask` (new; see below) |
 
@@ -202,7 +202,7 @@ All components share the same engine facade and differ mainly in: base class, `C
 - `save(filename)` / `load(filename)`: serialize `{state_dict, frankenstein_yaml, tokenizer, num_labels, head_state}` into the DashAI run dir; reload by rebuilding the model from the YAML and `load_state_dict`.
 
 **`FrankensteinDecoderModel(BaseGenerativeModel)`** — causal generation.
-- `COMPATIBLE_COMPONENTS = ["TextToTextGenerationTask"]`; forces `model_class: frankensteindecoder` (which already forces `mode: decoder`).
+- `COMPATIBLE_COMPONENTS = ["TextToTextGenerationTask"]`; forces `model_class: frankenstein_text_decoder` (which already forces `mode: decoder`).
 - `generate(prompt)` / `predict(...)`: autoregressive decode using the decoder; aligns with DashAI's generative-model interface.
 - Otherwise mirrors the MLM adapter with a generation head instead of a classification head.
 
@@ -471,7 +471,7 @@ for each. The five Frankenstein classes register with these base types:
 2. **Install** the plugin (PyPI path triggers DashAI's `execute_pip_command`; editable path is already present).
 3. The five components now appear in the component registry. Create a run and, depending on the task:
    - **Text classification** → pick `TextClassificationTask` + `FrankensteinMLMModel`. In the model's config form, either select a **Preset** (dropdown of `configs/*.yaml`) or paste a **Frankenstein YAML**. Set device/batch_size/epochs. Train → metrics stream to the UI → predict.
-   - **Text generation** → `TextToTextGenerationTask` + `FrankensteinDecoderModel`. Paste a decoder YAML (or a preset with `model_class: frankensteindecoder`). The model generates via top-k sampling.
+   - **Text generation** → `TextToTextGenerationTask` + `FrankensteinDecoderModel`. Paste a decoder YAML (or a preset with `model_class: frankenstein_text_decoder`). The model generates via top-k sampling.
    - **Image classification** → `ImageClassificationTask` + `FrankensteinViTClassifier`. Use a ViT preset (`configs/frankenstein_vit_base.yaml`) or a YAML with `model_class: frankenstein_vit`.
    - **Segmentation** → `SegmentationTask` (provided by this plugin) + `FrankensteinViTSegmenter`. Use a ViT YAML with a segmentation head.
 

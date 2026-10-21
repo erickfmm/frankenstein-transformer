@@ -4,9 +4,9 @@ This directory contains YAML presets. Each file describes the model (`model`) an
 
 ## Files
 
-- `frankenstein.yaml`
+- `frankenstein_text_encoder.yaml`
 - `mini.yaml`
-- `frankensteindecoder.yaml`
+- `frankenstein_text_decoder.yaml`
 - `standard.yaml`
 - `standard_hope.yaml`
 - `tinybert.yaml`
@@ -19,7 +19,7 @@ This directory contains YAML presets. Each file describes the model (`model`) an
 
 ```yaml
 # Option A: train custom Frankenstein model
-model_class: frankenstein|frankensteindecoder
+model_class: frankenstein_text_encoder|frankenstein_text_decoder
 model: # FrankensteinModelConfig
   ...
 
@@ -191,8 +191,8 @@ Examples:
 ## Available Fields (Detailed)
 
 ### model_class
-- `frankenstein` or `frankensteindecoder`.
-- `frankensteindecoder` builds the autoregressive causal decoder variant (`FrankensteinDecoder`).
+- `frankenstein_text_encoder` or `frankenstein_text_decoder`.
+- `frankenstein_text_decoder` builds the autoregressive causal decoder variant (`FrankensteinDecoder`).
 - Ignored when `base_model` is set.
 
 ### base_model
@@ -220,7 +220,7 @@ and `residuals`. Flat `model.*` feature keys are no longer accepted.
 - `num_kv_heads`: key-value heads for GQA (also used by `msa_attn`/`sparda_attn`).
 - `dropout`: global dropout.
 - `layer_pattern`: list of blocks.
-- `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankensteindecoder`, which forces decoder).
+- `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankenstein_text_decoder`, which forces decoder).
 - Legacy blocks: `retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`.
 - Sparse blocks: `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `msa_attn` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda_attn` (SparDA, arXiv:2606.04511).
 - Gated blocks: `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` (Kimi Delta Attention, arXiv:2510.26692).
@@ -403,8 +403,8 @@ Autoregressive decoder examples are available in `configs/examples/`:
 You can also run the named decoder preset directly:
 
 ```yaml
-model_class: frankensteindecoder
-# file: configs/frankensteindecoder.yaml
+model_class: frankenstein_text_decoder
+# file: configs/frankenstein_text_decoder.yaml
 ```
 
 ### training (TrainingConfig + runtime)

@@ -479,7 +479,7 @@ def test_engine_causal_lm_accepts_caller_dataset(dashai_db, tmp_path, monkeypatc
     from dashai_frankenstein.adapters.dataset import causal_lm_dataloader_dict
 
     cfg = {
-        "model_class": "frankensteindecoder",
+        "model_class": "frankenstein_text_decoder",
         "model": {"dims": {"hidden_size": 64, "num_layers": 2,
                            "num_heads": 4, "layer_pattern": ["standard_attn"]}},
         "tokenizer": {"name_or_path": "prajjwal1/bert-tiny"},
@@ -487,7 +487,7 @@ def test_engine_causal_lm_accepts_caller_dataset(dashai_db, tmp_path, monkeypatc
                      "optimizer": {"optimizer_class": "AdamW",
                                    "parameters": {"lr": 1e-3}}},
     }
-    model, loaded, _ = build_model_from_json(cfg, model_class_override="frankensteindecoder")
+    model, loaded, _ = build_model_from_json(cfg, model_class_override="frankenstein_text_decoder")
     device = resolve_device("cpu")
     tokenizer = resolve_tokenizer(loaded)
     loader = causal_lm_dataloader_dict(
@@ -583,7 +583,7 @@ class TestTokenizerTrainFromDataset:
         from dashai_frankenstein.engine import build_model_and_trained_tokenizer
 
         cfg = {
-            "model_class": "frankenstein",
+            "model_class": "frankenstein_text_encoder",
             "model": {"dims": {"hidden_size": 32, "num_layers": 1,
                                "num_heads": 4,
                                "layer_pattern": ["standard_attn"]}},

@@ -148,7 +148,7 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
    from src.cli import build_parser
    cmds = [
        ['train', '--config', './config_generated.yaml', '--device', 'cpu'],
-       ['train', '--config-name', 'frankenstein', '--device', 'cuda'],
+       ['train', '--config-name', 'frankenstein_text_encoder', '--device', 'cuda'],
        ['deploy', '--checkpoint', './model.pt', '--output', './out',
         '--format', 'quantized', '--validate'],
        ['deploy', '--checkpoint', './model.pt', '--yaml', './config_generated.yaml',

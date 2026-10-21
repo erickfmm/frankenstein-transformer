@@ -227,7 +227,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     train_parser = subparsers.add_parser("train", help="Run schema-validated training from a YAML config")
     train_parser.add_argument("--config", type=str, default=None, help="Path to custom YAML config file")
-    train_parser.add_argument("--config-name", type=str, default="frankenstein", help="Named preset from configs/")
+    train_parser.add_argument("--config-name", type=str, default="frankenstein_text_encoder", help="Named preset from configs/")
     train_parser.add_argument("--list-configs", action="store_true", help="List available config presets and exit")
     train_parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     train_parser.set_defaults(func=_run_train)

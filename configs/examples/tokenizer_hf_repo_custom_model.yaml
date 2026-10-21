@@ -2,7 +2,7 @@
 # (source: hf_repo on the CUSTOM model path — no base_model). The vocab size
 # of the tokenizer overrides model.dims.vocab_size before model construction
 # so the embedding matrix matches.
-model_class: frankenstein
+model_class: frankenstein_text_encoder
 model:
   dims:
     hidden_size: 128

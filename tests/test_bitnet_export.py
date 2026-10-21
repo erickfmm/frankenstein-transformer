@@ -23,7 +23,7 @@ if TORCH_AVAILABLE:
 
 def _yaml_text(model_overrides: str) -> str:
     return (
-        "model_class: frankenstein\n"
+        "model_class: frankenstein_text_encoder\n"
         "model:\n"
         "  vocab_size: 64\n"
         "  hidden_size: 64\n"

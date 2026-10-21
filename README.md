@@ -46,8 +46,8 @@ flowchart LR
 flowchart TB
     subgraph CLASSES["Model Classes"]
         direction LR
-        E["frankenstein<br/><i>encoder (mixed attention)</i>"]
-        D["frankensteindecoder<br/><i>causal decoder</i>"]
+        E["frankenstein_text_encoder<br/><i>encoder (mixed attention)</i>"]
+        D["frankenstein_text_decoder<br/><i>causal decoder</i>"]
         V["frankenstein_vit<br/><i>vision transformer</i>"]
     end
     subgraph TASKS["Training Tasks"]
@@ -106,8 +106,8 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
-| `frankenstein` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 42 mixer types |
-| `frankensteindecoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
+| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 42 mixer types |
+| `frankenstein_text_decoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 | `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `dataset:` blocks |
 
 See [configs/README.md](configs/README.md) for preset details and [docs/specs/](docs/specs/) for architecture deep-dives.
@@ -116,7 +116,7 @@ See [configs/README.md](configs/README.md) for preset details and [docs/specs/](
 
 | Subcommand | Purpose | Example |
 |------------|---------|---------|
-| `train` | Run schema-validated training | `frankenstein-transformer train --config-name frankenstein --device auto` |
+| `train` | Run schema-validated training | `frankenstein-transformer train --config-name frankenstein_text_encoder --device auto` |
 | `deploy` | Export checkpoint to deployment artifacts (`quantized`/`standard`) or formats (`transformers`, `gguf`) | `frankenstein-transformer deploy --checkpoint ckpt.pt --output deployed/ --format quantized` |
 | `infer` | Batch/interactive/benchmark inference (`--task mlm`) or SBERT similarity/search/cluster/encode (`--task sbert`) | `frankenstein-transformer infer --model deployed/ --text "hello" --device auto` |
 | `web-server` | Launch Streamlit config builder UI | `frankenstein-transformer web-server` |
@@ -184,7 +184,7 @@ This engine powers the **`dashai-frankenstein` plugin**, which registers Franken
 Minimal YAML config (`my_config.yaml`) — only the 5 required model fields plus task; everything else uses FrankensteinModelConfig/TrainingConfig defaults:
 
 ```yaml
-model_class: frankenstein
+model_class: frankenstein_text_encoder
 model:
   vocab_size: 30522
   hidden_size: 256

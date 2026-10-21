@@ -59,7 +59,7 @@ def validate_json(json_text: str) -> None:
     3. ``load_training_config`` on a temp file — catches cross-component
        constraints (``hidden_size % num_heads``, ``num_kv_heads`` divides
        ``num_heads``, BitNet flags, ffn activation, optimizer presence,
-       task/model_class compatibility, ``frankensteindecoder`` forces
+       task/model_class compatibility, ``frankenstein_text_decoder`` forces
        ``mode: decoder``, vision tasks require ``frankenstein_vit``, …).
 
     Parameters

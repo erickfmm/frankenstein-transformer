@@ -29,7 +29,7 @@ When compatible, the command creates:
 | Input setting | Compatible | Notes |
 |---|---|---|
 | `training.task: mlm` | ✅ | Exported as `FrankensteinForMaskedLM` unless decoder mode is active. |
-| `model_class: frankensteindecoder` or `model.mode: decoder` | ✅ | Exported as `FrankensteinForCausalLM`. |
+| `model_class: frankenstein_text_decoder` or `model.mode: decoder` | ✅ | Exported as `FrankensteinForCausalLM`. |
 | `training.task: sbert` | ❌ | Not exported by this command (SBERT wrapper is not an AutoModel LM head). |
 | `base_model` set in YAML | ❌ | Command does not export base-model fine-tune configs for this custom architecture wrapper. |
 

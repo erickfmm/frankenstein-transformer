@@ -101,7 +101,7 @@ startup — no DashAI source edits required.
 
 ### Co-install compatibility with DashAI
 
-`dashai-frankenstein >= 0.6.0` (with `frankenstein-transformer >= 1.5.0`)
+`dashai-frankenstein >= 0.7.0` (with `frankenstein-transformer >= 1.6.0`)
 allows **transformers 4.x and 5.x** (`>=4.45,<6`), so installing the plugin
 into an existing DashAI environment keeps DashAI's modern stack intact
 (transformers 5 / huggingface-hub 1.x / diffusers 0.40) with no downgrades

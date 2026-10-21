@@ -62,7 +62,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
         self.assertIsNotNone(cfg.model_config)
         self.assertEqual(cfg.model_config.vocab_size, 100)
 
-    def test_mlm_sets_frankenstein_model_class_by_default(self):
+    def test_mlm_sets_text_encoder_model_class_by_default(self):
         path = self._cfg_path("""
             model:
               vocab_size: 100
@@ -89,7 +89,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 parameters: {}
         """)
         cfg = load_training_config(path)
-        self.assertEqual(cfg.model_class, "frankenstein")
+        self.assertEqual(cfg.model_class, "frankenstein_text_encoder")
 
     def test_mlm_missing_optimizer_raises(self):
         path = self._cfg_path("""
@@ -712,7 +712,7 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
 
     def _decoder_model_block(self):
         return """
-            model_class: frankensteindecoder
+            model_class: frankenstein_text_decoder
             model:
               vocab_size: 100
               hidden_size: 48
@@ -744,7 +744,7 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
         """)
         cfg = load_training_config(path)
         self.assertEqual(cfg.task, "causal_lm")
-        self.assertEqual(cfg.model_class, "frankensteindecoder")
+        self.assertEqual(cfg.model_class, "frankenstein_text_decoder")
         self.assertIsNotNone(cfg.model_config)
         self.assertEqual(cfg.model_config.mode, "decoder")
 
@@ -757,9 +757,9 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
             load_training_config(path)
 
     def test_causal_lm_requires_decoder_model_class(self):
-        # model_class=frankenstein (encoder) must be rejected for causal_lm.
+        # model_class=frankenstein_text_encoder (encoder) must be rejected for causal_lm.
         path = self._cfg_path("""
-            model_class: frankenstein
+            model_class: frankenstein_text_encoder
             model:
               vocab_size: 100
               hidden_size: 48
@@ -788,7 +788,7 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
             load_training_config(path)
 
     def test_causal_lm_missing_model_class_raises(self):
-        # No model_class provided defaults to "frankenstein" -> rejected.
+        # No model_class provided defaults to "frankenstein_text_encoder" -> rejected.
         path = self._cfg_path("""
             model:
               vocab_size: 100
