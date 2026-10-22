@@ -1,0 +1,21 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  G["G = ∇f(θₜ₋₁)"]
+  L["L ← L + GGᵀ, R ← R + GᵀG"]
+  cond{"t mod K = 0?"}
+  eig["eigh(L), eigh(R)"]
+  rot["G_rot = QₗᵀGQᵣ"]
+  m["m ← β₁m + (1−β₁)G_rot"]
+  v["v ← β₂v + (1−β₂)G_rot²"]
+  u["u = m/(√v + ε)"]
+  back["Δθ = QₗuQᵣᵀ"]
+  upd["θₜ ← θ − ηΔθ"]
+
+  G --> L --> cond
+  cond -- "yes" --> eig --> rot
+  cond -- "no" --> rot
+  rot --> m
+  rot --> v
+  m --> u
+  v --> u
+  u --> back --> upd

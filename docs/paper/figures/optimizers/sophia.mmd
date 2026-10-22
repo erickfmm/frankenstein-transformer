@@ -1,0 +1,16 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  g["g = ∇f(θₜ₋₁)"]
+  m["m ← β₁m + (1−β₁)g"]
+  cond{"t mod k = 0?"}
+  hutch["ĥ ← Hutchinson(g)"]
+  h["h ← β₂h + (1−β₂)ĥ"]
+  den["u = m/max(γh, ε)"]
+  clip["u ← clip(u, C)"]
+  upd["θₜ ← θ − ηu"]
+
+  g --> m --> cond
+  cond -- "yes" --> hutch --> h --> den
+  cond -- "no" --> den
+  m --> den
+  den --> clip --> upd

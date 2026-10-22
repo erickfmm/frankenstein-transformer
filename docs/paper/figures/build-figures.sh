@@ -4,6 +4,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Optional override: PUPPETEER_CONFIG=/path/to/config.json ./build-figures.sh
+PUPPETEER_CONFIG="${PUPPETEER_CONFIG:-puppeteer-config.json}"
+
 for src in *.mmd; do
   [ "$src" = "test.mmd" ] && continue
   out="${src%.mmd}.pdf"
@@ -13,7 +16,7 @@ for src in *.mmd; do
   echo "==> $src -> $out (width ${width}px)"
   pnpm dlx @mermaid-js/mermaid-cli \
     -i "$src" -o "$out" \
-    -p puppeteer-config.json \
+    -p "$PUPPETEER_CONFIG" \
     --size "$width"
 done
 
@@ -24,7 +27,18 @@ for src in mixers/*.mmd; do
   echo "==> $src -> $out (width 1400px)"
   pnpm dlx @mermaid-js/mermaid-cli \
     -i "$src" -o "$out" \
-    -p puppeteer-config.json \
+    -p "$PUPPETEER_CONFIG" \
+    --size 1400
+done
+
+# Per-optimizer step diagrams live in optimizers/ and are embedded by the
+# optimizer annexes of both papers.
+for src in optimizers/*.mmd; do
+  out="${src%.mmd}.pdf"
+  echo "==> $src -> $out (width 1400px)"
+  pnpm dlx @mermaid-js/mermaid-cli \
+    -i "$src" -o "$out" \
+    -p "$PUPPETEER_CONFIG" \
     --size 1400
 done
 

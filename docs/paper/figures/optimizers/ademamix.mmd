@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  g["gₜ = ∇f(θₜ₋₁)"]
+  m1["m₁ ← β₁m₁ + (1−β₁)gₜ<br/>(fast EMA)"]
+  m2["m₂ ← β₃m₂ + (1−β₃)gₜ<br/>(slow EMA)"]
+  v["v ← β₂v + (1−β₂)gₜ²"]
+  mix["m = m₁ + αₜm₂"]
+  upd["θₜ ← θ − η·m/(√v + ε)"]
+  alpha["αₜ (schedule)"]
+
+  g --> m1
+  g --> m2
+  g --> v
+  m1 --> mix
+  m2 --> mix
+  alpha --> mix
+  mix --> upd
+  v --> upd

@@ -8,6 +8,10 @@ embeds with `\includegraphics`.
 of each mixer's section in the attention annexes (English sources; the Spanish
 paper reuses the same PDFs).
 
+`optimizers/` holds one step-flow diagram per optimizer, embedded at the start
+of each optimizer's entry in the optimizer annexes. Sources and labels are in
+English; the Spanish paper reuses the same PDFs.
+
 Rebuild every diagram (one at a time, Mermaid CLI via `pnpm`):
 
 ```bash

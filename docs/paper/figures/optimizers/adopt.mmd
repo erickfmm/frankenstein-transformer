@@ -1,0 +1,15 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  g["gₜ = ∇f(θₜ₋₁)"]
+  vprev["v at step t−1"]
+  den["denom = √max(v, ε) + ε"]
+  m["m ← β₁m + (1−β₁)·gₜ/denom"]
+  v["v ← β₂v + (1−β₂)gₜ²"]
+  upd["θₜ ← θ − η·m"]
+
+  vprev -. "carry" .-> den
+  den --> m
+  g --> m
+  g --> v
+  m --> upd
+  v -. "carry v" .-> vprev

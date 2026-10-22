@@ -1,0 +1,14 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  g["gₜᴸ (per layer L)"]
+  m["mᴸ ← β₁mᴸ + (1−β₁)gₜᴸ"]
+  v["vᴸ ← β₂vᴸ + (1−β₂)(gₜᴸ)²"]
+  ua["u_adamᴸ = mᴸ/(√vᴸ + ε) + λθᴸ"]
+  phi["φᴸ = ‖θᴸ‖₂/‖u_adamᴸ‖₂"]
+  upd["θₜᴸ ← θₜ₋₁ᴸ − ηφᴸu_adamᴸ"]
+
+  g --> m
+  g --> v
+  m --> ua
+  v --> ua
+  ua --> phi --> upd

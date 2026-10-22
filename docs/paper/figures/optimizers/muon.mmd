@@ -1,0 +1,9 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  G["G = ∇f(W)"]
+  norm["X₀ = G/(‖G‖_F + ε)"]
+  ns["repeat k = 0…K−1:<br/>A = XₖXₖᵀ<br/>B = 1.5A − 0.5A²<br/>Xₖ₊₁ = BXₖ"]
+  orth["X_K ≈ orthogonal direction"]
+  upd["W ← W − ηX_K"]
+
+  G --> norm --> ns --> orth --> upd

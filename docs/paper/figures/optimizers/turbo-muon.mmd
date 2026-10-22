@@ -1,0 +1,9 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  G["G = ∇f(W)"]
+  norm["X₀ = G/(‖G‖_F + ε)"]
+  aol["AOL: P = 1.5I − 0.5X₀X₀ᵀ<br/>X₀ ← PX₀"]
+  ns["repeat k = 0…K′−1 (K′ ≈ 4):<br/>A = XₖXₖᵀ<br/>B = 1.5A − 0.5A²<br/>Xₖ₊₁ = BXₖ"]
+  upd["W ← W − ηX_K′"]
+
+  G --> norm --> aol --> ns --> upd

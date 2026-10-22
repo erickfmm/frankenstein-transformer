@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  g["gₜ = ∇f(θₜ₋₁)"]
+  wd["θ ← θ(1 − ηλ)"]
+  m["m ← β₁m + (1−β₁)gₜ"]
+  v["v ← β₂v + (1−β₂)gₜ²"]
+  bc["m̂, v̂ (bias correction)"]
+  rho["ρₜ = ρ∞ − 2tβ₂ᵗ/(1−β₂ᵗ)"]
+  cond{"ρₜ > 4?"}
+  rect["rₜ = √(((ρₜ−4)(ρₜ−2)ρ∞)<br/>/((ρ∞−4)(ρ∞−2)ρₜ))"]
+  adap["θₜ ← θ − η·rₜ·m̂/(√v̂ + ε)"]
+  fall["θₜ ← θ − η·m̂<br/>(SGD with momentum)"]
+
+  g --> wd --> m
+  g --> v
+  m --> bc
+  v --> bc
+  bc --> rho --> cond
+  cond -- "yes" --> rect --> adap
+  cond -- "no" --> fall

@@ -1,0 +1,17 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  G["Gₜ (matrix gradient)"]
+  R["R ← β₂R + (1−β₂)(Gₜ²)1ₙᵀ"]
+  C["C ← β₂C + (1−β₂)1ₘᵀ(Gₜ²)"]
+  V["V̂ = (R·C)/(1ₙᵀR)"]
+  U["Uₜ = Gₜ/(√V̂ + ε)"]
+  uc["Ûₜ = Uₜ/max(1, RMS(Uₜ))"]
+  upd["θₜ₊₁ ← θₜ − ηÛₜ"]
+
+  G --> R
+  G --> C
+  R --> V
+  C --> V
+  V --> U
+  G --> U
+  U --> uc --> upd

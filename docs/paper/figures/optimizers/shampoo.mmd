@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  G["G = ∇f(θₜ₋₁)"]
+  L["L ← L + GGᵀ"]
+  R["R ← R + GᵀG"]
+  cond{"t mod K = 0?"}
+  eig["eigh(L), eigh(R)"]
+  inv["L^(−1/4), R^(−1/4)"]
+  pre["Δθ = L^(−1/4) G R^(−1/4)"]
+  upd["θₜ ← θ − ηΔθ"]
+
+  G --> L
+  G --> R
+  L --> cond
+  R --> cond
+  cond -- "yes" --> eig --> inv --> pre
+  cond -- "no" --> pre
+  pre --> upd

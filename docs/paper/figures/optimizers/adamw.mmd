@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  g["gₜ = ∇f(θₜ₋₁)"]
+  prev["m, v at step t−1"]
+  wd["θ ← θ(1 − ηλ)"]
+  m["m ← β₁m + (1−β₁)gₜ"]
+  v["v ← β₂v + (1−β₂)gₜ²"]
+  bc["m̂ = m/(1−β₁ᵗ)<br/>v̂ = v/(1−β₂ᵗ)"]
+  u["u = m̂/(√v̂ + ε)"]
+  upd["θₜ ← θ − ηu"]
+
+  g --> wd
+  wd --> m
+  wd --> v
+  prev -. "carry" .-> m
+  prev -. "carry" .-> v
+  m --> bc
+  v --> bc
+  bc --> u --> upd
+  upd -. "carry m, v" .-> prev

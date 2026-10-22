@@ -1,0 +1,14 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  G["Gₜ = ∇f(Wₜ)"]
+  cond{"t mod K = 1?"}
+  svd["U, S, Vᵀ ← SVD(Gₜ)<br/>select top-r vectors P"]
+  proj["G_low ← PᵀGₜ"]
+  adam["Δ_low ← Adam(G_low)"]
+  rec["Δ ← PΔ_low"]
+  upd["Wₜ ← Wₜ − ηΔ"]
+
+  G --> cond
+  cond -- "yes" --> svd --> proj
+  cond -- "no" --> proj
+  proj --> adam --> rec --> upd

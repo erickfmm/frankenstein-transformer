@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  g["gₜ = ∇f(θₜ₋₁)"]
+  gp["gₜ₋₁ (carry)"]
+  cp["c at step t−1"]
+  c["c ← gₜ + γ(c − gₜ₋₁)"]
+  m["m ← β₁m + (1−β₁)c"]
+  v["v ← β₂v + (1−β₂)c²"]
+  wd["θ ← θ(1 − ηλ)"]
+  upd["θₜ ← θ − η·m/(√v + ε)"]
+
+  g --> c
+  gp --> c
+  c --> m
+  c --> v
+  m --> wd
+  wd --> upd
+  v --> upd
+  g -. "carry gₜ" .-> gp
+  c -. "carry c" .-> cp

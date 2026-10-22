@@ -1,0 +1,24 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  step["step t: gₜ = ∇f(θₜ₋₁)"]
+  m["m ← β₁m + (1−β₁)gₜ"]
+  v["v ← β₂v + (1−β₂)gₜ²"]
+  cond{"t = 2ᵏ?"}
+  k["k ← k + 1"]
+  vb["v̄ = v/(1 − β₂^max(t/2,1)) + ε"]
+  cond2{"k = 0?"}
+  fl0["fixed_lr = v̄^(−γ/2)"]
+  fl["fixed_lr = √(2/(1/fixed_lr² + v̄^γ))"]
+  reset["v ← 0"]
+  upd["θₜ ← θ − η/(1−β₁ᵗ)·m ⊙ fixed_lr"]
+
+  step --> m
+  step --> v
+  step --> cond
+  m --> upd
+  v --> upd
+  cond -- "yes" --> k --> vb --> cond2
+  cond2 -- "yes" --> fl0 --> reset
+  cond2 -- "no" --> fl --> reset
+  reset --> upd
+  cond -- "no" --> upd

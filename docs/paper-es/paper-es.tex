@@ -16,6 +16,17 @@
 \usepackage{graphicx}
 \usepackage{adjustbox}
 \usepackage{float}
+% Double rules at the top and bottom of every algorithm float.
+\makeatletter
+\newcommand\fs@dblrulled{%
+  \def\@fs@cfont{\bfseries}\let\@fs@capt\floatc@ruled
+  \def\@fs@pre{\hrule height 0.9pt depth 0pt\kern 1.2pt\hrule height 0.4pt depth 0pt\kern 2pt}%
+  \def\@fs@post{\kern 2pt\hrule height 0.4pt depth 0pt\kern 1.2pt\hrule height 0.9pt depth 0pt\relax}%
+  \def\@fs@mid{\kern 2pt\hrule\kern 2pt}%
+  \let\@fs@iftopcapt\iftrue}
+\makeatother
+\floatstyle{dblrulled}
+\restylefloat{algorithm}
 %Includes "References" in the table of contents
 \usepackage[nottoc]{tocbibind}
 

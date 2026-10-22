@@ -6,12 +6,18 @@ El estudio de optimizadores enmarca la optimización de transformadores como una
 
 \subsection{Línea Base Estándar y Optimizadores Adaptativos}
 \paragraph{SGD con Momentum.}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/sgd-momentum.pdf}}
+\caption{Flujo por paso de SGD con momentum: decaimiento L2 opcional, acumulación exponencial de momentum y actualización de parámetros con paso fijo.}
+\label{fig:opt-sgd-momentum}
+\end{figure}
 La actualización clásica acumula un búfer de momentum y luego aplica una tasa de aprendizaje fija. En cada iteración $t$, el algoritmo mantiene un promedio móvil exponencial $m_t$ de los gradientes pasados:
 \begin{align}
 m_t &= \beta m_{t-1} + g_t \\
 \theta_{t+1} &= \theta_t - \eta m_t
 \end{align}
-donde $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controla la decadencia del momentum y $\eta$ es la tasa de aprendizaje fija. El término de momentum actúa como velocidad: acelera el movimiento en direcciones consistentes mientras amortigua oscilaciones en direcciones variables. Sus fortalezas son la baja sobrecarga de memoria (un único búfer de momentum por parámetro) y una fuerte generalización cuando se ajusta cuidadosamente. Su principal debilidad en cargas de trabajo de transformadores es la escasa robustez frente a la heterogeneidad de curvatura (diferentes espectros del Hessiano entre grupos de parámetros) y una fuerte dependencia de las programaciones de tasa de aprendizaje.
+donde $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controla la decadencia del momentum y $\eta$ es la tasa de aprendizaje fija. El término de momentum actúa como velocidad: acelera el movimiento en direcciones consistentes mientras amortigua oscilaciones en direcciones variables.
 
 \begin{algorithm}[H]
 \caption{SGD con Momentum}
@@ -32,7 +38,25 @@ donde $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controla la decadencia
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Escasa robustez frente a la heterogeneidad de curvatura: una única tasa global no puede adaptarse a todos los grupos de parámetros.
+\item Fuerte dependencia de programaciones de tasa de aprendizaje cuidadosamente diseñadas.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Baja sobrecarga de memoria: un único búfer de momentum por parámetro.
+\item Fuerte generalización cuando se ajusta cuidadosamente, y una actualización simple de implementar.
+\end{itemize}
+
 \paragraph{Adam y AdamW.}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/adamw.pdf}}
+\caption{Flujo por paso de AdamW: decaimiento de pesos desacoplado, EMAs de primer y segundo momento, corrección de sesgo y actualización adaptativa elemento a elemento.}
+\label{fig:opt-adamw}
+\end{figure}
 Adam rastrea promedios móviles exponenciales tanto del primer momento (media) como del segundo momento (varianza no centrada) para lograr tasas de aprendizaje adaptativas elemento a elemento. La regla de actualización es:
 \begin{align}
 m_t &= \beta_1 m_{t-1} + (1-\beta_1) g_t \\
@@ -40,7 +64,7 @@ v_t &= \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \\
 \hat{m}_t &= \frac{m_t}{1-\beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1-\beta_2^t} \quad \text{(corrección de sesgo)} \\
 \theta_{t+1} &= \theta_t - \eta \left(\frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon}\right)
 \end{align}
-AdamW introduce una modificación crucial: la decadencia de peso se aplica directamente a los parámetros (desacoplada de los gradientes): $\theta_t \gets \theta_t(1-\eta\lambda)$ en lugar de añadir $\lambda\theta_t$ al gradiente. Este desacoplamiento evita que el escalado adaptativo interfiera con la fuerza de la regularización. El informe trata a AdamW como la línea base práctica para el ajuste fino de transformadores porque converge rápidamente y es relativamente tolerante a la variación de hiperparámetros. La desventaja es el costo de memoria: ambos tensores de momento deben almacenarse para cada parámetro, duplicando la memoria del estado del optimizador en relación con SGD.
+AdamW introduce una modificación crucial: la decadencia de peso se aplica directamente a los parámetros (desacoplada de los gradientes): $\theta_t \gets \theta_t(1-\eta\lambda)$ en lugar de añadir $\lambda\theta_t$ al gradiente. Este desacoplamiento evita que el escalado adaptativo interfiera con la fuerza de la regularización.
 
 \begin{algorithm}[H]
 \caption{AdamW (Adam con Decadencia de Peso Desacoplada)}
@@ -62,12 +86,30 @@ AdamW introduce una modificación crucial: la decadencia de peso se aplica direc
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Almacena tensores de primer y segundo momento para cada parámetro, duplicando la memoria del estado del optimizador respecto a SGD.
+\item El escalado adaptativo elemento a elemento puede interferir con la regularización si el decaimiento de pesos no se desacopla.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Línea base práctica para el ajuste fino de transformadores: convergencia rápida y tolerancia a la variación de hiperparámetros.
+\item El decaimiento de pesos desacoplado mantiene la fuerza de la regularización independiente del escalado adaptativo.
+\end{itemize}
+
 \paragraph{RAdam (Adam Rectificado).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/radam.pdf}}
+\caption{Flujo por paso de RAdam: rectificación por ventana SMA con retroceso a SGD con momentum en los primeros pasos.}
+\label{fig:opt-radam}
+\end{figure}
 RAdam aborda la inestabilidad de Adam en el entrenamiento temprano rectificando dinámicamente la tasa de aprendizaje adaptativa. La observación clave es que el segundo momento $v_t$ tiene una varianza muy alta en los primeros pasos, causando un escalado adaptativo poco fiable. RAdam calcula la longitud efectiva de la ventana de promedio móvil simple (SMA):
 \[\rho_t = \rho_{\infty} - \frac{2t\beta_2^t}{1-\beta_2^t}, \quad \text{donde} \quad \rho_{\infty} = \frac{2}{1-\beta_2}-1\]
 Cuando $\rho_t > 4$ (suficientes muestras para la estimación de varianza), RAdam aplica el escalado adaptativo con un término de rectificación:
 \[r_t = \sqrt{\frac{(\rho_t-4)(\rho_t-2)\rho_{\infty}}{(\rho_{\infty}-4)(\rho_{\infty}-2)\rho_t}}, \quad \theta_{t+1} = \theta_t - \eta r_t \frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon}\]
-Cuando $\rho_t \leq 4$, RAdam retrocede a SGD con momentum: $\theta_{t+1} = \theta_t - \eta\hat{m}_t$. Esta transición gradual elimina la necesidad de programaciones manuales de calentamiento de la tasa de aprendizaje y mejora la robustez.
+Cuando $\rho_t \leq 4$, RAdam retrocede a SGD con momentum: $\theta_{t+1} = \theta_t - \eta\hat{m}_t$.
 
 \begin{algorithm}[H]
 \caption{RAdam (Adam Rectificado)}
@@ -97,8 +139,26 @@ Cuando $\rho_t \leq 4$, RAdam retrocede a SGD con momentum: $\theta_{t+1} = \the
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Añade contabilidad de rectificación sobre el estado de momentos de Adam.
+\item El beneficio se reduce cuando ya se usa una programación de calentamiento bien ajustada.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Elimina la necesidad de calentamiento manual al rectificar la tasa adaptativa.
+\item Retrocede con elegancia a SGD con momentum mientras las estimaciones de varianza no son fiables, mejorando la robustez.
+\end{itemize}
+
 \subsection{Momentum Avanzado y Reducción de Varianza (2024--2025)}
 \paragraph{Adan (Momentum Nesterov Adaptativo).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/adan.pdf}}
+\caption{Flujo por paso de Adan: estimación de momentum de Nesterov a partir de la diferencia de gradientes, con tres búferes de estado y un paso de momentum combinado.}
+\label{fig:opt-adan}
+\end{figure}
 Adan reformula la aceleración de Nesterov sin el cálculo de gradiente adicional requerido por el SGD Nesterov clásico. El algoritmo mantiene tres búferes de momentum:
 \begin{align}
 m_t &= (1-\beta_1)m_{t-1} + \beta_1 g_t \quad\text{(primer momento)} \\
@@ -107,7 +167,6 @@ n_t &= (1-\beta_3)n_{t-1} + \beta_3[g_t + (1-\beta_1)(g_t-g_{t-1})]^2 \quad\text
 \end{align}
 El término de \textbf{Estimación de Momentum Nesterov} (NME) $\bar{g}_t = g_t + (1-\beta_1)(g_t-g_{t-1})$ estima el gradiente en una posición futura sin evaluarlo. La actualización combina el momentum con la velocidad:
 \[\bar{m}_t = m_t + (1-\beta_1)v_t, \quad \theta_{t+1} = \theta_t - \eta\frac{\bar{m}_t}{\sqrt{n_t}+\epsilon}\]
-Adan logra una convergencia rápida en diversas arquitecturas (CNN, GAN, Transformadores) mediante esta aceleración. El costo es mantener tres búferes similares al momentum, aumentando la sobrecarga de memoria en relación con Adam.
 
 \begin{algorithm}[H]
 \caption{Adan (Momentum Nesterov Adaptativo)}
@@ -131,14 +190,31 @@ Adan logra una convergencia rápida en diversas arquitecturas (CNN, GAN, Transfo
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Tres búferes tipo momentum aumentan la sobrecarga de memoria respecto a Adam.
+\item Contabilidad adicional de la diferencia de gradientes en cada paso.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Aceleración estilo Nesterov sin una evaluación adicional del gradiente.
+\item Convergencia rápida en arquitecturas diversas (CNN, GAN, transformadores).
+\end{itemize}
+
 \paragraph{ADOPT (Adam con Ajuste Óptimo Podado).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/adopt.pdf}}
+\caption{Flujo por paso de ADOPT: el segundo momento del paso anterior normaliza el gradiente actual antes de actualizar el primer momento.}
+\label{fig:opt-adopt}
+\end{figure}
 ADOPT corrige un problema teórico fundamental en Adam: el gradiente aparece tanto en la estimación del primer momento como en la del segundo momento, creando circularidad. ADOPT \textbf{desacopla} utilizando el segundo momento del paso anterior para el denominador:
 \begin{align}
 v_t &= \beta_2 v_{t-1} + (1-\beta_2)g_t^2 \\
 m_t &= \beta_1 m_{t-1} + (1-\beta_1)\frac{g_t}{\sqrt{v_{t-1}}+\epsilon} \quad\text{(usa $v_{t-1}$, no $v_t$)} \\
 \theta_{t+1} &= \theta_t - \eta m_t
 \end{align}
-Este simple reordenamiento logra la tasa de convergencia óptima $O(1/\sqrt{T})$ con \textbf{cualquier} elección de $\beta_2 \in (0,1)$, sin suposiciones de ruido acotado. La consecuencia práctica es que ADOPT es un reemplazo directo de Adam con garantías teóricas más sólidas y un rendimiento empírico comparable o superior en los dominios de visión, PLN, RL y modelado generativo.
 
 \begin{algorithm}[H]
 \caption{ADOPT (Adam con Ajuste Óptimo Podado)}
@@ -161,7 +237,25 @@ Este simple reordenamiento logra la tasa de convergencia óptima $O(1/\sqrt{T})$
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Requiere conservar el segundo momento anterior como denominador explícito.
+\item Las ganancias empíricas dependen de la arquitectura y del ajuste.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Elimina la circularidad del gradiente de Adam y alcanza la tasa óptima $O(1/\sqrt{T})$ con \textbf{cualquier} $\beta_2 \in (0,1)$, sin suposiciones de ruido acotado.
+\item Reemplazo directo de Adam con rendimiento empírico comparable o superior en visión, PLN, RL y modelado generativo.
+\end{itemize}
+
 \paragraph{AdEMAMix (Mezcla de Promedios Móviles Exponenciales).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/ademamix.pdf}}
+\caption{Flujo por paso de AdEMAMix: EMAs rápida y lenta en paralelo, mezcladas con un peso programado $\alpha_t$ antes de la actualización adaptativa.}
+\label{fig:opt-ademamix}
+\end{figure}
 AdEMAMix reemplaza el EMA único de gradientes de Adam por una \textbf{mezcla de dos EMA}: uno de decadencia rápida y otro de decadencia lenta. Esto aborda la observación de que los gradientes siguen siendo informativos durante decenas de miles de pasos, no solo cientos:
 \begin{align}
 m_{1,t} &= \beta_1 m_{1,t-1} + (1-\beta_1)g_t \quad\text{(EMA rápido, $\beta_1 \approx 0.9$)} \\
@@ -170,7 +264,7 @@ v_t &= \beta_2 v_{t-1} + (1-\beta_2)g_t^2 \\
 m_t &= m_{1,t} + \alpha_t m_{2,t} \quad\text{(mezcla con peso programado $\alpha_t$)} \\
 \theta_{t+1} &= \theta_t - \eta\frac{m_t}{\sqrt{v_t}+\epsilon}
 \end{align}
-El peso de la mezcla $\alpha_t$ típicamente aumenta durante el entrenamiento, permitiendo que el EMA rápido proporcione adaptación inmediata mientras que el EMA lento acumula correlaciones de gradiente a largo plazo. Empíricamente, un modelo de 1.3B parámetros en 101B tokens alcanza una pérdida similar a AdamW en 197B tokens (ganancia del 95\% en eficiencia de datos), lo que sugiere que el EMA lento reduce significativamente el olvido del modelo.
+El peso de la mezcla $\alpha_t$ típicamente aumenta durante el entrenamiento, permitiendo que el EMA rápido proporcione adaptación inmediata mientras que el EMA lento acumula correlaciones de gradiente a largo plazo.
 
 \begin{algorithm}[H]
 \caption{AdEMAMix (Mezcla de Promedios Móviles Exponenciales)}
@@ -195,7 +289,25 @@ El peso de la mezcla $\alpha_t$ típicamente aumenta durante el entrenamiento, p
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Dos EMA de gradiente más el segundo momento casi triplican el estado del optimizador de Adam.
+\item La programación de mezcla $\alpha_t$ añade un hiperparámetro que ajustar.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Explota información de gradiente que sigue siendo informativa durante decenas de miles de pasos.
+\item Un modelo de 1.3B en 101B tokens iguala a AdamW en 197B tokens (ganancia del 95\% en eficiencia de datos), lo que sugiere menor olvido.
+\end{itemize}
+
 \paragraph{MARS (Haciendo Brillar las Tasas de Aprendizaje Adaptativas).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/mars.pdf}}
+\caption{Flujo por paso de MARS: una estimación recursiva de gradiente con varianza reducida que alimenta los momentos de primer y segundo orden estilo Adam.}
+\label{fig:opt-mars}
+\end{figure}
 MARS combina métodos de gradiente precondicionado (ej., AdamW) con \textbf{reducción de varianza} mediante momentum recursivo estocástico escalado. La innovación central es una estimación del gradiente con varianza reducida:
 \begin{align}
 c_t &= g_t + \gamma(c_{t-1} - g_{t-1}) \quad\text{(estimación recursiva tipo SVRG)} \\
@@ -203,7 +315,7 @@ m_t &= \beta_1 m_{t-1} + (1-\beta_1)c_t \\
 v_t &= \beta_2 v_{t-1} + (1-\beta_2)c_t^2 \\
 \theta_{t+1} &= \theta_t - \eta\frac{m_t}{\sqrt{v_t}+\epsilon}
 \end{align}
-donde $\gamma \in [0.01, 0.1]$ controla cuánta información de gradiente histórico se retiene. El gradiente con varianza reducida $c_t$ actúa como un filtro de ruido implícito, amplificando las direcciones de señal consistentes y amortiguando el ruido contradictorio. MARS-AdamW supera consistentemente a AdamW por márgenes significativos en el preentrenamiento de GPT-2, lo que sugiere que la reducción de varianza mejora sustancialmente la convergencia en el entrenamiento estocástico por mini-lotes.
+donde $\gamma \in [0.01, 0.1]$ controla cuánta información de gradiente histórico se retiene. El gradiente con varianza reducida $c_t$ actúa como un filtro de ruido implícito, amplificando las direcciones de señal consistentes y amortiguando el ruido contradictorio.
 
 \begin{algorithm}[H]
 \caption{MARS (Haciendo Brillar las Tasas de Aprendizaje Adaptativas)}
@@ -228,14 +340,32 @@ donde $\gamma \in [0.01, 0.1]$ controla cuánta información de gradiente histó
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Almacena el gradiente con varianza reducida y el gradiente anterior además de los momentos de Adam.
+\item El coeficiente de reducción de varianza $\gamma \in [0.01, 0.1]$ debe ajustarse.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Actúa como un filtro de ruido implícito, amplificando direcciones consistentes y amortiguando el ruido contradictorio.
+\item MARS-AdamW supera consistentemente a AdamW por márgenes significativos en el preentrenamiento de GPT-2.
+\end{itemize}
+
 \paragraph{Optimizadores Cautelosos (Cautious AdamW, Cautious Lion).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/cautious.pdf}}
+\caption{Flujo por paso de Cautious AdamW: una máscara de consenso conserva solo las coordenadas donde momentum y gradiente coinciden.}
+\label{fig:opt-cautious}
+\end{figure}
 El marco Cauteloso aplica una \textbf{modificación de una línea} a cualquier optimizador basado en momentum: enmascarar la actualización de modo que solo se apliquen las dimensiones donde el momentum y la dirección del gradiente coinciden:
 \begin{align}
 \text{mask}_i &= \begin{cases} 1 & \text{si } m_t[i] \cdot g_t[i] > 0 \quad\text{(acuerdo)} \\ 0 & \text{en caso contrario} \end{cases} \\
 u_t &= \left(\frac{m_t}{\sqrt{v_t}+\epsilon}\right) \odot \text{mask} \quad\text{(enmascaramiento elemento a elemento)} \\
 \theta_{t+1} &= \theta_t - \eta u_t
 \end{align}
-La intuición: el momentum $m_t$ estima la dirección del gradiente a partir del historial; el gradiente actual $g_t$ es la señal instantánea. Cuando ambos coinciden, el optimizador está seguro y debe actualizar agresivamente. Cuando discrepan, el optimizador está en conflicto---la tendencia histórica apunta hacia una región que pudo haber sido buena antes, pero la evidencia actual la contradice. Al enmascarar las dimensiones en conflicto, Cauteloso se vuelve más conservador y evita pasos corruptos. Empíricamente, este simple enmascaramiento logra hasta \textbf{1.47$\times$ de aceleración} en el preentrenamiento de Llama y MAE mientras preserva las garantías de convergencia.
+La intuición: el momentum $m_t$ estima la dirección del gradiente a partir del historial; el gradiente actual $g_t$ es la señal instantánea. Cuando ambos coinciden, el optimizador está seguro y debe actualizar agresivamente. Cuando discrepan, el optimizador está en conflicto---la tendencia histórica apunta hacia una región que pudo haber sido buena antes, pero la evidencia actual la contradice. Al enmascarar las dimensiones en conflicto, Cauteloso se vuelve más conservador y evita pasos corruptos.
 
 \begin{algorithm}[H]
 \caption{Cautious AdamW (Enmascaramiento de Actualización por Consenso)}
@@ -260,8 +390,26 @@ La intuición: el momentum $m_t$ estima la dirección del gradiente a partir del
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item El enmascaramiento puede descartar actualizaciones útiles cuando momentum y gradiente discrepan temporalmente.
+\item Requiere un optimizador base con momentum además de la máscara elemento a elemento.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Modificación de una línea aplicable a cualquier optimizador basado en momentum.
+\item Hasta \textbf{1.47$\times$ de aceleración} en el preentrenamiento de Llama y MAE preservando las garantías de convergencia.
+\end{itemize}
+
 \subsection{Optimizadores de Lote Grande, Eficientes en Memoria y Sin Tasa de Aprendizaje}
 \paragraph{LAMB (Layer-wise Adaptive Moments optimizer for Batch training).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/lamb.pdf}}
+\caption{Flujo por paso de LAMB: paso Adam por capas reescalado por la razón de confianza entre las normas de pesos y actualización.}
+\label{fig:opt-lamb}
+\end{figure}
 LAMB extiende Adam con \textbf{escalado de tasa adaptativo por capas} (inspirado en LARS), permitiendo entrenamiento estable con tamaños de lote extremos (e.g., 64K en BERT):
 \begin{align}
 m_t^L &= \beta_1 m_{t-1}^L + (1-\beta_1)g_t^L \quad\text{(momento de primer orden por capas)} \\
@@ -270,7 +418,7 @@ u_{\text{adam}}^L &= \frac{m_t^L}{\sqrt{v_t^L}+\epsilon} + \lambda\theta_{t-1}^L
 \phi^L &= \frac{\|\theta_{t-1}^L\|_2}{\|u_{\text{adam}}^L\|_2} \quad\text{(razón de confianza: normalización por capas)} \\
 \theta_t^L &= \theta_{t-1}^L - \eta \cdot \phi^L \cdot u_{\text{adam}}^L
 \end{align}
-La \textbf{razón de confianza} $\phi^L = \|\theta^L\|_2 / \|u_{\text{adam}}^L\|_2$ normaliza el paso de actualización efectivo en relación con la magnitud de los pesos. En lotes muy grandes, el ruido estocástico del gradiente puede superar a la señal, desestabilizando las tasas de aprendizaje por capas. Al escalar las actualizaciones proporcionalmente a las normas de los pesos, LAMB asegura cambios relativos en lugar de absolutos, evitando que actualizaciones pequeñas y seguras en vectores grandes dominen. LAMB preserva los beneficios de generalización de lotes pequeños mientras permite entrenamiento eficiente con lotes grandes.
+La \textbf{razón de confianza} $\phi^L = \|\theta^L\|_2 / \|u_{\text{adam}}^L\|_2$ normaliza el paso de actualización efectivo en relación con la magnitud de los pesos. En lotes muy grandes, el ruido estocástico del gradiente puede superar a la señal, desestabilizando las tasas de aprendizaje por capas. Al escalar las actualizaciones proporcionalmente a las normas de los pesos, LAMB asegura cambios relativos en lugar de absolutos, evitando que actualizaciones pequeñas y seguras en vectores grandes dominen.
 
 \begin{algorithm}[H]
 \caption{LAMB (Layer-wise Adaptive Moments optimizer for Batch training)}
@@ -296,7 +444,25 @@ La \textbf{razón de confianza} $\phi^L = \|\theta^L\|_2 / \|u_{\text{adam}}^L\|
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item La contabilidad de normas por capas y el cálculo de la razón de confianza añaden sobrecarga por paso.
+\item La razón de confianza es inestable cuando las normas de capa o de actualización son cercanas a cero.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Permite entrenamiento estable con tamaños de lote extremos (e.g., 64K en BERT).
+\item Preserva los beneficios de generalización de lotes pequeños mientras escala el lote.
+\end{itemize}
+
 \paragraph{Schedule-Free AdamW.}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/schedulefree.pdf}}
+\caption{Flujo por paso de Schedule-Free AdamW: flujo de exploración $z$, promedio de iteraciones $x$ y punto de interpolación $y$, con promediado implícito $1/(t+1)$.}
+\label{fig:opt-schedulefree}
+\end{figure}
 Los métodos Schedule-Free eliminan el diseño explícito de programación de la receta de optimización. El algoritmo mantiene dos flujos de parámetros: $z_t$ (exploración) y $x_t$ (promedio suavizado):
 \begin{align}
 v_t &= \beta_2 v_{t-1} + (1-\beta_2)g_t^2 \quad\text{(varianza)} \\
@@ -305,7 +471,7 @@ c_t &= \frac{1}{t+1} \quad\text{(coeficiente de promediado, decrece con el tiemp
 x_t &= (1-c_t)x_{t-1} + c_t z_t \quad\text{(promediado de iteraciones)} \\
 y_t &= (1-\beta)z_t + \beta x_t \quad\text{(interpolación para el punto de evaluación)}
 \end{align}
-El coeficiente de promediado $c_t = 1/(t+1)$ implementa una programación de tasa de aprendizaje implícita sin especificar explícitamente el número total de pasos $T$. Este marco unifica la programación y el promediado de iteraciones: el algoritmo explora mediante $z_t$ mientras acumula dirección estable mediante $x_t$. El punto de evaluación $y_t$ (usado para el cómputo del gradiente) interpola entre exploración y estabilidad. Schedule-Free logra convergencia de última generación en optimización convexa, aprendizaje profundo a gran escala y aprendizaje por refuerzo, eliminando un hiperparámetro importante.
+El coeficiente de promediado $c_t = 1/(t+1)$ implementa una programación de tasa de aprendizaje implícita sin especificar explícitamente el número total de pasos $T$. Este marco unifica la programación y el promediado de iteraciones: el algoritmo explora mediante $z_t$ mientras acumula dirección estable mediante $x_t$. El punto de evaluación $y_t$ (usado para el cómputo del gradiente) interpola entre exploración y estabilidad.
 
 \begin{algorithm}[H]
 \caption{Schedule-Free AdamW}
@@ -327,7 +493,25 @@ El coeficiente de promediado $c_t = 1/(t+1)$ implementa una programación de tas
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Mantiene dos flujos de parámetros ($z$ y $x$) y requiere manejar explícitamente el punto de evaluación.
+\item Su comportamiento difiere de las líneas base con programación, lo que complica las comparaciones.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Elimina la programación explícita de la tasa de aprendizaje y su hiperparámetro de pasos totales.
+\item Convergencia de última generación en optimización convexa, aprendizaje profundo a gran escala y aprendizaje por refuerzo.
+\end{itemize}
+
 \paragraph{Adafactor.}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/adafactor.pdf}}
+\caption{Flujo por paso de Adafactor: acumuladores factorizados de segundo momento por filas y columnas, reconstrucción mediante producto exterior y recorte RMS.}
+\label{fig:opt-adafactor}
+\end{figure}
 Adafactor reduce la memoria del optimizador \textbf{factorizando} estadísticas de segundo momento para parámetros con forma de matriz, almacenando solo acumuladores de filas y columnas en lugar de estados de varianza densos. Para una matriz de gradiente $G_t \in \mathbb{R}^{m \times n}$:
 \begin{align}
 R_t &= \beta_2 R_{t-1} + (1-\beta_2)(G_t^2) \mathbf{1}_n^T \quad\text{(varianza por filas)} \\
@@ -336,14 +520,13 @@ C_t &= \beta_2 C_{t-1} + (1-\beta_2) \mathbf{1}_m^\top (G_t^2) \quad\text{(varia
 U_t &= \frac{G_t}{\sqrt{\hat{V}_t}+\epsilon} \quad\text{(paso adaptativo normalizado)} \\
 \hat{U}_t &= \frac{U_t}{\max(1, \text{RMS}(U_t))} \quad\text{(recorte de estabilidad)}
 \end{align}
-En lugar de almacenar $m \times n$ valores de segundo momento, Adafactor almacena solo $m + n$ acumuladores, reduciendo la memoria de $O(n_{\text{params}})$ a $O(\sqrt{n_{\text{params}}})$. Esto es más atractivo cuando la VRAM está dominada por el estado del optimizador en lugar de las activaciones. La contrapartida es una expresividad de optimización reducida y posible inestabilidad en algunas tareas.
 
 \begin{algorithm}[H]
 \caption{Adafactor (Estadísticas de Segundo Momento Factorizadas)}
 \label{alg:adafactor}
 \begin{algorithmic}[1]
 \Require Matriz de gradiente $G_t \in \mathbb{R}^{m \times n}$, tasa de aprendizaje $\eta$, $\beta_2 \approx 0.999$
-\Ensure Parámetros actualizados
+\Ensure Parámetros actualizados $\theta_T$
 \State Inicializar: Acumuladores de fila $R \gets \epsilon \mathbf{1}^T_m$, Columna $C \gets \epsilon \mathbf{1}_n$
 \For{$t = 1, 2, \ldots, T$}
     \State $G_t \gets \nabla f(\theta_t)$ (gradiente matricial)
@@ -354,10 +537,29 @@ En lugar de almacenar $m \times n$ valores de segundo momento, Adafactor almacen
     \State Recorte RMS por fila: $\hat{U}_t \gets U_t / \max(1, \text{RMS}(U_t))$
     \State $\theta_{t+1} \gets \theta_t - \eta \hat{U}_t$
 \EndFor
+\Return $\theta_T$
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item La varianza factorizada es una aproximación y puede ser inestable en algunas tareas.
+\item Menor expresividad de optimización en comparación con Adam completo.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item La memoria baja de $O(n_{\text{params}})$ a $O(\sqrt{n_{\text{params}}})$ para parámetros matriciales.
+\item Más atractivo cuando la VRAM está dominada por el estado del optimizador en lugar de las activaciones.
+\end{itemize}
+
 \paragraph{GaLore (Gradient Low-Rank Projection).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/galore.pdf}}
+\caption{Flujo por paso de GaLore: proyección SVD periódica del gradiente a un subespacio de bajo rango, Adam en ese subespacio y reconstrucción.}
+\label{fig:opt-galore}
+\end{figure}
 GaLore proyecta gradientes 2D en un subespacio de bajo rango antes de la optimización, reduciendo la memoria del estado del optimizador mientras mantiene el escalado adaptativo del paso. Para una matriz de parámetros 2D $W \in \mathbb{R}^{m \times n}$:
 \begin{align}
 U, S, V &= \text{SVD}(G_t) \quad\text{(calcular descomposición singular)} \\
@@ -366,14 +568,14 @@ G_{\text{low}} &= P^\top G_t \quad\text{(proyectar al espacio de bajo rango)} \\
 \Delta_{\text{low}} &= \text{Adam}(G_{\text{low}}) \quad\text{(optimizar en el espacio comprimido)} \\
 \Delta &= P \Delta_{\text{low}} \quad\text{(reconstruir en el espacio original)}
 \end{align}
-Al proyectar en un subespacio de rango $r$ (típicamente $r \ll \min(m,n)$), el estado del optimizador se reduce de $O(mn)$ a $O(r(m+n))$ para parámetros 2D. Este enfoque complementario de ahorro de memoria es especialmente relevante cuando el modelo es demasiado grande para el estado completo del optimizador. GaLore funciona sinérgicamente con otras técnicas y ha mostrado resultados empíricos sólidos en modelos de miles de millones de parámetros.
+Al proyectar en un subespacio de rango $r$ (típicamente $r \ll \min(m,n)$), el estado del optimizador se reduce de $O(mn)$ a $O(r(m+n))$ para parámetros 2D. Este enfoque complementario de ahorro de memoria es especialmente relevante cuando el modelo es demasiado grande para el estado completo del optimizador.
 
 \begin{algorithm}[H]
 \caption{GaLore (Gradient Low-Rank Projection)}
 \label{alg:galore}
 \begin{algorithmic}[1]
 \Require Matriz de parámetros 2D $W \in \mathbb{R}^{m \times n}$, tasa de aprendizaje $\eta$, rango $r \ll \min(m,n)$
-\Ensure Parámetros actualizados
+\Ensure Parámetros actualizados $\theta_T$
 \State Inicializar: Estado de Adam en el espacio de bajo rango (si es variante de rango 2)
 \For{$t = 1, 2, \ldots, T$}
     \State $G_t \gets \nabla f(W_t)$
@@ -386,10 +588,29 @@ Al proyectar en un subespacio de rango $r$ (típicamente $r \ll \min(m,n)$), el 
     \State Reconstruir en espacio original: $\Delta \gets P \Delta_{\text{low}}$ (o $\Delta_{\text{low}} P^\top$)
     \State $W_t \gets W_t - \eta \Delta$
 \EndFor
+\Return $\theta_T$
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item El SVD periódico añade cómputo e introduce un intervalo de actualización de la proyección que ajustar.
+\item La proyección de bajo rango puede descartar información del gradiente.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item El estado del optimizador se reduce de $O(mn)$ a $O(r(m+n))$ para parámetros 2D.
+\item Funciona sinérgicamente con otras técnicas y ha mostrado resultados sólidos en modelos de miles de millones de parámetros.
+\end{itemize}
+
 \paragraph{APOLLO, APOLLO-Mini, y Q-APOLLO.}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/apollo.pdf}}
+\caption{Flujo por paso de la familia APOLLO: momentos proyectados gaussianos, escalado estructurado del gradiente (por canales en APOLLO, escalar en APOLLO-Mini) y estado cuantizado en Q-APOLLO.}
+\label{fig:opt-apollo}
+\end{figure}
 La familia APOLLO \citep{zhu2025apollosgdlikememoryadamwlevel} parte de la observación de que el denominador elemento a elemento de AdamW puede \textbf{transformarse en una actualización estructurada de la tasa de aprendizaje}. En lugar de almacenar momentos densos para cada entrada de parámetro, APOLLO proyecta un gradiente matricial $G_t \in \mathbb{R}^{m \times n}$ en un subespacio aleatorio compacto y rastrea momentos estilo Adam allí:
 \begin{align}
 R_t &= P_t G_t \quad\text{o}\quad R_t = G_t P_t^\top \\
@@ -402,8 +623,6 @@ El estado proyectado \emph{no} se expande de vuelta a una actualización densa d
 W_t \gets (1-\eta\lambda)W_{t-1} - \eta\,\alpha\,(G_t \odot S_t)
 \]
 donde $\alpha$ es el factor de escala adicional usado para estabilizar variantes altamente comprimidas.
-
-La contribución práctica del artículo es doble. Primero, APOLLO reemplaza el costoso SVD repetido con \textbf{proyección aleatoria gaussiana} actualizada periódicamente, de modo que la carga computacional es multiplicación de matrices ordinaria en lugar de descomposición espectral. Segundo, el optimizador es inusualmente tolerante a la compresión extrema: incluso \textbf{APOLLO-Mini}, que mantiene solo estado auxiliar de rango 1, sigue siendo competitivo o mejor que AdamW en los experimentos de preentrenamiento reportados, mientras se acerca al costo de memoria de SGD.
 
 \begin{algorithm}[H]
 \caption{APOLLO / APOLLO-Mini Escalado de Gradiente Estructurado}
@@ -431,13 +650,55 @@ La contribución práctica del artículo es doble. Primero, APOLLO reemplaza el 
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item El escalado estructurado es una aproximación más gruesa del denominador elemento a elemento de AdamW.
+\item Las proyecciones deben refrescarse periódicamente y rangos muy pequeños hacen que el escalado sea ruidoso.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Reemplaza el SVD repetido con proyección aleatoria gaussiana refrescada periódicamente, de modo que el costo de sistemas es multiplicación de matrices ordinaria en lugar de descomposición espectral.
+\item Inusualmente tolerante a la compresión extrema: incluso APOLLO-Mini, que solo mantiene estado auxiliar de rango 1, sigue siendo competitivo o mejor que AdamW mientras se acerca al costo de memoria de SGD.
+\end{itemize}
+
 \paragraph{APOLLO-Mini.}
 APOLLO-Mini es el miembro de la familia optimizado para \textbf{eficiencia de memoria extrema}. El artículo lo motiva argumentando que, en un espacio compacto de rango 1, el escalado por canales se vuelve demasiado ruidoso, por lo que la actualización se simplifica aún más a un único escalar por tensor. La pérdida de granularidad se compensa parcialmente con el factor de escala explícito $\alpha$ (el artículo discute valores como $128$ en este régimen), proporcionando un punto útil en la frontera de Pareto de optimización: estado muy pequeño, sin sobrecarga de SVD, y aún un comportamiento sólido en preentrenamiento.
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Un único escalar por tensor pierde granularidad por canales, y el estado de rango 1 puede ser ruidoso.
+\item Depende del factor de escala adicional $\alpha$ (e.g., $128$) para mantenerse estable.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item El estado más pequeño de la familia APOLLO, sin sobrecarga de SVD.
+\item Comportamiento sólido en preentrenamiento con un costo de memoria cercano a SGD.
+\end{itemize}
+
 \paragraph{Q-APOLLO.}
-El artículo de APOLLO también enfatiza que la familia se combina naturalmente con \textbf{cuantización} para entrenamiento con memoria ultra-baja. Este repositorio convierte esa observación de sistemas en una variante concreta del optimizador, \texttt{q\_apollo}. En la implementación, los momentos de primer y segundo orden de bajo rango de APOLLO se almacenan en forma cuantizada junto con escalas y desplazamientos por tensor, y se descuantizan solo cuando es necesario para el siguiente paso. Q-APOLLO preserva, por tanto, la lógica de gradiente proyectado de APOLLO mientras reduce la precisión del estado restante del optimizador, convirtiéndolo en el miembro más agresivo en ahorro de memoria de la pila local de optimizadores.
+El artículo de APOLLO también enfatiza que la familia se combina naturalmente con \textbf{cuantización} para entrenamiento con memoria ultra-baja. Este repositorio convierte esa observación de sistemas en una variante concreta del optimizador, \texttt{q\_apollo}. En la implementación, los momentos de primer y segundo orden de bajo rango de APOLLO se almacenan en forma cuantizada junto con escalas y desplazamientos por tensor, y se descuantizan solo cuando es necesario para el siguiente paso. Q-APOLLO preserva, por tanto, la lógica de gradiente proyectado de APOLLO mientras reduce la precisión del estado restante del optimizador.
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Los momentos cuantizados introducen error de aproximación y sobrecarga de descuantización.
+\item Requiere gestionar escalas y desplazamientos por tensor.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Reduce el estado restante del optimizador a precisión ultra baja.
+\item Miembro más agresivo en ahorro de memoria de la pila local, preservando la lógica de gradiente proyectado de APOLLO.
+\end{itemize}
 
 \paragraph{Anon (Adaptivity Non-restricted Optimizer with Novel convergence technique).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/anon.pdf}}
+\caption{Flujo por paso de Anon: el precondicionador IDU refrescado en potencias de dos, con adaptividad ajustable $\gamma$ y una actualización de momentum con corrección de sesgo.}
+\label{fig:opt-anon}
+\end{figure}
 Anon \citep{anon2026anon} introduce adaptividad ajustable continuamente mediante un único parámetro $\gamma \in \mathbb{R}$, cerrando la brecha entre comportamientos tipo SGD ($\gamma=0$) y tipo Adam ($\gamma=1$), y extrapolando más allá de ambos. La innovación central es el mecanismo Incremental Delay Update (IDU), que permite convergencia estable a través de todo el espectro de adaptividad de valores reales:
 
 \begin{align}
@@ -452,8 +713,6 @@ v_t &= \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \quad\text{(momento de segundo orden)
 \end{align}
 
 A diferencia de los optimizadores adaptativos estándar, IDU actualiza el precondicionador solo en potencias de dos ($t = 2^k$), acumulando estadísticas de gradiente entre actualizaciones y agregándolas recursivamente. Este acumulador suave y multiescala evita el seguimiento estricto del máximo de AMSGrad mientras estabiliza demostrablemente la convergencia para cualquier $\gamma \in \mathbb{R}$. El parámetro $\gamma$ controla directamente la adaptividad: $\gamma > 1$ acelera la salida de puntos de silla (favorable para arquitecturas complejas), $\gamma = 1$ recupera el comportamiento tipo Adam, $\gamma = 0$ produce escalado tipo SGD, y $\gamma < 0$ se sesga hacia mínimos más planos (beneficioso para arquitecturas clásicas como CNNs).
-
-Anon mantiene tres buffers de estado ($m$, $v$, $fixed\_lr$) con costo $O(n)$ por paso, situándolo en la misma clase de complejidad que AdamW pero con la flexibilidad adicional de adaptividad ajustable. La técnica IDU converge demostrablemente con regret $O(\sqrt{T})$ para problemas convexos y $O(\ln T / \sqrt{T})$ para entornos no convexos, igualando las garantías de los optimizadores adaptativos convencionales mientras soporta todo el rango de adaptividad de valores reales.
 
 \begin{algorithm}[H]
 \caption{Anon (Adaptivity Non-restricted Optimizer con IDU)}
@@ -482,7 +741,25 @@ Anon mantiene tres buffers de estado ($m$, $v$, $fixed\_lr$) con costo $O(n)$ po
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Mantiene tres búferes de estado ($m$, $v$, fixed\_lr) y refresca el precondicionador con una programación logarítmica.
+\item El parámetro de adaptividad $\gamma$ debe seleccionarse por arquitectura.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Misma clase de complejidad $\mathcal{O}(n)$ por paso que AdamW, con adaptividad ajustable de forma continua.
+\item IDU alcanza demostrablemente regret $\mathcal{O}(\sqrt{T})$ para problemas convexos y $\mathcal{O}(\ln T/\sqrt{T})$ para entornos no convexos.
+\end{itemize}
+
 \paragraph{Prodigy (Approximating the Distance Estimate).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/prodigy.pdf}}
+\caption{Flujo por paso de Prodigy: una estimación de distancia signada acumulativa que escala el paso adaptativo sin programación de tasa de aprendizaje.}
+\label{fig:opt-prodigy}
+\end{figure}
 Prodigy adapta la escala efectiva del paso mediante una estadística tipo distancia acumulativa, eliminando la necesidad de ajuste explícito de la tasa de aprendizaje. El algoritmo mantiene una estimación de distancia acumulativa:
 \begin{align}
 u_t &= \frac{g_t}{\sqrt{v_t}+\epsilon} \quad\text{(paso adaptativo no normalizado)} \\
@@ -490,7 +767,7 @@ s_t &= s_{t-1} + \langle u_t, \theta_t - \theta_0 \rangle \quad\text{(distancia 
 d_t &= \max(d_{t-1}, d_0 + d_{\text{coef}} \cdot s_t) \quad\text{(estimación de distancia con cota inferior)} \\
 \theta_{t+1} &= \theta_t - \eta \cdot d_t \cdot u_t
 \end{align}
-donde $d_0$ es una cota inicial y $d_{\text{coef}}$ controla qué tan agresivamente se adapta la estimación. La estimación de distancia $d_t$ captura la magnitud combinada de gradientes pasados ponderada por el desplazamiento real de los parámetros, implementando una tasa de aprendizaje efectiva implícita. Este escalado consciente de la distancia logra convergencia robusta en distintas escalas de problemas y tamaños de lote sin requerir una programación de la tasa de aprendizaje. Prodigy reduce la sensibilidad a hiperparámetros estimando los tamaños de paso a partir de la geometría de optimización en lugar del conocimiento previo específico del problema.
+donde $d_0$ es una cota inicial y $d_{\text{coef}}$ controla qué tan agresivamente se adapta la estimación. La estimación de distancia $d_t$ captura la magnitud combinada de gradientes pasados ponderada por el desplazamiento real de los parámetros, implementando una tasa de aprendizaje efectiva implícita.
 
 \begin{algorithm}[H]
 \caption{Prodigy (Approximating the Distance Estimate)}
@@ -511,7 +788,35 @@ donde $d_0$ es una cota inicial y $d_{\text{coef}}$ controla qué tan agresivame
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Introduce los hiperparámetros $d_0$ y $d_{\text{coef}}$ para la estimación de distancia.
+\item Añade un paso de contabilidad de producto interno por iteración.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Elimina el ajuste y la programación explícitos de la tasa de aprendizaje.
+\item Convergencia robusta en distintas escalas de problemas y tamaños de lote.
+\end{itemize}
+
 \subsection{Optimizadores de Segundo Orden, Geométricos y de Ortogonalidad}
+\paragraph{Shampoo (Precondicionamiento Matricial mediante Productos de Kronecker).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/shampoo.pdf}}
+\caption{Flujo por paso de Shampoo: matrices de Gram factorizadas por Kronecker, eigendescomposición periódica y precondicionamiento del gradiente con raíz cuarta.}
+\label{fig:opt-shampoo}
+\end{figure}
+Shampoo es un \textbf{método estructurado de segundo orden} que calcula precondicionadores matriciales a partir de estadísticas de producto exterior con estructura de Kronecker. Para una matriz de parámetros 2D $W \in \mathbb{R}^{m \times n}$:
+\begin{align}
+L_t &= L_{t-1} + G_t G_t^\top \quad\text{(matriz de Gram izquierda/filas, $m \times m$)} \\
+R_t &= R_{t-1} + G_t^\top G_t \quad\text{(matriz de Gram derecha/columnas, $n \times n$)} \\
+L_t^{-1/4} &= Q_L (\Lambda_L)^{-1/4} Q_L^\top \quad\text{(mediante eigendescomposición)} \\
+R_t^{-1/4} &= Q_R (\Lambda_R)^{-1/4} Q_R^\top \\
+\Delta W_t &= L_t^{-1/4} G_t R_t^{-1/4} \quad\text{(gradiente precondicionado)}
+\end{align}
+Shampoo aproxima el precondicionador de matriz completa de Adagrad $H^{-1/2}$ (donde $H$ es el Hessiano) utilizando estructura factorizada de Kronecker. En lugar de almacenar un precondicionador de $(mn) \times (mn)$, Shampoo mantiene dos matrices más pequeñas ($m \times m$ y $n \times n$), capturando correlaciones entre parámetros dentro y entre grupos. Las eigendescomposiciones se realizan periódicamente (e.g., cada $K=10$ pasos) para amortizar el costo.
 
 \begin{algorithm}[H]
 \caption{Shampoo (Precondicionamiento Matricial mediante Productos de Kronecker)}
@@ -536,18 +841,25 @@ donde $d_0$ es una cota inicial y $d_{\text{coef}}$ controla qué tan agresivame
 \end{algorithmic}
 \end{algorithm}
 
-\paragraph{Shampoo (Precondicionamiento Matricial mediante Productos de Kronecker).}
-Shampoo es un \textbf{método estructurado de segundo orden} que calcula precondicionadores matriciales a partir de estadísticas de producto exterior con estructura de Kronecker. Para una matriz de parámetros 2D $W \in \mathbb{R}^{m \times n}$:
-\begin{align}
-L_t &= L_{t-1} + G_t G_t^\top \quad\text{(matriz de Gram izquierda/filas, $m \times m$)} \\
-R_t &= R_{t-1} + G_t^\top G_t \quad\text{(matriz de Gram derecha/columnas, $n \times n$)} \\
-L_t^{-1/4} &= Q_L (\Lambda_L)^{-1/4} Q_L^\top \quad\text{(mediante eigendescomposición)} \\
-R_t^{-1/4} &= Q_R (\Lambda_R)^{-1/4} Q_R^\top \\
-\Delta W_t &= L_t^{-1/4} G_t R_t^{-1/4} \quad\text{(gradiente precondicionado)}
-\end{align}
-Shampoo aproxima el precondicionador de matriz completa de Adagrad $H^{-1/2}$ (donde $H$ es el Hessiano) utilizando estructura factorizada de Kronecker. En lugar de almacenar un precondicionador de $(mn) \times (mn)$, Shampoo mantiene dos matrices más pequeñas ($m \times m$ y $n \times n$), capturando correlaciones entre parámetros dentro y entre grupos. El método ha demostrado ser efectivo a escala (sistemas de producción de Google) y es adecuado para arquitecturas transformer con estructura de alto rango. Las eigendescomposiciones se realizan periódicamente (e.g., cada $K=10$ pasos) para amortizar el costo. Contrapartida: mayor cómputo por paso y eigendescomposición $O(m^3 + n^3)$ periódica frente a mejor condicionamiento y convergencia acelerada.
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Eigendescomposiciones periódicas $O(m^3+n^3)$ y mayor cómputo por paso.
+\item Asume estructura de parámetros 2D; los embeddings y sesgos requieren manejo aparte.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Precondicionamiento de segundo orden factorizado por Kronecker sin una matriz densa $(mn)\times(mn)$.
+\item Demostrado efectivo a escala de producción y adecuado para matrices transformer de alto rango, con mejor condicionamiento y convergencia acelerada.
+\end{itemize}
 
 \paragraph{SOAP (Shampoo with Adam in eigenbasis).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/soap.pdf}}
+\caption{Flujo por paso de SOAP: momentos de Adam en la base de eigenvectores de Shampoo, rotados de vuelta al espacio de parámetros.}
+\label{fig:opt-soap}
+\end{figure}
 SOAP es una variante simplificada de Shampoo que desacopla el precondicionamiento del seguimiento de momento. En lugar de álgebra matricial compleja sobre gradientes precondicionados, SOAP ejecuta Adam estándar en la base de eigenvectores de los precondicionadores de Shampoo:
 \begin{align}
 L_t &= L_{t-1} + G_t G_t^\top, \quad R_t = R_{t-1} + G_t^\top G_t \quad\text{(acumulación de Gram)} \\
@@ -557,7 +869,7 @@ m_t^{\text{rot}} &= \beta_1 m_{t-1}^{\text{rot}} + (1-\beta_1) G_t^{\text{rot}} 
 v_t^{\text{rot}} &= \beta_2 v_{t-1}^{\text{rot}} + (1-\beta_2)(G_t^{\text{rot}})^2 \quad\text{(Adam en el espacio rotado)} \\
 U_t^{\text{rot}} &= \frac{m_t^{\text{rot}}}{\sqrt{v_t^{\text{rot}}}+\epsilon}, \quad U_t = Q_L U_t^{\text{rot}} Q_R^\top \quad\text{(rotar de vuelta)}
 \end{align}
-La idea clave: todo el seguimiento de momento ocurre en la base de eigenvectores bien condicionada, simplificando la estabilidad numérica y el análisis teórico. SOAP combina los beneficios de Shampoo (estructura de curvatura explícita) y Adam (mecánica de momento probada), siendo más limpio y a menudo más estable que Shampoo completo. Las eigendescomposiciones se recalculan cada $K$ pasos, amortizando el costo.
+La idea clave: todo el seguimiento de momento ocurre en la base de eigenvectores bien condicionada, simplificando la estabilidad numérica y el análisis teórico.
 
 \begin{algorithm}[H]
 \caption{SOAP (Shampoo with Adam in Eigenbasis)}
@@ -583,13 +895,32 @@ La idea clave: todo el seguimiento de momento ocurre en la base de eigenvectores
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Hereda el costo de eigendescomposición periódica de Shampoo.
+\item La rotación y la rotación inversa añaden multiplicaciones de matrices por paso.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Combina la estructura de curvatura explícita de Shampoo con la mecánica de momentum probada de Adam.
+\item A menudo más limpio y estable que Shampoo completo, con eigendescomposiciones amortizadas cada $K$ pasos.
+\end{itemize}
+
 \paragraph{Lion (EvoLved Sign Momentum).}
-Lion logra un \textbf{sobrecosto de memoria mínimo} al usar actualizaciones basadas en signo en lugar de escalado adaptativo completo:\begin{align}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/lion.pdf}}
+\caption{Flujo por paso de Lion: actualización por signo del momentum con acumulación de momentum desacoplada y decaimiento de pesos.}
+\label{fig:opt-lion}
+\end{figure}
+Lion logra una \textbf{sobrecarga de memoria mínima} al usar actualizaciones basadas en signo en lugar de escalado adaptativo completo:
+\begin{align}
 c_t &= \beta_1 m_t + (1-\beta_1) g_t \quad\text{(entrada de momento)} \\
 \theta_{t+1} &= \theta_t - \eta \left(\text{sign}(c_t) + \lambda\theta_t\right) \quad\text{(actualización con operador signo)} \\
 m_{t+1} &= \beta_2 m_t + (1-\beta_2) g_t \quad\text{(acumulación de momento)}
 \end{align}
-Todas las operaciones de escalado elemento a elemento se reemplazan con \texttt{sign()}, que produce $\{-1, 0, +1\}$. Esto reduce drásticamente la memoria en comparación con métodos tipo Adam: Lion almacena solo el buffer de momento, sin varianza de segundo momento. La contrapartida: las actualizaciones basadas en signo sacrifican la adaptación de tasa de aprendizaje elemento a elemento que hace efectivo a Adam. Lion se posiciona no como un optimizador universalmente superior sino como una alternativa especializada de baja memoria y alto rendimiento para escenarios donde la memoria de activaciones domina y se puede sacrificar algo de sofisticación del optimizador. Funciona bien en regímenes de lotes grandes y cuando el rendimiento del hardware es la restricción principal.
+Todas las operaciones de escalado elemento a elemento se reemplazan con \texttt{sign()}, que produce $\{-1, 0, +1\}$. Esto reduce drásticamente la memoria en comparación con métodos tipo Adam: Lion almacena solo el búfer de momento, sin varianza de segundo momento.
 
 \begin{algorithm}[H]
 \caption{Lion (EvoLved Sign Momentum)}
@@ -597,7 +928,7 @@ Todas las operaciones de escalado elemento a elemento se reemplazan con \texttt{
 \begin{algorithmic}[1]
 \Require Parámetros iniciales $\theta_0$, tasa de aprendizaje $\eta$, $\beta_1, \beta_2$, decaimiento de pesos $\lambda$
 \Ensure Parámetros actualizados $\theta_T$
-\State Inicializar: $m \gets 0$ (buffer de momento)
+\State Inicializar: $m \gets 0$ (búfer de momento)
 \For{$t = 1, 2, \ldots, T$}
     \State $g \gets \nabla f(\theta_{t-1})$ \Comment{Gradiente}
     \State $c \gets \beta_1 m + (1-\beta_1) g$ \Comment{Entrada de momento}
@@ -608,20 +939,39 @@ Todas las operaciones de escalado elemento a elemento se reemplazan con \texttt{
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Las actualizaciones por signo sacrifican la adaptación elemento a elemento de la tasa de aprendizaje que hace efectivo a Adam.
+\item Puede ser menos robusto que los métodos de la familia Adam en tareas que requieren escalado adaptativo.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Almacena solo el búfer de momentum, sin varianza de segundo momento.
+\item Opción de alto rendimiento y baja memoria para regímenes de lotes grandes donde domina la memoria de activaciones.
+\end{itemize}
+
 \paragraph{Sophia (Second-Order Hessian Information with Optimized Approximation).}
-Sophia utiliza \textbf{estimaciones diagonales del Hessiano} para escalado consciente de la curvatura sin el costo de memoria y cómputo de los métodos densos de segundo orden.\begin{align}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/sophia.pdf}}
+\caption{Flujo por paso de Sophia: estimación diagonal del Hessiano mediante Hutchinson con pasos recortados conscientes de la curvatura.}
+\label{fig:opt-sophia}
+\end{figure}
+Sophia utiliza \textbf{estimaciones diagonales del Hessiano} para escalado consciente de la curvatura sin el costo de memoria y cómputo de los métodos densos de segundo orden.
+\begin{align}
 m_t &= \beta_1 m_{t-1} + (1-\beta_1) g_t \quad\text{(momento de primer orden)} \\
 h_t &= \beta_2 h_{t-(k-1)} + (1-\beta_2) \hat{h}_t \quad\text{(Hessiano diagonal, actualizado cada $k$ pasos)} \\
 \text{clip}(x, C) &= \min(\max(x, -C), C) \quad\text{(recorte elemento a elemento)} \\
 \theta_{t+1} &= \theta_t - \eta \cdot \text{clip}\left(\frac{m_t}{\max(\gamma h_t, \epsilon)}, 1\right)
 \end{align}
-donde $\hat{h}_t$ es una estimación diagonal (e.g., estimador de traza de Hutchinson) y $\gamma$ es un factor de escala. El Hessiano diagonal $h_t$ captura la curvatura local, permitiendo que el optimizador tome pasos más pequeños en direcciones pronunciadas y pasos más grandes en direcciones planas. La operación de recorte $\text{clip}(\cdot, 1)$ evita que los pasos adaptativos exploten. Sophia pertenece a la familia de métodos conscientes de la curvatura que buscan mejor condicionamiento sin el costo $O(n^2)$ o $O(n^3)$ de los métodos completos de segundo orden. Funciona particularmente bien en escenarios de ajuste fino de segunda pasada.
+donde $\hat{h}_t$ es una estimación diagonal (e.g., estimador de traza de Hutchinson) y $\gamma$ es un factor de escala. El Hessiano diagonal $h_t$ captura la curvatura local, permitiendo que el optimizador tome pasos más pequeños en direcciones pronunciadas y pasos más grandes en direcciones planas. La operación de recorte $\text{clip}(\cdot, 1)$ evita que los pasos adaptativos exploten.
 
 \begin{algorithm}[H]
 \caption{Sophia (Hessiano Diagonal con Actualizaciones Recortadas)}
 \label{alg:sophia}
 \begin{algorithmic}[1]
-\Require Parámetros iniciales $\theta_0$, tasa de aprendizaje $\eta$, $\beta_1, \beta_2$, frecuencia de actualización del Hessiano $k$, umbral de recorte $C$ 
+\Require Parámetros iniciales $\theta_0$, tasa de aprendizaje $\eta$, $\beta_1, \beta_2$, frecuencia de actualización del Hessiano $k$, umbral de recorte $C$
 \Ensure Parámetros actualizados $\theta_T$
 \State Inicializar: $m \gets 0$, $h \gets \epsilon$ (estimación diagonal del Hessiano)
 \For{$t = 1, 2, \ldots, T$}
@@ -639,8 +989,26 @@ donde $\hat{h}_t$ es una estimación diagonal (e.g., estimador de traza de Hutch
 \end{algorithmic}
 \end{algorithm}
 
-\paragraph{Muon y Turbo-Muon (Optimizadores Basados en Ortogonalidad).}
-Muon y Turbo-Muon son \textbf{optimizadores orientados a la ortogonalidad} que reformulan la geometría de actualización utilizando iteraciones polinomiales de Newton-Schulz para ortogonalización. Para una matriz de parámetros 2D $W$ con gradiente $G_t$:
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Las estimaciones de Hutchinson añaden cómputo periódico y ruido a la señal de curvatura.
+\item La estimación del Hessiano puede quedar desactualizada entre refrescos.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Escalado consciente de la curvatura sin el costo $O(n^2)$ u $O(n^3)$ de los métodos completos de segundo orden.
+\item Los pasos recortados evitan explosiones y funcionan particularmente bien en el ajuste fino de segunda pasada.
+\end{itemize}
+
+\paragraph{Muon (Ortogonalización de Newton-Schulz).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/muon.pdf}}
+\caption{Flujo por paso de Muon: normalización de Frobenius seguida de iteraciones de Newton-Schulz que ortogonalizan la dirección de actualización.}
+\label{fig:opt-muon}
+\end{figure}
+Muon es un \textbf{optimizador orientado a la ortogonalidad} que reformula la geometría de actualización utilizando iteraciones polinomiales de Newton-Schulz para ortogonalización. Para una matriz de parámetros 2D $W$ con gradiente $G_t$:
 \begin{align}
 X_0 &= \frac{G_t}{\|G_t\|_F + \epsilon} \quad\text{(gradiente normalizado)} \\
 A_k &= X_k X_k^\top \quad\text{(Gramiana)} \\
@@ -648,14 +1016,14 @@ B_k &= b A_k + c A_k^2 \quad\text{(paso polinomial, coeficientes $b, c$ de Newto
 X_{k+1} &= a X_k + B_k X_k \quad\text{(iteración $k=0,1,\ldots,4$)} \\
 W_{t+1} &= W_t - \eta X_K \quad\text{(actualización con dirección ortogonalizada)}
 \end{align}
-Muon realiza 5 iteraciones de Newton-Schulz para producir una dirección aproximadamente ortogonal, asegurando que las actualizaciones respeten restricciones geométricas. Turbo-Muon añade un paso de \textbf{precondicionamiento casi-ortogonal} (AOL) antes de las iteraciones, reduciendo el número de pasos de ortogonalización requeridos a 4. La justificación: las actualizaciones ortogonales preservan las normas durante el entrenamiento, evitando la deriva de norma observada en métodos basados en momento. Estos optimizadores muestran potencial en entrenamiento a gran escala pero requieren kernels CUDA personalizados para eficiencia. Contrapartida: alto cómputo por paso (multiplicaciones de matrices e iteraciones polinomiales) frente a una geometría de actualización fundamentalmente mejor condicionada.
+Muon realiza 5 iteraciones de Newton-Schulz para producir una dirección aproximadamente ortogonal, asegurando que las actualizaciones respeten restricciones geométricas. La justificación: las actualizaciones ortogonales preservan las normas durante el entrenamiento, evitando la deriva de norma observada en métodos basados en momento.
 
 \begin{algorithm}[H]
 \caption{Muon (Ortogonalización de Newton-Schulz)}
 \label{alg:muon}
 \begin{algorithmic}[1]
 \Require Parámetros iniciales $\theta$ (matrices), tasa de aprendizaje $\eta$, iteraciones Newton-Schulz $K$
-\Ensure Parámetros actualizados $\theta$
+\Ensure Parámetros actualizados $\theta_T$
 \For{cada matriz de parámetros 2D $W$}
     \State $G \gets \nabla f(W)$ \Comment{Gradiente}
     \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalizar gradiente por norma de Frobenius}
@@ -666,20 +1034,41 @@ Muon realiza 5 iteraciones de Newton-Schulz para producir una dirección aproxim
     \EndFor
     \State $W \gets W - \eta X_K$ \Comment{Actualizar con dirección ortogonalizada}
 \EndFor
-\Return $\theta$ \Comment{actualizado}
+\Return $\theta_T$
 \end{algorithmic}
 \end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Varias multiplicaciones de matrices por iteración de Newton-Schulz; se requieren kernels personalizados eficientes.
+\item Definido solo para matrices de parámetros 2D.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Las actualizaciones ortogonalizadas preservan las normas y evitan la deriva de norma de los métodos basados en momento.
+\item Resultados prometedores en entrenamiento a gran escala con una geometría de actualización fundamentalmente mejor condicionada.
+\end{itemize}
+
+\paragraph{Turbo-Muon (Ortogonalización Precondicionada con AOL).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/turbo-muon.pdf}}
+\caption{Flujo por paso de Turbo-Muon: precondicionamiento casi ortogonal (AOL) antes de las iteraciones de Newton-Schulz, reduciendo su número.}
+\label{fig:opt-turbo-muon}
+\end{figure}
+Turbo-Muon añade un paso de \textbf{precondicionamiento casi-ortogonal} (AOL) antes de las iteraciones de Newton-Schulz. El precondicionador $P = 1.5I - 0.5X_0X_0^\top$ se aplica al gradiente normalizado, reduciendo el número de pasos de ortogonalización requeridos a cuatro mientras preserva la geometría de actualización ortogonalizada.
 
 \begin{algorithm}[H]
 \caption{Turbo-Muon (Ortogonalización Precondicionada con AOL)}
 \label{alg:turbo-muon}
 \begin{algorithmic}[1]
 \Require Parámetros iniciales $\theta$ (matrices), tasa de aprendizaje $\eta$, iteraciones Newton-Schulz $K'$ (típicamente 4)
-\Ensure Parámetros actualizados $\theta$
+\Ensure Parámetros actualizados $\theta_T$
 \For{cada matriz de parámetros 2D $W$}
     \State $G \gets \nabla f(W)$ \Comment{Gradiente}
     \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalizar gradiente}
-    \State \bf{AOL (Almost-Orthogonal preconditioner):} \Comment{Paso de precondicionamiento}
+    \State \textbf{AOL (Almost-Orthogonal preconditioner):} \Comment{Paso de precondicionamiento}
     \State $P \gets (1.5 I - 0.5 X_0 X_0^\top)$ \Comment{Matriz de precondicionamiento}
     \State $X_0 \gets P X_0$ \Comment{Inicio precondicionado}
     \For{$k = 0, 1, \ldots, K'-1$}
@@ -689,9 +1078,21 @@ Muon realiza 5 iteraciones de Newton-Schulz para producir una dirección aproxim
     \EndFor
     \State $W \gets W - \eta X_{K'}$ \Comment{Actualizar con dirección ortogonalizada precondicionada}
 \EndFor
-\Return $\theta$ \Comment{actualizado}
+\Return $\theta_T$
 \end{algorithmic}
 \end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Sigue siendo intensivo en cómputo; AOL añade una multiplicación de matrices de precondicionamiento.
+\item Requiere el mismo soporte de kernels personalizados que Muon.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item AOL reduce el número de iteraciones de Newton-Schulz (típicamente de cinco a cuatro).
+\item Conserva la geometría de actualización ortogonalizada con menor costo de iteraciones.
+\end{itemize}
 
 \small
 \begin{longtable}{p{2.5cm}p{3.5cm}p{2.0cm}p{5.3cm}}
@@ -708,4 +1109,3 @@ Orientado a geometría & Muon, Turbo-Muon & estructura de actualización ortogon
 \bottomrule
 \end{longtable}
 \normalsize
-

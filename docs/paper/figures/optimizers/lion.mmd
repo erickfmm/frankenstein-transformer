@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  g["g = ∇f(θₜ₋₁)"]
+  c["c = β₁m + (1−β₁)g"]
+  sgn["sign(c) + λθₜ₋₁"]
+  upd["θₜ ← θ − η(sign(c) + λθₜ₋₁)"]
+  m["m ← β₂m + (1−β₂)g"]
+
+  g --> c --> sgn --> upd
+  g --> m
