@@ -102,8 +102,11 @@ The probes compare the page's Command tab and asset URLs against `pyproject.toml
 - `cmd-binary-name` → the generated command prefix (`let cmd = '…'`) must equal the `[project.scripts]` name from `pyproject.toml` (currently `frankenstein-transformer`).
 - `github-url` → sidebar repo link must point to the real repo (`github.com/erickfmm/frankenstein-transformer`).
 - `deploy-format` → `--format` `<option>` values must be a subset of the `choices` in `src/cli.py` (`quantized`, `standard`, `transformers`, `gguf`); remove invalid options and add missing ones.
-- `cmd-config-flag` → the `--config` append condition must fire only for subcommands whose parser in `src/cli.py` defines `--config` (currently `train` only — **not** `deploy`, `infer`).
+- `cmd-config-flag` → the `--config` append condition must fire only for subcommands whose parser in `src/cli.py` defines `--config` (`train`, `deploy`, `infer` — **not** `web-server`).
 - `sbert-mode-default` → the infer `--mode` select must not offer an empty `(default)` option (`infer --task sbert --mode` is required; default the select to `--mode similarity`).
+- `cmd-select-complete` → every subcommand in `src/cli.py` must be offered by the page (currently `train`, `deploy`, `infer`, `web-server`).
+- `inference-section` → the Builder must render the schema `inference` block plus nullable unions, JSON-object fields and numeric-array/object-list controls.
+- `cli-flags` (python probe) → every flag exposed by `src/cli.py` must appear in `index.html`.
 - `schema-refs` / `example-yaml` / `asset-base-url` failures indicate broken mirrored content or wrong `/frankenstein-transformer/…` URLs — fix the content or URL, never the probe's expectations.
 
 Re-run the state script until all probes PASS.
@@ -156,13 +159,28 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
        ['train', '--config-name', 'frankenstein_text_encoder', '--device', 'cuda'],
        ['deploy', '--checkpoint', './model.pt', '--output', './out',
         '--format', 'quantized', '--validate'],
+       ['deploy', '--checkpoint', './model.pt', '--output', './out',
+        '--format', 'standard', '--config', './model.json',
+        '--validate', '--device', 'cpu'],
        ['deploy', '--checkpoint', './model.pt', '--yaml', './config_generated.yaml',
         '--output', './hf_out', '--format', 'transformers'],
        ['deploy', '--checkpoint', './model.pt', '--yaml', './config_generated.yaml',
         '--output', './out.gguf', '--format', 'gguf', '--check'],
-       ['infer', '--model', './deploy/model.pt', '--text', 'hola', '--batch-size', '8', '--benchmark'],
+       ['infer', '--model', './deploy/model.pt', '--text', 'hola',
+        '--batch-size', '8', '--fp16', '--benchmark'],
        ['infer', '--model', './sbert', '--task', 'sbert', '--mode', 'similarity',
         '--sentence1', 'a', '--sentence2', 'b'],
+       ['infer', '--model', './sbert', '--task', 'sbert', '--mode', 'encode',
+        '--input-file', 'in.txt', '--output-file', 'out.npz', '--batch-size', '8'],
+       ['infer', '--model', './deploy/model.pt', '--task', 'causal_lm',
+        '--config', './config_generated.yaml', '--prompt', 'hola',
+        '--max-new-tokens', '16', '--temperature', '0.8', '--top-k', '50',
+        '--top-p', '0.9', '--greedy', '--kv-cache', '--kv-quant', 'int4_kivi',
+        '--kv-group-size', '32', '--kv-protected-window', '16',
+        '--kv-compress', 'window_sinks', '--kv-num-sinks', '2',
+        '--kv-window', '128', '--batch-size', '8', '--benchmark-generation'],
+       ['web-server', '--server-port', '8501', '--server-address', 'localhost',
+        '--server-headless', '--development-mode'],
    ]
    for c in cmds:
        build_parser().parse_args(c)   # raises SystemExit on invalid

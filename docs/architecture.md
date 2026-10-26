@@ -50,12 +50,13 @@ flowchart TD
     T --> K["Checkpoints + metrics + telemetry"]
     K --> D["deploy --format<br/>standard | quantized"]
     K --> X["deploy --format<br/>transformers | gguf"]
-    D --> I["infer --task mlm | sbert"]
+    D --> I["infer --task mlm | sbert | causal_lm"]
     X --> I
 ```
 
-The YAML file is the single source of truth. `--device` is the only runtime
-override accepted by the CLI.
+The YAML file is the single source of truth for model/training settings.
+`--device` is the only training runtime override; the `infer` runtime flags and
+`deploy --config` are documented in §8.3.
 
 ## 3. Repository map
 
@@ -648,14 +649,14 @@ generation/KV-cache flags (CLI > YAML `inference:` > schema default).
 | Subcommand | Key flags | Behaviour |
 |---|---|---|
 | `train` | `--config`, `--config-name`, `--device`, `--list-configs` | Validates and trains (MLM, SBERT, causal LM, vision, classification) |
-| `deploy` | `--checkpoint`, `--output`, `--format`, `--yaml`, `--validate`, `--check`, `--device` | `standard`/`quantized` artifacts; `transformers`/`gguf` exports |
-| `infer` | `--model`, `--task {mlm,sbert,causal_lm}`, `--mode`, `--device`, `--batch-size`, `--top-k`, `--n-clusters`, `--prompt`, `--config`, `--max-new-tokens`, `--temperature`, `--top-p`, `--greedy`, `--kv-cache/--no-kv-cache`, `--kv-quant`, `--kv-group-size`, `--kv-protected-window`, `--kv-compress`, `--kv-num-sinks`, `--kv-window` | MLM, SBERT or autoregressive generation (with optional KV cache) |
-| `web-server` | — | Streamlit schema-driven YAML builder |
+| `deploy` | `--checkpoint`, `--output`, `--format`, `--yaml`, `--config`, `--validate`, `--check`, `--device` | `standard`/`quantized` artifacts; `transformers`/`gguf` exports. `--config` is a JSON model config for `standard`/`quantized` only. |
+| `infer` | `--model`, `--task {mlm,sbert,causal_lm}`, `--mode`, `--config`, `--device`, `--batch-size`, `--fp16`, `--benchmark`, `--benchmark-generation`, `--text`, `--input`, `--output`, `--sentence1`, `--sentence2`, `--query`, `--corpus-file`, `--sentences-file`, `--input-file`, `--output-file`, `--top-k`, `--n-clusters`, `--prompt`, `--max-new-tokens`, `--temperature`, `--top-p`, `--greedy`, `--kv-cache/--no-kv-cache`, `--kv-quant`, `--kv-group-size`, `--kv-protected-window`, `--kv-compress`, `--kv-num-sinks`, `--kv-window` | MLM, SBERT or autoregressive generation (with optional KV cache) |
+| `web-server` | `--server-port`, `--server-address`, `--server-headless`, `--development-mode` | Streamlit schema-driven YAML builder |
 
 `--format transformers|gguf` requires `--yaml`; `--check` is only valid with
-`gguf`. `infer --task causal_lm` requires a decoder artifact
-(`config.mode == "decoder"`); every generation/cache flag defaults to
-`None` (no override).
+`gguf`; `deploy --config` is rejected for export formats. `infer --task
+causal_lm` requires a decoder artifact (`config.mode == "decoder"`); every
+generation/cache flag defaults to `None` (no override).
 
 ## 9. Data paths
 

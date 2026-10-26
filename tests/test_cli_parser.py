@@ -68,6 +68,7 @@ class BuildParserStructureTests(unittest.TestCase):
         self.assertEqual(args.checkpoint, "/tmp/ckpt.pt")
         self.assertEqual(args.format, "quantized")
         self.assertIsNone(args.yaml)
+        self.assertIsNone(args.config)
         self.assertFalse(args.validate)
         self.assertFalse(args.check)
 
@@ -91,6 +92,7 @@ class BuildParserStructureTests(unittest.TestCase):
         self.assertEqual(args.batch_size, 8)
         self.assertFalse(args.fp16)
         self.assertFalse(args.benchmark)
+        self.assertFalse(args.benchmark_generation)
 
     def test_infer_task_choices(self):
         for task in ("mlm", "sbert"):
@@ -171,6 +173,27 @@ class MainDispatchTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         forwarded = mocked.call_args[0][0]
         self.assertIn("quantized", forwarded)
+
+    def test_deploy_config_forwarded_for_standard(self):
+        mocked = Mock(return_value=0)
+        fake_mod = SimpleNamespace(main=mocked)
+        with patch.dict("sys.modules", {"src.deploy.deploy": fake_mod}):
+            rc = main([
+                "deploy", "--checkpoint", "/tmp/ckpt.pt", "--output", "/tmp/out",
+                "--format", "standard", "--config", "/tmp/model.json",
+            ])
+        self.assertEqual(rc, 0)
+        forwarded = mocked.call_args[0][0]
+        self.assertIn("--config", forwarded)
+        self.assertIn("/tmp/model.json", forwarded)
+
+    def test_deploy_config_rejected_for_export_formats(self):
+        rc = main([
+            "deploy", "--checkpoint", "/tmp/ckpt.pt", "--output", "/tmp/out",
+            "--format", "transformers", "--yaml", "/tmp/train.yaml",
+            "--config", "/tmp/model.json",
+        ])
+        self.assertEqual(rc, 2)
 
     def test_deploy_transformers_dispatches_to_export_main(self):
         mocked = Mock(return_value=0)
@@ -260,6 +283,18 @@ class MainDispatchTests(unittest.TestCase):
             rc = main(["infer", "--model", "/tmp/model"])
         self.assertEqual(rc, 0)
         mocked.assert_called_once()
+
+    def test_infer_benchmark_generation_forwarded(self):
+        mocked = Mock(return_value=0)
+        fake_mod = SimpleNamespace(main=mocked)
+        with patch.dict("sys.modules", {"src.deploy.inference": fake_mod}):
+            rc = main([
+                "infer", "--model", "/tmp/model", "--task", "causal_lm",
+                "--benchmark-generation",
+            ])
+        self.assertEqual(rc, 0)
+        forwarded = mocked.call_args[0][0]
+        self.assertIn("--benchmark-generation", forwarded)
 
     def test_infer_sbert_requires_mode(self):
         infer_main = Mock(return_value=0)

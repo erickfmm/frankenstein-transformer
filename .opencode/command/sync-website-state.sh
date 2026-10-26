@@ -235,6 +235,18 @@ else
     probe PASS cmd-select "all Command tab subcommands exist in cli.py ($(echo "$page_cmds" | tr '\n' ' '))"
   fi
 
+  # 5b) Every cli.py subcommand is exposed in the Command tab.
+  missing_cmds=""
+  while IFS= read -r c; do
+    [[ -z "$c" ]] && continue
+    if ! grep -qx "$c" <<< "$page_cmds"; then missing_cmds="$missing_cmds $c"; fi
+  done <<< "$cli_subs"
+  if [[ -n "$missing_cmds" ]]; then
+    probe FAIL cmd-select-complete "Command tab is missing cli.py subcommand(s):$missing_cmds"
+  else
+    probe PASS cmd-select-complete "Command tab exposes every cli.py subcommand"
+  fi
+
   # 6) infer --task sbert --mode must not offer an empty default (CLI: required with --task sbert)
   # (capture first: `sed | grep -q` under pipefail fails via SIGPIPE when grep exits early)
   mode_block=$(sed -n '/id="opt-infer-mode"/,/<\/select>/p' "$INDEX")
@@ -242,6 +254,17 @@ else
     probe FAIL sbert-mode-default "--mode select offers empty '(default)' but infer --task sbert requires --mode (choices: similarity|search|cluster|encode)"
   else
     probe PASS sbert-mode-default "--mode has no empty default"
+  fi
+
+  # 6b) Builder exposes the schema's inference block and nullable/free-form UI.
+  if grep -q 'id="inference-section"' "$INDEX" \
+     && grep -q 'SCHEMA.properties.inference' "$INDEX" \
+     && grep -q 'object-list-builder' "$INDEX" \
+     && grep -q 'data-json-object="true"' "$INDEX" \
+     && grep -q 'data-array-item-type=' "$INDEX"; then
+    probe PASS inference-section "Builder renders inference plus nullable, JSON-object and numeric-array controls"
+  else
+    probe FAIL inference-section "Builder is missing inference-section or one of its generic schema controls"
   fi
 
   # 7) asset paths point at the deployed subfolder
@@ -316,6 +339,31 @@ for m in msgs[:15]:
   else
     probe FAIL example-yaml "no site example YAMLs found"
   fi
+
+  out=$(uv run --project "$REPO_ROOT" --extra cpu --extra train python -c "
+import sys
+sys.path.insert(0, r'$REPO_ROOT')
+from src.cli import build_parser
+html = open(r'$INDEX', encoding='utf-8').read()
+missing = []
+parser = build_parser()
+for action in parser._actions:
+    if action.dest != 'command':
+        continue
+    for name, sub in action.choices.items():
+        for subaction in sub._actions:
+            for opt in subaction.option_strings:
+                if opt in ('-h', '--help'):
+                    continue
+                if opt not in html:
+                    missing.append(name + ':' + opt)
+print('CLI_FLAGS=' + ('OK' if not missing else ','.join(missing)))
+" 2>/dev/null | grep '^CLI_FLAGS=')
+  case "$out" in
+    "CLI_FLAGS=OK") probe PASS cli-flags "every cli.py flag is represented in index.html" ;;
+    "") probe FAIL cli-flags "could not inspect cli.py flags (uv project env missing?)" ;;
+    *) probe FAIL cli-flags "index.html is missing cli.py flag(s): ${out#CLI_FLAGS=}" ;;
+  esac
 else
   probe FAIL uv "uv not found; cannot run schema/YAML probes"
 fi

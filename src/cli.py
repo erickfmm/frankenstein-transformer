@@ -12,8 +12,11 @@ subcommands:
   trained SBERT model (``--task sbert``).
 - ``web-server``: Streamlit web UI for building YAML configurations.
 
-The YAML config is the single source of truth for every model/training
-setting; ``--device`` is the only runtime override accepted on the CLI.
+The YAML config is the single source of truth for model/training settings;
+``--device`` is the only training runtime override accepted on the CLI. The
+inference subcommand exposes the runtime ``inference:`` block flags with the
+documented precedence CLI > YAML > schema defaults, and ``deploy --config``
+supplies a JSON model config only when the checkpoint does not embed one.
 """
 
 from __future__ import annotations
@@ -55,6 +58,9 @@ def _run_deploy(args: argparse.Namespace) -> int:
         print("`--check` is only supported with `--format gguf`.")
         return 2
     if args.format in ("transformers", "gguf"):
+        if args.config:
+            print("`--config` is only supported with `--format standard|quantized`.")
+            return 2
         if not args.yaml:
             print(f"`--yaml` is required when using `--format {args.format}`.")
             return 2
@@ -75,6 +81,8 @@ def _run_deploy(args: argparse.Namespace) -> int:
             "--device",
             args.device,
         ]
+        if args.config:
+            argv.extend(["--config", args.config])
         if args.validate:
             argv.append("--validate")
         result = deploy_main(argv)
@@ -173,6 +181,8 @@ def _run_infer(args: argparse.Namespace) -> int:
         argv.append("--fp16")
     if args.benchmark:
         argv.append("--benchmark")
+    if args.benchmark_generation:
+        argv.append("--benchmark-generation")
     # Generation / KV-cache flags: forward only explicitly-passed values so
     # the CLI > YAML > schema-default precedence holds (D2).
     for flag in (
@@ -281,6 +291,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Training YAML (required for --format transformers|gguf)",
     )
+    deploy_parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Optional JSON model config for --format standard|quantized (when not stored in the checkpoint)",
+    )
     deploy_parser.add_argument("--validate", action="store_true", help="Validate artifact after creation (standard/quantized)")
     deploy_parser.add_argument("--check", action="store_true", help="Only run the GGUF compatibility check and exit (gguf only)")
     deploy_parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
@@ -332,6 +348,13 @@ def build_parser() -> argparse.ArgumentParser:
     infer_parser.add_argument("--output", type=str, default=None, help="Output file for results (mlm task)")
     infer_parser.add_argument("--fp16", action="store_true", help="Use FP16 precision (mlm task)")
     infer_parser.add_argument("--benchmark", action="store_true", help="Run inference benchmark (mlm task)")
+    infer_parser.add_argument(
+        "--benchmark-generation",
+        dest="benchmark_generation",
+        action="store_true",
+        default=False,
+        help="Benchmark generation prefill/decode throughput (causal_lm task)",
+    )
     infer_parser.add_argument("--sentence1", type=str, default=None, help="First sentence (sbert similarity)")
     infer_parser.add_argument("--sentence2", type=str, default=None, help="Second sentence (sbert similarity)")
     infer_parser.add_argument("--query", type=str, default=None, help="Search query (sbert search)")
