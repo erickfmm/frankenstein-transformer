@@ -1,0 +1,359 @@
+\section{KV Cache and Incremental Decoding}
+\label{sec:annex-kv-cache}
+
+Autoregressive decoding is dominated by a structural asymmetry: the prefill stage processes the whole prompt in one quadratic pass, while each decode step appends a single token and needs only one new query row against an already-computed history. Recomputing the full sequence at every step turns generation into an $\mathcal{O}(S^2)$-per-token procedure; maintaining the per-layer history turns it into $\mathcal{O}(S)$ per token with constant-size work per new position. This annex documents the toolkit's KV-cache subsystem (\texttt{src/model/cache/}), the correctness contracts that make cached and uncached execution numerically interchangeable, the per-family incremental recipes, and the write-time quantizers and read-time eviction policies layered on top of it.
+
+Three design commitments frame everything below. First, the cache is \emph{opt-in}: with \texttt{inference.kv\_cache.enabled} unset (default), generation executes the original full-recompute loop bit-identically. Second, the cache is \emph{central and declarative}: a single manager is threaded through the model, and a per-mixer capability registry decides which layers may cache --- never the other way around. Third, the cache is \emph{never fatal} (decision D5): a layer whose source formulation does not admit an exact incremental form silently runs uncached, so enabling the cache can only ever change speed, not correctness or availability.
+
+\subsection{Motivation and Scope}
+
+Let $S$ be the prompt length and $T$ the number of generated tokens. Without a cache, step $t$ feeds $S+t-1$ tokens through every layer and discards all intermediate keys and values, for total attention work
+\[
+\mathcal{O}\!\left(\sum_{t=0}^{T-1} (S+t)^2\right) \;=\; \mathcal{O}\!\left(T S^2 + T^2 S + T^3\right).
+\]
+With a cache, the prefill costs $\mathcal{O}(S^2)$ once and each decode step costs $\mathcal{O}(S+t)$:
+\[
+\mathcal{O}\!\left(S^2 + \sum_{t=0}^{T-1}(S+t)\right) \;=\; \mathcal{O}\!\left(S^2 + TS + T^2\right).
+\]
+The difference is the familiar one between re-encoding a conversation and continuing it.
+
+The subsystem covers every one of the forty-four dispatchable layer types. Twenty-six have parity-tested incremental branches; the remainder are registered with an explicit, paper-based rationale for running uncached (\S\ref{sec:kv-fallbacks}). Quantization and eviction are orthogonal to the mixer mathematics: codecs transform tensors at \emph{write} time and policies act at \emph{read} time, so the same \texttt{int8} or \texttt{int4\_kivi} codec serves a dense, latent or ring slot without per-mixer code \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
+
+\subsection{Cache Architecture}
+\label{sec:kv-architecture}
+
+\subsubsection{Central Manager and Layer Identity}
+
+The unit of caching is a logical layer, not a module. The encoder may re-execute the same physical stack \texttt{num\_loops} times (looped depth) and, under Hyperloop, partitions it into a begin block, a looped middle block and an end block. The same \texttt{HybridLayer} object therefore plays several distinct roles during one forward pass. The cache keys every slot by the global \textbf{logical layer index}
+\[
+\ell \;=\; 0,\dots,\, \texttt{num\_layers}\times\texttt{num\_loops}-1 ,
+\]
+which the encoder already threads into every mixer call. Two logical roles never share storage even though they share weights.
+
+\begin{algorithm}[H]
+\caption{Cached generation loop (prefill + decode)}
+\begin{algorithmic}[1]
+\Require prompt ids $\mathbf{x}_{1:S}$; generation config $\theta$; model $f$
+\Ensure generated ids
+\State $\mathcal{C} \gets \textsc{Cache.new}(f,\theta)$ \Comment{lazy slots, token tail, write cursor}
+\State $\mathbf{L}, \mathcal{C} \gets f(\mathbf{x}_{1:S}; \text{past}=\mathcal{C}, \text{use\_cache}=\top, \text{return\_cache}=\top)$ \Comment{prefill}
+\State $\mathbf{z} \gets \mathbf{L}_{:,S,:}$
+\For{$t \gets 0$ \textbf{to} $T-1$}
+    \State $y \gets \textsc{Sample}(\mathbf{z};\theta)$ \Comment{greedy, top-$k$, top-$p$}
+    \State \textbf{append} $y$ to the output
+    \If{$t < T-1$}
+        \State $p \gets \mathcal{C}.\text{next\_position}()$
+        \State $\mathbf{L}, \mathcal{C} \gets f(y; \text{past}=\mathcal{C}, \text{use\_cache}=\top, \text{cache\_position}=p, \text{return\_cache}=\top)$
+        \State $\mathbf{z} \gets \mathbf{L}_{:,-1,:}$
+    \EndIf
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+The manager owns the per-layer slot dictionary, a FIFO of recent token ids (consumed by token-level mixers such as Engram), a write cursor advanced by each forward, and the resolved quantization codec and eviction policy. Slot creation is lazy and driven by the layer on first use, so a heterogeneous \texttt{layer\_pattern} --- say a dense layer, a latent layer and a recurrent layer in one stack --- holds three different slot kinds without special-casing. Rollback is a first-class operation: \texttt{truncate(n)} keeps the first $n$ positions across all slots (cheap list truncation with length bookkeeping; recurrent-state slots are no-ops because they are not position-indexed), which is the primitive required by speculative decoding and early-exit verification \citep{layerskip_elhoushi_2024}.
+
+\subsubsection{Typed Slots}
+
+Six slot kinds cover the taxonomy of \S\ref{sec:kv-recipes}. Position-indexed slots store an ordered list of \emph{parts}; a part is either full precision or an encoded payload, and reading concatenates $\big[\text{sinks} \mid \text{history} \mid \text{protected window}\big]$.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.98\linewidth}{l L{0.34\linewidth} X}
+\toprule
+\textbf{Slot kind} & \textbf{Stores} & \textbf{Used by} \\
+\midrule
+\texttt{kv} & post-RoPE keys and values $(\text{B},H_{kv},T,d)$; absolute positions; optional per-token extras & quadratic softmax mixers \\
+\texttt{latent\_kv} & named low-rank streams: latent $\mathbf{c}_{KV}$, decoupled RoPE key, grouped keys, latent values & latent family \\
+\texttt{state} & one recurrent matrix (+ gate accumulators), updated in place; constant memory & recurrent / linear family \\
+\texttt{ring} & capacity-bounded K/V with a pinned sink region & sliding-window family \\
+\texttt{conv\_tail} & last $k-1$ pre-convolution rows (FIFO) & causal short convolutions \\
+\texttt{token\_tail} & last $n$ token ids & Engram n-gram lookup \\
+\bottomrule
+\end{tabularx}
+\caption{Typed cache slots. Position-indexed kinds (\texttt{kv}, \texttt{ring}, \texttt{latent\_kv}) carry absolute position metadata, so eviction gaps keep correct relative distances; \texttt{state} and \texttt{conv\_tail} are position-less and never evicted.}
+\label{tab:kv-slots}
+\end{table}
+
+\subsubsection{Capability Registry}
+
+One frozen record per \texttt{layer\_pattern} enum value declares whether and how a layer caches:
+\[
+\textsc{CacheSpec} \;=\; \big(\texttt{supported},\ \texttt{slot\_type},\ \texttt{slot\_types},\ \texttt{extras},\ \texttt{notes}\big).
+\]
+The registry is the single source of truth consulted both at runtime (slot resolution) and statically (configuration warnings). A layer receives a slot only when its mixer's formulation admits a cache \emph{and} an incremental branch is implemented and parity-tested; otherwise it receives \texttt{None} and executes the legacy path. The registry is therefore also the project's honest inventory of what caching means for each paper: \texttt{supported} records the source formulation, the implemented set records engineering status, and \texttt{notes} records the reason.
+
+\subsubsection{Forward Plumbing and Fallback Semantics}
+
+All signature changes are additive and default to the legacy behaviour:
+\begin{align*}
+f_{\text{mixer}}&(\mathbf{x}; \ell, \text{pe}, \texttt{cache}=\varnothing, \texttt{cache\_position}=\varnothing),\\
+f_{\text{model}}&(\mathbf{x}; \texttt{past\_key\_values}=\varnothing, \texttt{use\_cache}=\bot, \texttt{return\_cache}=\bot).
+\end{align*}
+\texttt{HybridLayer} resolves the slot once per call and honours the four historical dispatch shapes: stateless linear (\texttt{mamba}) is called without arguments because it has nothing to cache; the two whole-stream mixers (\texttt{ode}, \texttt{retnet}) receive the slot only when their spec supports it; Engram additionally receives \texttt{input\_ids}; every other mixer receives \texttt{cache} and \texttt{cache\_position}. Unsupported or disabled layers are called exactly as before, which keeps the uncached path bit-identical.
+
+\subsection{Correctness Contracts}
+\label{sec:kv-correctness}
+
+Cached and uncached execution must agree on the query row they share: the last row of a full forward and the row produced by a decode step. The contracts below establish that agreement.
+
+\subsubsection{Post-RoPE Storage and the Absolute Schedule}
+
+Keys are stored \emph{after} the rotary transform, the industry convention: the cache holds the rotated vectors, and no re-rotation is needed when a ring buffer wraps. The prerequisite is that rotation use absolute positions on both sides of the cache boundary. RoPE, HoPE and sinusoidal-rotary accept a position offset $\pi_0$ and place the incoming tokens at
+\[
+\pi_i = \big(\pi_0 + i\big)\cdot \texttt{scaling}, \qquad i = 0,\dots,S_{\text{new}}-1 ,
+\]
+so a decode step at cursor $p$ rotates exactly as the full forward rotated position $p$. The slot metadata versions the scaling factor; a runtime change of the RoPE schedule invalidates already-rotated keys and is reported as a configuration error at generation start, never mid-decode \citep{su_rope_2024,dai_hope_2025}.
+
+\subsubsection{Additive Score Biases}
+
+ALiBi and BAM inject position through the score matrix, so they carry no positional tensor in the cache --- precisely their appeal for length extrapolation \citep{press_alibi_2022,bianchessi_bam_2025}. The full-square builder generalizes to a windowed builder over absolute query and key positions:
+\[
+b_{h,i,j} \;=\; -\,\text{slope}_h \cdot \big|q_i - \kappa_j\big| \quad\text{(ALiBi)},
+\qquad
+b_{h,i,j} \;=\; -\Big(\big|\kappa_j - \alpha_h q_i - \mu_h\big| + \varepsilon\Big)^{\beta_h} \quad\text{(BAM)},
+\]
+where $q_i = \pi_0 + i$ for the incoming query positions and $\kappa_j$ are the cached absolute key positions. With $\pi_0 = 0$ and $\kappa_j = j$ this reproduces the legacy matrix exactly; after eviction, $\kappa_j$ may be non-contiguous, and the distances remain correct by construction.
+
+\subsubsection{Length-Dependent Rescaling}
+
+Scalable Softmax multiplies pre-softmax logits by $s\cdot\ln n$ where $n$ is the context length. In cached decoding the context of the newest query is the accumulated cache, so the rescale uses
+\[
+\ln\big(n_{\text{cached}} + S_{\text{new}}\big)
+\]
+rather than the size of the incoming chunk. For the final row of a full forward over $S_{\text{cached}}+S_{\text{new}}$ tokens both expressions coincide, which is exactly the row the parity tests compare.
+
+\subsubsection{Causal Masking from Positions}
+
+Masks are derived from metadata rather than from array indices:
+\[
+M_{ij} \;=\; \big[\,q_i < \kappa_j\,\big] \;=\; \big[\,\pi_0 + i < \kappa_j\,\big],
+\]
+which reduces to the classical upper-triangular mask when the cache starts empty and $\kappa_j = j$. For a single decode query every cached key satisfies $\kappa_j \le q_i$, so the mask is empty and the step needs no mask at all. Sparse families replace the causal predicate with a position-based pattern (\S\ref{sec:kv-recipes}).
+
+\subsubsection{Absolute Positional Encodings}
+
+Additive absolute encodings (sinusoidal, learned) are applied once to the embeddings. In cached decoding the embedding lookup for the new token receives the same offset, so token $p$ is augmented with row $p$ of the table:
+\[
+\mathbf{x}_i \;\leftarrow\; \mathbf{x}_i + \text{PE}\big[\pi_0 + i\big].
+\]
+
+\subsubsection{Interlocks with Mixture-of-Depths, mHC, Hyperloop and AttnRes}
+
+Mixture-of-Depths routes a fraction of tokens through each layer. Routing a prompt would produce ragged, token-dependent caches, which v1 deliberately excludes; when the cache is active, prefill is forced dense while decode degenerates to dense automatically (one token is always within capacity). The divergence is one-directional: forcing dense can only add keys, never attend to keys that do not exist. mHC and Hyperloop residual streams are per-token state and flow through a cached forward without cross-step carry; the loop-level hyper-connections fire per iteration and need no slot of their own. Attention-residual variants keep cross-layer buffers that must accumulate across steps, a mode not yet implemented; the combination disables caching for that forward with a warning and falls back to full recompute. PaPE augmentations are content-dependent, so caching post-augmentation keys is not provably exact; such layers fall back per layer \citep{ohrstrom_pape_2026}.
+
+\subsection{Incremental Recipes by Family}
+\label{sec:kv-recipes}
+
+\subsubsection{Quadratic Softmax Family}
+
+For a dense attention layer with $H$ query heads, $H_{kv}$ key/value heads and head dimension $d$, the cached branch appends the new keys and values and attends over the whole retained prefix:
+\[
+\mathbf{K} \gets \big[\mathbf{K}_{\text{cached}};\ \mathbf{k}_{\text{new}}\big],\quad
+\mathbf{V} \gets \big[\mathbf{V}_{\text{cached}};\ \mathbf{v}_{\text{new}}\big],\quad
+\mathbf{S} = \frac{\mathbf{q}\mathbf{K}^\top}{\sqrt d} + \mathbf{B},\quad
+\mathbf{o} = \operatorname{softmax}(\mathbf{S})\,\mathbf{V},
+\]
+with $\mathbf{B}$ the positional bias of \S\ref{sec:kv-correctness}. Grouped-query attention caches only the $H_{kv}$ compact heads and expands head groups after the read, which is where its cache advantage originates \citep{ainslie_gqa_2023}. The family's variations are all captured by substituting the normalizer or the bias:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Sigmoid attention.} The normalizer is replaced by an $\ell_1$ row normalization, $\hat{\mathbf{S}}_{ij} = \sigma(\mathbf{S}_{ij}) / \big(\sum_{j'}\sigma(\mathbf{S}_{ij'}) + \varepsilon\big)$. Because sigmoid is not shift-invariant, the denominator must be re-summed over the full cached prefix at every step; no online-softmax maximum trick exists \citep{ramapuram_theory_2024}.
+    \item \textbf{Gated softmax.} The gate $\sigma(\mathbf{x}\mathbf{W}_g)$ multiplies the attention output and depends only on the current token, so nothing extra is cached \citep{qiu_gated_attention_2025}.
+    \item \textbf{Forgetting attention.} The logit bias is $D_{ij} = c_i - c_j$ with $c_i = \sum_{l\le i}\log f_l$ the cumulative log-forget sum. The cache stores one scalar per token and head as an extra; decode extends the running sum from the last cached token and evaluates a single row of $D$ against the cached column \citep{lin_forgetting_transformer_2025}.
+    \item \textbf{Titans.} The implemented layer is the attention window; the memory module is outside the cached path. Standard append/read applies \citep{behrouz_titans_2025}.
+    \item \textbf{Interleaved head attention.} Pseudo-key/value tensors are static learned head mixings computed on the fly; only the real per-token K/V is cached, and the mixing is applied after the read (the mixing is a per-token head-space map, so applying it post-read is exact) \citep{duvvuri_iha_2026}.
+\end{itemize}
+
+\subsubsection{Latent Family}
+
+Latent mixers compress keys and values into a low-rank latent and cache only that latent. Writing $\mathbf{c}_{KV} = \mathbf{W}_{DKV}\mathbf{x}$, decode re-expands and rotates per step:
+\[
+\mathbf{k} = \mathbf{W}_{UK}\mathbf{c}_{KV},\qquad
+\mathbf{v} = \mathbf{W}_{UV}\mathbf{c}_{KV},\qquad
+[\mathbf{q},\mathbf{k}] \leftarrow \operatorname{RoPE}\big([\mathbf{q},\mathbf{k}], \pi_0\big),
+\]
+with attention as in the dense case \citep{mehta_mla_2025}. DeepSeek-style MLA caches a decoupled RoPE key and can absorb the up-projections into the query, avoiding per-step expansion; this toolkit's variant applies RoPE to the decompressed query and key, so absorption is unavailable and expansion is the documented cost of halving the cache. GQLA reuses one weight set with two algebraically equivalent decode paths, and the slot layout follows the configured path \citep{meng_gqla_2026}. MLRA partitions the latent into disjoint sub-heads, which is a tensor-parallel sharding win rather than a compression win; the total cache is MLA-sized \citep{liu_mlra_2026}. Tucker attention caches the factorized key and value latents and expands through the core projections \citep{klein_tucker_2026}. GTA caches one key per head \emph{group} plus latent values; because rotation at a fixed position is head-independent, group means commute with the rotation and caching the mean is exact \citep{sun_gta_2025}. MTLA is the only method that compresses along time: a hyper-network merges adjacent cache vectors at stride boundaries, the schedule is dynamic, and its parity with a chunk-level training schedule is a named risk, so it currently falls back \citep{deng_mtla_2025}.
+
+\subsubsection{Sparse and Window Families}
+
+Sparse patterns are evaluated as predicates over absolute positions, never over array indices \citep{child_sparse_transformer_2019}:
+\[
+\text{attend}(q_i,\kappa_j) ;\Longleftrightarrow; \text{pattern}\big(\pi_0+i,\ \kappa_j\big) \;\wedge\; \kappa_j \le \pi_0+i .
+\]
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Sliding window with sinks.} Every query attends to the first $s$ positions plus the last $w-s$; the ring buffer's retention policy \emph{is} the attention pattern, so a decode step attends the cached set directly and a multi-token chunk is pattern-masked \citep{jolicoeur_sliding_window_2026,xiao_streaming_sinks_2024}. Removing the sinks collapses quality, which is why they are pinned both by the pattern and by the ring.
+    \item \textbf{Longformer.} Symmetric windows plus task-specified global tokens; because a global token may sit anywhere, the slot is unbounded and the pattern is evaluated over positions \citep{beltagy_longformer_2020}.
+    \item \textbf{BigBird.} Window, globals and random links. Random links must be reproducible across incremental steps, so they are drawn from a generator seeded by $(\ell, q_i)$ over $[0, q_i]$: links beyond the query are causal-masked anyway, so the effective mask is unchanged while becoming deterministic \citep{zaheer_bigbird_2020}.
+    \item \textbf{Sparse Transformers.} Strided and fixed factorized patterns, where a token's summary-column role changes as blocks complete; position-based evaluation handles this, and an automatic stride is resolved from the accumulated length so the full and cached paths agree \citep{child_sparse_transformer_2019}.
+    \item \textbf{FASA.} Per-head importance is computed from dominant RoPE-frequency chunks and re-ranked per query; it is row-local, so a decode step re-ranks the cached keys exactly \citep{wang_fasa_2026}. SpargeAttn, NSA, MiniMax and SparDA select blocks from chunk-level statistics and therefore fall back in v1 \citep{zhang_spargeattn_2025,yuan_nsa_2025,lai_minimax_2026,fu_sparda_2026}.
+\end{itemize}
+
+\subsubsection{Recurrent and Linear State Family}
+
+Recurrent mixers carry a fixed-size state; caching means persisting that state, so memory is constant and no eviction is meaningful. With the paper convention $\mathbf{S}_t \in \mathbb{R}^{d_v\times d_k}$ and read $\mathbf{o}_t = \mathbf{S}_t\mathbf{q}_t$:
+
+\begin{align}
+\text{RetNet:}\quad & \mathbf{S}_t = \gamma_h\,\mathbf{S}_{t-1} + \mathbf{v}_t\mathbf{k}_t^\top, \qquad \text{per-head multi-scale }\gamma_h, \\
+\text{GLA:}\quad & \mathbf{S}_t = \mathbf{G}_t \odot \mathbf{S}_{t-1} + \mathbf{v}_t\mathbf{k}_t^\top, \qquad \mathbf{G}_t = \operatorname{diag}\big(\exp(\operatorname{logsigmoid}(\mathbf{W}_{gk}\mathbf{x}_t)/c)\big), \\
+\text{DeltaNet:}\quad & \mathbf{S}_t = \mathbf{S}_{t-1}\big(\mathbf{I} - \beta_t\mathbf{k}_t\mathbf{k}_t^\top\big) + \beta_t\mathbf{v}_t\mathbf{k}_t^\top, \\
+\text{Gated DeltaNet:}\quad & \mathbf{S}_t = \alpha_t\,\mathbf{S}_{t-1}\big(\mathbf{I} - \beta_t\mathbf{k}_t\mathbf{k}_t^\top\big) + \beta_t\mathbf{v}_t\mathbf{k}_t^\top, \\
+\text{GDN-2:}\quad & \mathbf{S}_t = \big(\mathbf{I} - \mathbf{k}_t(\mathbf{b}_t\odot\mathbf{k}_t)^\top\big)\mathbf{D}_t\mathbf{S}_{t-1} + \mathbf{k}_t(\mathbf{w}_t\odot\mathbf{v}_t)^\top, \\
+\text{HGRN2:}\quad & \mathbf{S}_t = \operatorname{diag}(\mathbf{g}_t)\mathbf{S}_{t-1} + \mathbf{v}_t\mathbf{k}_t^\top, \qquad g_{t,j} = b_\ell + (1-b_\ell)\sigma(\cdot), \\
+\text{KDA:}\quad & \mathbf{S}_t = \big(\mathbf{I} - \beta_t\mathbf{k}_t\mathbf{k}_t^\top\big)\mathbf{D}_t\mathbf{S}_{t-1} + \beta_t\mathbf{k}_t\mathbf{v}_t^\top, \\
+\text{GMA:}\quad & \tilde{\mathbf{V}}_t = \tilde{\mathbf{V}}_{t-1} + \boldsymbol{\gamma}^{K}_t \otimes \mathbf{v}_t,\quad \mathbf{Z}_t = \mathbf{Z}_{t-1} + \boldsymbol{\gamma}^{K}_t, \quad \mathbf{o}_t = \frac{\sum_k \gamma^{Q}_{t,k}\tilde{\mathbf{V}}_{t,k}}{\sum_k \gamma^{Q}_{t,k}Z_{t,k} + \varepsilon},
+\end{align}
+referring to \citet{sun_retentive_2023}, \citet{yang_gla_2023}, \citet{yang_deltanet_2024}, \citet{yang_gated_deltanet_2024}, \citet{hatamizadeh_gated_deltanet2_2026}, \citet{qin_hgrn2_2024}, \citet{kimi_kda_2025} and \citet{huang_gma_2026}.
+
+Two subtleties deserve emphasis. First, RetNet's parallel retention sum and the recurrence above produce the same row for the same query --- algebraically the parallel form factors through the running state --- so the cached path may use the recurrent form while the uncached path uses the parallel one, and the parity test compares the shared row. Second, GDN-2 and KDA decay along the \emph{key} axis ($\mathbf{D}_t$ multiplies the state from the left), whereas GLA and HGRN2 gate the key axis element-wise; both are diagonal in the key dimension, which is what makes a simple in-place recurrence exact. The ODE-attention block is excluded: its solver re-derives every token's intermediate state at each integration step, so a converged-state cache cannot reproduce the full path.
+
+\subsubsection{Auxiliary State and Documented Fallbacks}
+\label{sec:kv-fallbacks}
+
+Some mixers need a small FIFO beside their activation cache. Falcon's chunk-parallel variants bound a rehearsal window, so exact continuation requires the last $B-1$ prefix-aligned pairs; CCA/CCGQA stack two causal convolutions and need the last $k-1$ pre-convolution latents plus a shifted value; Engram needs the last $n_{\max}-1$ token ids only. These are the \texttt{conv\_tail} and \texttt{token\_tail} kinds.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.98\linewidth}{l X}
+\toprule
+\textbf{Mixer} & \textbf{Why it runs uncached in v1} \\
+\midrule
+\texttt{mamba} & linear placeholder; stateless per token, inherently incremental \\
+\texttt{ssog\_attn} & bidirectional vision grid; no causal formulation exists \\
+\texttt{ode} & solver re-derives all tokens' intermediate states each step \\
+\texttt{falcon1..3a} & chunk-parallel rehearsal FIFO (\texttt{conv\_tail} design pending) \\
+\texttt{cca\_attn}, \texttt{ccgqa\_attn} & two causal convolutions + shifted value \\
+\texttt{engram\_attn} & token-id tail (\texttt{token\_tail} design pending) \\
+\texttt{nsa}, \texttt{msa}, \texttt{sparda}, \texttt{sparge} & block selection uses chunk-level statistics, not row-local \\
+\texttt{mtla\_attn} & dynamic hyper-network merge schedule (risk R1) \\
+\texttt{sparsek\_attn} & eviction-policy design (SparseK is a policy, not a slot) \\
+PaPE layers & content-dependent q/k augmentation; exactness unproven \\
+\bottomrule
+\end{tabularx}
+\caption{Documented uncached fallbacks. Each entry carries a paper-based rationale in the capability registry and a loader warning when the cache is enabled; none of them can make inference fail.}
+\label{tab:kv-fallbacks}
+\end{table}
+
+\subsection{KV-Cache Quantization}
+\label{sec:kv-quant}
+
+Quantization is a write-time transform: the slot encodes on append and dequantizes on read, so the stored footprint shrinks while the mixer consumes ordinary floating-point tensors. This placement follows the literature and keeps codecs orthogonal to mixers: the same codec serves dense, latent and ring slots, and latent slots may declare a different granularity per stream. Recurrent states are \emph{not} quantized in v1: the evidence base there is thinnest, and their constant size makes the payoff small.
+
+\subsubsection{Symmetric int8 with Asymmetric Axes}
+
+Keys exhibit persistent per-channel outliers (a RoPE-frequency structure), while values exhibit per-token outliers. The \texttt{int8} codec therefore uses different reduction axes:
+\[
+\text{keys (channel axis):}\quad s_{h,c} = \frac{\max_{t\in g}|K_{t,h,c}|}{127},\qquad \hat{K} = \operatorname{round}\!\big(K/s\big)\in[-127,127];
+\]
+\[
+\text{values (token axis):}\quad s_{t,h} = \frac{\max_{c}|V_{t,h,c}|}{127},\qquad \hat{V} = \operatorname{round}\!\big(V/s\big)\in[-127,127].
+\]
+Each stored block carries its own scales, so a token-by-token decode block gets exact per-token scales and the relative rounding error stays bounded by $1/127\approx 0.8\%$ independently of block size. Dequantization is $\hat{K}\odot s$; merging two payloads is dequantize, concatenate along time, and requantize.
+
+\subsubsection{Group-Wise int4 with a Protected Window}
+
+The \texttt{int4\_kivi} codec combines KIVI's group-wise low-bit quantization with the two-region protection pattern of streaming sinks and SKVQ. Signed levels are $[-7,7]$; $g$ tokens form a group along time; granularity follows the int8 codec. Two regions are kept in full precision:
+\begin{itemize}[leftmargin=*]
+    \item the most recent $w_p$ tokens (the \emph{protected window}), never quantized;
+    \item the first $s$ tokens (\emph{sinks}), never quantized and never evicted.
+\end{itemize}
+Append semantics mirror KIVI's residual window: a decode step pushes rows into the full-precision window, and as soon as the oldest chunk completes a group of $g$ tokens that group is quantized and moved into the history; prefill quantizes whole groups immediately. Reading concatenates $[\text{quantized history}\mid\text{protected window}]$. With signed 4-bit levels, the worst-case absolute error of a group quantizer is half a step,
+\[
+|K-\hat{K}| \;\le\; \frac{s}{2} \;=\; \frac{\max_{g}|K|}{2\cdot 7} \;\approx\; 7.1\%\ \text{of the group maximum},
+\]
+which is the bound asserted by the codec tests. Because sinks and the protected window stay exact, the tokens that dominate attention mass are never perturbed \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024,xiao_streaming_sinks_2024}.
+
+\subsubsection{Interface and Future Codecs}
+
+Both codecs implement the same three-method contract: \texttt{encode\_write}, \texttt{decode\_read} and \texttt{update}. Codecs must never raise on unknown tensors: on any internal error they fall back to identity and record a one-time warning, preserving D5 at the storage layer as well. The v1 registry contains \texttt{none}, \texttt{int8} and \texttt{int4\_kivi}; further methods are interface-ready but deliberately unimplemented, and requesting one is a configuration error at generation start: \texttt{int2\_kivi} (2-bit with dual-axis variance normalization), \texttt{palu\_lowrank} (rank-$r$ projection with reconstruction), \texttt{commvq} (RoPE-commutative codebooks, attention in codebook space), \texttt{qjl\_sketch} (1-bit Johnson--Lindenstrauss signs with an unbiased inner-product estimator) and \texttt{block\_gtq} (per-RoPE-frequency bit allocation). Slot metadata already records the positional-encoding type and the scaling version, which is what a codebook or pre-RoPE codec needs to declare its compatibility. Sensitivity-aware per-layer bit allocation (\texttt{k\_bits} $\ne$ \texttt{v\_bits}) is exposed by configuration, since attention mass is pyramidal in depth.
+
+\subsection{Compression and Eviction}
+\label{sec:kv-evict}
+
+Eviction is a read-time transform; keeping it orthogonal to quantization is what allows a quantized cache to be evicted and an evicted cache to be quantized. The v1 policy is StreamingLLM's window-with-sinks: pin the first $s$ positions, retain the last $w$ positions, drop everything in between. The retained budget is
+\[
+\mathcal{B} \;=\; s + w ,
+\]
+optionally overridden per layer by a budget vector $\mathcal{B}_\ell$ (attention mass is pyramidal in depth, so deeper layers tolerate smaller budgets). Policies act only on position-indexed slots; recurrent states are constant-size and MTLA manages its own merging schedule, so external policies are excluded there by construction. Future enum-ready policies are H2O (accumulate per-token attention mass and evict the lightest), SnapKV (one-shot post-prefill compression from a look-ahead window), PyramidKV (static depth-dependent budgets) and SparseK (learned scorer with permanent within-generation eviction, which is why it is modeled as a policy rather than a slot).
+
+\subsection{Configuration and Deployment Interface}
+\label{sec:kv-config}
+
+The runtime block is validated by a dedicated schema module and flattened into a runtime dataclass that is deliberately \emph{not} part of the architectural configuration, mirroring the \texttt{training.*} separation.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.98\linewidth}{l l X}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\texttt{inference.generation.max\_new\_tokens} & $64$ & tokens generated after the prompt \\
+\texttt{inference.generation.temperature} & $1.0$ & softmax temperature \\
+\texttt{inference.generation.top\_k} & $50$ & top-$k$ filter; $0$ disables \\
+\texttt{inference.generation.top\_p} & $1.0$ & nucleus mass; $1.0$ disables \\
+\texttt{inference.generation.greedy} & \texttt{false} & argmax decoding \\
+\midrule
+\texttt{kv\_cache.enabled} & \texttt{false} & opt-in; unset keeps the legacy loop bit-identical \\
+\texttt{quantization.method} & \texttt{none} & \texttt{none}, \texttt{int8}, \texttt{int4\_kivi} \\
+\texttt{quantization.k\_bits} / \texttt{v\_bits} & $4$ / $4$ & int4 bit widths (int8 fixes 8) \\
+\texttt{quantization.group\_size} & $64$ & tokens per group \\
+\texttt{quantization.protected\_window} & $32$ & most recent tokens kept in full precision \\
+\texttt{compression.method} & \texttt{none} & \texttt{none}, \texttt{window\_sinks} \\
+\texttt{compression.num\_sinks} & $4$ & pinned leading positions \\
+\texttt{compression.window} & $512$ & sliding window size \\
+\texttt{compression.budget} & \texttt{null} & scalar budget per layer; \texttt{null} = unlimited \\
+\texttt{compression.per\_layer\_budgets} & $[\,]$ & per-layer budget vector, overrides the scalar \\
+\texttt{per\_mixer[].enabled} & \texttt{true} & per-mixer opt-out \\
+\bottomrule
+\end{tabularx}
+\caption{Inference runtime configuration. Cross-key rules: compression requires \texttt{enabled}, and \texttt{window} $\ge$ \texttt{protected\_window} so the protected region can never be evicted.}
+\label{tab:kv-config}
+\end{table}
+
+Resolution order is \textbf{CLI flags $>$ YAML \texttt{inference:} $>$ schema defaults}. Every CLI flag defaults to ``unset'', so a YAML preset is patched leaf-by-leaf rather than replaced:
+\begin{center}
+\footnotesize
+\texttt{infer --task causal\_lm --config\,<preset> --prompt "\ldots" --kv-cache --kv-quant int4\_kivi --kv-compress window\_sinks --kv-window 512}
+\end{center}
+The deployer serializes the resolved block into the artifact's \texttt{config.json} under \texttt{"inference"}, and the inference engine reads it back, so cached generation is reproducible without the original YAML. The HuggingFace export's causal-LM wrapper accepts \texttt{past\_key\_values}, \texttt{use\_cache} and \texttt{cache\_position} and forwards them to the decoder instead of discarding extras, and implements \texttt{prepare\_inputs\_for\_generation} so that a standard transformers loop feeds only the last token once a cache exists.
+
+\subsection{Validation}
+\label{sec:kv-validation}
+
+The central test is a parity protocol: for a mixer and a positional encoding, compare a full forward over $S$ tokens against prefill over $S-k$ tokens followed by $k$ decode steps, requiring agreement on the shared row. Greedy generation is compared token-for-token first; if a numerical discrepancy appears, last-position logits are compared with $\mathrm{rtol}=10^{-4}$, $\mathrm{atol}=10^{-5}$ in fp32 with quantizer \texttt{none} and BitNet disabled.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.98\linewidth}{l X}
+\toprule
+\textbf{Suite} & \textbf{Assertions} \\
+\midrule
+slots & append/read/truncate/device moves; ring wrap with position metadata; in-place state; conv-tail FIFO; token tail \\
+codecs & int8 error $\le 10^{-2}$; int4 error $\le 7.5\times10^{-2}$; protected window exactly fp; group boundaries; \texttt{update} $=$ dequant$\to$concat$\to$requant \\
+mixers & every implemented mixer $\times$ \{rope, none, ALiBi\}: full forward vs prefill+decode \\
+fallback & all $44$ enum values run with the cache on; unimplemented mixers bit-identical on/off; PaPE per-layer fallback \\
+mechanisms & looped depth (distinct slots per logical layer), Hyperloop, mHC, MoD dense prefill, AttnRes fallback \\
+quantization & int8/int4 drift bounds with BitNet on and off; int4 engages on short prompts; protected window exact \\
+compression & sinks pinned after eviction; retained region correct; composition with int8 \\
+generation & greedy parity exact; seeded sampling determinism; \texttt{truncate} rollback \\
+config & schema-default parity, flattening, precedence, cross-key rules, fallback warnings, serialization \\
+\bottomrule
+\end{tabularx}
+\caption{Validation matrix. The registry is also cross-checked against the schema's layer-pattern enum so a new mixer cannot be added without a cache decision.}
+\label{tab:kv-tests}
+\end{table}
+
+\subsection{Relation to Prior Work}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{KV-cache quantization} (KIVI, KVQuant, SKVQ): adopted as write-time codecs with asymmetric granularity and protected outlier regions; the group-window append semantics follow KIVI's residual window.
+    \item \textbf{Eviction and sparsity} (StreamingLLM, H2O, SnapKV, PyramidKV, Quest): adopted as read-time policies; Quest-style page metadata and query-aware reading are future work inside the slot extras.
+    \item \textbf{Paged and prefix sharing} (PagedAttention/vLLM, RadixAttention): structurally compatible --- slots are content-agnostic and serializable --- but block tables and prefix sharing are out of scope for v1.
+    \item \textbf{Hybrid schedulers} (Jamba, Griffin, Zamba): the same slot dictionary holds attention K/V and recurrent states, which is the pattern these systems established.
+    \item \textbf{Speculative decoding and early exit} (LayerSkip): served by the same \texttt{truncate} primitive that the tests exercise.
+\end{itemize}
+
+\paragraph{When to enable the cache.} Any decoder-only generation workload benefits: the regime where decode dominates (long outputs, short prompts) gains the most, while a single full forward (classification, embedding, masked prediction) gains nothing and should leave \texttt{enabled} false. Quantization is worth enabling when memory, not latency, is the binding constraint, and \texttt{int4\_kivi} should keep a protected window of at least the attention-sink span; window-with-sinks eviction is the right default for streaming or unbounded contexts. For recurrent layers the state is already constant-size, so eviction is meaningless and quantization is disabled by design.

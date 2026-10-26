@@ -1,0 +1,359 @@
+\section{Caché KV y Decodificación Incremental}
+\label{sec:annex-kv-cache}
+
+La decodificación autorregresiva está dominada por una asimetría estructural: la etapa de \emph{prefill} procesa el prompt completo en una sola pasada cuadrática, mientras que cada paso de decodificación añade un único token y sólo necesita una fila de consulta nueva contra una historia ya calculada. Recomputar la secuencia completa en cada paso convierte la generación en un procedimiento de $\mathcal{O}(S^2)$ por token; mantener la historia por capa la convierte en $\mathcal{O}(S)$ por token con trabajo de tamaño constante por posición nueva. Este anexo documenta el subsistema de caché KV del toolkit (\texttt{src/model/cache/}), los contratos de corrección que hacen numéricamente intercambiables la ejecución con y sin caché, las recetas incrementales por familia, y los cuantizadores de escritura y las políticas de expulsión de lectura que se apilan sobre él.
+
+Tres compromisos de diseño enmarcan todo lo anterior. Primero, la caché es \emph{opcional}: sin \texttt{inference.kv\_cache.enabled} (por defecto), la generación ejecuta el bucle original de recomputación completa de forma bit-idéntica. Segundo, la caché es \emph{central y declarativa}: un único gestor se propaga por el modelo, y un registro de capacidades por mezclador decide qué capas pueden cachear --- nunca al revés. Tercero, la caché \emph{nunca es fatal} (decisión D5): una capa cuya formulación de origen no admite una forma incremental exacta se ejecuta sin caché en silencio, de modo que habilitarla sólo puede cambiar la velocidad, no la corrección ni la disponibilidad.
+
+\subsection{Motivación y Alcance}
+
+Sea $S$ la longitud del prompt y $T$ el número de tokens generados. Sin caché, el paso $t$ introduce $S+t-1$ tokens por todas las capas y descarta todas las claves y valores intermedios, con un trabajo de atención total
+\[
+\mathcal{O}\!\left(\sum_{t=0}^{T-1} (S+t)^2\right) \;=\; \mathcal{O}\!\left(T S^2 + T^2 S + T^3\right).
+\]
+Con caché, el prefill cuesta $\mathcal{O}(S^2)$ una vez y cada paso de decodificación cuesta $\mathcal{O}(S+t)$:
+\[
+\mathcal{O}\!\left(S^2 + \sum_{t=0}^{T-1}(S+t)\right) \;=\; \mathcal{O}\!\left(S^2 + TS + T^2\right).
+\]
+La diferencia es la conocida entre re-codificar una conversación y continuarla.
+
+El subsistema cubre los cuarenta y cuatro tipos de capa despachables. Veintiséis tienen ramas incrementales verificadas por paridad; el resto queda registrado con una justificación explícita, basada en el artículo, para ejecutarse sin caché (\S\ref{sec:kv-fallbacks}). La cuantización y la expulsión son ortogonales a la matemática del mezclador: los códecs transforman tensores en \emph{escritura} y las políticas actúan en \emph{lectura}, de modo que el mismo códec \texttt{int8} o \texttt{int4\_kivi} sirve a un slot denso, latente o de anillo sin código por mezclador \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
+
+\subsection{Arquitectura de la Caché}
+\label{sec:kv-architecture}
+
+\subsubsection{Gestor Central e Identidad de Capa}
+
+La unidad de cacheo es una capa lógica, no un módulo. El encoder puede re-ejecutar la misma pila física \texttt{num\_loops} veces (profundidad en bucle) y, bajo Hyperloop, dividirla en un bloque inicial, un bloque medio en bucle y un bloque final. El mismo objeto \texttt{HybridLayer} desempeña por tanto varios roles distintos durante una pasada. La caché indexa cada slot por el \textbf{índice de capa lógica} global
+\[
+\ell \;=\; 0,\dots,\, \texttt{num\_layers}\times\texttt{num\_loops}-1 ,
+\]
+que el encoder ya propaga a cada llamada de mezclador. Dos roles lógicos nunca comparten almacenamiento aunque compartan pesos.
+
+\begin{algorithm}[H]
+\caption{Bucle de generación con caché (prefill + decodificación)}
+\begin{algorithmic}[1]
+\Require ids del prompt $\mathbf{x}_{1:S}$; configuración de generación $\theta$; modelo $f$
+\Ensure ids generados
+\State $\mathcal{C} \gets \textsc{Cache.new}(f,\theta)$ \Comment{slots perezosos, cola de tokens, cursor de escritura}
+\State $\mathbf{L}, \mathcal{C} \gets f(\mathbf{x}_{1:S}; \text{past}=\mathcal{C}, \text{use\_cache}=\top, \text{return\_cache}=\top)$ \Comment{prefill}
+\State $\mathbf{z} \gets \mathbf{L}_{:,S,:}$
+\For{$t \gets 0$ \textbf{hasta} $T-1$}
+    \State $y \gets \textsc{Sample}(\mathbf{z};\theta)$ \Comment{greedy, top-$k$, top-$p$}
+    \State \textbf{añadir} $y$ a la salida
+    \If{$t < T-1$}
+        \State $p \gets \mathcal{C}.\text{next\_position}()$
+        \State $\mathbf{L}, \mathcal{C} \gets f(y; \text{past}=\mathcal{C}, \text{use\_cache}=\top, \text{cache\_position}=p, \text{return\_cache}=\top)$
+        \State $\mathbf{z} \gets \mathbf{L}_{:,-1,:}$
+    \EndIf
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+El gestor posee el diccionario de slots por capa, una cola FIFO de ids de tokens recientes (consumida por mezcladores de nivel de token como Engram), un cursor de escritura que avanza en cada pasada, y el códec de cuantización y la política de expulsión resueltos. La creación de slots es perezosa y la dispara la capa en su primer uso, de modo que un \texttt{layer\_pattern} heterogéneo --- por ejemplo una capa densa, una latente y una recurrente en una misma pila --- mantiene tres tipos de slot distintos sin casos especiales. La reversión es una operación de primera clase: \texttt{truncate(n)} conserva las primeras $n$ posiciones en todos los slots (truncado de listas barato con contabilidad de longitud; los slots de estado recurrente son no-ops porque no están indexados por posición), que es la primitiva que requieren la decodificación especulativa y la verificación de salida temprana \citep{layerskip_elhoushi_2024}.
+
+\subsubsection{Slots Tipados}
+
+Seis tipos de slot cubren la taxonomía de \S\ref{sec:kv-recipes}. Los slots indexados por posición almacenan una lista ordenada de \emph{partes}; una parte es de precisión completa o una carga codificada, y la lectura concatena $\big[\text{sinks} \mid \text{historia} \mid \text{ventana protegida}\big]$.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.98\linewidth}{l L{0.34\linewidth} X}
+\toprule
+\textbf{Tipo de slot} & \textbf{Almacena} & \textbf{Usado por} \\
+\midrule
+\texttt{kv} & claves y valores post-RoPE $(\text{B},H_{kv},T,d)$; posiciones absolutas; extras por token opcionales & mezcladores softmax cuadráticos \\
+\texttt{latent\_kv} & flujos de bajo rango con nombre: latente $\mathbf{c}_{KV}$, clave RoPE desacoplada, claves agrupadas, valores latentes & familia latente \\
+\texttt{state} & una matriz recurrente (+ acumuladores de compuerta), actualizada in situ; memoria constante & familia recurrente / lineal \\
+\texttt{ring} & K/V acotados por capacidad con una región de sinks fijada & familia de ventana deslizante \\
+\texttt{conv\_tail} & últimas $k-1$ filas pre-convolución (FIFO) & convoluciones causales cortas \\
+\texttt{token\_tail} & últimos $n$ ids de token & búsqueda de n-gramas de Engram \\
+\bottomrule
+\end{tabularx}
+\caption{Slots de caché tipados. Los tipos indexados por posición (\texttt{kv}, \texttt{ring}, \texttt{latent\_kv}) llevan metadatos de posición absoluta, de modo que los huecos por expulsión mantienen distancias relativas correctas; \texttt{state} y \texttt{conv\_tail} no tienen posición y nunca se expulsan.}
+\label{tab:kv-slots}
+\end{table}
+
+\subsubsection{Registro de Capacidades}
+
+Un registro congelado por cada valor del enum \texttt{layer\_pattern} declara si una capa cachea y cómo:
+\[
+\textsc{CacheSpec} \;=\; \big(\texttt{supported},\ \texttt{slot\_type},\ \texttt{slot\_types},\ \texttt{extras},\ \texttt{notes}\big).
+\]
+El registro es la fuente única de verdad consultada tanto en ejecución (resolución de slot) como estáticamente (avisos de configuración). Una capa recibe un slot sólo cuando la formulación de su mezclador admite caché \emph{y} existe una rama incremental implementada y verificada por paridad; en caso contrario recibe \texttt{None} y ejecuta la ruta legada. El registro es, por tanto, también el inventario honesto del proyecto sobre qué significa cachear para cada artículo: \texttt{supported} registra la formulación de origen, el conjunto implementado registra el estado de ingeniería, y \texttt{notes} registra el motivo.
+
+\subsubsection{Propagación en el Forward y Semántica de Respaldo}
+
+Todos los cambios de firma son aditivos y por defecto reproducen el comportamiento legado:
+\begin{align*}
+f_{\text{mixer}}&(\mathbf{x}; \ell, \text{pe}, \texttt{cache}=\varnothing, \texttt{cache\_position}=\varnothing),\\
+f_{\text{model}}&(\mathbf{x}; \texttt{past\_key\_values}=\varnothing, \texttt{use\_cache}=\bot, \texttt{return\_cache}=\bot).
+\end{align*}
+\texttt{HybridLayer} resuelve el slot una vez por llamada y respeta las cuatro formas históricas de despacho: el lineal sin estado (\texttt{mamba}) se invoca sin argumentos porque no tiene nada que cachear; los dos mezcladores que reemplazan el flujo completo (\texttt{ode}, \texttt{retnet}) reciben el slot sólo cuando su especificación lo admite; Engram recibe además \texttt{input\_ids}; el resto de mezcladores recibe \texttt{cache} y \texttt{cache\_position}. Las capas no admitidas o deshabilitadas se invocan exactamente como antes, lo que mantiene bit-idéntica la ruta sin caché.
+
+\subsection{Contratos de Corrección}
+\label{sec:kv-correctness}
+
+La ejecución con y sin caché debe coincidir en la fila de consulta que comparten: la última fila de una pasada completa y la fila producida por un paso de decodificación. Los contratos siguientes establecen esa coincidencia.
+
+\subsubsection{Almacenamiento Post-RoPE y el Calendario Absoluto}
+
+Las claves se almacenan \emph{después} de la transformación rotatoria, la convención de la industria: la caché guarda los vectores ya rotados y no hace falta re-rotar cuando un anillo da la vuelta. El requisito es que la rotación use posiciones absolutas a ambos lados de la frontera de la caché. RoPE, HoPE y sinusoidal-rotatoria aceptan un desplazamiento de posición $\pi_0$ y sitúan los tokens entrantes en
+\[
+\pi_i = \big(\pi_0 + i\big)\cdot \texttt{scaling}, \qquad i = 0,\dots,S_{\text{nuevo}}-1 ,
+\]
+de modo que un paso de decodificación en el cursor $p$ rota exactamente como lo hizo la pasada completa en la posición $p$. Los metadatos del slot versionan el factor de escalado; un cambio en tiempo de ejecución del calendario RoPE invalida las claves ya rotadas y se reporta como error de configuración al inicio de la generación, nunca a mitad de decodificación \citep{su_rope_2024,dai_hope_2025}.
+
+\subsubsection{Sesgos Aditivos en las Puntuaciones}
+
+ALiBi y BAM inyectan la posición a través de la matriz de puntuaciones, así que no llevan tensor posicional en la caché --- precisamente su atractivo para la extrapolación de longitud \citep{press_alibi_2022,bianchessi_bam_2025}. El constructor de matriz completa se generaliza a uno de ventana sobre posiciones absolutas de consulta y clave:
+\[
+b_{h,i,j} \;=\; -\,\text{pendiente}_h \cdot \big|q_i - \kappa_j\big| \quad\text{(ALiBi)},
+\qquad
+b_{h,i,j} \;=\; -\Big(\big|\kappa_j - \alpha_h q_i - \mu_h\big| + \varepsilon\Big)^{\beta_h} \quad\text{(BAM)},
+\]
+donde $q_i = \pi_0 + i$ para las posiciones de consulta entrantes y $\kappa_j$ son las posiciones absolutas de las claves cacheadas. Con $\pi_0 = 0$ y $\kappa_j = j$ esto reproduce exactamente la matriz legada; tras una expulsión, $\kappa_j$ puede ser no contigua y las distancias siguen siendo correctas por construcción.
+
+\subsubsection{Reescalado Dependiente de la Longitud}
+
+Scalable Softmax multiplica los logits pre-softmax por $s\cdot\ln n$, donde $n$ es la longitud de contexto. En decodificación con caché el contexto de la consulta más reciente es la caché acumulada, así que el reescalado usa
+\[
+\ln\big(n_{\text{cacheado}} + S_{\text{nuevo}}\big)
+\]
+en lugar del tamaño del fragmento entrante. Para la fila final de una pasada completa sobre $S_{\text{cacheado}}+S_{\text{nuevo}}$ tokens ambas expresiones coinciden, que es exactamente la fila que comparan los tests de paridad.
+
+\subsubsection{Enmascaramiento Causal desde Posiciones}
+
+Las máscaras se derivan de metadatos y no de índices de arreglo:
+\[
+M_{ij} \;=\; \big[\,q_i < \kappa_j\,\big] \;=\; \big[\,\pi_0 + i < \kappa_j\,\big],
+\]
+que se reduce a la máscara triangular superior clásica cuando la caché empieza vacía y $\kappa_j = j$. Para una única consulta de decodificación toda clave cacheada cumple $\kappa_j \le q_i$, así que la máscara es vacía y el paso no necesita máscara alguna. Las familias dispersas sustituyen el predicado causal por un patrón basado en posiciones (\S\ref{sec:kv-recipes}).
+
+\subsubsection{Codificaciones Posicionales Absolutas}
+
+Las codificaciones absolutas aditivas (sinusoidal, aprendida) se aplican una vez a los embeddings. En decodificación con caché la búsqueda del embedding del token nuevo recibe el mismo desplazamiento, de modo que el token $p$ se aumenta con la fila $p$ de la tabla:
+\[
+\mathbf{x}_i \;\leftarrow\; \mathbf{x}_i + \text{PE}\big[\pi_0 + i\big].
+\]
+
+\subsubsection{Interbloqueos con Mezcla de Profundidades, mHC, Hyperloop y AttnRes}
+
+La mezcla de profundidades (MoD) enruta una fracción de tokens por cada capa. Enrutar un prompt produciría cachés irregulares y dependientes del token, algo que v1 excluye deliberadamente; cuando la caché está activa, el prefill se fuerza denso mientras que la decodificación degenera a densa automáticamente (un token siempre cabe en la capacidad). La divergencia es unidireccional: forzar denso sólo puede añadir claves, nunca atender a claves que no existen. Los flujos residuales de mHC y Hyperloop son estado por token y atraviesan una pasada con caché sin arrastre entre pasos; las hiper-conexiones a nivel de bucle se disparan por iteración y no necesitan slot propio. Las variantes de residual de atención mantienen búferes entre capas que deben acumularse a través de los pasos, un modo aún no implementado; la combinación deshabilita la caché para esa pasada con un aviso y recurre a la recomputación completa. Las augmentaciones PaPE dependen del contenido, así que cachear claves post-augmentación no es demostrablemente exacto; esas capas retroceden por capa \citep{ohrstrom_pape_2026}.
+
+\subsection{Recetas Incrementales por Familia}
+\label{sec:kv-recipes}
+
+\subsubsection{Familia Softmax Cuadrática}
+
+Para una capa de atención densa con $H$ cabezas de consulta, $H_{kv}$ cabezas de clave/valor y dimensión de cabeza $d$, la rama cacheada añade las claves y valores nuevos y atiende sobre todo el prefijo retenido:
+\[
+\mathbf{K} \gets \big[\mathbf{K}_{\text{cacheado}};\ \mathbf{k}_{\text{nuevo}}\big],\quad
+\mathbf{V} \gets \big[\mathbf{V}_{\text{cacheado}};\ \mathbf{v}_{\text{nuevo}}\big],\quad
+\mathbf{S} = \frac{\mathbf{q}\mathbf{K}^\top}{\sqrt d} + \mathbf{B},\quad
+\mathbf{o} = \operatorname{softmax}(\mathbf{S})\,\mathbf{V},
+\]
+con $\mathbf{B}$ el sesgo posicional de \S\ref{sec:kv-correctness}. La atención de consultas agrupadas cachea sólo las $H_{kv}$ cabezas compactas y expande los grupos de cabezas después de la lectura, que es de donde proviene su ventaja de caché \citep{ainslie_gqa_2023}. Las variaciones de la familia se capturan sustituyendo el normalizador o el sesgo:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Atención sigmoide.} El normalizador se sustituye por una normalización $\ell_1$ por fila, $\hat{\mathbf{S}}_{ij} = \sigma(\mathbf{S}_{ij}) / \big(\sum_{j'}\sigma(\mathbf{S}_{ij'}) + \varepsilon\big)$. Como la sigmoide no es invariante a desplazamientos, el denominador debe re-sumarse sobre todo el prefijo cacheado en cada paso; no existe truco de máximo estilo softmax en línea \citep{ramapuram_theory_2024}.
+    \item \textbf{Softmax con compuerta.} La compuerta $\sigma(\mathbf{x}\mathbf{W}_g)$ multiplica la salida de atención y depende sólo del token actual, así que no se cachea nada extra \citep{qiu_gated_attention_2025}.
+    \item \textbf{Atención con olvido.} El sesgo de logits es $D_{ij} = c_i - c_j$ con $c_i = \sum_{l\le i}\log f_l$ la suma acumulada de log-olvido. La caché guarda un escalar por token y cabeza como extra; la decodificación extiende la suma corrida desde el último token cacheado y evalúa una sola fila de $D$ contra la columna cacheada \citep{lin_forgetting_transformer_2025}.
+    \item \textbf{Titans.} La capa implementada es la ventana de atención; el módulo de memoria queda fuera de la ruta cacheada. Se aplica el append/read estándar \citep{behrouz_titans_2025}.
+    \item \textbf{Atención de cabezas intercaladas.} Los tensores pseudo-clave/valor son mezclas estáticas aprendidas de cabezas calculadas al vuelo; sólo se cachea el K/V real por token, y la mezcla se aplica después de la lectura (la mezcla es un mapa por token en el espacio de cabezas, así que aplicarla post-lectura es exacto) \citep{duvvuri_iha_2026}.
+\end{itemize}
+
+\subsubsection{Familia Latente}
+
+Los mezcladores latentes comprimen claves y valores en un latente de bajo rango y cachean sólo ese latente. Escribiendo $\mathbf{c}_{KV} = \mathbf{W}_{DKV}\mathbf{x}$, la decodificación re-expande y rota por paso:
+\[
+\mathbf{k} = \mathbf{W}_{UK}\mathbf{c}_{KV},\qquad
+\mathbf{v} = \mathbf{W}_{UV}\mathbf{c}_{KV},\qquad
+[\mathbf{q},\mathbf{k}] \leftarrow \operatorname{RoPE}\big([\mathbf{q},\mathbf{k}], \pi_0\big),
+\]
+con la atención como en el caso denso \citep{mehta_mla_2025}. El MLA estilo DeepSeek cachea una clave RoPE desacoplada y puede absorber las proyecciones ascendentes en la consulta, evitando la expansión por paso; la variante de este toolkit aplica RoPE a la consulta y la clave descomprimidas, así que la absorción no está disponible y la expansión es el coste documentado de reducir la caché a la mitad. GQLA reutiliza un conjunto de pesos con dos rutas de decodificación algebraicamente equivalentes, y el diseño del slot sigue la ruta configurada \citep{meng_gqla_2026}. MLRA particiona el latente en sub-cabezas disjuntas, lo que es una ganancia de particionado en paralelismo tensorial más que de compresión; la caché total es del tamaño de MLA \citep{liu_mlra_2026}. La atención de Tucker cachea los latentes factorizados de clave y valor y expande por las proyecciones del núcleo \citep{klein_tucker_2026}. GTA cachea una clave por \emph{grupo} de cabezas más valores latentes; como la rotación en una posición fija es independiente de la cabeza, las medias de grupo conmutan con la rotación y cachear la media es exacto \citep{sun_gta_2025}. MTLA es el único método que comprime a lo largo del tiempo: una hiper-red fusiona vectores adyacentes de la caché en fronteras de zancada, el calendario es dinámico y su paridad con un calendario de entrenamiento a nivel de fragmento es un riesgo declarado, por lo que actualmente retrocede \citep{deng_mtla_2025}.
+
+\subsubsection{Familias Dispersas y de Ventana}
+
+Los patrones dispersos se evalúan como predicados sobre posiciones absolutas, nunca sobre índices de arreglo \citep{child_sparse_transformer_2019}:
+\[
+\text{atender}(q_i,\kappa_j) ;\Longleftrightarrow; \text{patrón}\big(\pi_0+i,\ \kappa_j\big) \;\wedge\; \kappa_j \le \pi_0+i .
+\]
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Ventana deslizante con sinks.} Cada consulta atiende a las primeras $s$ posiciones más las últimas $w-s$; la política de retención del anillo \emph{es} el patrón de atención, así que un paso de decodificación atiende directamente al conjunto cacheado y un fragmento multi-token se enmascara por patrón \citep{jolicoeur_sliding_window_2026,xiao_streaming_sinks_2024}. Eliminar los sinks colapsa la calidad, por lo que se fijan tanto por el patrón como por el anillo.
+    \item \textbf{Longformer.} Ventanas simétricas más tokens globales especificados por la tarea; como un token global puede estar en cualquier parte, el slot es ilimitado y el patrón se evalúa sobre posiciones \citep{beltagy_longformer_2020}.
+    \item \textbf{BigBird.} Ventana, globales y enlaces aleatorios. Los enlaces aleatorios deben ser reproducibles entre pasos incrementales, así que se extraen de un generador sembrado por $(\ell, q_i)$ sobre $[0, q_i]$: los enlaces más allá de la consulta quedan causalmente enmascarados de todos modos, de modo que la máscara efectiva no cambia y a la vez se vuelve determinista \citep{zaheer_bigbird_2020}.
+    \item \textbf{Sparse Transformers.} Patrones factorizados con zancada y fijos, donde el rol de columna de resumen de un token cambia al completarse los bloques; la evaluación por posiciones lo maneja, y una zancada automática se resuelve desde la longitud acumulada para que las rutas completa y cacheada coincidan \citep{child_sparse_transformer_2019}.
+    \item \textbf{FASA.} La importancia por cabeza se calcula a partir de los fragmentos de frecuencia RoPE dominantes y se reordena por consulta; es local a la fila, así que un paso de decodificación reordena exactamente las claves cacheadas \citep{wang_fasa_2026}. SpargeAttn, NSA, MiniMax y SparDA seleccionan bloques a partir de estadísticos a nivel de fragmento y por ello retroceden en v1 \citep{zhang_spargeattn_2025,yuan_nsa_2025,lai_minimax_2026,fu_sparda_2026}.
+\end{itemize}
+
+\subsubsection{Familia Recurrente y de Estado Lineal}
+
+Los mezcladores recurrentes llevan un estado de tamaño fijo; cachear significa persistir ese estado, así que la memoria es constante y ninguna expulsión tiene sentido. Con la convención del artículo $\mathbf{S}_t \in \mathbb{R}^{d_v\times d_k}$ y lectura $\mathbf{o}_t = \mathbf{S}_t\mathbf{q}_t$:
+
+\begin{align}
+\text{RetNet:}\quad & \mathbf{S}_t = \gamma_h\,\mathbf{S}_{t-1} + \mathbf{v}_t\mathbf{k}_t^\top, \qquad \gamma_h \text{ multi-escala por cabeza}, \\
+\text{GLA:}\quad & \mathbf{S}_t = \mathbf{G}_t \odot \mathbf{S}_{t-1} + \mathbf{v}_t\mathbf{k}_t^\top, \qquad \mathbf{G}_t = \operatorname{diag}\big(\exp(\operatorname{logsigmoid}(\mathbf{W}_{gk}\mathbf{x}_t)/c)\big), \\
+\text{DeltaNet:}\quad & \mathbf{S}_t = \mathbf{S}_{t-1}\big(\mathbf{I} - \beta_t\mathbf{k}_t\mathbf{k}_t^\top\big) + \beta_t\mathbf{v}_t\mathbf{k}_t^\top, \\
+\text{Gated DeltaNet:}\quad & \mathbf{S}_t = \alpha_t\,\mathbf{S}_{t-1}\big(\mathbf{I} - \beta_t\mathbf{k}_t\mathbf{k}_t^\top\big) + \beta_t\mathbf{v}_t\mathbf{k}_t^\top, \\
+\text{GDN-2:}\quad & \mathbf{S}_t = \big(\mathbf{I} - \mathbf{k}_t(\mathbf{b}_t\odot\mathbf{k}_t)^\top\big)\mathbf{D}_t\mathbf{S}_{t-1} + \mathbf{k}_t(\mathbf{w}_t\odot\mathbf{v}_t)^\top, \\
+\text{HGRN2:}\quad & \mathbf{S}_t = \operatorname{diag}(\mathbf{g}_t)\mathbf{S}_{t-1} + \mathbf{v}_t\mathbf{k}_t^\top, \qquad g_{t,j} = b_\ell + (1-b_\ell)\sigma(\cdot), \\
+\text{KDA:}\quad & \mathbf{S}_t = \big(\mathbf{I} - \beta_t\mathbf{k}_t\mathbf{k}_t^\top\big)\mathbf{D}_t\mathbf{S}_{t-1} + \beta_t\mathbf{k}_t\mathbf{v}_t^\top, \\
+\text{GMA:}\quad & \tilde{\mathbf{V}}_t = \tilde{\mathbf{V}}_{t-1} + \boldsymbol{\gamma}^{K}_t \otimes \mathbf{v}_t,\quad \mathbf{Z}_t = \mathbf{Z}_{t-1} + \boldsymbol{\gamma}^{K}_t, \quad \mathbf{o}_t = \frac{\sum_k \gamma^{Q}_{t,k}\tilde{\mathbf{V}}_{t,k}}{\sum_k \gamma^{Q}_{t,k}Z_{t,k} + \varepsilon},
+\end{align}
+refiriendo a \citet{sun_retentive_2023}, \citet{yang_gla_2023}, \citet{yang_deltanet_2024}, \citet{yang_gated_deltanet_2024}, \citet{hatamizadeh_gated_deltanet2_2026}, \citet{qin_hgrn2_2024}, \citet{kimi_kda_2025} y \citet{huang_gma_2026}.
+
+Dos sutilezas merecen énfasis. Primero, la suma de retención paralela de RetNet y la recurrencia anterior producen la misma fila para la misma consulta --- algebraicamente la forma paralela factoriza a través del estado corrido --- así que la ruta cacheada puede usar la forma recurrente mientras la ruta sin caché usa la paralela, y el test de paridad compara la fila compartida. Segundo, GDN-2 y KDA decaen a lo largo del eje de \emph{clave} ($\mathbf{D}_t$ multiplica el estado por la izquierda), mientras que GLA y HGRN2 compuertan el eje de clave elemento a elemento; ambas son diagonales en la dimensión de clave, que es lo que hace exacta una recurrencia simple in situ. El bloque de atención ODE queda excluido: su solver re-deriva el estado intermedio de cada token en cada paso de integración, así que una caché de estado convergido no puede reproducir la ruta completa.
+
+\subsubsection{Estado Auxiliar y Respaldos Documentados}
+\label{sec:kv-fallbacks}
+
+Algunos mezcladores necesitan una pequeña FIFO junto a su caché de activaciones. Las variantes chunk-parallel de Falcon acotan una ventana de repetición, así que la continuación exacta requiere los últimos $B-1$ pares alineados al prefijo; CCA/CCGQA apilan dos convoluciones causales y necesitan los últimos $k-1$ latentes pre-convolución más un valor desplazado; Engram sólo necesita los últimos $n_{\max}-1$ ids de token. Estos son los tipos \texttt{conv\_tail} y \texttt{token\_tail}.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.98\linewidth}{l X}
+\toprule
+\textbf{Mezclador} & \textbf{Por qué se ejecuta sin caché en v1} \\
+\midrule
+\texttt{mamba} & marcador de posición lineal; sin estado por token, inherentemente incremental \\
+\texttt{ssog\_attn} & rejilla de visión bidireccional; no existe formulación causal \\
+\texttt{ode} & el solver re-deriva los estados intermedios de todos los tokens en cada paso \\
+\texttt{falcon1..3a} & FIFO de repetición chunk-parallel (diseño \texttt{conv\_tail} pendiente) \\
+\texttt{cca\_attn}, \texttt{ccgqa\_attn} & dos convoluciones causales + valor desplazado \\
+\texttt{engram\_attn} & cola de ids de token (diseño \texttt{token\_tail} pendiente) \\
+\texttt{nsa}, \texttt{msa}, \texttt{sparda}, \texttt{sparge} & la selección de bloques usa estadísticos de fragmento, no locales a la fila \\
+\texttt{mtla\_attn} & calendario dinámico de fusión por hiper-red (riesgo R1) \\
+\texttt{sparsek\_attn} & diseño de política de expulsión (SparseK es una política, no un slot) \\
+capas PaPE & augmentación q/k dependiente del contenido; exactitud no demostrada \\
+\bottomrule
+\end{tabularx}
+\caption{Respaldos sin caché documentados. Cada entrada lleva una justificación basada en el artículo en el registro de capacidades y un aviso del cargador cuando la caché está habilitada; ninguna puede hacer fallar la inferencia.}
+\label{tab:kv-fallbacks}
+\end{table}
+
+\subsection{Cuantización de la Caché KV}
+\label{sec:kv-quant}
+
+La cuantización es una transformación de escritura: el slot codifica al añadir y descuantiza al leer, de modo que la huella almacenada se reduce mientras el mezclador consume tensores de punto flotante ordinarios. Esta ubicación sigue a la literatura y mantiene los códecs ortogonales a los mezcladores: el mismo códec sirve a slots densos, latentes y de anillo, y los slots latentes pueden declarar una granularidad distinta por flujo. Los estados recurrentes \emph{no} se cuantizan en v1: la base de evidencia es allí la más delgada y su tamaño constante hace que la ganancia sea pequeña.
+
+\subsubsection{int8 Simétrico con Ejes Asimétricos}
+
+Las claves exhiben valores atípicos persistentes por canal (una estructura de frecuencia RoPE), mientras que los valores exhiben atípicos por token. El códec \texttt{int8} usa por tanto ejes de reducción distintos:
+\[
+\text{claves (eje de canal):}\quad s_{h,c} = \frac{\max_{t\in g}|K_{t,h,c}|}{127},\qquad \hat{K} = \operatorname{round}\!\big(K/s\big)\in[-127,127];
+\]
+\[
+\text{valores (eje de token):}\quad s_{t,h} = \frac{\max_{c}|V_{t,h,c}|}{127},\qquad \hat{V} = \operatorname{round}\!\big(V/s\big)\in[-127,127].
+\]
+Cada bloque almacenado lleva sus propias escalas, así que un bloque de decodificación token a token obtiene escalas exactas por token y el error relativo de redondeo queda acotado por $1/127\approx 0.8\%$ independientemente del tamaño del bloque. La descuantización es $\hat{K}\odot s$; fusionar dos cargas es descuantizar, concatenar a lo largo del tiempo y recuantizar.
+
+\subsubsection{int4 por Grupos con Ventana Protegida}
+
+El códec \texttt{int4\_kivi} combina la cuantización por grupos de bajo bit de KIVI con el patrón de protección de dos regiones de los sinks de streaming y SKVQ. Los niveles con signo son $[-7,7]$; $g$ tokens forman un grupo a lo largo del tiempo; la granularidad sigue al códec int8. Dos regiones se mantienen en precisión completa:
+\begin{itemize}[leftmargin=*]
+    \item los $w_p$ tokens más recientes (la \emph{ventana protegida}), nunca cuantizados;
+    \item los primeros $s$ tokens (\emph{sinks}), nunca cuantizados y nunca expulsados.
+\end{itemize}
+La semántica de append refleja la ventana residual de KIVI: un paso de decodificación empuja filas a la ventana de precisión completa, y en cuanto el fragmento más antiguo completa un grupo de $g$ tokens ese grupo se cuantiza y pasa a la historia; el prefill cuantiza grupos completos de inmediato. La lectura concatena $[\text{historia cuantizada}\mid\text{ventana protegida}]$. Con niveles de 4 bits con signo, el peor error absoluto de un cuantizador por grupos es medio paso,
+\[
+|K-\hat{K}| \;\le\; \frac{s}{2} \;=\; \frac{\max_{g}|K|}{2\cdot 7} \;\approx\; 7.1\%\ \text{del máximo del grupo},
+\]
+que es la cota que afirman los tests del códec. Como los sinks y la ventana protegida quedan exactos, los tokens que dominan la masa de atención nunca se perturban \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024,xiao_streaming_sinks_2024}.
+
+\subsubsection{Interfaz y Códecs Futuros}
+
+Ambos códecs implementan el mismo contrato de tres métodos: \texttt{encode\_write}, \texttt{decode\_read} y \texttt{update}. Los códecs nunca deben lanzar excepciones ante tensores desconocidos: ante cualquier error interno recurren a la identidad y registran un aviso una sola vez, preservando D5 también en la capa de almacenamiento. El registro v1 contiene \texttt{none}, \texttt{int8} e \texttt{int4\_kivi}; otros métodos están listos a nivel de interfaz pero deliberadamente sin implementar, y solicitarlos es un error de configuración al inicio de la generación: \texttt{int2\_kivi} (2 bits con normalización de varianza de doble eje), \texttt{palu\_lowrank} (proyección de rango $r$ con reconstrucción), \texttt{commvq} (libros de códigos conmutativos con RoPE, atención en el espacio de códigos), \texttt{qjl\_sketch} (signos de Johnson--Lindenstrauss de 1 bit con estimador insesgado del producto interno) y \texttt{block\_gtq} (asignación de bits por bloque de frecuencia RoPE). Los metadatos del slot ya registran el tipo de codificación posicional y la versión de escalado, que es lo que un códec de libros de códigos o pre-RoPE necesita para declarar su compatibilidad. La asignación de bits por capa sensible a la sensibilidad (\texttt{k\_bits} $\ne$ \texttt{v\_bits}) se expone por configuración, ya que la masa de atención es piramidal en profundidad.
+
+\subsection{Compresión y Expulsión}
+\label{sec:kv-evict}
+
+La expulsión es una transformación de lectura; mantenerla ortogonal a la cuantización es lo que permite que una caché cuantizada se expulse y una caché expulsada se cuantice. La política v1 es la ventana con sinks de StreamingLLM: fijar las primeras $s$ posiciones, retener las últimas $w$ posiciones y descartar todo lo intermedio. El presupuesto retenido es
+\[
+\mathcal{B} \;=\; s + w ,
+\]
+opcionalmente sobrescrito por capa mediante un vector de presupuestos $\mathcal{B}_\ell$ (la masa de atención es piramidal en profundidad, así que las capas profundas toleran presupuestos menores). Las políticas actúan sólo sobre slots indexados por posición; los estados recurrentes son de tamaño constante y MTLA gestiona su propio calendario de fusión, por lo que las políticas externas quedan excluidas allí por construcción. Las políticas futuras listas para el enum son H2O (acumular masa de atención por token y expulsar la más ligera), SnapKV (compresión única tras el prefill a partir de una ventana de anticipación), PyramidKV (presupuestos estáticos dependientes de la profundidad) y SparseK (puntuador aprendido con expulsión permanente dentro de la generación, razón por la cual se modela como política y no como slot).
+
+\subsection{Interfaz de Configuración y Despliegue}
+\label{sec:kv-config}
+
+El bloque de ejecución lo valida un módulo de esquema dedicado y se aplana en una clase de datos de ejecución que deliberadamente \emph{no} forma parte de la configuración arquitectónica, reflejando la separación de \texttt{training.*}.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.98\linewidth}{l l X}
+\toprule
+\textbf{Clave} & \textbf{Defecto} & \textbf{Descripción} \\
+\midrule
+\texttt{inference.generation.max\_new\_tokens} & $64$ & tokens generados tras el prompt \\
+\texttt{inference.generation.temperature} & $1.0$ & temperatura softmax \\
+\texttt{inference.generation.top\_k} & $50$ & filtro top-$k$; $0$ lo desactiva \\
+\texttt{inference.generation.top\_p} & $1.0$ & masa nucleus; $1.0$ lo desactiva \\
+\texttt{inference.generation.greedy} & \texttt{false} & decodificación argmax \\
+\midrule
+\texttt{kv\_cache.enabled} & \texttt{false} & opcional; sin fijarlo el bucle legado es bit-idéntico \\
+\texttt{quantization.method} & \texttt{none} & \texttt{none}, \texttt{int8}, \texttt{int4\_kivi} \\
+\texttt{quantization.k\_bits} / \texttt{v\_bits} & $4$ / $4$ & anchos de bits int4 (int8 fija 8) \\
+\texttt{quantization.group\_size} & $64$ & tokens por grupo \\
+\texttt{quantization.protected\_window} & $32$ & tokens más recientes en precisión completa \\
+\texttt{compression.method} & \texttt{none} & \texttt{none}, \texttt{window\_sinks} \\
+\texttt{compression.num\_sinks} & $4$ & posiciones iniciales fijadas \\
+\texttt{compression.window} & $512$ & tamaño de la ventana deslizante \\
+\texttt{compression.budget} & \texttt{null} & presupuesto escalar por capa; \texttt{null} = ilimitado \\
+\texttt{compression.per\_layer\_budgets} & $[\,]$ & vector de presupuestos por capa, sobrescribe el escalar \\
+\texttt{per\_mixer[].enabled} & \texttt{true} & exclusión por mezclador \\
+\bottomrule
+\end{tabularx}
+\caption{Configuración de ejecución de inferencia. Reglas entre claves: la compresión requiere \texttt{enabled}, y \texttt{window} $\ge$ \texttt{protected\_window} para que la región protegida nunca pueda expulsarse.}
+\label{tab:kv-config}
+\end{table}
+
+El orden de resolución es \textbf{banderas CLI $>$ YAML \texttt{inference:} $>$ defectos del esquema}. Cada bandera CLI tiene por defecto ``sin fijar'', de modo que un preset YAML se parchea hoja a hoja en lugar de reemplazarse:
+\begin{center}
+\footnotesize
+\texttt{infer --task causal\_lm --config\,<preset> --prompt "\ldots" --kv-cache --kv-quant int4\_kivi --kv-compress window\_sinks --kv-window 512}
+\end{center}
+El desplegador serializa el bloque resuelto en el \texttt{config.json} del artefacto bajo \texttt{"inference"}, y el motor de inferencia lo vuelve a leer, de modo que la generación con caché es reproducible sin el YAML original. El envoltorio causal-LM de la exportación a HuggingFace acepta \texttt{past\_key\_values}, \texttt{use\_cache} y \texttt{cache\_position} y los reenvía al decodificador en lugar de descartar extras, e implementa \texttt{prepare\_inputs\_for\_generation} para que un bucle estándar de transformers alimente sólo el último token una vez que existe caché.
+
+\subsection{Validación}
+\label{sec:kv-validation}
+
+El test central es un protocolo de paridad: para un mezclador y una codificación posicional, comparar una pasada completa sobre $S$ tokens contra un prefill sobre $S-k$ tokens seguido de $k$ pasos de decodificación, exigiendo coincidencia en la fila compartida. La generación greedy se compara token a token primero; si aparece una discrepancia numérica, se comparan los logits de la última posición con $\mathrm{rtol}=10^{-4}$, $\mathrm{atol}=10^{-5}$ en fp32 con cuantizador \texttt{none} y BitNet deshabilitado.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.98\linewidth}{l X}
+\toprule
+\textbf{Suite} & \textbf{Afirmaciones} \\
+\midrule
+slots & append/read/truncate/movimientos de dispositivo; vuelta de anillo con metadatos de posición; estado in situ; FIFO de cola de convolución; cola de tokens \\
+códecs & error int8 $\le 10^{-2}$; error int4 $\le 7.5\times10^{-2}$; ventana protegida exactamente fp; fronteras de grupo; \texttt{update} $=$ descuantizar$\to$concatenar$\to$recuantizar \\
+mezcladores & cada mezclador implementado $\times$ \{rope, none, ALiBi\}: pasada completa vs prefill+decodificación \\
+respaldo & los $44$ valores del enum corren con la caché activa; mezcladores no implementados bit-idénticos on/off; respaldo PaPE por capa \\
+mecanismos & profundidad en bucle (slots distintos por capa lógica), Hyperloop, mHC, prefill denso de MoD, respaldo AttnRes \\
+cuantización & cotas de deriva int8/int4 con BitNet on y off; int4 se activa en prompts cortos; ventana protegida exacta \\
+compresión & sinks fijados tras la expulsión; región retenida correcta; composición con int8 \\
+generación & paridad greedy exacta; determinismo de muestreo con semilla; reversión con \texttt{truncate} \\
+configuración & paridad de defectos del esquema, aplanado, precedencia, reglas entre claves, avisos de respaldo, serialización \\
+\bottomrule
+\end{tabularx}
+\caption{Matriz de validación. El registro también se verifica cruzadamente contra el enum de patrones de capa del esquema, de modo que un mezclador nuevo no puede añadirse sin una decisión de caché.}
+\label{tab:kv-tests}
+\end{table}
+
+\subsection{Relación con Trabajo Previo}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Cuantización de caché KV} (KIVI, KVQuant, SKVQ): adoptada como códecs de escritura con granularidad asimétrica y regiones protegidas de atípicos; la semántica de append por ventana de grupo sigue la ventana residual de KIVI.
+    \item \textbf{Expulsión y dispersión} (StreamingLLM, H2O, SnapKV, PyramidKV, Quest): adoptadas como políticas de lectura; los metadatos de página estilo Quest y la lectura consciente de la consulta son trabajo futuro dentro de los extras del slot.
+    \item \textbf{Paginación y compartición de prefijos} (PagedAttention/vLLM, RadixAttention): estructuralmente compatibles --- los slots son agnósticos al contenido y serializables --- pero las tablas de bloques y la compartición de prefijos quedan fuera de v1.
+    \item \textbf{Planificadores híbridos} (Jamba, Griffin, Zamba): el mismo diccionario de slots alberga K/V de atención y estados recurrentes, que es el patrón que establecieron estos sistemas.
+    \item \textbf{Decodificación especulativa y salida temprana} (LayerSkip): servidas por la misma primitiva \texttt{truncate} que ejercitan los tests.
+\end{itemize}
+
+\paragraph{Cuándo habilitar la caché.} Cualquier carga de generación decoder-only se beneficia: el régimen donde domina la decodificación (salidas largas, prompts cortos) gana más, mientras que una única pasada completa (clasificación, embeddings, predicción enmascarada) no gana nada y debe dejar \texttt{enabled} en falso. La cuantización merece habilitarse cuando la restricción vinculante es la memoria y no la latencia, y \texttt{int4\_kivi} debe conservar una ventana protegida de al menos el tramo de los sinks de atención; la expulsión de ventana con sinks es el defecto correcto para contextos de streaming o ilimitados. Para las capas recurrentes el estado ya es de tamaño constante, así que la expulsión carece de sentido y la cuantización está deshabilitada por diseño.
