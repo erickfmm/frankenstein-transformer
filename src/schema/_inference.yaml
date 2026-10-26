@@ -1,0 +1,268 @@
+type: object
+title: Inference-time configuration (generation and KV cache)
+title_es: Configuración de inferencia (generación y caché KV)
+description: 'Runtime inference configuration: autoregressive generation sampling
+  parameters and the opt-in KV cache (quantization, compression and per-mixer
+  overrides). This block is runtime configuration — it never affects training
+  and is deliberately NOT part of the flat FrankensteinModelConfig. Precedence:
+  CLI flags override YAML values, which override schema defaults.
+
+  '
+description_es: 'Configuración de runtime para inferencia: parámetros de muestreo
+  de generación autorregresiva y la caché KV opcional (cuantización, compresión y
+  anulaciones por mezclador). Este bloque es configuración de ejecución: nunca
+  afecta al entrenamiento y deliberadamente NO forma parte del
+  FrankensteinModelConfig plano. Precedencia: las banderas CLI sobrescriben los
+  valores YAML, que a su vez sobrescriben los valores por defecto del esquema.
+
+  '
+additionalProperties: false
+properties:
+  generation:
+    type: object
+    title: Generation parameters
+    title_es: Parámetros de generación
+    description: Sampling parameters for autoregressive generation
+      (`FrankensteinDecoder.generate` / CLI `infer --task causal_lm`).
+    description_es: Parámetros de muestreo para la generación autorregresiva
+      (`FrankensteinDecoder.generate` / CLI `infer --task causal_lm`).
+    additionalProperties: false
+    properties:
+      max_new_tokens:
+        type: integer
+        minimum: 1
+        default: 64
+        title: Maximum new tokens
+        title_es: Máximo de tokens nuevos
+        description: Maximum number of tokens to generate after the prompt.
+        description_es: Número máximo de tokens a generar después del prompt.
+      temperature:
+        type: number
+        minimum: 0
+        default: 1.0
+        title: Sampling temperature
+        title_es: Temperatura de muestreo
+        description: Softmax temperature; lower values make output more deterministic.
+        description_es: Temperatura softmax; valores más bajos hacen la salida más determinista.
+      top_k:
+        type: integer
+        minimum: 0
+        default: 50
+        title: Top-k filtering
+        title_es: Filtrado top-k
+        description: Keep only the k highest-probability tokens for sampling;
+          0 disables top-k filtering.
+        description_es: Conserva solo los k tokens de mayor probabilidad para el
+          muestreo; 0 desactiva el filtrado top-k.
+      top_p:
+        type: number
+        minimum: 0
+        maximum: 1
+        default: 1.0
+        title: Nucleus (top-p) filtering
+        title_es: Filtrado nucleus (top-p)
+        description: Keep the smallest set of tokens whose cumulative probability
+          exceeds top_p; 1.0 disables nucleus filtering.
+        description_es: Conserva el menor conjunto de tokens cuya probabilidad
+          acumulada excede top_p; 1.0 desactiva el filtrado nucleus.
+      greedy:
+        type: boolean
+        default: false
+        title: Greedy decoding
+        title_es: Decodificación codiciosa
+        description: When true, always take the argmax token (overrides sampling).
+        description_es: Si es verdadero, siempre toma el token argmax (anula el muestreo).
+  kv_cache:
+    type: object
+    title: KV cache
+    title_es: Caché KV
+    description: 'Opt-in KV-cache management for incremental decoding
+      (arXiv:2412.19442 survey). Disabled by default; when disabled, generation
+      runs the legacy full-recompute loop bit-identically. Unsupported mixers
+      (per the declarative CACHE_SPECS registry) silently fall back to the
+      uncached path — inference never fails because of the cache.
+      '
+    description_es: 'Gestión opcional de la caché KV para decodificación incremental
+      (encuesta arXiv:2412.19442). Desactivada por defecto; al desactivarla, la
+      generación ejecuta el bucle de recomputación completa legado de forma
+      bit-idéntica. Los mezcladores no compatibles (según el registro
+      declarativo CACHE_SPECS) retroceden silenciosamente a la ruta sin caché:
+      la inferencia nunca falla por la caché.
+      '
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: false
+        title: Enable KV cache
+        title_es: Activar caché KV
+        description: Opt-in switch for incremental decoding (default false —
+          legacy behavior is bit-identical).
+        description_es: Interruptor opcional para la decodificación incremental
+          (por defecto falso — el comportamiento legado es bit-idéntico).
+      quantization:
+        type: object
+        title: KV quantization
+        title_es: Cuantización KV
+        description: Write-time quantization codec applied to cached tensors
+          (KIVI arXiv:2402.02750, KVQuant arXiv:2401.18079).
+        description_es: Códec de cuantización aplicado en escritura a los tensores
+          en caché (KIVI arXiv:2402.02750, KVQuant arXiv:2401.18079).
+        additionalProperties: false
+        properties:
+          method:
+            type: string
+            enum:
+            - none
+            - int8
+            - int4_kivi
+            default: none
+            title: Quantization method
+            title_es: Método de cuantización
+            description: "Codec applied at slot write/read time.\n- `none`: full-precision passthrough (baseline).\n- `int8`: symmetric int8 with asymmetric axes — K per-channel, V per-token (KIVI).\n- `int4_kivi`: group-wise int4 with a protected full-precision window + pinned sinks (KIVI + StreamingLLM).\n\nFuture interface-ready plugins (not in v1): int2_kivi, palu_lowrank, commvq, qjl_sketch, block_gtq."
+            description_es: "Códec aplicado al escribir/leer los slots.\n- `none`: paso de precisión completa (línea base).\n- `int8`: int8 simétrico con ejes asimétricos — K por canal, V por token (KIVI).\n- `int4_kivi`: int4 por grupos con ventana de precisión completa protegida + sinks fijados (KIVI + StreamingLLM).\n\nPlugins futuros (no en v1): int2_kivi, palu_lowrank, commvq, qjl_sketch, block_gtq."
+          k_bits:
+            type: integer
+            enum:
+            - 2
+            - 4
+            - 8
+            default: 4
+            title: Key bits
+            title_es: Bits de las claves
+            description: Bit width for key streams (int4_kivi only; int8 fixes 8).
+            description_es: Ancho de bits para los streams de claves (solo int4_kivi;
+              int8 fija 8).
+          v_bits:
+            type: integer
+            enum:
+            - 2
+            - 4
+            - 8
+            default: 4
+            title: Value bits
+            title_es: Bits de los valores
+            description: Bit width for value streams (int4_kivi only; int8 fixes 8).
+            description_es: Ancho de bits para los streams de valores (solo
+              int4_kivi; int8 fija 8).
+          group_size:
+            type: integer
+            minimum: 16
+            default: 64
+            title: Quantization group size
+            title_es: Tamaño de grupo de cuantización
+            description: Tokens per quantization group along the sequence
+              (int4_kivi only).
+            description_es: Tokens por grupo de cuantización a lo largo de la
+              secuencia (solo int4_kivi).
+          protected_window:
+            type: integer
+            minimum: 0
+            default: 32
+            title: Protected full-precision window
+            title_es: Ventana protegida de precisión completa
+            description: Most recent tokens kept in full precision and never
+              quantized (int4_kivi only; KVQuant/KVSink outlier protection).
+            description_es: Los tokens más recientes se mantienen en precisión
+              completa y nunca se cuantizan (solo int4_kivi; protección de
+              atípicos KVQuant/KVSink).
+      compression:
+        type: object
+        title: KV compression / eviction
+        title_es: Compresión / expulsión KV
+        description: Read-time eviction policy operating on the cache across
+          decode steps (StreamingLLM arXiv:2309.17453, H2O arXiv:2306.14048).
+        description_es: Política de expulsión en lectura que opera sobre la caché
+          durante los pasos de decodificación (StreamingLLM arXiv:2309.17453,
+          H2O arXiv:2306.14048).
+        additionalProperties: false
+        properties:
+          method:
+            type: string
+            enum:
+            - none
+            - window_sinks
+            default: none
+            title: Compression method
+            title_es: Método de compresión
+            description: "Eviction policy across decode steps.\n- `none`: keep everything.\n- `window_sinks`: pin the first num_sinks positions and keep only the last `window` positions (StreamingLLM attention sinks).\n\nFuture enum-ready policies (not in v1): h2o, snapkv_prefill, pyramid, sparsek."
+            description_es: "Política de expulsión durante los pasos de decodificación.\n- `none`: conservar todo.\n- `window_sinks`: fija las primeras num_sinks posiciones y conserva solo las últimas `window` posiciones (attention sinks de StreamingLLM).\n\nPolíticas futuras (no en v1): h2o, snapkv_prefill, pyramid, sparsek."
+          num_sinks:
+            type: integer
+            minimum: 0
+            default: 4
+            title: Number of attention sinks
+            title_es: Número de attention sinks
+            description: Leading positions pinned forever (never evicted; kept
+              full precision under int4_kivi). Removing sinks collapses
+              performance catastrophically.
+            description_es: Posiciones iniciales fijadas para siempre (nunca
+              expulsadas; en precisión completa bajo int4_kivi). Eliminar los
+              sinks colapsa el rendimiento.
+          window:
+            type: integer
+            minimum: 1
+            default: 512
+            title: Sliding window size
+            title_es: Tamaño de la ventana deslizante
+            description: Number of most-recent positions retained (window_sinks).
+            description_es: Número de posiciones más recientes conservadas
+              (window_sinks).
+          budget:
+            type:
+            - integer
+            - 'null'
+            default: null
+            title: Token budget per layer
+            title_es: Presupuesto de tokens por capa
+            description: Scalar token budget per layer; null = unlimited. When
+              set (window_sinks), overrides `window`.
+            description_es: Presupuesto escalar de tokens por capa; null =
+              ilimitado. Si se establece (window_sinks), sobrescribe `window`.
+          per_layer_budgets:
+            type: array
+            items:
+              type: integer
+              minimum: 1
+            default: []
+            title: Per-layer budgets
+            title_es: Presupuestos por capa
+            description: Per-layer budget vector (index i = logical layer i %
+              len); overrides the scalar budget when non-empty (PyramidKV-style
+              depth allocation, arXiv:2406.02069).
+            description_es: Vector de presupuestos por capa (índice i = capa
+              lógica i % len); sobrescribe el presupuesto escalar cuando no está
+              vacío (asignación de profundidad estilo PyramidKV,
+              arXiv:2406.02069).
+      per_mixer:
+        type: array
+        title: Per-mixer overrides
+        title_es: Anulaciones por mezclador
+        description: Enable/disable caching per mixer key (must be a
+          layer_pattern enum value). Disabled mixers run the legacy uncached
+          path (D5).
+        description_es: Activar/desactivar la caché por clave de mezclador (debe
+          ser un valor del enum layer_pattern). Los mezcladores desactivados
+          ejecutan la ruta legado sin caché (D5).
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            mixer:
+              type: string
+              title: Mixer key
+              title_es: Clave del mezclador
+              description: Layer-pattern enum value this override applies to.
+              description_es: Valor del enum layer_pattern al que aplica esta
+                anulación.
+            enabled:
+              type: boolean
+              default: true
+              title: Caching enabled
+              title_es: Caché activada
+              description: Whether this mixer uses the cache (false = legacy
+                uncached path for that mixer).
+              description_es: Si este mezclador usa la caché (falso = ruta legado
+                sin caché para ese mezclador).
+          required:
+          - mixer

@@ -36,6 +36,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..common import BitLinear
+from ...cache.hooks import cached_latent_attention
 
 
 class GQLAAttention(nn.Module):
@@ -114,7 +115,20 @@ class GQLAAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "gqla_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def make_cache_slot(self, meta, cache):
+        """Cache the joint latent ``c_kv`` (per-token axis)."""
+        from ...cache.slots import LatentKVSlot
+
+        return LatentKVSlot(meta, axes={"c_kv": "token"}, **cache.codec_slot_kwargs())
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute GQLA attention.
 
         Args:
@@ -123,12 +137,65 @@ class GQLAAttention(nn.Module):
                 encoder. Defaults to ``0`` if ``None``.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder`` for this forward call.
+            cache: Optional latent slot caching ``c_kv`` (the slot layout
+                follows ``gqla_decode_path``; both decode paths re-expand
+                per step over the concatenated latent). ``None`` runs the
+                legacy path (D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
         bsz, seq_len, _ = x.shape
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
+        slot = cache if getattr(cache, "kind", "") == "latent_kv" else None
+        if slot is not None:
+            from ...cache.hooks import cached_latent_attention
+
+            c_kv = self.dkv_proj(x)
+            q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+            def _expand(c_all):
+                c = c_all["c_kv"]
+                t = c.size(1)
+                k = self.uk_proj(c).view(bsz, t, self.num_heads, self.head_dim).transpose(1, 2)
+                v = self.uv_proj(c).view(bsz, t, self.num_heads, self.head_dim).transpose(1, 2)
+                if self.decode_path == "gqa" and self.num_groups < self.num_heads:
+                    kv_groups = k.view(bsz, self.num_groups, self.group_size, t, self.head_dim)
+                    kv_groups = kv_groups.mean(dim=2)
+                    k = (
+                        kv_groups.unsqueeze(2)
+                        .expand(bsz, self.num_groups, self.group_size, t, self.head_dim)
+                        .reshape(bsz, self.num_heads, t, self.head_dim)
+                    )
+                    v_groups = v.view(bsz, self.num_groups, self.group_size, t, self.head_dim)
+                    v_groups = v_groups.mean(dim=2)
+                    v = (
+                        v_groups.unsqueeze(2)
+                        .expand(bsz, self.num_groups, self.group_size, t, self.head_dim)
+                        .reshape(bsz, self.num_heads, t, self.head_dim)
+                    )
+                return k, v
+
+            attended = cached_latent_attention(
+                slot,
+                q,
+                {"c_kv": c_kv},
+                cache_position=cache_position,
+                scale=self.scale,
+                expand_fn=_expand,
+                pe=pe,
+                pe_type=self.pe_type,
+                use_pe=self.use_pe,
+                x_for_pe=x,
+                logical_layer_idx=logical_layer_idx or 0,
+                dropout=self.dropout,
+                causal=True,
+            )
+            out = attended.transpose(1, 2).contiguous().view(bsz, seq_len, -1)
+            return self.out_proj(out)
+
         c_kv = self.dkv_proj(x)
         k = self.uk_proj(c_kv).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.uv_proj(c_kv).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)

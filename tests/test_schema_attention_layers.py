@@ -133,6 +133,30 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 f"{expected_leaves - actual_leaves}",
             )
 
+    def test_cache_specs_match_layer_pattern_enum(self):
+        """T12: CACHE_SPECS covers exactly the layer_pattern enum (44)."""
+        from src.model.cache.capabilities import CACHE_SPECS
+
+        schema_path = pathlib.Path(__file__).parent.parent / "src" / "schema.yaml"
+        schema = resolve_schema(schema_path)
+        enum_values = set(
+            schema["properties"]["model"]["properties"]["dims"]["properties"][
+                "layer_pattern"
+            ]["items"]["enum"]
+        )
+        self.assertEqual(len(enum_values), 44)
+        self.assertEqual(set(CACHE_SPECS), enum_values)
+
+    def test_inference_schema_is_referenced(self):
+        """The optional inference: block is wired into the root schema."""
+        schema_path = pathlib.Path(__file__).parent.parent / "src" / "schema.yaml"
+        schema = resolve_schema(schema_path)
+        self.assertIn("inference", schema["properties"])
+        inference = schema["properties"]["inference"]
+        self.assertFalse(inference.get("additionalProperties", True))
+        self.assertIn("kv_cache", inference["properties"])
+        self.assertIn("generation", inference["properties"])
+
 
 if __name__ == "__main__":
     unittest.main()

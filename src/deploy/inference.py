@@ -18,7 +18,9 @@ try:
     from ..model.config import FrankensteinModelConfig
     from ..model.frankenstein_decoder import FrankensteinDecoder
     from ..model.frankenstein_encoder import FrankensteinEncoder
+    from ..model.cache import FrankensteinCache
     from .quantization import load_quantized_checkpoint
+    from .inference_config import InferenceConfig, apply_cli_overrides
     from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..model.attention.common import BitLinear
@@ -27,7 +29,9 @@ except ImportError:
     from model.config import FrankensteinModelConfig
     from model.frankenstein_decoder import FrankensteinDecoder
     from model.frankenstein_encoder import FrankensteinEncoder
+    from model.cache import FrankensteinCache
     from deploy.quantization import load_quantized_checkpoint
+    from deploy.inference_config import InferenceConfig, apply_cli_overrides
     from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from model.attention.common import BitLinear
@@ -76,6 +80,7 @@ class FrankensteinInference:
         self.model_dir = Path(model_dir)
         self.device = resolve_torch_device(device)
         self.use_half_precision = use_half_precision and self.device == 'cuda'
+        self.inference_section = None
         
         logger.info(f"Initializing inference engine on {self.device}")
         
@@ -101,9 +106,186 @@ class FrankensteinInference:
         with open(config_path) as f:
             config_dict = json.load(f)
         
+        # The runtime inference block is NOT part of FrankensteinModelConfig;
+        # keep it aside for the generation API (§11.5) and drop it before
+        # constructing the architectural config.
+        self.inference_section = config_dict.pop("inference", None)
         config = FrankensteinModelConfig(**flatten_model_dict(config_dict))
         logger.info(f"Config loaded: {config.hidden_size}D, {config.num_layers} layers")
         return config
+
+    def load_inference_config(self, yaml_path=None, args=None) -> InferenceConfig:
+        """Resolve the runtime :class:`InferenceConfig` for generation.
+
+        Precedence (D2): CLI flags > deployed ``config.json`` "inference"
+        section (or a YAML preset via ``yaml_path``) > schema defaults.
+
+        Args:
+            yaml_path: Optional YAML preset carrying an ``inference:`` block.
+            args: Optional argparse namespace with the generation flags
+                (all defaulting to ``None``).
+
+        Returns:
+            The fully resolved flat :class:`InferenceConfig`.
+        """
+        cfg = InferenceConfig()
+        if yaml_path:
+            try:
+                from ..training.config_loader import load_inference_config
+            except ImportError:
+                from training.config_loader import load_inference_config
+
+            cfg = load_inference_config(yaml_path)
+        elif isinstance(getattr(self, "inference_section", None), dict):
+            try:
+                from ..training.config_loader import load_inference_config
+            except ImportError:
+                from training.config_loader import load_inference_config
+
+            cfg = load_inference_config({"inference": self.inference_section})
+        if args is not None:
+            cfg = apply_cli_overrides(cfg, args)
+        return cfg
+
+    def generate(
+        self,
+        prompt: Union[str, List[str], torch.Tensor],
+        inference_config: Optional[InferenceConfig] = None,
+        max_length: int = 512,
+    ):
+        """Autoregressive generation from a text prompt or token tensor.
+
+        Builds a :class:`~src.model.cache.FrankensteinCache` from the
+        resolved config and runs the decoder's prefill+decode loop. When
+        ``kv_cache_enabled`` is false the legacy full-recompute loop runs
+        (bit-identical, D4/D12).
+
+        Args:
+            prompt: Text string, list of strings (batch), or an int64 token
+                tensor ``(B, S)``.
+            inference_config: Resolved runtime config; defaults are used
+                when ``None``.
+            max_length: Truncation length for tokenized prompts.
+
+        Returns:
+            Dict with ``input_ids`` ``(B, S+T)`` and, when a tokenizer is
+            available, ``texts`` (one decoded string per batch row).
+        """
+        cfg = inference_config or InferenceConfig()
+        model = self.model
+        if not isinstance(model, FrankensteinDecoder):
+            raise ValueError(
+                "Generation requires a decoder model (config.mode == 'decoder'); "
+                "deployed artifact is an encoder/ViT."
+            )
+
+        if isinstance(prompt, str):
+            prompt = [prompt]
+        if isinstance(prompt, dict):
+            prompt = prompt.get("input_ids", prompt)
+        if isinstance(prompt, (list, tuple)) and prompt and isinstance(prompt[0], str):
+            if self.tokenizer is None:
+                raise ValueError(
+                    "A tokenizer is required to generate from text; deploy one "
+                    "into the artifact directory or pass an int64 token tensor."
+                )
+            input_ids = []
+            for text in prompt:
+                encoded = self.tokenizer.encode(text)
+                input_ids.append(encoded["input_ids"][:max_length])
+            max_len = max(len(seq) for seq in input_ids)
+            input_tensor = torch.tensor(
+                [seq + [0] * (max_len - len(seq)) for seq in input_ids], dtype=torch.long
+            )
+        elif isinstance(prompt, torch.Tensor):
+            input_tensor = prompt.to(torch.long)
+        else:
+            input_tensor = torch.tensor(prompt, dtype=torch.long)
+
+        input_tensor = input_tensor.to(self.device)
+        cache = FrankensteinCache.new(model, cfg, device=self.device)
+        out_ids = model.generate(
+            input_tensor,
+            max_new_tokens=int(cfg.max_new_tokens),
+            temperature=float(cfg.temperature),
+            top_k=int(cfg.top_k),
+            top_p=float(cfg.top_p),
+            greedy=bool(cfg.greedy),
+            past_key_values=cache,
+            use_cache=bool(cfg.kv_cache_enabled),
+        )
+        result = {"input_ids": out_ids, "cache": cache}
+        if self.tokenizer is not None and hasattr(self.tokenizer, "decode"):
+            result["texts"] = [
+                self.tokenizer.decode(row.tolist()) for row in out_ids
+            ]
+        return result
+
+    def benchmark_generation(
+        self,
+        prompt_length: int = 64,
+        max_new_tokens: int = 64,
+        inference_config: Optional[InferenceConfig] = None,
+        num_runs: int = 3,
+    ):
+        """Benchmark generation split into prefill and decode phases.
+
+        Logs prefill tokens/sec and decode tokens/sec separately (the two
+        regimes have different computational profiles, arXiv:2403.02310).
+
+        Args:
+            prompt_length: Prompt length for the dummy input.
+            max_new_tokens: Number of tokens generated per run.
+            inference_config: Resolved runtime config.
+            num_runs: Number of timed runs (best is reported).
+        """
+        cfg = inference_config or InferenceConfig()
+        model = self.model
+        if not isinstance(model, FrankensteinDecoder):
+            raise ValueError("Generation benchmarking requires a decoder model.")
+        was_cached = bool(cfg.kv_cache_enabled)
+        best = {"prefill_tps": 0.0, "decode_tps": 0.0}
+        for _ in range(num_runs):
+            dummy = torch.randint(0, self.config.vocab_size, (1, prompt_length), device=self.device)
+            cache = FrankensteinCache.new(model, cfg, device=self.device)
+            if self.device == "cuda":
+                torch.cuda.synchronize()
+            t0 = time.time()
+            logits, cache = model(
+                dummy, past_key_values=cache, use_cache=was_cached, return_cache=was_cached
+            )
+            if self.device == "cuda":
+                torch.cuda.synchronize()
+            prefill_s = time.time() - t0
+            prefill_tps = prompt_length / max(prefill_s, 1e-9)
+
+            next_logits = logits[:, -1, :]
+            decode_tps = 0.0
+            if max_new_tokens > 1:
+                t1 = time.time()
+                steps = max_new_tokens - 1
+                for step in range(steps):
+                    token = torch.argmax(next_logits, dim=-1, keepdim=True)
+                    if step < steps - 1:
+                        logits, cache = model(
+                            token,
+                            past_key_values=cache if was_cached else None,
+                            use_cache=was_cached,
+                            cache_position=cache.next_position() if was_cached else None,
+                            return_cache=was_cached,
+                        )
+                        next_logits = logits[:, -1, :]
+                if self.device == "cuda":
+                    torch.cuda.synchronize()
+                decode_s = time.time() - t1
+                decode_tps = steps / max(decode_s, 1e-9)
+            best["prefill_tps"] = max(best["prefill_tps"], prefill_tps)
+            best["decode_tps"] = max(best["decode_tps"], decode_tps)
+
+        logger.info("Generation benchmark (cache=%s):", was_cached)
+        logger.info("  Prefill: %.0f tokens/sec", best["prefill_tps"])
+        logger.info("  Decode:  %.0f tokens/sec", best["decode_tps"])
+        return best
     
     def _load_model(self) -> FrankensteinEncoder:
         """Load and prepare model for inference."""
@@ -511,6 +693,118 @@ def main(argv=None):
         action='store_true',
         help='Run benchmark'
     )
+    # ---- Generation mode (causal_lm) ----
+    parser.add_argument(
+        '--task',
+        type=str,
+        choices=['mlm', 'causal_lm'],
+        default=None,
+        help='mlm (default): full-forward prediction; causal_lm: autoregressive generation'
+    )
+    parser.add_argument(
+        '--config',
+        type=str,
+        default=None,
+        help='YAML preset carrying an inference: block (generation + KV cache)'
+    )
+    parser.add_argument(
+        '--prompt',
+        type=str,
+        default=None,
+        help='Prompt text for generation (--task causal_lm)'
+    )
+    parser.add_argument(
+        '--max-new-tokens',
+        dest='max_new_tokens',
+        type=int,
+        default=None,
+        help='Maximum tokens to generate (inference.generation.max_new_tokens)'
+    )
+    parser.add_argument(
+        '--temperature',
+        type=float,
+        default=None,
+        help='Sampling temperature (inference.generation.temperature)'
+    )
+    parser.add_argument(
+        '--top-p',
+        dest='top_p',
+        type=float,
+        default=None,
+        help='Nucleus mass (inference.generation.top_p; 1.0 disables)'
+    )
+    parser.add_argument(
+        '--greedy',
+        dest='greedy',
+        action='store_true',
+        default=None,
+        help='Greedy argmax decoding (overrides sampling)'
+    )
+    # ---- KV-cache flags (CLI > YAML > default, D2) ----
+    parser.add_argument(
+        '--kv-cache',
+        dest='kv_cache',
+        action='store_true',
+        default=None,
+        help='Enable the KV cache for generation'
+    )
+    parser.add_argument(
+        '--no-kv-cache',
+        dest='kv_cache',
+        action='store_false',
+        help='Disable the KV cache for generation'
+    )
+    parser.add_argument(
+        '--kv-quant',
+        dest='kv_quant',
+        type=str,
+        choices=['none', 'int8', 'int4_kivi'],
+        default=None,
+        help='KV quantization codec (inference.kv_cache.quantization.method)'
+    )
+    parser.add_argument(
+        '--kv-group-size',
+        dest='kv_group_size',
+        type=int,
+        default=None,
+        help='Tokens per quantization group (int4_kivi)'
+    )
+    parser.add_argument(
+        '--kv-protected-window',
+        dest='kv_protected_window',
+        type=int,
+        default=None,
+        help='Recent tokens kept in full precision (int4_kivi)'
+    )
+    parser.add_argument(
+        '--kv-compress',
+        dest='kv_compress',
+        type=str,
+        choices=['none', 'window_sinks'],
+        default=None,
+        help='KV eviction policy (inference.kv_cache.compression.method)'
+    )
+    parser.add_argument(
+        '--kv-num-sinks',
+        dest='kv_num_sinks',
+        type=int,
+        default=None,
+        help='Pinned leading attention-sink positions'
+    )
+    parser.add_argument(
+        '--kv-window',
+        dest='kv_window',
+        type=int,
+        default=None,
+        help='Sliding window size (window_sinks)'
+    )
+    parser.add_argument(
+        '--benchmark-generation',
+        dest='benchmark_generation',
+        action='store_true',
+        default=None,
+        help='Benchmark generation split into prefill/decode throughput'
+    )
     
     args = parser.parse_args(argv)
     resolved_device = resolve_torch_device(args.device)
@@ -522,6 +816,52 @@ def main(argv=None):
         device=resolved_device,
         use_half_precision=args.fp16
     )
+
+    # ---- Generation mode (causal_lm) ----
+    generation_requested = (
+        args.task == 'causal_lm'
+        or args.prompt is not None
+        or bool(args.benchmark_generation)
+    )
+    if generation_requested:
+        if not isinstance(engine.model, FrankensteinDecoder):
+            logger.error(
+                "Generation requires a decoder model (config.mode == 'decoder'); "
+                "the deployed artifact is not a decoder."
+            )
+            return 2
+        cfg = engine.load_inference_config(yaml_path=args.config, args=args)
+        if args.benchmark_generation:
+            engine.benchmark_generation(
+                max_new_tokens=int(cfg.max_new_tokens),
+                inference_config=cfg,
+            )
+            return 0
+        prompt = args.prompt
+        if prompt is None and args.input:
+            input_path = Path(args.input)
+            if input_path.suffix == ".pt":
+                # Token-id tensor (useful when the artifact ships without a
+                # tokenizer): (B, S) int64 or a 1-D sequence.
+                prompt = torch.load(input_path, map_location="cpu", weights_only=False)
+            else:
+                with open(input_path) as handle:
+                    prompt = [line.strip() for line in handle if line.strip()]
+        if prompt is None:
+            logger.error("--task causal_lm requires --prompt (or --input file)")
+            return 2
+        result = engine.generate(prompt, inference_config=cfg)
+        texts = result.get("texts")
+        if texts:
+            for row in texts:
+                print(row)
+        else:
+            ids = result["input_ids"]
+            print(f"Generated ids shape: {tuple(ids.shape)}")
+        if args.output:
+            torch.save(result["input_ids"].cpu(), args.output)
+            logger.info("Generated ids saved to %s", args.output)
+        return 0
     
     # Run benchmark if requested
     if args.benchmark:

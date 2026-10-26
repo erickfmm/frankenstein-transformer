@@ -540,6 +540,68 @@ This is a hard migration.
 - `training.task` is required.
 - Legacy top-level optimizer keys (`lr_*`, `wd_*`, `betas_*`, `eps_*`) are no longer accepted in `training`.
 
+## Inference / KV cache (`inference:`)
+
+The optional top-level `inference:` block is **runtime** configuration
+(never part of `FrankensteinModelConfig`). It is validated by
+`src/schema/_inference.yaml` and materialised as
+`src/deploy/inference_config.InferenceConfig`.
+
+```yaml
+inference:
+  generation:
+    max_new_tokens: 64
+    temperature: 0.8
+    top_k: 50
+    top_p: 1.0
+    greedy: false
+  kv_cache:
+    enabled: true                       # opt-in (default false: legacy path)
+    quantization:
+      method: int4_kivi                 # none | int8 | int4_kivi
+      k_bits: 4
+      v_bits: 4
+      group_size: 32
+      protected_window: 32
+    compression:
+      method: window_sinks              # none | window_sinks
+      num_sinks: 4
+      window: 512
+      budget: null
+      per_layer_budgets: []
+    per_mixer: []                       # [{mixer: standard_attn, enabled: false}]
+```
+
+Precedence (D2): **CLI flags > YAML `inference:` > schema defaults**.
+Every CLI flag defaults to `None`, so only explicitly passed values patch
+the preset:
+
+```bash
+frankenstein-transformer infer --model artifacts/ --task causal_lm \
+  --config configs/examples/kv_cache_generate.yaml \
+  --prompt "Hola" --max-new-tokens 64 --greedy \
+  --kv-cache --kv-quant int4_kivi --kv-group-size 32 \
+  --kv-compress window_sinks --kv-num-sinks 4 --kv-window 512
+```
+
+Semantics:
+- `kv_cache.enabled: false` (default) keeps generation bit-identical to
+  the legacy full-recompute loop.
+- Mixers without an implemented incremental branch (documented in
+  `src/model/cache/capabilities.py`) silently fall back to the uncached
+  path — inference never fails because of the cache (D5). The loader
+  prints a warning naming them.
+- PaPE-configured layers fall back per layer (content-dependent q/k
+  augmentation; caching exactness unproven).
+- `compression.method != none` requires `enabled: true`, and
+  `compression.window >= quantization.protected_window`.
+- `int8` fixes 8 bits (ignores `k_bits`/`v_bits`); `int4_kivi` uses them;
+  `none` ignores all quantization sub-keys.
+
+`ModelDeployer` serialises the resolved block into the artifact
+`config.json` (`"inference": {...}`) so cached inference is reproducible
+without the original YAML.
+
 ## Notes
 
 - `ffn_hidden_size` is required to match BERT/TinyBERT/EmbBERT.

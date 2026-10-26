@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import math
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -172,7 +174,12 @@ class PaPERI(nn.Module):
             key = F.pad(key, (0, self.num_pad), "constant", 0)
         return query, key
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: int = 0) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: int = 0,
+        position_offset: Optional[int] = None,
+    ) -> torch.Tensor:
         """Return the input tensor unchanged.
 
         Args:

@@ -155,17 +155,38 @@ class SlidingWindowAttention(nn.Module):
         distance = (row - col).abs()
         return sinks | (distance <= span // 2)
 
+    def make_cache_slot(self, meta, cache):
+        """Bounded ring slot: pinned sinks + last ``window - sinks`` tokens.
+        The retention policy is EXACTLY the attention pattern, so decode
+        attends to the whole cached set without a mask."""
+        from ...cache.slots import RingSlot
+
+        return RingSlot(
+            meta,
+            capacity=self.window_size,
+            num_sinks=self.num_sinks,
+            **{k: v for k, v in cache.codec_slot_kwargs().items() if k in ("codec", "policy")},
+        )
+
     def forward(
         self,
         x: torch.Tensor,
         logical_layer_idx: Optional[int] = None,
         pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
     ) -> torch.Tensor:
         """Compute sliding-window attention with attention sinks.
 
         Projects queries, keys, and values, then applies the combined sink +
         sliding-window mask. Decoder mode builds the mask causally so no
         future token (including future sinks) is ever visible.
+
+        Cached decoding stores post-RoPE K/V in a ring buffer whose
+        retention policy equals the attention pattern (pinned sinks + last
+        ``window - sinks`` tokens), so a single decode query attends the
+        whole cached set directly; multi-token chunks are pattern-masked
+        against the cached ``positions`` metadata (B5 fix).
 
         Args:
             x (torch.Tensor): Input tensor of shape
@@ -174,6 +195,9 @@ class SlidingWindowAttention(nn.Module):
                 layer-specific positional encoding. Defaults to 0.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder``.
+            cache: Optional ring/KV slot for incremental decoding (``None``
+                runs the legacy full-recompute path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             torch.Tensor: Output tensor of shape
@@ -186,6 +210,46 @@ class SlidingWindowAttention(nn.Module):
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            import torch.nn.functional as _F
+            from ...cache.hooks import causal_mask_from_positions, kv_decode_append, pattern_mask, positions_for
+
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe, position_offset=offset)
+            K, V, kv_positions, _ = kv_decode_append(slot, k, v, positions)
+            scores = (q @ K.transpose(-2, -1)) * self.scale
+            span = self.window_size - self.num_sinks
+
+            def _pattern(q_pos, kv_pos):
+                sinks = (kv_pos < self.num_sinks) & (kv_pos <= q_pos)
+                if self.mode == "decoder":
+                    recent = (kv_pos > q_pos - span) & (kv_pos <= q_pos)
+                    return sinks | recent
+                distance = (q_pos - kv_pos).abs()
+                return sinks | (distance <= span // 2)
+
+            if seq_len == 1:
+                # Decode: every cached position is inside the pattern by
+                # construction (sinks are pinned; the ring holds the last
+                # span tokens) — no mask needed.
+                pass
+            else:
+                mask = pattern_mask(positions, kv_positions, _pattern)
+                scores = scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+
+            scores = apply_pe_to_scores(
+                pe, self.pe_type, scores, q, self.use_pe,
+                kv_len=K.size(-2),
+                q_offset=0 if offset is None else int(offset),
+                kv_positions=kv_positions,
+            )
+            attn = _F.softmax(scores, dim=-1)
+            attn = self.dropout(attn)
+            out = (attn @ V).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+            return self.out_proj(out)
 
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 

@@ -112,7 +112,14 @@ class GatedSoftmaxAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "gated_softmax_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute gated softmax attention over the input sequence.
 
         Computes standard scaled dot-product attention, then applies a
@@ -125,6 +132,10 @@ class GatedSoftmaxAttention(nn.Module):
                 compatibility with other attention mixers.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder``.
+            cache: Optional KV slot for incremental decoding. The gate
+                depends only on the current token, so nothing extra is
+                cached (plan §6.2). ``None`` runs the legacy path (D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -136,6 +147,30 @@ class GatedSoftmaxAttention(nn.Module):
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            from ...cache.hooks import cached_qk_attention
+
+            attended, _, _ = cached_qk_attention(
+                slot,
+                q,
+                k,
+                v,
+                cache_position=cache_position,
+                scale=self.scale,
+                pe=pe,
+                pe_type=self.pe_type,
+                use_pe=self.use_pe,
+                x_for_pe=x,
+                logical_layer_idx=logical_layer_idx or 0,
+                normalize=None,
+                dropout=self.dropout,
+                causal=True,
+            )
+            sdpa_out = attended.permute(0, 2, 1, 3).reshape(bsz, seq_len, self.total_dim)
+            gate = torch.sigmoid(self.gate_proj(x))
+            return self.out_proj(sdpa_out * gate)
 
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 

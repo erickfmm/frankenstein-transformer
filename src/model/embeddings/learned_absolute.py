@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+from typing import Optional
 
 
 class LearnedAbsolutePE(nn.Module):
@@ -51,19 +52,33 @@ class LearnedAbsolutePE(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, max_len, hidden_size))
         nn.init.trunc_normal_(self.pos_embed, std=init_std)
 
-    def add(self, embedding: torch.Tensor) -> torch.Tensor:
+    def add(self, embedding: torch.Tensor, position_offset: Optional[int] = None) -> torch.Tensor:
         """Add the learned positional embedding to an embedding tensor.
 
         Args:
             embedding: Tensor of shape ``(batch, seq_len, hidden_size)``.
+            position_offset: Absolute index of the FIRST token in
+                ``embedding``. ``None`` slices the table from 0 (legacy
+                behavior); incremental decoding passes the cache write
+                position so the new token receives its absolute index.
 
         Returns:
             Tensor of same shape as ``embedding`` with the learned positional
             embedding added along the sequence dimension.
         """
-        return embedding + self.pos_embed[:, : embedding.size(1)]
+        start = 0 if position_offset is None else int(position_offset)
+        seq_len = embedding.size(1)
+        if start + seq_len <= self.pos_embed.size(1):
+            return embedding + self.pos_embed[:, start : start + seq_len]
+        # Beyond the learned table: fall back to the final positions.
+        return embedding + self.pos_embed[:, -seq_len:]
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: int = 0) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: int = 0,
+        position_offset: Optional[int] = None,
+    ) -> torch.Tensor:
         """Return the input tensor unchanged.
 
         Args:

@@ -34,6 +34,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..common import BitLinear
+from ...cache.hooks import cached_latent_attention
 
 
 class TuckerAttention(nn.Module):
@@ -94,7 +95,24 @@ class TuckerAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "tucker_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def make_cache_slot(self, meta, cache):
+        """Cache the factorized K/V latents (per-token axes)."""
+        from ...cache.slots import LatentKVSlot
+
+        return LatentKVSlot(
+            meta,
+            axes={"k_lat": "token", "v_lat": "token"},
+            **cache.codec_slot_kwargs(),
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute Tucker-factorised attention.
 
         Args:
@@ -103,12 +121,48 @@ class TuckerAttention(nn.Module):
                 encoder. Defaults to ``0`` if ``None``.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder`` for this forward call.
+            cache: Optional latent slot caching the factorized K/V latents
+                (``key_rank``/``value_rank`` per token). ``None`` runs the
+                legacy path (D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
         bsz, seq_len, _ = x.shape
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
+        slot = cache if getattr(cache, "kind", "") == "latent_kv" else None
+        if slot is not None:
+            from ...cache.hooks import cached_latent_attention
+
+            k_lat = self.k_factor(x)
+            v_lat = self.v_factor(x)
+            q = self.q_core(self.q_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+            def _expand(c_all):
+                k = self.k_core(c_all["k_lat"]).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+                v = self.v_core(c_all["v_lat"]).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+                return k, v
+
+            attended = cached_latent_attention(
+                slot,
+                q,
+                {"k_lat": k_lat, "v_lat": v_lat},
+                cache_position=cache_position,
+                scale=self.scale,
+                expand_fn=_expand,
+                pe=pe,
+                pe_type=self.pe_type,
+                use_pe=self.use_pe,
+                x_for_pe=x,
+                logical_layer_idx=logical_layer_idx or 0,
+                dropout=self.dropout,
+                causal=True,
+            )
+            out = attended.transpose(1, 2).contiguous().view(bsz, seq_len, -1)
+            return self.out_proj(out)
+
         q = self.q_core(self.q_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_core(self.k_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_core(self.v_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)

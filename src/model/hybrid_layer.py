@@ -328,6 +328,8 @@ class HybridLayer(nn.Module):
         x,
         logical_layer_idx: Optional[int] = None,
         input_ids: Optional[torch.Tensor] = None,
+        cache=None,
+        cache_position: Optional[int] = None,
     ):
         """Run the full attention + FFN path for all tokens (no MoD routing).
 
@@ -336,6 +338,10 @@ class HybridLayer(nn.Module):
             logical_layer_idx: Global logical layer index (0-based across
                 loops). Passed to mixers that need positional awareness.
             input_ids: Original token IDs, required by Engram layers.
+            cache: Optional :class:`~src.model.cache.manager.FrankensteinCache`
+                (KV-cache manager). Mixers only receive a resolved slot when
+                their capability spec + implementation status allow it (D5).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(B, S, hidden_size)``.
@@ -352,6 +358,8 @@ class HybridLayer(nn.Module):
                 x,
                 logical_layer_idx=logical_layer_idx,
                 input_ids=input_ids,
+                cache=cache,
+                cache_position=cache_position,
             )
 
         residual = x
@@ -362,12 +370,40 @@ class HybridLayer(nn.Module):
                 f"Layer '{self.layer_type}' is training-free and only supported in eval/inference mode."
             )
 
+        # Slot resolution is declarative: unsupported / unimplemented /
+        # per-mixer-disabled mixers receive ``None`` and run the legacy path
+        # (D5 — inference never fails because of the cache). The n-stream
+        # mHC/hyperloop residual is per-token state; no cross-step carry is
+        # assumed here (R6 — asserted by tests/test_kv_cache_mechanisms.py).
+        slot = None
+        if cache is not None:
+            slot = cache.resolve_slot(logical_layer_idx or 0, self)
+
         if self.layer_type == "mamba":
             x = x + self.mixer(x)
         elif self.layer_type in {"ode", "retnet"}:
-            x = self.mixer(x)
+            # Call shape S2: the mixer replaces x wholesale. State slots are
+            # threaded when the mixer's spec supports them (F2).
+            if slot is not None:
+                x = self.mixer(
+                    x,
+                    logical_layer_idx=logical_layer_idx,
+                    pos_encoder=self.pos_encoder,
+                    cache=slot,
+                    cache_position=cache_position,
+                )
+            else:
+                x = self.mixer(x)
         elif self.layer_type == "engram_attn":
             x = self.mixer(x, input_ids=input_ids, logical_layer_idx=logical_layer_idx, pos_encoder=self.pos_encoder)
+        elif slot is not None:
+            x = self.mixer(
+                x,
+                logical_layer_idx=logical_layer_idx,
+                pos_encoder=self.pos_encoder,
+                cache=slot,
+                cache_position=cache_position,
+            )
         else:
             x = self.mixer(x, logical_layer_idx=logical_layer_idx, pos_encoder=self.pos_encoder)
 
@@ -420,6 +456,8 @@ class HybridLayer(nn.Module):
         x,
         logical_layer_idx: Optional[int] = None,
         input_ids: Optional[torch.Tensor] = None,
+        cache=None,
+        cache_position: Optional[int] = None,
     ):
         """Run the attention + FFN path over an n-stream mHC residual.
 
@@ -433,6 +471,9 @@ class HybridLayer(nn.Module):
             logical_layer_idx: Global logical layer index (0-based across
                 loops). Passed to mixers that need positional awareness.
             input_ids: Original token IDs, required by Engram layers.
+            cache: Optional KV-cache manager (mixers receive resolved slots
+                only when their capability spec allows, D5).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Updated stream of shape ``(B, S, n, C)``.
@@ -446,19 +487,41 @@ class HybridLayer(nn.Module):
                 f"Layer '{self.layer_type}' is training-free and only supported in eval/inference mode."
             )
 
+        # Slot resolution mirrors the dense path (declarative, D5).
+        slot = None
+        if cache is not None:
+            slot = cache.resolve_slot(logical_layer_idx or 0, self)
+
         # Attention sub-function.
         fpre = self.mhc_attn.fpre(x)
         attn_in = self.norm1(fpre)
         if self.layer_type == "mamba":
             attn_out = self.mixer(attn_in)
         elif self.layer_type in {"ode", "retnet"}:
-            attn_out = self.mixer(attn_in)
+            if slot is not None:
+                attn_out = self.mixer(
+                    attn_in,
+                    logical_layer_idx=logical_layer_idx,
+                    pos_encoder=self.pos_encoder,
+                    cache=slot,
+                    cache_position=cache_position,
+                )
+            else:
+                attn_out = self.mixer(attn_in)
         elif self.layer_type == "engram_attn":
             attn_out = self.mixer(
                 attn_in,
                 input_ids=input_ids,
                 logical_layer_idx=logical_layer_idx,
                 pos_encoder=self.pos_encoder,
+            )
+        elif slot is not None:
+            attn_out = self.mixer(
+                attn_in,
+                logical_layer_idx=logical_layer_idx,
+                pos_encoder=self.pos_encoder,
+                cache=slot,
+                cache_position=cache_position,
             )
         else:
             attn_out = self.mixer(attn_in, logical_layer_idx=logical_layer_idx, pos_encoder=self.pos_encoder)
@@ -504,6 +567,8 @@ class HybridLayer(nn.Module):
         x,
         logical_layer_idx: Optional[int] = None,
         input_ids: Optional[torch.Tensor] = None,
+        cache=None,
+        cache_position: Optional[int] = None,
     ):
         """Forward pass with optional Mixture-of-Depths token routing.
 
@@ -514,11 +579,18 @@ class HybridLayer(nn.Module):
         auxiliary load-balancing loss is computed and stored in
         ``last_mixture_of_depths_aux_loss``.
 
+        When a KV cache is active, MoD routing is **forced dense at prefill**
+        (multi-token chunks): routing would produce ragged, token-dependent
+        caches (D8). At decode the single token already degenerates to dense
+        (capacity >= 1 = seq_len), so cached decode is safe by construction.
+
         Args:
             x: Input tensor of shape ``(B, S, hidden_size)``.
             logical_layer_idx: Global logical layer index (0-based across
                 loops).
             input_ids: Original token IDs, required by Engram layers.
+            cache: Optional KV-cache manager.
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(B, S, hidden_size)``.
@@ -534,6 +606,23 @@ class HybridLayer(nn.Module):
                 x,
                 logical_layer_idx=logical_layer_idx,
                 input_ids=input_ids,
+                cache=cache,
+                cache_position=cache_position,
+            )
+
+        # D8: forced-dense prefill when caching (ragged caches out of scope
+        # for v1; documented train/inference divergence — it can only add
+        # K/V, never attend to keys that do not exist).
+        if cache is not None and cache.force_dense_prefill and x.size(1) > 1:
+            self.last_mixture_of_depths_aux_loss = None
+            self.last_mixture_of_depths_selected_fraction = 1.0
+            self.last_mixture_of_depths_capacity = x.size(1)
+            return self._forward_dense(
+                x,
+                logical_layer_idx=logical_layer_idx,
+                input_ids=input_ids,
+                cache=cache,
+                cache_position=cache_position,
             )
 
         batch_size, seq_len, hidden_size = x.shape

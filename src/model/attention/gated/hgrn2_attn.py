@@ -117,7 +117,14 @@ class HGRN2Attention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "hgrn2_attn_use_pe", False))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute HGRN2 attention over the input sequence.
 
         Processes the sequence token-by-token with a lower-bounded
@@ -149,14 +156,19 @@ class HGRN2Attention(nn.Module):
             from ..common import apply_pe_to_qk
             q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
-        state = torch.zeros(
-            bsz,
-            self.num_heads,
-            self.head_dim,
-            self.head_dim,
-            device=x.device,
-            dtype=x.dtype,
-        )
+        slot = cache if getattr(cache, "kind", "") == "state" else None
+        state = None
+        if slot is not None:
+            state = slot.read().get("state")
+        if state is None:
+            state = torch.zeros(
+                bsz,
+                self.num_heads,
+                self.head_dim,
+                self.head_dim,
+                device=x.device,
+                dtype=x.dtype,
+            )
 
         outputs = []
         for t in range(seq_len):
@@ -164,6 +176,8 @@ class HGRN2Attention(nn.Module):
             state = state * gate.unsqueeze(-1) + v[:, t].unsqueeze(-1) * k[:, t].unsqueeze(-2)
             out_t = (state * q[:, t].unsqueeze(-2)).sum(-1)
             outputs.append(out_t)
+        if slot is not None:
+            slot.update(state=state)
 
         out = torch.stack(outputs, dim=1).reshape(bsz, seq_len, self.total_dim)
         out = self.norm(out)

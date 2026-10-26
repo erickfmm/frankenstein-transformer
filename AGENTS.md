@@ -29,6 +29,8 @@
 | Optimizers + factory | `src/model/optimizer/{factory.py,<family>.py}` |
 | Norms + factory | `src/model/norm/{factory.py,<impl>.py}` |
 | Positional encodings | `src/model/embeddings/` |
+| KV cache / incremental decoding | `src/model/cache/` (`manager.py`, `slots.py`, `capabilities.py`, `hooks.py`, `quant/`, `compress/`) |
+| Inference runtime config | `src/deploy/inference_config.py`, `src/schema/_inference.yaml` |
 | Activations | `src/model/activation_function/` |
 | Residuals / mHC / Hyperloop | `src/model/residuals/`, `src/model/mhc.py`, `hyperloop.py` |
 | Model classes | `src/model/frankenstein_{encoder,decoder,vit}.py`, `src/model/__init__.py` |
@@ -82,6 +84,10 @@
 - `tests/test_common_modules.py`, `test_positional_encodings.py`, `test_activation_functions.py`, `test_residuals.py`.
 - `tests/test_naming_conventions.py` — no legacy names, no `frankenstein_model.py` shim.
 - `tests/test_frankenstein_vit.py`, `test_vision_dataset.py`, `test_vision_loss.py`.
+- `tests/test_kv_cache_*.py` — slot/codec/mixer-parity/fallback/mechanism/eval-only/quant suites;
+  `test_inference_config.py`, `test_inference_generate.py`, `test_transformers_export.py`.
+  `test_kv_cache_mixers.py` parametrizes every mixer in `IMPLEMENTED_MIXERS`
+  (`src/model/cache/capabilities.py`): full-forward vs prefill+decode parity.
 
 ## Decisions
 

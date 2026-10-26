@@ -13,6 +13,7 @@ Reference:
 from __future__ import annotations
 
 import math
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -67,19 +68,47 @@ class SinusoidalAbsolute(nn.Module):
         pe = pe.unsqueeze(0)
         self.register_buffer("pe", pe, persistent=False)
 
-    def add(self, embedding: torch.Tensor) -> torch.Tensor:
+    def add(self, embedding: torch.Tensor, position_offset: Optional[int] = None) -> torch.Tensor:
         """Add the precomputed positional encoding to an embedding tensor.
 
         Args:
             embedding: Tensor of shape ``(batch, seq_len, hidden_size)``.
+            position_offset: Absolute index of the FIRST token in
+                ``embedding``. ``None`` slices the table from 0 (legacy
+                behavior); incremental decoding passes the cache write
+                position so the new token receives its absolute index.
 
         Returns:
             Tensor of same shape as ``embedding`` with the sinusoidal
             positional encoding added along the sequence dimension.
         """
-        return embedding + self.pe[:, : embedding.size(1)]
+        start = 0 if position_offset is None else int(position_offset)
+        seq_len = embedding.size(1)
+        table = self.pe
+        if start + seq_len <= table.size(1):
+            table = table[:, start : start + seq_len]
+        else:
+            # Beyond the precomputed table: extend on the fly (same math).
+            device, dtype = embedding.device, embedding.dtype
+            position = torch.arange(
+                start, start + seq_len, device=device, dtype=torch.float32
+            ).unsqueeze(1)
+            div_term = torch.exp(
+                torch.arange(0, self.hidden_size, 2, device=device, dtype=torch.float32)
+                * (-math.log(self.base) / self.hidden_size)
+            )
+            ext = torch.zeros(seq_len, self.hidden_size, device=device, dtype=torch.float32)
+            ext[:, 0::2] = torch.sin(position * div_term * self.scale)
+            ext[:, 1::2] = torch.cos(position * div_term * self.scale)
+            table = ext.unsqueeze(0).to(dtype)
+        return embedding + table
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: int = 0) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: int = 0,
+        position_offset: Optional[int] = None,
+    ) -> torch.Tensor:
         """Return the input tensor unchanged.
 
         Args:
@@ -148,13 +177,20 @@ class SinusoidalRotary(nn.Module):
         self.register_buffer("sin", sin, persistent=False)
         self.register_buffer("cos", cos, persistent=False)
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: int = 0) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: int = 0,
+        position_offset: Optional[int] = None,
+    ) -> torch.Tensor:
         """Apply rotary positional encoding using absolute-position angles.
 
         Args:
             x: Input tensor of shape ``(batch, heads, seq_len, head_dim)``.
             logical_layer_idx: Logical layer index (unused; accepted for
                 interface compatibility with other positional encodings).
+            position_offset: Absolute index of the FIRST token in ``x``.
+                ``None`` positions from 0 (legacy behavior, bit-identical).
 
         Returns:
             Tensor of same shape as ``x`` with rotary positional encoding
@@ -167,8 +203,9 @@ class SinusoidalRotary(nn.Module):
         device = x.device
         dtype = x.dtype
 
-        if seq_len > self.max_len:
-            pos = torch.arange(seq_len, device=device, dtype=dtype) * self.scale
+        start = 0 if position_offset is None else int(position_offset)
+        if start > 0 or seq_len > self.max_len:
+            pos = torch.arange(start, start + seq_len, device=device, dtype=dtype) * self.scale
             if self.pair_dim > 1:
                 idx = torch.arange(self.pair_dim, device=device, dtype=dtype)
                 inv_freq = self.base ** (-idx / (self.pair_dim - 1))

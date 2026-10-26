@@ -78,7 +78,14 @@ class StandardAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "standard_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute standard multi-head attention.
 
         Args:
@@ -87,6 +94,11 @@ class StandardAttention(nn.Module):
                 interface compatibility with other attention modules).
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder`` for this forward call.
+            cache: Optional :class:`~src.model.cache.slots.KVSlot` for
+                incremental decoding. ``None`` runs the legacy full-recompute
+                path (bit-identical, D4).
+            cache_position: Absolute index of the first token in ``x``
+                (required for correct post-RoPE alignment when caching).
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -98,8 +110,42 @@ class StandardAttention(nn.Module):
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
+        idx = logical_layer_idx or 0
         from .common import apply_pe_to_qk, apply_pe_to_scores
-        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            from ..cache.hooks import causal_mask_from_positions, kv_decode_append, positions_for
+
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            # Keys are cached POST-RoPE: rotate q/k on the absolute schedule.
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, idx, self.use_pe, position_offset=offset)
+            K, V, kv_positions, _ = kv_decode_append(slot, k, v, positions)
+
+            attn_scores = (q @ K.transpose(-2, -1)) * self.scale
+            attn_scores = apply_pe_to_scores(
+                pe,
+                self.pe_type,
+                attn_scores,
+                q,
+                self.use_pe,
+                kv_len=K.size(-2),
+                q_offset=0 if offset is None else int(offset),
+                kv_positions=kv_positions,
+            )
+            # Cached attention is causal by construction (decode); a mask is
+            # still built for multi-token (prefill) chunks from positions,
+            # which reproduces the classic triu mask exactly when the cache
+            # starts empty.
+            mask = causal_mask_from_positions(positions, kv_positions)
+            attn_scores = attn_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+            attn_weights = F.softmax(attn_scores, dim=-1)
+            attn_weights = self.dropout(attn_weights)
+            out = (attn_weights @ V).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+            return self.out_proj(out)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, idx, self.use_pe)
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
         attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)

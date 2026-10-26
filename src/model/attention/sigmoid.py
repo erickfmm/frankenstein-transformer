@@ -81,7 +81,14 @@ class SigmoidAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "sigmoid_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute sigmoid attention with L1 normalization.
 
         Args:
@@ -90,6 +97,9 @@ class SigmoidAttention(nn.Module):
                 interface compatibility with other attention modules).
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder`` for this forward call.
+            cache: Optional KV slot for incremental decoding (``None`` runs
+                the legacy full-recompute path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -102,6 +112,36 @@ class SigmoidAttention(nn.Module):
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         from .common import apply_pe_to_qk, apply_pe_to_scores
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            from ..cache.hooks import cached_qk_attention
+
+            def _sigmoid_l1(scores):
+                weights = torch.sigmoid(scores)
+                # Sigmoid is NOT shift-invariant: the L1 denominator must be
+                # re-summed over the whole cached prefix each step (plan
+                # §6.2); no online-softmax max trick exists.
+                return weights / (weights.sum(dim=-1, keepdim=True) + self.eps)
+
+            out, _, _ = cached_qk_attention(
+                slot,
+                q,
+                k,
+                v,
+                cache_position=cache_position,
+                scale=self.scale,
+                pe=pe,
+                pe_type=self.pe_type,
+                use_pe=self.use_pe,
+                x_for_pe=x,
+                logical_layer_idx=logical_layer_idx or 0,
+                normalize=_sigmoid_l1,
+                dropout=self.dropout,
+                causal=True,
+            )
+            return self.out_proj(out.transpose(1, 2).contiguous().view(bsz, seq_len, hidden))
+
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale

@@ -24,6 +24,7 @@ Reference:
 from __future__ import annotations
 
 import math
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -89,31 +90,54 @@ class BAM(nn.Module):
 
     def bias(
         self,
-        seq_len: int,
+        q_len: Optional[int] = None,
+        kv_len: Optional[int] = None,
+        q_offset: int = 0,
+        kv_positions: Optional[torch.Tensor] = None,
         device=None,
         dtype=None,
+        seq_len: Optional[int] = None,
     ) -> torch.Tensor:
         """Compute the BAM additive attention bias.
 
+        The full-square builder is the special case ``q_offset = 0`` and
+        ``q_len == kv_len`` (bit-identical to the legacy ``bias(seq_len)``
+        signature, still accepted via the ``seq_len`` keyword).
+        Incremental decoding passes the cached key positions so relative
+        distances stay exact after eviction.
+
         Args:
-            seq_len: Sequence length for which to compute the bias.
+            q_len: Number of query positions.
+            kv_len: Number of key positions. Defaults to ``q_len``.
+            q_offset: Absolute index of the FIRST query position. Default 0.
+            kv_positions: Optional absolute int64 positions of the cached
+                keys ``(kv_len,)``. Defaults to ``arange(kv_len)``.
             device: Device on which to materialise the bias tensor. Defaults
                 to the ``theta_alpha`` parameter device.
             dtype: Data type of the returned bias. Defaults to the
                 ``theta_alpha`` parameter dtype.
+            seq_len: Legacy keyword alias for ``q_len`` (backward
+                compatibility with ``bias(seq_len=...)`` call sites).
 
         Returns:
-            Tensor of shape ``(1, num_heads, seq_len, seq_len)`` containing
+            Tensor of shape ``(1, num_heads, q_len, kv_len)`` containing
             the additive bias ``- (|j - alpha*i - mu| + eps) ^ beta``.
         """
+        if q_len is None:
+            if seq_len is None:
+                raise ValueError("bias() requires q_len (or the legacy seq_len keyword)")
+            q_len = int(seq_len)
         if device is None:
             device = self.theta_alpha.device
         if dtype is None:
             dtype = self.theta_alpha.dtype
-
-        pos = torch.arange(seq_len, device=device, dtype=dtype)
-        i = pos[:, None]  # [S, 1] query index
-        j = pos[None, :]  # [1, S] key index
+        if kv_len is None:
+            kv_len = q_len
+        if kv_positions is None:
+            kv_positions = torch.arange(kv_len, device=device, dtype=dtype)
+        else:
+            kv_positions = kv_positions.to(device=device, dtype=dtype)
+        i = torch.arange(q_len, device=device, dtype=dtype) + q_offset  # [Q] query index
 
         theta_alpha = self.theta_alpha.to(device=device, dtype=dtype)  # [H]
         theta_beta = self.theta_beta.to(device=device, dtype=dtype)  # [H]
@@ -124,13 +148,22 @@ class BAM(nn.Module):
         mu = theta_mu  # [H]
 
         # relative position contribution per head: j - alpha[h] * i - mu[h]
-        # shape [H, S, S] via broadcasting
-        contrib = j[None, :, :] - alpha[:, None, None] * i[None, :, :] - mu[:, None, None]
+        # shape [H, Q, kv_len] via broadcasting
+        contrib = (
+            kv_positions[None, None, :]
+            - alpha[:, None, None] * i[None, :, None]
+            - mu[:, None, None]
+        )
         # B[h, i, j] = -(|contrib| + eps) ^ beta[h]
         B = -((contrib.abs() + self.eps) ** beta[:, None, None])
-        return B.unsqueeze(0)  # [1, H, S, S]
+        return B.unsqueeze(0)  # [1, H, Q, kv_len]
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: int = 0) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: int = 0,
+        position_offset: Optional[int] = None,
+    ) -> torch.Tensor:
         """Return the input tensor unchanged.
 
         Args:

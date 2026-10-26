@@ -14,6 +14,8 @@ Reference:
 
 from __future__ import annotations
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 
@@ -57,13 +59,22 @@ class RoPE(nn.Module):
         self.base = base
         self.scaling = scaling
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: int = 0) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: int = 0,
+        position_offset: Optional[int] = None,
+    ) -> torch.Tensor:
         """Apply rotary position encoding.
 
         Args:
             x: Input tensor of shape ``(batch, heads, seq_len, head_dim)``.
             logical_layer_idx: Logical layer index (unused; accepted for
                 interface compatibility with other positional encodings).
+            position_offset: Absolute index of the FIRST token in ``x``.
+                ``None`` positions from 0 (legacy behavior, bit-identical).
+                Incremental decoding passes the cache write position so
+                cached post-RoPE keys stay on one consistent schedule.
 
         Returns:
             Tensor of same shape as ``x`` with rotary position encoding
@@ -76,7 +87,8 @@ class RoPE(nn.Module):
         device = x.device
         dtype = x.dtype
 
-        pos = torch.arange(seq_len, device=device, dtype=dtype) * self.scaling
+        start = 0 if position_offset is None else int(position_offset)
+        pos = torch.arange(start, start + seq_len, device=device, dtype=dtype) * self.scaling
         if self.pair_dim > 1:
             idx = torch.arange(self.pair_dim, device=device, dtype=dtype)
             inv_freq = self.base ** (-idx / (self.pair_dim - 1))

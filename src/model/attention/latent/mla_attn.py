@@ -36,6 +36,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
+from ...cache.hooks import cached_latent_attention
 
 
 class MLAAttention(nn.Module):
@@ -100,7 +101,21 @@ class MLAAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "mla_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def make_cache_slot(self, meta, cache):
+        """Mixer-specific slot factory: cache the joint latent ``c_kv`` only
+        (per-token quantization axis)."""
+        from ...cache.slots import LatentKVSlot
+
+        return LatentKVSlot(meta, axes={"c_kv": "token"}, **cache.codec_slot_kwargs())
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute latent attention with RoPE on decompressed Q/K.
 
         Args:
@@ -109,12 +124,49 @@ class MLAAttention(nn.Module):
                 encoder. Defaults to ``0`` if ``None``.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder`` for this forward call.
+            cache: Optional :class:`~src.model.cache.slots.LatentKVSlot`
+                caching ``c_kv`` (the latent — never the expanded K/V).
+                ``None`` runs the legacy full-recompute path (D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
         bsz, seq_len, _ = x.shape
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
+        slot = cache if getattr(cache, "kind", "") == "latent_kv" else None
+        if slot is not None:
+            from ...cache.hooks import cached_latent_attention
+
+            c_kv = self.dkv_proj(x)
+            q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+            def _expand(c_all):
+                c = c_all["c_kv"]
+                t = c.size(1)
+                k = self.uk_proj(c).view(bsz, t, self.num_heads, self.head_dim).transpose(1, 2)
+                v = self.uv_proj(c).view(bsz, t, self.num_heads, self.head_dim).transpose(1, 2)
+                return k, v
+
+            attended = cached_latent_attention(
+                slot,
+                q,
+                {"c_kv": c_kv},
+                cache_position=cache_position,
+                scale=self.scale,
+                expand_fn=_expand,
+                pe=pe,
+                pe_type=self.pe_type,
+                use_pe=self.use_pe,
+                x_for_pe=x,
+                logical_layer_idx=logical_layer_idx or 0,
+                dropout=self.dropout,
+                causal=True,
+            )
+            out = attended.transpose(1, 2).contiguous().view(bsz, seq_len, -1)
+            return self.out_proj(out)
+
         c_kv = self.dkv_proj(x)
         k = self.uk_proj(c_kv).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.uv_proj(c_kv).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)

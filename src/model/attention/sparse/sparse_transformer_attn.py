@@ -180,7 +180,33 @@ class SparseTransformerAttention(nn.Module):
                 mask[i, torch.tensor(sorted(set(indices)), device=device)] = True
         return mask
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def make_cache_slot(self, meta, cache):
+        """Unbounded KV slot (strided/fixed patterns reach arbitrary past
+        positions; pattern evaluated over ``positions``)."""
+        from ...cache.slots import KVSlot
+
+        kwargs = cache.codec_slot_kwargs()
+        return KVSlot(meta, codec=kwargs["codec"], policy=None, num_sinks=kwargs["num_sinks"])
+
+    def _pattern_strided(self, stride: int):
+        def pattern(q_pos, kv_pos):
+            local = (kv_pos > q_pos - stride) & (kv_pos <= q_pos)
+            aligned = ((q_pos - kv_pos) % stride == 0) & (kv_pos <= q_pos)
+            return local | aligned
+
+        return pattern
+
+    def _pattern_fixed(self, stride: int):
+        def pattern(q_pos, kv_pos):
+            block_start = (q_pos // stride) * stride
+            in_block = (kv_pos >= block_start) & (kv_pos <= q_pos)
+            summary = (kv_pos % stride) >= max(0, stride - self.summary_cols)
+            summary = summary & (kv_pos <= q_pos) & (kv_pos >= 0)
+            return in_block | summary
+
+        return pattern
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None, cache=None, cache_position: Optional[int] = None) -> torch.Tensor:
         """Compute factorized sparse attention.
 
         Projects queries, keys, and values, then applies strided and fixed
@@ -188,13 +214,19 @@ class SparseTransformerAttention(nn.Module):
         respectively. In decoder mode, both patterns are further constrained
         by a causal mask.
 
+        Cached decoding evaluates both patterns as pure functions of the
+        absolute positions over the cached ``positions`` metadata (B5 fix —
+        summary columns change role as blocks complete, so the pattern must
+        be position-based, never index-based). The auto stride uses the
+        TOTAL accumulated length, matching the full forward's stride.
+
         Args:
             x (torch.Tensor): Input tensor of shape ``(batch, seq_len, hidden_size)``.
-            logical_layer_idx (Optional[int]): Logical layer index for
-                potential layer-specific behavior. Not used by this
-                implementation.
-            pos_encoder: Optional positional encoding module overriding
-                ``self.pos_encoder``.
+            logical_layer_idx (Optional[int]): Logical layer index. Not used.
+            pos_encoder: Optional positional encoding module override.
+            cache: Optional KV slot for incremental decoding (``None`` runs
+                the legacy full-recompute path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
@@ -202,11 +234,54 @@ class SparseTransformerAttention(nn.Module):
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
 
         bsz, seq_len, hidden = x.shape
-        stride = self._resolved_stride(seq_len)
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            import torch.nn.functional as _F
+            from ...cache.hooks import causal_mask_from_positions, kv_decode_append, pattern_mask, positions_for
+
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe, position_offset=offset)
+            K, V, kv_positions, _ = kv_decode_append(slot, k, v, positions)
+            total = int(kv_positions.numel())
+            stride = max(1, int(self.stride)) if self.stride > 0 else max(1, int(math.sqrt(max(1, total))))
+            scores = (q @ K.transpose(-2, -1)) * self.scale
+
+            if seq_len == 1:
+                p = kv_positions.new_full((1,), int(kv_positions[-1]))
+                allowed_s = self._pattern_strided(stride)(p, kv_positions)
+                allowed_f = self._pattern_fixed(stride)(p, kv_positions)
+                half = max(1, self.num_heads // 2)
+                scores[:, :half] = scores[:, :half].masked_fill(
+                    (~allowed_s).unsqueeze(0).unsqueeze(0), float("-inf")
+                )
+                scores[:, half:] = scores[:, half:].masked_fill(
+                    (~allowed_f).unsqueeze(0).unsqueeze(0), float("-inf")
+                )
+            else:
+                mask_s = pattern_mask(positions, kv_positions, self._pattern_strided(stride))
+                mask_f = pattern_mask(positions, kv_positions, self._pattern_fixed(stride))
+                half = max(1, self.num_heads // 2)
+                scores[:, :half] = scores[:, :half].masked_fill(mask_s.unsqueeze(0).unsqueeze(0), float("-inf"))
+                scores[:, half:] = scores[:, half:].masked_fill(mask_f.unsqueeze(0).unsqueeze(0), float("-inf"))
+
+            scores = apply_pe_to_scores(
+                pe, self.pe_type, scores, q, self.use_pe,
+                kv_len=K.size(-2),
+                q_offset=0 if offset is None else int(offset),
+                kv_positions=kv_positions,
+            )
+            attn = _F.softmax(scores, dim=-1)
+            attn = self.dropout(attn)
+            out = (attn @ V).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+            return self.out_proj(out)
+
+        stride = self._resolved_stride(seq_len)
 
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 

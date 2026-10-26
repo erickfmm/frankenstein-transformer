@@ -129,23 +129,44 @@ class LongformerAttention(nn.Module):
 
         return mask
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def make_cache_slot(self, meta, cache):
+        """Unbounded KV slot: global tokens may sit anywhere, so eviction
+        cannot be applied safely (pattern-mask over ``positions`` instead)."""
+        from ...cache.slots import KVSlot
+
+        kwargs = cache.codec_slot_kwargs()
+        return KVSlot(meta, codec=kwargs["codec"], policy=None, num_sinks=kwargs["num_sinks"])
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute sliding-window attention with global tokens.
 
         Projects queries, keys, and values, then applies the combined
         window + global-token mask. In decoder mode, the mask is further
         intersected with a causal (lower-triangular) mask.
 
+        Cached decoding evaluates the window/globals pattern against the
+        cached absolute ``positions`` (B5 fix), which stays exact under
+        any position set.
+
         Args:
-            x (torch.Tensor): Input tensor of shape ``(batch, seq_len, hidden_size)``.
-            logical_layer_idx (Optional[int]): Logical layer index for
-                potential layer-specific behavior. Not used by this
-                implementation.
-            pos_encoder: Optional positional encoding module overriding
-                ``self.pos_encoder``.
+            x (torch.Tensor): Input tensor of shape
+                ``(batch, seq_len, hidden_size)``.
+            logical_layer_idx (Optional[int]): Logical layer index. Not used.
+            pos_encoder: Optional positional encoding module override.
+            cache: Optional KV slot for incremental decoding (``None`` runs
+                the legacy full-recompute path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
-            torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
+            torch.Tensor: Output tensor of shape
+                ``(batch, seq_len, hidden_size)``.
         """
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
 
@@ -154,6 +175,58 @@ class LongformerAttention(nn.Module):
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            import torch.nn.functional as _F
+            from ...cache.hooks import causal_mask_from_positions, kv_decode_append, pattern_mask, positions_for
+
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe, position_offset=offset)
+            K, V, kv_positions, _ = kv_decode_append(slot, k, v, positions)
+            scores = (q @ K.transpose(-2, -1)) * self.scale
+            half_w = self.window_size // 2
+            globals_t = torch.tensor(
+                [g for g in self.global_tokens if g >= 0], dtype=torch.long, device=x.device
+            )
+
+            def _pattern(q_pos, kv_pos):
+                q_col = q_pos.reshape(-1, 1)
+                kv_row = kv_pos.reshape(1, -1)
+                window = (q_col - kv_row).abs() <= half_w
+                is_global_kv = (
+                    (kv_row == globals_t.reshape(1, -1)).any(dim=1)
+                    if globals_t.numel()
+                    else torch.zeros_like(kv_row[0])
+                )
+                is_global_q = (
+                    (q_col == globals_t.reshape(1, -1)).any(dim=1)
+                    if globals_t.numel()
+                    else torch.zeros_like(q_col[0])
+                )
+                return window | is_global_kv.unsqueeze(0) | is_global_q.unsqueeze(1)
+
+            if seq_len == 1:
+                # Decode: cached keys are all causal; allowed = window ∪
+                # globals ∪ (query-is-global ⇒ everything causal).
+                p = kv_positions.new_full((1,), int(kv_positions[-1]))
+                allowed = _pattern(p, kv_positions)
+                scores = scores.masked_fill((~allowed).unsqueeze(0).unsqueeze(0), float("-inf"))
+            else:
+                mask = pattern_mask(positions, kv_positions, _pattern)
+                scores = scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+
+            scores = apply_pe_to_scores(
+                pe, self.pe_type, scores, q, self.use_pe,
+                kv_len=K.size(-2),
+                q_offset=0 if offset is None else int(offset),
+                kv_positions=kv_positions,
+            )
+            attn = _F.softmax(scores, dim=-1)
+            attn = self.dropout(attn)
+            out = (attn @ V).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+            return self.out_proj(out)
 
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 

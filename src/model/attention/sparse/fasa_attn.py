@@ -139,7 +139,15 @@ class FASAAttention(nn.Module):
         dim_idx = torch.stack((fc_idx * 2, fc_idx * 2 + 1), dim=-1).flatten()
         return dim_idx.clamp(max=self.head_dim - 1)
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def make_cache_slot(self, meta, cache):
+        """KV slot caching post-RoPE keys (the importance proxy operates on
+        cached RoPE'd key dimensions — computation must stay full)."""
+        from ...cache.slots import KVSlot
+
+        kwargs = cache.codec_slot_kwargs()
+        return KVSlot(meta, codec=kwargs["codec"], policy=None, num_sinks=kwargs["num_sinks"])
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None, cache=None, cache_position: Optional[int] = None) -> torch.Tensor:
         """Compute frequency-aware sparse attention.
 
         For each head independently:
@@ -151,13 +159,19 @@ class FASAAttention(nn.Module):
 
         In decoder mode, a causal mask is applied during importance estimation.
 
+        Cached decoding is exact: the per-row importance proxy and top-k
+        selection are row-local, so the decode step re-ranks the cached
+        (post-RoPE) keys per query — the importance CANNOT be precomputed
+        at write time (plan §6.4).
+
         Args:
             x (torch.Tensor): Input tensor of shape ``(batch, seq_len, hidden_size)``.
-            logical_layer_idx (Optional[int]): Logical layer index for
-                potential layer-specific behavior. Not used by this
-                implementation.
+            logical_layer_idx (Optional[int]): Logical layer index. Not used.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder``.
+            cache: Optional KV slot for incremental decoding (``None`` runs
+                the legacy full-recompute path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
@@ -173,6 +187,45 @@ class FASAAttention(nn.Module):
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            from ...cache.hooks import causal_mask_from_positions, kv_decode_append, positions_for
+
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe, position_offset=offset)
+            K, V, kv_positions, _ = kv_decode_append(slot, k, v, positions)
+            total = K.size(-2)
+            n_select = min(self.n_fac, total)
+
+            mask = None
+            if seq_len > 1:
+                mask = causal_mask_from_positions(positions, kv_positions)
+
+            out = torch.zeros_like(q)
+            for h in range(self.num_heads):
+                dim_idx = self._dominant_dim_indices(h, x.device)
+                q_sub = q[:, h, :, dim_idx]           # (B, S, d_sub)
+                k_sub = K[:, h, :, dim_idx]           # (B, T, d_sub)
+                importance = torch.matmul(q_sub, k_sub.transpose(-2, -1))  # (B, S, T)
+                if mask is not None:
+                    importance = importance * (~mask).unsqueeze(0).to(importance.dtype)
+                top_idx = importance.topk(n_select, dim=-1).indices  # (B, S, n)
+
+                # Gather per (batch, query): K/V rows selected per query row.
+                k_head = K[:, h]  # (B, T, d)
+                v_head = V[:, h]
+                idx_e = top_idx.unsqueeze(-1).expand(bsz, seq_len, n_select, k_head.size(-1))
+                k_sel = k_head.unsqueeze(1).expand(bsz, seq_len, total, k_head.size(-1)).gather(2, idx_e)  # (B, S, n, d)
+                v_sel = v_head.unsqueeze(1).expand(bsz, seq_len, total, k_head.size(-1)).gather(2, idx_e)
+                scores = (q[:, h].unsqueeze(2) * k_sel).sum(dim=-1) / math.sqrt(self.head_dim)
+                attn = F.softmax(scores, dim=-1)
+                out[:, h] = torch.sum(attn.unsqueeze(-1) * v_sel, dim=2)
+
+            out = self.dropout(out)
+            out = out.transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+            return self.out_proj(out)
 
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 

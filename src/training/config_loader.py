@@ -9,18 +9,21 @@ overrides.
 import os
 from dataclasses import dataclass
 from dataclasses import fields
-from typing import Dict, Any, Optional
+from pathlib import Path
+from typing import Dict, Any, Optional, Union
 
 import yaml
 
 try:
     from .trainer import TrainingConfig
     from ..model.config import FrankensteinModelConfig
-    from ..utils.config_flatten import flatten_model_dict, flatten_image_dict
+    from ..utils.config_flatten import flatten_model_dict, flatten_image_dict, flatten_inference_dict
+    from ..deploy.inference_config import InferenceConfig
 except ImportError:
     from training.trainer import TrainingConfig
     from model.config import FrankensteinModelConfig
-    from utils.config_flatten import flatten_model_dict, flatten_image_dict
+    from utils.config_flatten import flatten_model_dict, flatten_image_dict, flatten_inference_dict
+    from deploy.inference_config import InferenceConfig
 
 
 def _field_names(cls) -> set:
@@ -196,6 +199,173 @@ class LoadedTrainingConfig:
     dataset_config: Dict[str, Any]
     text_dataset_config: Dict[str, Any]
     config_dict: Optional[Dict[str, Any]] = None
+
+
+def _inference_schema() -> Dict[str, Any]:
+    """Load the self-contained ``schema/_inference.yaml`` JSON-Schema."""
+    schema_path = Path(__file__).resolve().parent.parent / "schema" / "_inference.yaml"
+    with open(schema_path, "r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
+def _validate_inference_block(inference_data: Dict[str, Any]) -> None:
+    """Validate the ``inference:`` subtree against its JSON-Schema module.
+
+    Args:
+        inference_data: The ``inference:`` mapping.
+
+    Raises:
+        ValueError: On schema violations (unknown keys, bad enums, the
+            compression-implies-enabled conditional rule, ...).
+    """
+    try:
+        import jsonschema
+    except ImportError:  # pragma: no cover - jsonschema ships with the deps
+        return
+    schema = _inference_schema()
+    validator_cls = getattr(jsonschema, "Draft202012Validator", jsonschema.Draft7Validator)
+    validator = validator_cls(schema)
+    errors = sorted(validator.iter_errors(inference_data), key=lambda e: list(e.path))
+    if errors:
+        first = errors[0]
+        location = "/".join(str(p) for p in first.absolute_path) or "(root)"
+        raise ValueError(f"inference.{location}: {first.message}")
+
+
+def _validate_inference_rules(inference_data: Dict[str, Any]) -> None:
+    """Apply the cross-key inference rules not expressible in JSON-Schema.
+
+    Rules (plan §11.1):
+
+    * ``compression.window >= quantization.protected_window`` (else the
+      protected region could be evicted, contradicting §9.6 rule 4).
+    * ``compression.method != none`` requires ``kv_cache.enabled``
+      (also enforced by the schema conditional; double-checked here for
+      programmatic dict input that bypassed the schema).
+    """
+    kv = inference_data.get("kv_cache") if isinstance(inference_data, dict) else None
+    if not isinstance(kv, dict):
+        return
+    compression = kv.get("compression") or {}
+    quant = kv.get("quantization") or {}
+    if isinstance(compression, dict) and isinstance(quant, dict):
+        method = str(compression.get("method", "none"))
+        if method != "none" and not kv.get("enabled", False):
+            raise ValueError(
+                "inference.kv_cache.compression.method != none requires "
+                "inference.kv_cache.enabled = true"
+            )
+        if method == "window_sinks":
+            window = int(compression.get("window", 512) or 0)
+            protected = int(quant.get("protected_window", 32) or 0)
+            if window < protected:
+                raise ValueError(
+                    "inference.kv_cache.compression.window must be >= "
+                    "inference.kv_cache.quantization.protected_window "
+                    f"(got window={window}, protected_window={protected}); "
+                    "the protected region must never be evicted"
+                )
+
+
+def _warn_cache_support(inference_data: Dict[str, Any], full_config: Dict[str, Any]) -> None:
+    """Warn when the enabled cache cannot apply to some mixers (D5).
+
+    Consults the declarative ``CACHE_SPECS`` registry against the
+    ``layer_pattern`` and the per-mixer ``use_pe`` flags: unsupported or
+    unimplemented mixers silently fall back to the legacy uncached path —
+    the warnings make that visible.
+    """
+    kv = inference_data.get("kv_cache") if isinstance(inference_data, dict) else None
+    if not isinstance(kv, dict) or not kv.get("enabled", False):
+        return
+    try:
+        from ..model.cache.capabilities import CACHE_SPECS, is_cacheable
+    except ImportError:
+        from model.cache.capabilities import CACHE_SPECS, is_cacheable
+
+    model_data = full_config.get("model", {}) if isinstance(full_config, dict) else {}
+    dims = model_data.get("dims", {}) if isinstance(model_data, dict) else {}
+    layer_pattern = dims.get("layer_pattern") or []
+    if isinstance(layer_pattern, str):
+        layer_pattern = [layer_pattern]
+    pe_type = (
+        str(model_data.get("positional_encoding", "rope")).lower()
+        if isinstance(model_data, dict)
+        else "rope"
+    )
+    seen = set()
+    for mixer in layer_pattern:
+        if mixer in seen:
+            continue
+        seen.add(mixer)
+        spec = CACHE_SPECS.get(mixer)
+        if spec is None or not spec.supported:
+            reason = spec.notes if spec is not None else "unknown mixer key"
+            print(
+                f"WARNING [kv_cache]: mixer '{mixer}' cannot be cached "
+                f"({reason}); it will run the uncached full-recompute path."
+            )
+            continue
+        # PaPE-configured layers fall back per-layer (D10/D11).
+        use_pe = model_data.get(f"{mixer}_use_pe", True) if isinstance(model_data, dict) else True
+        if pe_type in ("pape", "pape_efficient", "pape_ri") and use_pe:
+            print(
+                f"WARNING [kv_cache]: layer(s) using '{mixer}' with PaPE "
+                "positional encoding run uncached (content-dependent q/k "
+                "augmentation; caching exactness unproven)."
+            )
+            continue
+        if not is_cacheable(mixer):
+            print(
+                f"WARNING [kv_cache]: mixer '{mixer}' has no implemented "
+                "incremental branch yet; running the uncached path."
+            )
+
+
+def load_inference_config(
+    path_or_dict: Union[str, "os.PathLike[str]", Dict[str, Any]],
+) -> InferenceConfig:
+    """Load and validate the ``inference:`` block into an
+    :class:`InferenceConfig`.
+
+    Accepts either a YAML path (full training config or a standalone
+    ``inference:`` document) or an already-loaded dict. Missing/``None``
+    sections yield all dataclass defaults (opt-in not active => legacy
+    behavior, D4/D11).
+
+    Args:
+        path_or_dict: YAML file path, or a dict (the full config containing
+            an ``inference:`` key, or the ``inference:`` block itself).
+
+    Returns:
+        The resolved flat :class:`InferenceConfig`.
+
+    Raises:
+        ValueError: On schema violations or failing cross-key rules.
+    """
+    if isinstance(path_or_dict, (str, os.PathLike)):
+        with open(path_or_dict, "r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    else:
+        data = path_or_dict or {}
+    if not isinstance(data, dict):
+        raise ValueError("load_inference_config expects a YAML path or a dict")
+
+    if "inference" in data:
+        full_config = data
+        inference_data = data.get("inference") or {}
+    else:
+        full_config = {"inference": data}
+        inference_data = data
+    if not isinstance(inference_data, dict):
+        raise ValueError("inference must be an object when provided")
+
+    _validate_inference_block(inference_data)
+    _validate_inference_rules(inference_data)
+    _warn_cache_support(inference_data, full_config)
+
+    flat = flatten_inference_dict(inference_data)
+    return InferenceConfig(**flat)
 
 
 def load_training_config(path: str) -> LoadedTrainingConfig:

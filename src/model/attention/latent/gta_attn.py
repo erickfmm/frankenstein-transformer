@@ -99,7 +99,24 @@ class GTAAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "gta_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def make_cache_slot(self, meta, cache):
+        """Heterogeneous slot: grouped (post-RoPE) keys + latent values."""
+        from ...cache.slots import LatentKVSlot
+
+        return LatentKVSlot(
+            meta,
+            axes={"k_g": "channel", "v_lat": "token"},
+            **cache.codec_slot_kwargs(),
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute GTA attention with shared group maps and latent values.
 
         Args:
@@ -108,6 +125,11 @@ class GTAAttention(nn.Module):
                 encoder. Defaults to ``0`` if ``None``.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder`` for this forward call.
+            cache: Optional latent slot caching the group-mean post-RoPE
+                keys and the latent values. RoPE is head-independent at a
+                given position, so group means commute with the rotation —
+                caching the mean is exact. ``None`` runs the legacy path (D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -115,6 +137,66 @@ class GTAAttention(nn.Module):
         bsz, seq_len, _ = x.shape
         G, S = self.num_groups, self.group_size
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
+        slot = cache if getattr(cache, "kind", "") == "latent_kv" else None
+        if slot is not None:
+            import torch.nn.functional as _F
+            from ...cache.hooks import causal_mask_from_positions, positions_for
+            from ..common import apply_pe_to_qk, apply_pe_to_scores
+
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            v_lat = self.dv_proj(x)
+            # Rotate per-head keys with the absolute offset, then group-mean
+            # (rotation is head-independent at a fixed position).
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe, position_offset=offset)
+            k_g_new = k.view(bsz, G, S, seq_len, self.head_dim).mean(dim=2)
+
+            cached = slot.read()
+            k_g_prev = cached.get("k_g")
+            v_lat_prev = cached.get("v_lat")
+            k_g = torch.cat([k_g_prev, k_g_new], dim=2) if k_g_prev is not None and k_g_prev.size(2) else k_g_new
+            v_lat_all = (
+                torch.cat([v_lat_prev, v_lat], dim=1)
+                if v_lat_prev is not None and v_lat_prev.size(1)
+                else v_lat
+            )
+            slot.append(positions=positions, k_g=k_g_new, v_lat=v_lat)
+            cached_pos = cached.get("positions")
+            kv_positions = (
+                torch.cat([cached_pos, positions], dim=0)
+                if cached_pos is not None and cached_pos.numel()
+                else positions
+            )
+
+            t = k_g.size(2)
+            q_groups = q.view(bsz, G, S, seq_len, self.head_dim).mean(dim=2)
+            attn_scores = (q_groups @ k_g.transpose(-2, -1)) * self.scale
+            attn_scores = apply_pe_to_scores(
+                pe,
+                self.pe_type,
+                attn_scores,
+                q_groups,
+                self.use_pe,
+                kv_len=t,
+                q_offset=0 if offset is None else int(offset),
+                kv_positions=kv_positions,
+            )
+            mask = causal_mask_from_positions(positions, kv_positions)
+            attn_scores = attn_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+            attn_weights = _F.softmax(attn_scores, dim=-1)
+            attn_weights = (
+                attn_weights.unsqueeze(2)
+                .expand(bsz, G, S, seq_len, t)
+                .reshape(bsz, self.num_heads, seq_len, t)
+            )
+            attn_weights = self.dropout(attn_weights)
+            v = _F.silu(self.uv_proj(v_lat_all)).view(bsz, t, self.num_heads, self.head_dim).transpose(1, 2)
+            out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, -1)
+            return self.out_proj(out)
+
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v_lat = self.dv_proj(x)

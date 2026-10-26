@@ -308,5 +308,88 @@ class MainDispatchTests(unittest.TestCase):
         self.assertEqual(rc, 1)
 
 
+class InferenceFlagTests(unittest.TestCase):
+    """KV-cache / generation flags (plan §13, T10)."""
+
+    def setUp(self):
+        self.parser = build_parser()
+
+    def test_causal_lm_task_parses(self):
+        args = self.parser.parse_args(
+            ["infer", "--model", "/tmp/m", "--task", "causal_lm"]
+        )
+        self.assertEqual(args.task, "causal_lm")
+
+    def test_generation_flags_default_to_none(self):
+        args = self.parser.parse_args(["infer", "--model", "/tmp/m"])
+        for flag in (
+            "max_new_tokens",
+            "temperature",
+            "top_k",
+            "top_p",
+            "greedy",
+            "kv_cache",
+            "kv_quant",
+            "kv_group_size",
+            "kv_protected_window",
+            "kv_compress",
+            "kv_num_sinks",
+            "kv_window",
+            "prompt",
+            "config",
+        ):
+            self.assertIsNone(getattr(args, flag), msg=flag)
+
+    def test_kv_flags_parse(self):
+        args = self.parser.parse_args(
+            [
+                "infer", "--model", "/tmp/m", "--task", "causal_lm",
+                "--prompt", "hola",
+                "--max-new-tokens", "8",
+                "--temperature", "0.7",
+                "--top-k", "40",
+                "--top-p", "0.9",
+                "--greedy",
+                "--kv-cache",
+                "--kv-quant", "int4_kivi",
+                "--kv-group-size", "32",
+                "--kv-protected-window", "16",
+                "--kv-compress", "window_sinks",
+                "--kv-num-sinks", "2",
+                "--kv-window", "128",
+            ]
+        )
+        self.assertEqual(args.prompt, "hola")
+        self.assertEqual(args.max_new_tokens, 8)
+        self.assertEqual(args.temperature, 0.7)
+        self.assertEqual(args.top_k, 40)
+        self.assertEqual(args.top_p, 0.9)
+        self.assertTrue(args.greedy)
+        self.assertTrue(args.kv_cache)
+        self.assertEqual(args.kv_quant, "int4_kivi")
+        self.assertEqual(args.kv_group_size, 32)
+        self.assertEqual(args.kv_protected_window, 16)
+        self.assertEqual(args.kv_compress, "window_sinks")
+        self.assertEqual(args.kv_num_sinks, 2)
+        self.assertEqual(args.kv_window, 128)
+
+    def test_no_kv_cache_disables(self):
+        args = self.parser.parse_args(["infer", "--model", "/tmp/m", "--no-kv-cache"])
+        self.assertFalse(args.kv_cache)
+
+    def test_sbert_top_k_default_preserved(self):
+        # sbert search uses --top-k with the legacy default of 5.
+        args = self.parser.parse_args(
+            ["infer", "--model", "/tmp/s", "--task", "sbert", "--mode", "search"]
+        )
+        self.assertIsNone(args.top_k)
+
+    def test_invalid_kv_quant_rejected(self):
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(
+                ["infer", "--model", "/tmp/m", "--kv-quant", "int2_kivi"]
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

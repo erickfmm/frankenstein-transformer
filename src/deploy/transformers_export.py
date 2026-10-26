@@ -88,7 +88,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from transformers import PreTrainedModel
-from transformers.modeling_outputs import CausalLMOutput, MaskedLMOutput
+from transformers.modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 
 from .configuration_frankenstein import FrankensteinConfig
 from .model.config import FrankensteinModelConfig
@@ -179,11 +179,27 @@ class FrankensteinForCausalLM(FrankensteinPreTrainedModel):
         self,
         input_ids: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
+        past_key_values: Any | None = None,
+        use_cache: bool = False,
+        cache_position: int | None = None,
+        return_dict: bool = True,
         **_: Any,
-    ) -> CausalLMOutput:
+    ) -> CausalLMOutputWithPast:
         if input_ids is None:
             raise ValueError("input_ids is required")
-        logits = self.model(input_ids)
+        # Real KV-cache support (plan blocker B7): the custom
+        # FrankensteinCache is threaded through the decoder's prefill +
+        # decode path instead of being silently discarded.
+        if use_cache:
+            logits, past_key_values = self.model(
+                input_ids,
+                past_key_values=past_key_values,
+                use_cache=True,
+                cache_position=cache_position,
+                return_cache=True,
+            )
+        else:
+            logits = self.model(input_ids)
         loss = None
         if labels is not None:
             shift_logits = logits[..., :-1, :].contiguous()
@@ -193,7 +209,27 @@ class FrankensteinForCausalLM(FrankensteinPreTrainedModel):
                 shift_labels.reshape(-1),
                 ignore_index=-100,
             )
-        return CausalLMOutput(loss=loss, logits=logits)
+        return CausalLMOutputWithPast(loss=loss, logits=logits, past_key_values=past_key_values)
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.Tensor,
+        past_key_values: Any | None = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        # HuggingFace ``generate`` compatibility: feed only the last token
+        # once a cache exists (prefill -> decode).
+        if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past_key_values,
+            "use_cache": True,
+        }
+
+    def _reorder_cache(self, past_key_values: Any, beam_idx: torch.Tensor) -> Any:
+        # Batch/beam reordering is a no-op for the v1 single-sequence cache.
+        return past_key_values
 """
 
 

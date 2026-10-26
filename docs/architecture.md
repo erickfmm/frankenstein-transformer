@@ -76,6 +76,7 @@ override accepted by the CLI.
 | `src/model/attention/**` | 44 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
 | `src/model/embeddings/**` | 12 positional encodings + factorized embedding + factory |
+| `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
 | `src/model/activation_function/**` | 43 activations + `ALL_ACTIVATIONS` factory |
 | `src/model/optimizer/**` | 23 optimizers + registry + parameter routing |
 | `src/engine.py` | Framework-neutral `build_model()` used by CLI, DashAI plugin and exports |
@@ -494,6 +495,91 @@ It is selected by `training.task: sbert` and configured under `training.sbert`.
 
 Inference: `infer --task sbert --mode similarity|search|cluster ...`.
 
+### 7.13 KV cache and incremental decoding (`inference.*`)
+
+Opt-in KV-cache infrastructure for autoregressive decoding. The package
+lives in `src/model/cache/` and is enabled by `inference.kv_cache.enabled`
+(default `false` — the legacy full-recompute path stays bit-identical).
+
+**Architecture (D1).** One central `FrankensteinCache` manager
+(HF `past_key_values`-style) is threaded
+`decoder → encoder → HybridLayer → mixer` as an optional keyword argument.
+Slot identity is the global `logical_layer_idx` (D6 — correct under
+`num_loops`/Hyperloop where the same physical layer executes with distinct
+logical roles). Per-layer storage is typed:
+
+| Slot | Kind | Stores | Used by |
+|---|---|---|---|
+| `KVSlot` | `kv` | post-RoPE K/V `(B,H_kv,T,D)`, absolute `positions`, per-token `extras` | quadratic softmax mixers |
+| `LatentKVSlot` | `latent_kv` | named latent streams (`c_kv`, `k_rope`, grouped keys + latent values) | latent family |
+| `StateSlot` | `state` | fixed recurrent matrix (+ gate accumulators), updated in place | recurrent/linear family |
+| `RingSlot` | `ring` | capacity-bounded K/V with pinned sinks | sliding-window family |
+| `ConvTailSlot` | `conv_tail` | last `kernel-1` pre-conv rows | falcon/CCA (future) |
+| `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
+
+**Capability registry (D5).** `src/model/cache/capabilities.py` holds one
+`CacheSpec` per `layer_pattern` enum value (44). A layer caches only when
+the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
+(incremental branch implemented + parity-tested). Everything else receives
+`cache=None` and runs the legacy path — **inference never fails because of
+the cache**; `config_loader` warns about the fallback mixers.
+
+Implemented cached branches (parity-tested in
+`tests/test_kv_cache_mixers.py`): `standard_attn`, `gqa_attn`,
+`sigmoid_attn`, `gated_softmax_attn`, `titan_attn`, `fox_attn`,
+`mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`,
+`gta_attn`, `swa_attn`, `longformer_attn`, `bigbird_attn`,
+`sparse_transformer_attn`, `fasa_attn`, `retnet`, `retnet_attn`,
+`gla_attn`, `deltanet_attn`, `gated_deltanet_attn`,
+`gated_deltanet2_attn`, `hgrn2_attn`, `kda_attn`, `gma_attn`.
+Documented fallbacks: `mamba` (stateless), `ssog_attn` (bidirectional
+vision grid, no causal formulation), `ode` (solver re-derives all
+intermediate states each step), `falcon*` (chunk-parallel rehearsal FIFO),
+`cca_attn`/`ccgqa_attn` (conv tails), `engram_attn` (token tail),
+`nsa_attn`/`msa_attn`/`sparda_attn`/`sparge_attn` (chunk-level block
+statistics are not row-local), `mtla_attn` (dynamic merge schedule),
+`sparsek_attn` (policy in F4), plus every PaPE-configured layer (D10).
+
+**Positional encodings (§8 of the plan).** RoPE/HoPE/sinusoidal-rotary
+accept `position_offset` (blocker B1); ALiBi/BAM accept
+`bias(q_len, kv_len, q_offset, kv_positions)` (B2); SSMax rescales by
+`ln(kv_len)` (B6). Absolute PEs receive `position_offset` in `add()`.
+Keys are stored **post-RoPE** (D7); the slot versions `rope_scaling`.
+
+**Quantization (F3, D3).** Write-time codecs in `src/model/cache/quant/`:
+`none`, `int8` (KIVI asymmetric axes: K per-channel, V per-token),
+`int4_kivi` (group-wise int4 + protected full-precision window + pinned
+sinks). Recurrent states are never quantized (D12). Future codecs are
+interface-ready but not implemented (`int2_kivi`, `palu_lowrank`,
+`commvq`, `qjl_sketch`, `block_gtq`).
+
+**Compression (F4).** Read-time policies in
+`src/model/cache/compress/`: `none`, `window_sinks` (StreamingLLM:
+pinned sinks + sliding window). Future: `h2o`, `snapkv_prefill`,
+`pyramid`, `sparsek`-as-policy.
+
+**Mechanism interactions.** MoD runs forced-dense at prefill when caching
+(D8; ragged caches out of scope); decode degenerates to dense. mHC
+n-streams and Hyperloop loop streams are per-token (no cross-step carry).
+AttnRes residuals disable caching per forward with a warning until the
+incremental buffer mode lands.
+
+**`generate()` (D12).** With `use_cache=False` the legacy O(S²) loop runs
+bit-identically. With `use_cache=True`: one prefill forward builds the
+cache, then each step feeds only the last token. `greedy`, `top_k`,
+`top_p` are supported; `truncate()` provides cheap rollback.
+
+**CLI.** `infer --task causal_lm` with `--prompt`,
+`--max-new-tokens/--temperature/--top-k/--top-p/--greedy`,
+`--kv-cache/--no-kv-cache`, `--kv-quant`, `--kv-group-size`,
+`--kv-protected-window`, `--kv-compress`, `--kv-num-sinks`,
+`--kv-window`, `--config` (see §8.3).
+
+**Deploy.** `ModelDeployer` serialises the resolved `InferenceConfig`
+into `config.json` (`"inference": {...}`); the HF export's
+`FrankensteinForCausalLM` now accepts `past_key_values`/`use_cache`/
+`cache_position` (blocker B7).
+
 ## 8. Training runtime
 
 ### 8.1 Optimizers (23)
@@ -553,17 +639,20 @@ one-time warning and training continues.
 ### 8.3 CLI surface
 
 The CLI exposes exactly four subcommands. `--device` is the only runtime
-override; everything else comes from YAML.
+override for training; the `infer` subcommand additionally accepts
+generation/KV-cache flags (CLI > YAML `inference:` > schema default).
 
 | Subcommand | Key flags | Behaviour |
 |---|---|---|
 | `train` | `--config`, `--config-name`, `--device`, `--list-configs` | Validates and trains (MLM, SBERT, causal LM, vision, classification) |
 | `deploy` | `--checkpoint`, `--output`, `--format`, `--yaml`, `--validate`, `--check`, `--device` | `standard`/`quantized` artifacts; `transformers`/`gguf` exports |
-| `infer` | `--model`, `--task`, `--mode`, `--device`, `--batch-size`, `--top-k`, `--n-clusters` | MLM or SBERT inference |
+| `infer` | `--model`, `--task {mlm,sbert,causal_lm}`, `--mode`, `--device`, `--batch-size`, `--top-k`, `--n-clusters`, `--prompt`, `--config`, `--max-new-tokens`, `--temperature`, `--top-p`, `--greedy`, `--kv-cache/--no-kv-cache`, `--kv-quant`, `--kv-group-size`, `--kv-protected-window`, `--kv-compress`, `--kv-num-sinks`, `--kv-window` | MLM, SBERT or autoregressive generation (with optional KV cache) |
 | `web-server` | — | Streamlit schema-driven YAML builder |
 
 `--format transformers|gguf` requires `--yaml`; `--check` is only valid with
-`gguf`.
+`gguf`. `infer --task causal_lm` requires a decoder artifact
+(`config.mode == "decoder"`); every generation/cache flag defaults to
+`None` (no override).
 
 ## 9. Data paths
 
@@ -776,6 +865,27 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 - `mamba` is currently a linear placeholder in the registry, not a full SSM.
 - Looped depth shares weights; it increases compute, not capacity.
 - BitNet is experimental; ternary weights may degrade quality.
+- **KV cache (v1)**: not every mixer has an incremental branch. The
+  registry (`src/model/cache/capabilities.py`) marks a mixer cacheable only
+  when `supported` *and* listed in `IMPLEMENTED_MIXERS`; the rest fall back
+  to the full-recompute path (never an error, D5). Current fallbacks:
+  `mamba` (stateless), `ssog_attn` (no causal formulation), `ode` (the
+  solver re-derives every token's intermediate state each step, so a
+  converged-state cache is not exact), the `falcon*` family (chunk-parallel
+  rehearsal FIFO), `cca_attn`/`ccgqa_attn` (conv tails), `engram_attn`
+  (token tail), `nsa_attn`/`msa_attn`/`sparda_attn`/`sparge_attn` (their
+  block-selection statistics are chunk-level, not row-local), `mtla_attn`
+  (dynamic hyper-network merge schedule; named risk R1), `sparsek_attn`
+  (eviction-policy work, F4), and any PaPE-configured layer (D10 —
+  content-dependent q/k augmentation, caching exactness unproven).
+- **KV cache + AttnRes**: `residual_type: full_attn|block_attn` disables
+  caching for that forward with a warning (incremental buffer mode pending).
+- **MoD + KV cache**: prefill is forced dense when caching (D8); ragged
+  token-dependent caches are out of scope for v1, so prefill attention
+  differs from the routed training path by construction.
+- **KV quantization** v1 implements `none`/`int8`/`int4_kivi` only; the
+  future codecs/policies listed in `src/model/cache/{quant,compress}` are
+  interface-ready but raise a configuration error if requested.
 - The paper sources (`docs/paper*/`) still use the historical
   `FrankensteinTransformer` name; the code and this spec are authoritative.
 

@@ -282,6 +282,12 @@ def check_gguf_compatibility(yaml_path: str) -> Dict[str, Any]:
     The model must use ``use_bitnet: true`` and a single ``standard_attn``
     layer type (pure encoder or decoder). Any hybrid mixer is rejected.
 
+    The optional ``inference.kv_cache`` block is **irrelevant to the GGUF
+    compatibility check**: KV caching is a runtime decode optimisation, not
+    an architecture change — a cached ``standard_attn`` hybrid exports
+    exactly like an uncached one. The check therefore ignores the
+    ``inference:`` section entirely (plan item 27).
+
     Args:
         yaml_path: Path to the training YAML.
 

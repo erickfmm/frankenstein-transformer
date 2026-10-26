@@ -110,8 +110,33 @@ class BigBirdAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "bigbird_attn_use_pe", True))
+        self._bb_seed = 0
 
-    def _build_mask(self, seq_len: int, device: torch.device) -> torch.Tensor:
+    def make_cache_slot(self, meta, cache):
+        """Unbounded KV slot: random links may point anywhere causal, so no
+        eviction is safe; the pattern is evaluated over ``positions``."""
+        from ...cache.slots import KVSlot
+
+        kwargs = cache.codec_slot_kwargs()
+        return KVSlot(meta, codec=kwargs["codec"], policy=None, num_sinks=kwargs["num_sinks"])
+
+    def _random_links(self, q_pos: int, limit: int, device: torch.device) -> torch.Tensor:
+        """Deterministic per-position random links (B5/R2 fix).
+
+        Links for query at ABSOLUTE position ``q_pos`` are drawn from
+        ``[0, limit)`` with a generator seeded from ``(layer seed, q_pos)``
+        so the full forward and every incremental decode step draw the
+        SAME links for the same position (else cached/full parity fails).
+        In decoder mode ``limit = q_pos + 1``: links beyond the query are
+        causal-masked anyway, so the effective mask is unchanged while
+        becoming reproducible.
+        """
+        gen = torch.Generator(device="cpu")
+        seed = ((int(self._bb_seed) + 0x9E3779B9) * (int(q_pos) + 1)) & 0x7FFFFFFF
+        gen.manual_seed(seed)
+        return torch.randint(0, max(1, limit), (self.num_random,), generator=gen).to(device)
+
+    def _build_mask(self, seq_len: int, device: torch.device, seed: int = 0, offset: int = 0) -> torch.Tensor:
         """Build the combined BigBird attention mask.
 
         Constructs a boolean mask that encodes all three BigBird attention
@@ -120,55 +145,73 @@ class BigBirdAttention(nn.Module):
         1. **Local window**: Each position ``i`` attends to a symmetric window
            of ``window_size // 2`` positions on each side.
         2. **Random links**: Each position ``i`` attends to ``num_random``
-           randomly sampled positions (sampled independently per position).
+           randomly sampled positions — deterministic per (seed, absolute
+           position) so incremental decoding reproduces them exactly (B5).
         3. **Global tokens**: The first ``num_global`` positions attend to all
            positions and are attended by all positions.
 
         Args:
             seq_len (int): Current sequence length.
             device (torch.device): Device on which to create the mask tensor.
+            seed (int): Layer seed for the random links (logical layer idx).
+            offset (int): Absolute index of the first row (cached chunks).
 
         Returns:
             torch.Tensor: Boolean mask of shape ``(seq_len, seq_len)`` where
                 ``True`` indicates allowed attention.
         """
+        self._bb_seed = seed
         mask = torch.zeros(seq_len, seq_len, dtype=torch.bool, device=device)
         half_w = self.window_size // 2
 
         for i in range(seq_len):
-            start = max(0, i - half_w)
-            end = min(seq_len, i + half_w + 1)
-            mask[i, start:end] = True
+            abs_i = offset + i
+            start = max(0, abs_i - half_w)
+            end = min(offset + seq_len, abs_i + half_w + 1)
+            mask[i, max(0, start - offset): max(0, end - offset)] = True
 
         for i in range(seq_len):
-            rand_idx = torch.randint(0, seq_len, (self.num_random,), device=device)
-            mask[i, rand_idx] = True
+            abs_i = offset + i
+            limit = abs_i + 1 if self.mode == "decoder" else offset + seq_len
+            rand_idx = self._random_links(abs_i, limit, device) - offset
+            rand_idx = rand_idx[(rand_idx >= 0) & (rand_idx < seq_len)]
+            if rand_idx.numel():
+                mask[i, rand_idx] = True
 
-        for g in range(min(self.num_global, seq_len)):
-            mask[g, :] = True
-            mask[:, g] = True
+        for g in range(min(self.num_global, offset + seq_len)):
+            if g >= offset:
+                mask[g - offset, :] = True
+            if 0 <= g - offset < seq_len:
+                mask[:, g - offset] = True
 
         return mask
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None, cache=None, cache_position: Optional[int] = None) -> torch.Tensor:
         """Compute BigBird sparse attention.
 
         Projects queries, keys, and values, then applies the combined
         window + random + global mask. In decoder mode, the mask is further
         intersected with a causal (lower-triangular) mask.
 
+        Random links are deterministic per (logical layer, absolute query
+        position) (R2 mitigation), so cached decoding reproduces the full
+        path's links exactly by evaluating the pattern over the cached
+        ``positions`` metadata.
+
         Args:
             x (torch.Tensor): Input tensor of shape ``(batch, seq_len, hidden_size)``.
-            logical_layer_idx (Optional[int]): Logical layer index for
-                potential layer-specific behavior. Not used by this
-                implementation.
-            pos_encoder: Optional positional encoding module overriding
-                ``self.pos_encoder``.
+            logical_layer_idx (Optional[int]): Logical layer index (seeds the
+                random links).
+            pos_encoder: Optional positional encoding module override.
+            cache: Optional KV slot for incremental decoding (``None`` runs
+                the legacy full-recompute path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
         """
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+        seed = int(logical_layer_idx or 0)
 
         bsz, seq_len, hidden = x.shape
 
@@ -176,10 +219,54 @@ class BigBirdAttention(nn.Module):
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            import torch.nn.functional as _F
+            from ...cache.hooks import causal_mask_from_positions, kv_decode_append, pattern_mask, positions_for
+
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            self._bb_seed = seed
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, seed, self.use_pe, position_offset=offset)
+            K, V, kv_positions, _ = kv_decode_append(slot, k, v, positions)
+            scores = (q @ K.transpose(-2, -1)) * self.scale
+            half_w = self.window_size // 2
+
+            def _pattern(q_pos, kv_pos):
+                q_col = q_pos.reshape(-1, 1)
+                kv_row = kv_pos.reshape(1, -1)
+                window = (q_col - kv_row).abs() <= half_w
+                is_global_kv = kv_row < self.num_global
+                is_global_q = q_col < self.num_global
+                random_ok = torch.zeros_like(window)
+                for idx in range(q_col.shape[0]):
+                    links = self._random_links(int(q_col[idx]), int(q_col[idx]) + 1, kv_row.device)
+                    random_ok[idx] = (kv_row[0].unsqueeze(1) == links.unsqueeze(0)).any(dim=1)
+                return window | is_global_kv | is_global_q | random_ok
+
+            if seq_len == 1:
+                p = kv_positions.new_full((1,), int(kv_positions[-1]))
+                allowed = _pattern(p, kv_positions)
+                scores = scores.masked_fill((~allowed).unsqueeze(0).unsqueeze(0), float("-inf"))
+            else:
+                mask = pattern_mask(positions, kv_positions, _pattern)
+                scores = scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+
+            scores = apply_pe_to_scores(
+                pe, self.pe_type, scores, q, self.use_pe,
+                kv_len=K.size(-2),
+                q_offset=0 if offset is None else int(offset),
+                kv_positions=kv_positions,
+            )
+            attn = _F.softmax(scores, dim=-1)
+            attn = self.dropout(attn)
+            out = (attn @ V).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+            return self.out_proj(out)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, seed, self.use_pe)
 
         scores = (q @ k.transpose(-2, -1)) * self.scale
-        mask = self._build_mask(seq_len, x.device)
+        mask = self._build_mask(seq_len, x.device, seed=seed, offset=0)
         if self.mode == "decoder":
             causal = torch.tril(torch.ones(seq_len, seq_len, dtype=torch.bool, device=x.device))
             mask = mask & causal

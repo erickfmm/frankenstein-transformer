@@ -95,8 +95,20 @@ class IHAAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "iha_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute interleaved-head attention with cross-head mixing.
+
+        Only the real per-token K/V is cached (MHA-sized); the pseudo-K/V
+        are static learned mixings computed on the fly from the cached
+        post-RoPE tensors — the mixing is a per-token head-space linear
+        map, so applying it after the cache read is exact.
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -104,6 +116,9 @@ class IHAAttention(nn.Module):
                 encoder. Defaults to ``0`` if ``None``.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder`` for this forward call.
+            cache: Optional KV slot caching the real per-token K/V.
+                ``None`` runs the legacy path (D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -116,6 +131,43 @@ class IHAAttention(nn.Module):
         v = self.v_proj(x).view(bsz, seq_len, H, d).transpose(1, 2)
 
         from ..common import apply_pe_to_qk, apply_pe_to_scores
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            from ...cache.hooks import cached_qk_attention
+
+            def _run(qp, kp, vp, pos):
+                out, _, _ = cached_qk_attention(
+                    slot,
+                    qp,
+                    kp,
+                    vp,
+                    cache_position=pos,
+                    scale=self.scale,
+                    pe=pe,  # score bias only; rotation already applied above
+                    pe_type=self.pe_type,
+                    use_pe=self.use_pe,
+                    x_for_pe=x,
+                    logical_layer_idx=logical_layer_idx or 0,
+                    normalize=None,
+                    dropout=self.dropout,
+                    causal=True,
+                    rotate=False,
+                )
+                return out
+
+            # Rotate real q/k with the absolute offset, then mix heads.
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe, position_offset=cache_position)
+            q_p = torch.einsum("ph,bhsd->bpsd", self.q_mix, q).reshape(bsz, H * P, seq_len, d)
+            k_p = torch.einsum("ph,bhsd->bpsd", self.k_mix, k).reshape(bsz, H * P, seq_len, d)
+            v_p = torch.einsum("ph,bhsd->bpsd", self.v_mix, v).reshape(bsz, H * P, seq_len, d)
+            attended = _run(q_p, k_p, v_p, cache_position)
+            out_p = attended
+            out = out_p.view(bsz, H, P, seq_len, d).mean(dim=2).transpose(1, 2).contiguous().view(
+                bsz, seq_len, H * d
+            )
+            return self.out_proj(out)
+
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         q_p = torch.einsum("ph,bhsd->bpsd", self.q_mix, q).reshape(bsz, H * P, seq_len, d)

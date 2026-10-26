@@ -21,6 +21,7 @@ Reference:
 from __future__ import annotations
 
 import math
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -83,33 +84,65 @@ class ALiBi(nn.Module):
 
     def bias(
         self,
-        seq_len: int,
+        q_len: Optional[int] = None,
+        kv_len: Optional[int] = None,
+        q_offset: int = 0,
+        kv_positions: Optional[torch.Tensor] = None,
         device=None,
         dtype=None,
+        seq_len: Optional[int] = None,
     ) -> torch.Tensor:
         """Compute the ALiBi additive attention bias.
 
+        The full-square builder is the special case ``q_offset = 0`` and
+        ``q_len == kv_len`` (bit-identical to the legacy
+        ``bias(seq_len)`` signature, still accepted via the ``seq_len``
+        keyword). Incremental decoding passes the cached key positions so
+        eviction gaps produce correct relative distances (ALiBi carries no
+        positional tensor in the cache — arXiv:2108.12409).
+
         Args:
-            seq_len: Sequence length for which to compute the bias.
+            q_len: Number of query positions.
+            kv_len: Number of key positions. Defaults to ``q_len``.
+            q_offset: Absolute index of the FIRST query position. Default 0.
+            kv_positions: Optional absolute int64 positions of the cached
+                keys ``(kv_len,)``. Defaults to ``arange(kv_len)``.
             device: Device on which to materialize the bias tensor. Defaults
                 to the slopes buffer device.
             dtype: Data type of the returned bias. Defaults to the slopes
                 buffer dtype.
+            seq_len: Legacy keyword alias for ``q_len`` (backward
+                compatibility with ``bias(seq_len=...)`` call sites).
 
         Returns:
-            Tensor of shape ``(1, num_heads, seq_len, seq_len)`` containing
-            the additive bias ``slopes * (-|i - j|)``.
+            Tensor of shape ``(1, num_heads, q_len, kv_len)`` containing
+            the additive bias ``slopes * (-|q_pos - kv_pos|)``.
         """
+        if q_len is None:
+            if seq_len is None:
+                raise ValueError("bias() requires q_len (or the legacy seq_len keyword)")
+            q_len = int(seq_len)
         if device is None:
             device = self.slopes.device
         if dtype is None:
             dtype = self.slopes.dtype
-        pos = torch.arange(seq_len, device=device, dtype=dtype)
-        distances = (pos[:, None] - pos[None, :]).abs()
+        if kv_len is None:
+            kv_len = q_len
+        if kv_positions is None:
+            kv_positions = torch.arange(kv_len, device=device, dtype=dtype)
+        else:
+            kv_positions = kv_positions.to(device=device, dtype=dtype)
+        q_pos = torch.arange(q_len, device=device, dtype=dtype) + q_offset
+        distances = (q_pos[:, None] - kv_positions[None, :]).abs()
         slopes = self.slopes.to(device=device, dtype=dtype)
         return slopes * (-distances)
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: int = 0) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: int = 0,
+        position_offset: Optional[int] = None,
+    ) -> torch.Tensor:
         """Return the input tensor unchanged.
 
         Args:

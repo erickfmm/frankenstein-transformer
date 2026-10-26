@@ -269,8 +269,13 @@ class GaussianMixtureAttention(nn.Module):
     # ------------------------------------------------------------------
     # Forward
     # ------------------------------------------------------------------
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None, cache=None, cache_position: Optional[int] = None) -> torch.Tensor:
         """Compute Gaussian Mixture Attention.
+
+        Cached decoding keeps the causal prefix statistics ``V_tilde`` and
+        ``Z`` as a recurrent state (StateSlot): the cumulative sums are
+        extended token-by-token, which reproduces the full forward's
+        cumsum exactly (arXiv:2606.18283, Sec. 3.6).
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -281,6 +286,8 @@ class GaussianMixtureAttention(nn.Module):
                 PEs (rope/hope) affect the routing space; score-bias PEs
                 (e.g. ALiBi) are no-ops since GMA does not materialise an
                 attention matrix.
+            cache: Optional state slot (``None`` runs the legacy path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -299,7 +306,10 @@ class GaussianMixtureAttention(nn.Module):
         from ..common import apply_pe_to_qk
         q_t = q.transpose(1, 2)                               # (B, H, N, d_r)
         k_t = k.transpose(1, 2)
-        q_t, k_t = apply_pe_to_qk(pe, self.pe_type, q_t, k_t, x, logical_layer_idx or 0, self.use_pe)
+        q_t, k_t = apply_pe_to_qk(
+            pe, self.pe_type, q_t, k_t, x, logical_layer_idx or 0, self.use_pe,
+            position_offset=cache_position,
+        )
         q = q_t.transpose(1, 2)
         k = k_t.transpose(1, 2)
 
@@ -309,7 +319,33 @@ class GaussianMixtureAttention(nn.Module):
         gamma_q = self.dropout(gamma_q)
         gamma_k = self.dropout(gamma_k)
 
+        slot = cache if getattr(cache, "kind", "") == "state" else None
+
         if self.mode == "decoder":
+            if slot is not None:
+                state = slot.read()
+                v_tilde_prev = state.get("v_tilde")
+                z_prev = state.get("z_prefix")
+                if v_tilde_prev is None:
+                    v_tilde_prev = torch.zeros(
+                        bsz, H, K, d_v, device=x.device, dtype=x.dtype
+                    )
+                    z_prev = torch.zeros(bsz, H, K, device=x.device, dtype=x.dtype)
+                # Per-token recurrence over the chunk (cumsum == running sum).
+                v_run = v_tilde_prev
+                z_run = z_prev
+                outs = []
+                for t in range(seq_len):
+                    gk_t = gamma_k[:, t]                       # (B, H, K)
+                    gq_t = gamma_q[:, t]
+                    v_run = v_run + gk_t.unsqueeze(-1) * v[:, t].unsqueeze(-2)
+                    z_run = z_run + gk_t
+                    numerator = (gq_t.unsqueeze(-1) * v_run).sum(dim=2)  # (B, H, d_v)
+                    denominator = (gq_t * z_run).sum(dim=-1) + self.epsilon
+                    outs.append(numerator / denominator.unsqueeze(-1))
+                slot.update(v_tilde=v_run, z_prefix=z_run)
+                out = torch.stack(outs, dim=1).reshape(bsz, seq_len, H * d_v)
+                return self.out_proj(out)
             # Causal GMA: prefix-restricted write statistics via cumsum
             # along the sequence axis (arXiv:2606.18283, Sec. 3.6).
             # V_tilde^(i)_k = sum_{j<=i} gamma^K_{j,k} V_{X,j}

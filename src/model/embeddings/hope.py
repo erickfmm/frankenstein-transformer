@@ -13,6 +13,7 @@ HoPE is used as the positional encoding for TitanAttention blocks.
 from __future__ import annotations
 
 import math
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -57,13 +58,20 @@ class HoPE(nn.Module):
         self.base = base
         self.damping = damping
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: int = 0) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: int = 0,
+        position_offset: Optional[int] = None,
+    ) -> torch.Tensor:
         """Apply hyperbolic positional encoding.
 
         Args:
             x: Input tensor of shape ``(batch, heads, seq_len, head_dim)``.
             logical_layer_idx: Logical layer index used to compute the
                 layer-dependent angle scaling factor. Defaults to ``0``.
+            position_offset: Absolute index of the FIRST token in ``x``.
+                ``None`` positions from 0 (legacy behavior, bit-identical).
 
         Returns:
             Tensor of same shape as ``x`` with hyperbolic positional encoding
@@ -76,7 +84,8 @@ class HoPE(nn.Module):
         device = x.device
         dtype = x.dtype
 
-        pos = torch.arange(seq_len, device=device, dtype=dtype)
+        start = 0 if position_offset is None else int(position_offset)
+        pos = torch.arange(start, start + seq_len, device=device, dtype=dtype)
         if self.pair_dim > 1:
             idx = torch.arange(self.pair_dim, device=device, dtype=dtype)
             inv_freq = torch.exp(-math.log(self.base) * idx / (self.pair_dim - 1))

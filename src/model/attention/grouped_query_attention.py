@@ -68,15 +68,70 @@ class GroupedQueryAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "gqa_attn_use_pe", True))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
+        """Compute grouped-query attention (optionally over a KV cache).
+
+        Args:
+            x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
+            logical_layer_idx: Logical layer index (interface compatibility).
+            pos_encoder: Optional positional encoding override for this call.
+            cache: Optional :class:`~src.model.cache.slots.KVSlot` caching
+                the ``num_kv_heads`` heads per token (the GQA cache win).
+                ``None`` runs the legacy full-recompute path (D4).
+            cache_position: Absolute index of the first token in ``x``.
+
+        Returns:
+            Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
+        """
         bsz, seq_len, hidden = x.shape
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
 
+        idx = logical_layer_idx or 0
         from .common import apply_pe_to_qk, apply_pe_to_scores
-        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            from ..cache.hooks import causal_mask_from_positions, kv_decode_append, positions_for
+
+            v = self.v_proj(x).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, idx, self.use_pe, position_offset=offset)
+            # Cache stores the compact num_kv_heads heads; expansion happens
+            # per query group after the read (the GQA cache win).
+            K, V, kv_positions, _ = kv_decode_append(slot, k, v, positions)
+            K = K.repeat_interleave(self.num_groups, dim=1)
+            V = V.repeat_interleave(self.num_groups, dim=1)
+
+            attn_scores = (q @ K.transpose(-2, -1)) * self.scale
+            attn_scores = apply_pe_to_scores(
+                pe,
+                self.pe_type,
+                attn_scores,
+                q,
+                self.use_pe,
+                kv_len=K.size(-2),
+                q_offset=0 if offset is None else int(offset),
+                kv_positions=kv_positions,
+            )
+            mask = causal_mask_from_positions(positions, kv_positions)
+            attn_scores = attn_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+            attn_weights = F.softmax(attn_scores, dim=-1)
+            attn_weights = self.dropout(attn_weights)
+            out = (attn_weights @ V).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+            return self.out_proj(out)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, idx, self.use_pe)
 
         v = self.v_proj(x).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
 

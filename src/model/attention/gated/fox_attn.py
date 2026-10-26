@@ -113,7 +113,14 @@ class ForgettingAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "fox_attn_use_pe", False))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute Forgetting Transformer attention over the input sequence.
 
         Constructs a cumulative log-forget bias matrix D from per-head
@@ -121,12 +128,21 @@ class ForgettingAttention(nn.Module):
         logits, and applies softmax. In decoder mode, a causal mask is
         applied on top of the forget bias.
 
+        Cached decoding stores the per-token cumulative log-forget sum
+        ``c_j`` as slot extras (plan §6.2): the bias ``D_ij = c_i - c_j``
+        is pairwise-relative, so decoding is a row of ``D`` against the
+        cached ``c_j`` column, with the running sum continued from the
+        last cached token.
+
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
             logical_layer_idx: Unused; accepted for interface
                 compatibility with other attention mixers.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder``.
+            cache: Optional KV slot for incremental decoding (``None`` runs
+                the legacy full-recompute path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -139,10 +155,50 @@ class ForgettingAttention(nn.Module):
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
-        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
-
         f = torch.sigmoid(self.f_proj(x)).permute(0, 2, 1)
         log_f = torch.log(f + 1e-6)
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            from ...cache.hooks import causal_mask_from_positions, kv_decode_append, positions_for
+            from ..common import apply_pe_to_scores as _apply_scores
+
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe, position_offset=offset)
+            # Continue the running cumulative log-forget sum from the cache.
+            cached = slot.read()
+            c_prev = cached.get("extras", {}).get("cum_log_f")
+            if c_prev is not None and c_prev.numel():
+                c_last = c_prev[:, :, -1:]
+            else:
+                c_last = torch.zeros(bsz, self.num_heads, 1, device=x.device, dtype=log_f.dtype)
+            cum_new = c_last + torch.cumsum(log_f, dim=-1)  # (B, H, S) query-side c_i
+            K, V, kv_positions, extras = kv_decode_append(
+                slot, k, v, positions, extras={"cum_log_f": cum_new}
+            )
+            c_j = extras["cum_log_f"]  # (B, H, T) every cached token
+            bias = cum_new.unsqueeze(-1) - c_j.unsqueeze(-2)  # D_ij = c_i - c_j
+            mask = causal_mask_from_positions(positions, kv_positions)
+            bias = bias.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+            attn = (q @ K.transpose(-2, -1)) * self.scale + bias
+            attn = _apply_scores(
+                pe,
+                self.pe_type,
+                attn,
+                q,
+                self.use_pe,
+                kv_len=K.size(-2),
+                q_offset=0 if offset is None else int(offset),
+                kv_positions=kv_positions,
+            )
+            attn = F.softmax(attn, dim=-1)
+            attn = self.dropout(attn)
+            out = (attn @ V).permute(0, 2, 1, 3).reshape(bsz, seq_len, self.total_dim)
+            return self.out_proj(out)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
         cum_log_f = torch.cumsum(log_f, dim=-1)
 
         bias = cum_log_f.unsqueeze(-1) - cum_log_f.unsqueeze(-2)

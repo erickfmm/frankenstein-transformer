@@ -58,18 +58,31 @@ class ModelDeployer:
         config: :class:`FrankensteinModelConfig` for the model.
         device: PyTorch device for deployment conversion.
         model: The loaded :class:`FrankensteinEncoder` instance.
+        inference_config: Optional resolved runtime
+            :class:`~src.deploy.inference_config.InferenceConfig` serialized
+            into ``config.json`` (``"inference"`` section) so cached
+            inference is reproducible without the original YAML (§11.5).
     """
 
-    def __init__(self, config: FrankensteinModelConfig, device: str = "cpu"):
+    def __init__(
+        self,
+        config: FrankensteinModelConfig,
+        device: str = "cpu",
+        inference_config=None,
+    ):
         """Initialize the deployer.
 
         Args:
             config: Model configuration.
             device: PyTorch device string for conversion.
+            inference_config: Optional resolved
+                :class:`~src.deploy.inference_config.InferenceConfig` to
+                embed in the artifacts.
         """
         self.config = config
         self.device = device
         self.model = None
+        self.inference_config = inference_config
 
     @staticmethod
     def _build_model(config: FrankensteinModelConfig) -> "FrankensteinEncoder":
@@ -180,6 +193,15 @@ class ModelDeployer:
         # Convert non-serializable types
         if 'layer_pattern' in config_dict:
             config_dict['layer_pattern'] = list(config_dict['layer_pattern'])
+        # Serialize the resolved runtime inference config (§11.5) so cached
+        # generation is reproducible without the original YAML.
+        if self.inference_config is not None:
+            try:
+                from .inference_config import inference_config_to_dict
+            except ImportError:  # flat sys.path context
+                from deploy.inference_config import inference_config_to_dict
+
+            config_dict["inference"] = inference_config_to_dict(self.inference_config)
         
         with open(config_path, 'w') as f:
             json.dump(config_dict, f, indent=2)

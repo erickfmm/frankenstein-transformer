@@ -142,7 +142,14 @@ class GatedDeltaNet2Attention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "gated_deltanet2_attn_use_pe", False))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute Gated DeltaNet-2 attention over the input sequence.
 
         Processes the sequence token-by-token with a gated delta-rule
@@ -204,6 +211,12 @@ class GatedDeltaNet2Attention(nn.Module):
             dtype=x.dtype,
         )
 
+        slot = cache if getattr(cache, "kind", "") == "state" else None
+        if slot is not None:
+            cached_state = slot.read().get("state")
+            if cached_state is not None:
+                state = cached_state
+
         outputs = []
         for t in range(seq_len):
             k_t = k[:, t]  # [B, H, dk]
@@ -231,6 +244,8 @@ class GatedDeltaNet2Attention(nn.Module):
             # Output: o_t = S^T @ q_t  (sum over key axis) -> [B, H, dv]
             out_t = (state * q[:, t].unsqueeze(-1)).sum(-2)
             outputs.append(out_t)
+        if slot is not None:
+            slot.update(state=state)
 
         out = torch.stack(outputs, dim=1).reshape(bsz, seq_len, self.total_dim)
         out = self.norm(out)

@@ -542,3 +542,69 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
             out["attnres_gradient_checkpoint"] = residuals["gradient_checkpoint"]
 
     return out
+
+
+def flatten_inference_dict(inference_data: Any) -> Dict[str, Any]:
+    """Flatten the top-level ``inference:`` block into InferenceConfig kwargs.
+
+    The ``inference:`` block is runtime configuration (sibling of
+    ``model:``), validated by ``schema/_inference.yaml`` and materialized
+    as the flat :class:`~src.deploy.inference_config.InferenceConfig`
+    dataclass. Pass-through for a legacy absent section (``None`` /
+    non-dict) yields an empty mapping, i.e. all dataclass defaults — the
+    cache stays opt-in (D4).
+
+    Args:
+        inference_data: The ``inference:`` mapping from a YAML config (or
+            ``None``).
+
+    Returns:
+        Flat kwargs accepted by :class:`InferenceConfig`.
+    """
+    if not isinstance(inference_data, dict):
+        return {}
+
+    out: Dict[str, Any] = {}
+
+    generation = inference_data.get("generation")
+    if isinstance(generation, dict):
+        for leaf in ("max_new_tokens", "temperature", "top_k", "top_p", "greedy"):
+            if leaf in generation:
+                out[leaf] = generation[leaf]
+
+    kv = inference_data.get("kv_cache")
+    if isinstance(kv, dict):
+        if "enabled" in kv:
+            out["kv_cache_enabled"] = bool(kv["enabled"])
+
+        quant = kv.get("quantization")
+        if isinstance(quant, dict):
+            if "method" in quant:
+                out["kv_quant_method"] = quant["method"]
+            for leaf, flat in (
+                ("k_bits", "kv_k_bits"),
+                ("v_bits", "kv_v_bits"),
+                ("group_size", "kv_group_size"),
+                ("protected_window", "kv_protected_window"),
+            ):
+                if leaf in quant:
+                    out[flat] = quant[leaf]
+
+        compression = kv.get("compression")
+        if isinstance(compression, dict):
+            if "method" in compression:
+                out["kv_compress_method"] = compression["method"]
+            for leaf, flat in (
+                ("num_sinks", "kv_num_sinks"),
+                ("window", "kv_window"),
+                ("budget", "kv_budget"),
+                ("per_layer_budgets", "kv_per_layer_budgets"),
+            ):
+                if leaf in compression:
+                    out[flat] = compression[leaf]
+
+        per_mixer = kv.get("per_mixer")
+        if isinstance(per_mixer, list):
+            out["kv_per_mixer"] = [e for e in per_mixer if isinstance(e, dict)]
+
+    return out

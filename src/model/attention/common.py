@@ -241,6 +241,7 @@ def apply_pe_to_qk(
     hidden: "torch.Tensor",
     logical_layer_idx: int,
     use_pe: bool,
+    position_offset: Optional[int] = None,
 ) -> tuple:
     """Apply positional encoding to query/key tensors (rotation or augmentation).
 
@@ -259,6 +260,11 @@ def apply_pe_to_qk(
             content-dependent PEs (PaPE).
         logical_layer_idx: Logical layer index for layer-dependent PE.
         use_pe: Whether PE is enabled for this mixer.
+        position_offset: Absolute index of the FIRST token in ``q``/``k``.
+            ``None`` positions from 0 (legacy behavior, bit-identical);
+            incremental decoding passes the cache write position so keys
+            rotate on the same absolute schedule as the cached post-RoPE
+            keys (blocker B1).
 
     Returns:
         Tuple ``(q, k)`` with PE applied.
@@ -268,8 +274,8 @@ def apply_pe_to_qk(
 
     pe_type = str(pe_type).lower()
     if pe_type in ("rope", "hope", "sinusoidal_rotary"):
-        q = pos_encoder(q, logical_layer_idx=logical_layer_idx)
-        k = pos_encoder(k, logical_layer_idx=logical_layer_idx)
+        q = pos_encoder(q, logical_layer_idx=logical_layer_idx, position_offset=position_offset)
+        k = pos_encoder(k, logical_layer_idx=logical_layer_idx, position_offset=position_offset)
     elif pe_type in ("pape", "pape_efficient", "pape_ri"):
         bsz, seq_len, _ = hidden.shape
         positions = pos_encoder.default_positions(bsz, seq_len, hidden.device, hidden.dtype)
@@ -284,6 +290,9 @@ def apply_pe_to_scores(
     attn_scores: "torch.Tensor",
     q: "torch.Tensor",
     use_pe: bool,
+    kv_len: Optional[int] = None,
+    q_offset: int = 0,
+    kv_positions: Optional["torch.Tensor"] = None,
 ) -> "torch.Tensor":
     """Apply positional encoding bias to attention scores (ALiBi / BAM + SSMax).
 
@@ -297,10 +306,19 @@ def apply_pe_to_scores(
     Args:
         pos_encoder: PE module or ``None``.
         pe_type: PE type string (lowercased).
-        attn_scores: Attention scores of shape ``(B, H, S, S)``.
+        attn_scores: Attention scores of shape ``(B, H, S, kv_len)``.
         q: Query tensor of shape ``(B, H, S, D)`` used to infer
-            sequence length, device and dtype.
+            query length, device and dtype.
         use_pe: Whether PE is enabled for this mixer.
+        kv_len: Total number of attended keys (cached + new). ``None``
+            defaults to the query count (legacy full-square behavior).
+            SSMax uses ``ln(kv_len)`` — its rescale depends on total
+            length, so cached decoding must pass the accumulated value
+            (blocker B6).
+        q_offset: Absolute index of the FIRST query position (blocker B2).
+        kv_positions: Optional absolute int64 positions of the cached keys
+            ``(kv_len,)``; enables exact ALiBi/BAM distances after
+            eviction (gaps in the position sequence).
 
     Returns:
         Attention scores with PE bias applied (or unchanged).
@@ -310,16 +328,26 @@ def apply_pe_to_scores(
 
     pe_type = str(pe_type).lower()
     seq_len = q.size(-2)
+    effective_kv_len = int(kv_len) if kv_len is not None else seq_len
     if pe_type in ("alibi", "bam"):
-        bias = pos_encoder.bias(seq_len, device=q.device, dtype=q.dtype)
+        bias = pos_encoder.bias(
+            seq_len,
+            effective_kv_len,
+            q_offset,
+            kv_positions=kv_positions,
+            device=q.device,
+            dtype=q.dtype,
+        )
         attn_scores = attn_scores + bias
 
     # Transversal Scalable Softmax (SSMax) logit rescale. Applies to every PE
     # type when ``use_ssmax=True`` (the factory attaches ``pos_encoder.ssmax``
-    # as a child submodule). Rescales logits by ``s * ln(seq_len)``.
+    # as a child submodule). Rescales logits by ``s * ln(kv_len)``.
     ssmax = getattr(pos_encoder, "ssmax", None)
     if ssmax is not None:
-        attn_scores = attn_scores * ssmax.scale(seq_len, device=q.device, dtype=q.dtype)
+        attn_scores = attn_scores * ssmax.scale(
+            effective_kv_len, device=q.device, dtype=q.dtype
+        )
 
     return attn_scores
 

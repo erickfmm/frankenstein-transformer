@@ -141,7 +141,14 @@ class KDAAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "kda_attn_use_pe", False))
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute KDA attention over the input sequence.
 
         Processes the sequence token-by-token with a gated delta-rule
@@ -187,14 +194,19 @@ class KDAAttention(nn.Module):
         alpha = torch.exp(log_decay).view(1, 1, self.num_heads, self.head_dim)
         alpha = alpha.to(x.dtype)
 
-        state = torch.zeros(
-            bsz,
-            self.num_heads,
-            self.head_dim,
-            self.head_dim,
-            device=x.device,
-            dtype=x.dtype,
-        )
+        slot = cache if getattr(cache, "kind", "") == "state" else None
+        state = None
+        if slot is not None:
+            state = slot.read().get("state")
+        if state is None:
+            state = torch.zeros(
+                bsz,
+                self.num_heads,
+                self.head_dim,
+                self.head_dim,
+                device=x.device,
+                dtype=x.dtype,
+            )
 
         outputs = []
         for t in range(seq_len):
@@ -210,6 +222,8 @@ class KDAAttention(nn.Module):
 
             out_t = (state * q[:, t].unsqueeze(-1)).sum(-2)
             outputs.append(out_t)
+        if slot is not None:
+            slot.update(state=state)
 
         out = torch.stack(outputs, dim=1).reshape(bsz, seq_len, self.total_dim)
         out = self.norm(out)

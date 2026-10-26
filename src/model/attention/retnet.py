@@ -102,14 +102,22 @@ class MultiScaleRetention(nn.Module):
         gammas = 1 - torch.exp(torch.linspace(math.log(1 / 32), math.log(1 / 512), self.heads))
         return gammas.view(self.heads, 1, 1)
 
-    def forward(self, x, logical_layer_idx: Optional[int] = None, pos_encoder=None):
+    def forward(self, x, logical_layer_idx: Optional[int] = None, pos_encoder=None, cache=None, cache_position: Optional[int] = None):
         """Compute multi-scale retention in parallel mode.
+
+        Cached decoding switches to the paper's recurrent form
+        ``S_n = gamma S_{n-1} + K_n^T V_n``, ``o_n = Q_n S_n`` — algebraically
+        identical to the parallel retention sum for the newest row — with
+        the recurrent matrix stored in a
+        :class:`~src.model.cache.slots.StateSlot` (O(1) per token).
 
         Args:
             x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
             logical_layer_idx: Logical layer index for layer-dependent PE.
             pos_encoder: Optional positional encoding module overriding
                 ``self.pos_encoder``.
+            cache: Optional state slot (``None`` runs the legacy path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
@@ -121,6 +129,33 @@ class MultiScaleRetention(nn.Module):
         q = self.q_proj(x).view(bsz, seq_len, self.heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.heads, self.head_dim).transpose(1, 2)
+
+        slot = cache if getattr(cache, "kind", "") == "state" else None
+        if slot is not None:
+            q, k = apply_pe_to_qk(
+                pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe,
+                position_offset=cache_position,
+            )
+            state = slot.read().get("state")
+            if state is None:
+                state = torch.zeros(
+                    bsz, self.heads, self.head_dim, self.head_dim,
+                    device=x.device, dtype=x.dtype,
+                )
+            gammas = self.decay_mask.to(device=x.device, dtype=x.dtype)  # (H, 1, 1)
+            outputs = []
+            for t in range(seq_len):
+                k_t = k[:, :, t]  # (B, H, D)
+                v_t = v[:, :, t]
+                q_t = q[:, :, t]
+                state = gammas * state + v_t.unsqueeze(-1) * k_t.unsqueeze(-2)
+                out_t = (state * q_t.unsqueeze(-1)).sum(-2) * self.scale
+                outputs.append(out_t)
+            slot.update(state=state)
+            y = torch.stack(outputs, dim=1).transpose(1, 2).reshape(bsz, seq_len, dim)
+            y = self.norm(y)
+            g = self.swish(self.g_proj(x))
+            return self.out_proj(y * g)
 
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 

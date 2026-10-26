@@ -216,3 +216,29 @@
     - model
     - image
     - vision_dataset
+# ---- inference / KV-cache conditional rules (plan §11.1) ----
+# compression.method != none  =>  kv_cache.enabled == true
+# (the window >= protected_window cross-key comparison is enforced
+# in Python by config_loader.load_inference_error, since JSON Schema
+# cannot compare two properties against each other)
+- if:
+    properties:
+      inference:
+        properties:
+          kv_cache:
+            properties:
+              compression:
+                required:
+                - method
+                properties:
+                  method:
+                    const: window_sinks
+  then:
+    properties:
+      inference:
+        kv_cache:
+          required:
+          - enabled
+          properties:
+            enabled:
+              const: true

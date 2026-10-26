@@ -128,7 +128,7 @@ def _run_infer(args: argparse.Namespace) -> int:
             "--device",
             args.device,
             "--top_k",
-            str(args.top_k),
+            str(args.top_k if args.top_k is not None else 5),
             "--n_clusters",
             str(args.n_clusters),
         ]
@@ -159,6 +159,10 @@ def _run_infer(args: argparse.Namespace) -> int:
         "--batch-size",
         str(args.batch_size),
     ]
+    if args.task == "causal_lm":
+        argv.extend(["--task", "causal_lm"])
+    if args.config:
+        argv.extend(["--config", args.config])
     if args.text:
         argv.extend(["--text", args.text])
     if args.input:
@@ -169,6 +173,35 @@ def _run_infer(args: argparse.Namespace) -> int:
         argv.append("--fp16")
     if args.benchmark:
         argv.append("--benchmark")
+    # Generation / KV-cache flags: forward only explicitly-passed values so
+    # the CLI > YAML > schema-default precedence holds (D2).
+    for flag in (
+        "prompt",
+        "max_new_tokens",
+        "temperature",
+        "top_p",
+        "greedy",
+        "kv_cache",
+        "kv_quant",
+        "kv_group_size",
+        "kv_protected_window",
+        "kv_compress",
+        "kv_num_sinks",
+        "kv_window",
+    ):
+        value = getattr(args, flag, None)
+        if value is None:
+            continue
+        cli_name = flag.replace("_", "-")
+        if isinstance(value, bool):
+            if value:
+                argv.append(f"--{cli_name}")
+            else:
+                argv.append(f"--no-{cli_name}")
+        else:
+            argv.extend([f"--{cli_name}", str(value)])
+    if args.top_k is not None and args.task == "causal_lm":
+        argv.extend(["--top-k", str(args.top_k)])
     result = infer_main(argv)
     return int(result) if isinstance(result, int) else 0
 
@@ -255,7 +288,38 @@ def build_parser() -> argparse.ArgumentParser:
 
     infer_parser = subparsers.add_parser("infer", help="Run inference with a deployed model or a trained SBERT model")
     infer_parser.add_argument("--model", type=str, required=True, help="Path to deployed model dir or SBERT model")
-    infer_parser.add_argument("--task", choices=["mlm", "sbert"], default="mlm", help="mlm: deployed encoder; sbert: sentence embeddings")
+    infer_parser.add_argument(
+        "--task",
+        choices=["mlm", "sbert", "causal_lm"],
+        default="mlm",
+        help="mlm: deployed encoder; sbert: sentence embeddings; causal_lm: autoregressive generation (requires a decoder artifact)",
+    )
+    infer_parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="YAML preset carrying an inference: block (causal_lm generation + KV cache)",
+    )
+    infer_parser.add_argument("--prompt", type=str, default=None, help="Prompt text (causal_lm)")
+    infer_parser.add_argument("--max-new-tokens", dest="max_new_tokens", type=int, default=None, help="Maximum tokens to generate (causal_lm)")
+    infer_parser.add_argument("--temperature", type=float, default=None, help="Sampling temperature (causal_lm)")
+    infer_parser.add_argument(
+        "--top-k",
+        dest="top_k",
+        type=int,
+        default=None,
+        help="causal_lm: top-k sampling filter (0 disables); sbert: number of search results (default 5)",
+    )
+    infer_parser.add_argument("--top-p", dest="top_p", type=float, default=None, help="Nucleus mass (causal_lm; 1.0 disables)")
+    infer_parser.add_argument("--greedy", dest="greedy", action="store_true", default=None, help="Greedy argmax decoding (causal_lm)")
+    infer_parser.add_argument("--kv-cache", dest="kv_cache", action="store_true", default=None, help="Enable the KV cache (causal_lm)")
+    infer_parser.add_argument("--no-kv-cache", dest="kv_cache", action="store_false", help="Disable the KV cache (causal_lm)")
+    infer_parser.add_argument("--kv-quant", dest="kv_quant", type=str, choices=["none", "int8", "int4_kivi"], default=None, help="KV quantization codec (causal_lm)")
+    infer_parser.add_argument("--kv-group-size", dest="kv_group_size", type=int, default=None, help="Tokens per quantization group, int4_kivi (causal_lm)")
+    infer_parser.add_argument("--kv-protected-window", dest="kv_protected_window", type=int, default=None, help="Recent full-precision tokens, int4_kivi (causal_lm)")
+    infer_parser.add_argument("--kv-compress", dest="kv_compress", type=str, choices=["none", "window_sinks"], default=None, help="KV eviction policy (causal_lm)")
+    infer_parser.add_argument("--kv-num-sinks", dest="kv_num_sinks", type=int, default=None, help="Pinned attention-sink positions (causal_lm)")
+    infer_parser.add_argument("--kv-window", dest="kv_window", type=int, default=None, help="Sliding window size, window_sinks (causal_lm)")
     infer_parser.add_argument(
         "--mode",
         type=str,
@@ -272,7 +336,6 @@ def build_parser() -> argparse.ArgumentParser:
     infer_parser.add_argument("--sentence2", type=str, default=None, help="Second sentence (sbert similarity)")
     infer_parser.add_argument("--query", type=str, default=None, help="Search query (sbert search)")
     infer_parser.add_argument("--corpus-file", type=str, default=None, help="Corpus file (sbert search)")
-    infer_parser.add_argument("--top-k", type=int, default=5, help="Top-k results (sbert search)")
     infer_parser.add_argument("--sentences-file", type=str, default=None, help="Sentences file (sbert cluster/encode)")
     infer_parser.add_argument("--n-clusters", type=int, default=5, help="Number of clusters (sbert cluster)")
     infer_parser.add_argument("--input-file", type=str, default=None, help="Input sentences file (sbert encode)")

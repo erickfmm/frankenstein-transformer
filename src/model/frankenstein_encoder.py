@@ -15,6 +15,8 @@ the next layer consumes the resulting stream.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 # Explicit submodule import: torch>=2.7 no longer guarantees that
@@ -166,7 +168,14 @@ class FrankensteinEncoder(nn.Module):
             self.mhc_in_proj = nn.Linear(config.hidden_size, n * config.hidden_size)
             self.mhc_out_proj = nn.Linear(n * config.hidden_size, config.hidden_size)
 
-    def forward(self, input_ids):
+    def forward(
+        self,
+        input_ids,
+        past_key_values=None,
+        use_cache: bool = False,
+        cache_position: Optional[int] = None,
+        return_cache: bool = False,
+    ):
         """Run the full looped-depth encoder forward pass.
 
         Iterates the physical layer stack ``num_loops`` times, tracking a
@@ -176,15 +185,48 @@ class FrankensteinEncoder(nn.Module):
 
         Args:
             input_ids: Integer token indices of shape ``(B, S)``.
+            past_key_values: Optional
+                :class:`~src.model.cache.manager.FrankensteinCache` manager.
+                Only consumed when ``use_cache`` is true; unsupported layers
+                silently fall back to the legacy full-recompute path (D5).
+            use_cache: Opt-in incremental decoding flag (D4). ``False``
+                (default) runs the legacy path bit-identically.
+            cache_position: Absolute index of the first token in
+                ``input_ids`` (``None`` during prefill).
+            return_cache: When true (and ``use_cache``), return the tuple
+                ``(logits, cache)`` so generation loops can thread the
+                manager; legacy callers always receive just ``logits``.
 
         Returns:
             Logits tensor of shape ``(B, S, vocab_size)``, or ``(B, num_labels)``
             when the optional classification head is enabled
-            (``classification_head=True``).
+            (``classification_head=True``). With ``return_cache=True`` and
+            ``use_cache=True``, a ``(logits, cache)`` tuple instead.
         """
+        cache = past_key_values if (use_cache and past_key_values is not None) else None
+        decoding = cache is not None and cache_position is not None
+
+        # AttnRes residuals keep cross-layer buffers that must accumulate
+        # across steps for cached decoding — incremental mode lands in F2
+        # (plan §7.4). Until then the combination is disabled with a
+        # one-time warning and the cache is ignored (safe fallback, D5).
+        if cache is not None and self.residual.is_attn_res:
+            import warnings
+
+            warnings.warn(
+                "KV caching is not yet supported with AttnRes residuals "
+                "(residual_type full_attn/block_attn); running the legacy "
+                "full-recompute path for this forward."
+            )
+            cache = None
+
         x = self.emb(input_ids)
         if self.pos_encoder is not None and hasattr(self.pos_encoder, "add"):
-            x = self.pos_encoder.add(x)
+            # Absolute PEs must address the new tokens by their absolute
+            # index during cached decode (plan §8.4).
+            x = self.pos_encoder.add(
+                x, position_offset=cache_position if decoding else None
+            )
         x = self.dropout(x)
 
         # ---- Middle-cycle partitioning (Hyperloop, arXiv:2604.21254) ----
@@ -242,9 +284,17 @@ class FrankensteinEncoder(nn.Module):
                         idx,
                         input_ids,
                         use_reentrant=False,
+                        cache=cache,
+                        cache_position=cache_position,
                     )
                 else:
-                    x = layer(x, logical_layer_idx=idx, input_ids=input_ids)
+                    x = layer(
+                        x,
+                        logical_layer_idx=idx,
+                        input_ids=input_ids,
+                        cache=cache,
+                        cache_position=cache_position,
+                    )
                 # For AttnRes variants, the depth-wise attention is the
                 # post-layer residual update. The layer has already applied
                 # its internal residual merge (``standard`` semantics);
@@ -323,5 +373,23 @@ class FrankensteinEncoder(nn.Module):
                 pooled = x.mean(dim=1)
             else:
                 pooled = x[:, 0]
-            return self.cls_head(pooled)
-        return self.head(x)
+            logits = self.cls_head(pooled)
+            if return_cache and use_cache:
+                return logits, cache
+            return logits
+
+        logits = self.head(x)
+
+        if cache is not None:
+            # Bookkeeping for the generation loop: advance the absolute
+            # write cursor and record the consumed token ids (token-tail
+            # consumers such as engram_attn read them from the manager).
+            cache.advance(int(input_ids.shape[1]))
+            cache.push_tokens(input_ids)
+
+        if return_cache and use_cache:
+            # ``cache`` may be None when an incompatible mechanism (AttnRes)
+            # disabled caching for this forward — the caller detects the
+            # None and falls back to the legacy loop (D5).
+            return logits, cache
+        return logits

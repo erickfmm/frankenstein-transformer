@@ -184,5 +184,56 @@ class TransformersExportTests(unittest.TestCase):
             self.assertTrue(any("model" in issue for issue in compatibility["issues"]))
 
 
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class TransformersExportCacheTests(unittest.TestCase):
+    """T11: the exported causal-LM wrapper supports past_key_values."""
+
+    def test_modeling_source_has_real_cache_plumbing(self):
+        from src.deploy.transformers_export import _MODELING_FILE
+
+        self.assertIn("CausalLMOutputWithPast", _MODELING_FILE)
+        self.assertIn("past_key_values", _MODELING_FILE)
+        self.assertIn("use_cache", _MODELING_FILE)
+        self.assertIn("cache_position", _MODELING_FILE)
+        self.assertIn("prepare_inputs_for_generation", _MODELING_FILE)
+        # The decoder call must request the cache tuple, not swallow kwargs.
+        self.assertIn("return_cache=True", _MODELING_FILE)
+
+    def test_local_equivalent_matches_cached_decode(self):
+        """The exported wrapper's call shape == local cached decode."""
+        import torch
+
+        from src.model.cache import FrankensteinCache
+        from src.model.config import FrankensteinModelConfig
+        from src.model.frankenstein_decoder import FrankensteinDecoder
+
+        cfg = FrankensteinModelConfig(
+            vocab_size=32, hidden_size=16, num_layers=1, num_loops=1,
+            layer_pattern=["standard_attn"], num_heads=4, retention_heads=4,
+            dropout=0.0, use_bitnet=False, mode="decoder",
+            positional_encoding="rope", norm_type="layer_norm",
+            ffn_hidden_size=32,
+        )
+        torch.manual_seed(0)
+        model = FrankensteinDecoder(cfg).eval()
+        prompt = torch.randint(0, 32, (1, 5))
+        with torch.inference_mode():
+            full = model(prompt)
+            cache = FrankensteinCache.new(model)
+            logits, cache = model(
+                prompt, past_key_values=cache, use_cache=True, return_cache=True
+            )
+            self.assertIsNotNone(cache)
+            next_logits, cache = model(
+                torch.tensor([[7]]),
+                past_key_values=cache,
+                use_cache=True,
+                cache_position=cache.next_position(),
+                return_cache=True,
+            )
+        torch.testing.assert_close(logits, full, rtol=1e-5, atol=1e-6)
+        self.assertEqual(next_logits.shape, (1, 1, 32))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,75 @@
+# KV-cache generation preset (causal_lm decoder + inference block).
+# Demonstrates the schema-validated `inference:` runtime block: opt-in KV
+# cache (D4) with int4 KIVI quantization and StreamingLLM window-with-sinks
+# eviction. Per-mixer overrides and CLI flags (CLI > YAML > default, D2)
+# patch this preset at runtime without editing the file.
+model_class: frankenstein_text_decoder
+model:
+  dims:
+    vocab_size: 32000
+    hidden_size: 512
+    num_layers: 6
+    num_loops: 1
+    num_heads: 8
+    num_kv_heads: 4
+    dropout: 0.0
+    layer_pattern:
+    - gqa_attn
+    - standard_attn
+    mode: decoder
+  norm:
+    type: layer_norm
+  embedding:
+    factorized:
+      enabled: false
+      dim: 128
+    conv:
+      enabled: false
+      kernel: 3
+  moe:
+    enabled: false
+    num_experts: 4
+    top_k: 2
+  bitnet:
+    enabled: false
+    routers: false
+    conv: false
+  ffn:
+    hidden_size: 2048
+    activation: gelu
+  positional_encoding: rope
+  positional_encoding_parameters:
+    rope:
+      base: 10000.0
+      scaling: 1.0
+training:
+  task: causal_lm
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 512
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_other: 3e-4
+inference:
+  generation:
+    max_new_tokens: 64
+    temperature: 0.8
+    top_k: 50
+    top_p: 1.0
+    greedy: false
+  kv_cache:
+    enabled: true
+    quantization:
+      method: int4_kivi
+      k_bits: 4
+      v_bits: 4
+      group_size: 32
+      protected_window: 32
+    compression:
+      method: window_sinks
+      num_sinks: 4
+      window: 512
+      budget: null
+      per_layer_budgets: []
+    per_mixer: []

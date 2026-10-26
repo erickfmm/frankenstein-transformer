@@ -62,7 +62,14 @@ class RetNetAttention(nn.Module):
         self.inner = MultiScaleRetention(config, pos_encoder=pos_encoder)
         self.mode = getattr(config, "mode", "encoder")
 
-    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
         """Compute multi-scale retention over the input sequence.
 
         Delegates to the inner MultiScaleRetention module.
@@ -73,8 +80,17 @@ class RetNetAttention(nn.Module):
                 compatibility with other attention mixers.
             pos_encoder: Optional positional encoding module overriding
                 ``self.inner.pos_encoder``.
+            cache: Optional state slot forwarded to the inner retention
+                module (``None`` runs the legacy path, D4).
+            cache_position: Absolute index of the first token in ``x``.
 
         Returns:
             Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
         """
-        return self.inner(x, logical_layer_idx=logical_layer_idx, pos_encoder=pos_encoder)
+        return self.inner(
+            x,
+            logical_layer_idx=logical_layer_idx,
+            pos_encoder=pos_encoder,
+            cache=cache,
+            cache_position=cache_position,
+        )
