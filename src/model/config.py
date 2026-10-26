@@ -270,6 +270,8 @@ class FrankensteinModelConfig:
             model-wide positional encoding. Default: True.
         longformer_attn_use_pe: Whether ``longformer_attn`` layers consume
             the model-wide positional encoding. Default: True.
+        swa_attn_use_pe: Whether ``swa_attn`` layers consume the model-wide
+            positional encoding. Default: True.
         bigbird_attn_use_pe: Whether ``bigbird_attn`` layers consume the
             model-wide positional encoding. Default: True.
         sparse_transformer_attn_use_pe: Whether ``sparse_transformer_attn``
@@ -501,6 +503,7 @@ class FrankensteinModelConfig:
     sparda_attn_use_pe: bool = True
     gma_attn_use_pe: bool = True
     longformer_attn_use_pe: bool = True
+    swa_attn_use_pe: bool = True
     bigbird_attn_use_pe: bool = True
     sparse_transformer_attn_use_pe: bool = True
     sparsek_attn_use_pe: bool = True
@@ -672,6 +675,13 @@ class FrankensteinModelConfig:
     # grid_h=1 degenerates to a 1D positional field.
     ssog_grid_h: Optional[int] = None
     ssog_grid_w: Optional[int] = None
+
+    # ---- SWA / Sliding Window Attention with sinks (arXiv:2608.28444) ----
+    # Total attended tokens w: the ``num_sinks`` leading sink tokens plus the
+    # ``w - num_sinks`` most recent tokens. Paper: w in {64, 128, 256, 512}.
+    swa_window_size: int = 256
+    # Leading sink tokens s every query always attends to. Paper: s = 4.
+    swa_num_sinks: int = 4
 
     # ---- CCA / CCGQA (arXiv:2510.04476) ----
     cca_latent_rank: Optional[int] = None
@@ -901,6 +911,22 @@ class FrankensteinModelConfig:
                 "ssog_attn is encoder-only: the separable Gaussian field has "
                 "no causal formulation. Remove ssog_attn from layer_pattern "
                 "for decoder models."
+            )
+
+        # ---- Validate SWA / Sliding Window Attention with sinks ----
+        if self.swa_window_size < 2:
+            raise ValueError(
+                f"swa_window_size must be >= 2, got {self.swa_window_size}"
+            )
+        if self.swa_num_sinks < 1:
+            raise ValueError(
+                f"swa_num_sinks must be >= 1, got {self.swa_num_sinks}"
+            )
+        if self.swa_num_sinks >= self.swa_window_size:
+            raise ValueError(
+                "swa_num_sinks must be smaller than swa_window_size, got "
+                f"num_sinks={self.swa_num_sinks}, "
+                f"window_size={self.swa_window_size}"
             )
 
         _VALID_POSITIONAL_ENCODINGS = {

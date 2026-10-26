@@ -208,6 +208,7 @@ properties:
       | `engram_attn` | N-gram conditional memory lookup (arXiv:2601.07372) | ✅ | ✅ |
       | `gqa_attn` | Grouped-Query Attention — configurable KV heads (arXiv:2305.13245) | ✅ | ✅ |
       | `longformer_attn` | Longformer: sliding windows + global tokens | ✅ | ✅ |
+      | `swa_attn` | Sliding-window attention with attention sinks — SWA(w, s) (arXiv:2608.28444) | ✅ | ✅ |
       | `bigbird_attn` | BigBird: local + random + global attention | ✅ | ✅ |
       | `sparse_transformer_attn` | Sparse Transformer: factorized patterns | ✅ | ✅ |
       | `sparsek_attn` | SparseK: differentiable top-k KV selection | ✅ | ✅ |
@@ -261,6 +262,7 @@ properties:
       | `engram_attn` | Memoria condicional por N-gramas (arXiv:2601.07372) | ✅ | ✅ |
       | `gqa_attn` | Grouped-Query Attention — cabezas KV configurables (arXiv:2305.13245) | ✅ | ✅ |
       | `longformer_attn` | Longformer: ventanas deslizantes + tokens globales | ✅ | ✅ |
+      | `swa_attn` | Atención de ventana deslizante con sumideros de atención — SWA(w, s) (arXiv:2608.28444) | ✅ | ✅ |
       | `bigbird_attn` | BigBird: local + aleatorio + global | ✅ | ✅ |
       | `sparse_transformer_attn` | Sparse Transformer: patrones factorizados | ✅ | ✅ |
       | `sparsek_attn` | SparseK: selección top-k diferenciable | ✅ | ✅ |
@@ -304,6 +306,7 @@ properties:
         - sigmoid_attn
         - sparse_transformer_attn
         - longformer_attn
+        - swa_attn
         - bigbird_attn
         - sparsek_attn
         - nsa_attn

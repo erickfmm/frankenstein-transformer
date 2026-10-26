@@ -3,7 +3,7 @@ flowchart TD
   tokens["Token sequence"]
 
   subgraph strategies["Sparse design strategies: locality, structured graph sparsity, and learned or predicted selection"]
-    local["Local / windowed<br/>Longformer"]
+    local["Local / windowed<br/>Longformer / SWA with sinks"]
     hybrid["Hybrid sparse graph<br/>BigBird / Sparse Transformer"]
     select["Selective pruning<br/>SparseK / NSA / FASA<br/>SpargeAttn"]
   end

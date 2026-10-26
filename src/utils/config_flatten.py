@@ -36,6 +36,7 @@ The hierarchical schema groups keys as:
                     init_mean_std}
         ssog:       {num_atoms, lookat, max_offset, cold_init, sigma_floor,
                     grid_h, grid_w}
+        swa:        {window_size, num_sinks}
         falcon:     {chunk_size, qk_norm, beta_mode, lambda_mode, beta,
                     lambda, window, short_conv, conv_kernel, eps, eps_gamma}
         ode:        {solver, steps}
@@ -145,6 +146,10 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
         "sigma_floor": "ssog_sigma_floor",
         "grid_h": "ssog_grid_h",
         "grid_w": "ssog_grid_w",
+    },
+    "swa": {
+        "window_size": "swa_window_size",
+        "num_sinks": "swa_num_sinks",
     },
     "falcon": {
         "chunk_size": "falcon_chunk_size",

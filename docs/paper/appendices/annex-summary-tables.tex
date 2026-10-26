@@ -41,10 +41,11 @@ titan\_attn & Recurrent & $\mathcal{O}(c^2 + n f)$ & $\mathcal{O}(c^2 + 1)$ & Te
 engram\_attn & Memory & $\mathcal{O}(n \cdot N \cdot H)$ & $\mathcal{O}(1)$ lookup & Conditional N-gram memory; hash-based scalable retrieval & \citep{cheng2026conditionalmemoryscalablelookup} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Sparse (9)}} \\
+\multicolumn{6}{c}{\textbf{Sparse (10)}} \\
 \midrule
 sparse\_transformer\_attn & Sparse & $\mathcal{O}(n \sqrt{n} \cdot d)$ & $\mathcal{O}(n)$ & Factorized strided + fixed masks; $\sqrt{n}$ sparsity pattern & \citep{child_sparse_transformer_2019} \\
 longformer\_attn & Sparse & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(n)$ & Sliding window + dilation + global tokens; linear in $n$ & \citep{beltagy_longformer_2020} \\
+swa\_attn & Sparse & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(w)$ & Sliding window + attention sinks; training-free, fixed KV cache & \citep{jolicoeur_sliding_window_2026} \\
 bigbird\_attn & Sparse & $\mathcal{O}(n)$ & $\mathcal{O}(n)$ & Random + local + global; Turing complete attention & \citep{zaheer_bigbird_2020} \\
 sparsek\_attn & Sparse & $\mathcal{O}(n \cdot d)$ & $\mathcal{O}(k)$ & Differentiable top-$k$ selection; learned sparsity mask & \citep{lou_sparsek_2024} \\
 nsa\_attn & Sparse & $\mathcal{O}((t/d + n_l + w)d)$ & $\mathcal{O}(n)$ & Hardware-aligned 3-branch design; token/neighbor/window & \citep{yuan_nsa_2025} \\

@@ -4,11 +4,11 @@
 \subsection{Familias de Atención y Mezcladores de Secuencia}
 \label{sec:attention-families}
 
-El sistema implementa cuarenta y tres mezcladores de secuencia organizados en ocho categorías funcionales que reflejan cómo cada método equilibra expresividad, costo computacional y memoria.
+El sistema implementa cuarenta y cuatro mezcladores de secuencia organizados en ocho categorías funcionales que reflejan cómo cada método equilibra expresividad, costo computacional y memoria.
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Líneas base densas} (3): atención softmax estándar, atención sigmoide y Grouped-Query Attention (GQA) ofrecen enrutamiento global completo a costo cuadrático.
     \item \textbf{Recurrentes y retentivas} (5): RetNet, Mamba, bloques tipo ODE y Titans mantienen estado para inferencia en tiempo constante mediante recurrencia, espacios de estados selectivos, profundidad continua o memoria en tiempo de prueba.
-    \item \textbf{Patrones dispersos} (9): Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA y SparDA reducen el costo cuadrático mediante dispersión estructurada, selección de tokens o poda sin entrenamiento.
+    \item \textbf{Patrones dispersos} (10): Sparse Transformer, Longformer, SWA con sumideros de atención, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA y SparDA reducen el costo cuadrático mediante dispersión estructurada, selección de tokens o poda sin entrenamiento.
     \item \textbf{Mecanismos con compuerta} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax y KDA introducen control dependiente de los datos sobre retención, olvido y fuerza de actualización.
     \item \textbf{Compresión latente} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA y GMA comprimen el estado clave--valor en cuellos de botella de bajo rango o enrutan mediante una memoria latente de mezcla gaussiana.
     \item \textbf{Memoria condicional} (1): Engram proporciona memoria de lectura/escritura en tiempo de prueba mediante búsquedas aprendidas.
@@ -51,7 +51,7 @@ Esta familia comprime el estado clave--valor por token en un latente de bajo ran
 \end{figure}
 
 \subsection{Extensiones de Atención Dispersa}
-El registro incluye nueve bloques dispersos \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026}. Dos métodos sin entrenamiento, \texttt{fasa\_attn} y \texttt{sparge\_attn}, son solo de evaluación y lanzan un error si se usan durante el entrenamiento. Las formulaciones, el pseudocódigo, las características por bloque y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-sparse}.
+El registro incluye diez bloques dispersos \citep{child_sparse_transformer_2019,beltagy_longformer_2020,jolicoeur_sliding_window_2026,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026}. Dos métodos sin entrenamiento, \texttt{fasa\_attn} y \texttt{sparge\_attn}, son solo de evaluación y lanzan un error si se usan durante el entrenamiento; \texttt{swa\_attn} también es sin entrenamiento pero es un mixer entrenable normal, por lo que funciona tanto en entrenamiento como en inferencia. Las formulaciones, el pseudocódigo, las características por bloque y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-sparse}.
 
 \begin{figure}[t]
 \centering

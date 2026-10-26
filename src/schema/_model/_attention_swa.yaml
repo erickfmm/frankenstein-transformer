@@ -1,0 +1,119 @@
+type: object
+additionalProperties: false
+properties:
+  swa:
+    type: object
+    additionalProperties: false
+    title: "Sliding Window Attention with Sinks"
+    title_es: "Atención de Ventana Deslizante con Sumideros"
+    description: |-
+      Hyperparameters for `swa_attn` (Sliding Window Attention with
+      attention sinks, arXiv:2608.28444). Every query attends to the first
+      `num_sinks` tokens (the attention sinks) plus the `window_size -
+      num_sinks` most recent tokens; the mechanism is a pure attention-mask
+      change with no extra parameters. In decoder mode the pattern is causal
+      (paper-exact); in encoder mode the local window is symmetric around the
+      query. Only applies when `swa_attn` appears in `layer_pattern`.
+    description_es: |-
+      Hiperparámetros para `swa_attn` (Atención de Ventana Deslizante con
+      sumideros de atención, arXiv:2608.28444). Cada consulta atiende a los
+      primeros `num_sinks` tokens (los sumideros de atención) más los
+      `window_size - num_sinks` tokens más recientes; el mecanismo es un
+      cambio puro de máscara de atención sin parámetros extra. En modo
+      decoder el patrón es causal (exacto al paper); en modo encoder la
+      ventana local es simétrica alrededor de la consulta. Solo aplica cuando
+      `swa_attn` aparece en `layer_pattern`.
+    properties:
+      window_size:
+        type: integer
+        minimum: 2
+        title: "SWA Window Size"
+        title_es: "Tamaño de Ventana SWA"
+        description: |-
+          Total number of tokens `w` each query can attend to in `swa_attn`
+          (arXiv:2608.28444), including the `num_sinks` sink tokens. The
+          sliding part therefore spans `window_size - num_sinks` tokens. The
+          paper evaluates `w` in `{64, 128, 256, 512}` and keeps the sinks
+          fixed at 4. Larger windows improve generative and long-context
+          tasks while increasing KV-cache memory and per-token compute;
+          smaller windows are faster and cheaper but collapse on generative
+          reasoning. Must be at least 2 and strictly greater than
+          `num_sinks`. Only applies when `swa_attn` is in `layer_pattern`.
+
+          **Examples explained:**
+          - `window_size=64`: paper's headline setting for log-likelihood
+            benchmarks (MMLU, ARC, HellaSwag, PIQA, WinoGrande); lowest
+            memory and fastest decoding, but collapses on GSM8K.
+          - `window_size=256`: balanced default. Good long-context behaviour
+            (BABILong) at moderate memory, matching the LoLCATs fused-kernel
+            window.
+          - `window_size=512`: paper's best average for generative math/code
+            (GSM8K, HumanEval) and long-context (RULER, LongBench) tasks;
+            the largest evaluated window and the most memory-hungry.
+        description_es: |-
+          Número total de tokens `w` a los que cada consulta puede atender en
+          `swa_attn` (arXiv:2608.28444), incluidos los `num_sinks` tokens
+          sumidero. La parte deslizante abarca por tanto `window_size -
+          num_sinks` tokens. El paper evalúa `w` en `{64, 128, 256, 512}` y
+          mantiene los sumideros fijos en 4. Ventanas mayores mejoran las
+          tareas generativas y de contexto largo a costa de más memoria de
+          caché KV y cómputo por token; ventanas menores son más rápidas y
+          baratas pero colapsan en razonamiento generativo. Debe ser al menos
+          2 y estrictamente mayor que `num_sinks`. Solo aplica cuando
+          `swa_attn` está en `layer_pattern`.
+
+          **Ejemplos explicados:**
+          - `window_size=64`: ajuste principal del paper para benchmarks de
+            verosimilitud (MMLU, ARC, HellaSwag, PIQA, WinoGrande); mínima
+            memoria y decodificación más rápida, pero colapsa en GSM8K.
+          - `window_size=256`: valor por defecto equilibrado. Buen
+            comportamiento en contexto largo (BABILong) con memoria
+            moderada, equivalente a la ventana del kernel fusionado de
+            LoLCATs.
+          - `window_size=512`: mejor promedio del paper para tareas
+            generativas de matemáticas/código (GSM8K, HumanEval) y de
+            contexto largo (RULER, LongBench); la ventana evaluada más grande
+            y la que más memoria consume.
+        default: 256
+        examples: [64, 256, 512]
+      num_sinks:
+        type: integer
+        minimum: 1
+        title: "SWA Attention Sinks"
+        title_es: "Sumideros de Atención SWA"
+        description: |-
+          Number of leading sink tokens `s` that every query always attends
+          to in `swa_attn` (arXiv:2608.28444). Attention sinks are the first
+          few tokens transformers learn to use as repositories for unused
+          attention mass; excluding them from the mask causes a catastrophic
+          quality drop once they leave the sliding window. The paper fixes
+          `s = 4` across all experiments. Must be at least 1 and strictly
+          smaller than `window_size`. In decoder mode sinks are causal-clipped
+          (early queries never see future sinks). Only applies when `swa_attn`
+          is in `layer_pattern`.
+
+          **Impact:** Increasing `s` gives the model more global "dump"
+          capacity and marginally helps long-context retrieval, at the cost
+          of a smaller effective sliding window for the same `window_size`.
+          Reducing `s` to 1 or 2 weakens the sink mechanism; setting it to 0
+          is not allowed because sink-free SWA fails catastrophically.
+        description_es: |-
+          Número de tokens sumidero iniciales `s` a los que toda consulta
+          atiende siempre en `swa_attn` (arXiv:2608.28444). Los sumideros de
+          atención son los primeros tokens que los transformers aprenden a
+          usar como repositorios de la masa de atención no utilizada;
+          excluirlos de la máscara provoca una caída catastrófica de calidad
+          en cuanto salen de la ventana deslizante. El paper fija `s = 4` en
+          todos los experimentos. Debe ser al menos 1 y estrictamente menor
+          que `window_size`. En modo decoder los sumideros se recortan de
+          forma causal (las consultas tempranas nunca ven sumideros futuros).
+          Solo aplica cuando `swa_attn` está en `layer_pattern`.
+
+          **Impacto:** Aumentar `s` da al modelo más capacidad global de
+          "descarga" y ayuda marginalmente a la recuperación en contexto
+          largo, a costa de una ventana deslizante efectiva menor para el
+          mismo `window_size`. Reducir `s` a 1 o 2 debilita el mecanismo de
+          sumideros; fijarlo a 0 no está permitido porque la SWA sin
+          sumideros falla catastróficamente.
+        default: 4
+        examples: [4]

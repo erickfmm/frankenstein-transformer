@@ -25,6 +25,8 @@ from src.model.attention import (
     SparseKAttention,
     SparseTransformerAttention,
     SpargeAttention,
+    SparDAAttention,
+    SlidingWindowAttention,
     SSOGAttention,
     StandardAttention,
     TitanAttention,
@@ -82,6 +84,7 @@ class AttentionRefactorTests(unittest.TestCase):
         self.assertTrue(callable(RoPE))
         self.assertTrue(callable(SparseTransformerAttention))
         self.assertTrue(callable(LongformerAttention))
+        self.assertTrue(callable(SlidingWindowAttention))
         self.assertTrue(callable(BigBirdAttention))
         self.assertTrue(callable(SparseKAttention))
         self.assertTrue(callable(NSAAttention))
@@ -144,6 +147,7 @@ class AttentionRefactorTests(unittest.TestCase):
             "mamba",
             "sparse_transformer_attn",
             "longformer_attn",
+            "swa_attn",
             "bigbird_attn",
             "sparsek_attn",
             "nsa_attn",

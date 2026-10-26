@@ -4,11 +4,11 @@
 \subsection{Attention and Sequence-Mixer Families}
 \label{sec:attention-families}
 
-The system implements forty-three sequence mixers organized into eight functional categories that reflect how each method balances expressivity, computational cost, and memory.
+The system implements forty-four sequence mixers organized into eight functional categories that reflect how each method balances expressivity, computational cost, and memory.
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Dense baselines} (3): standard softmax attention, sigmoid attention, and Grouped-Query Attention (GQA) provide full global routing at quadratic cost.
     \item \textbf{Recurrent and retentive} (5): RetNet, Mamba, ODE-style blocks, and Titans maintain state for constant-time inference through recurrence, selective state spaces, continuous depth, or test-time memory.
-    \item \textbf{Sparse patterns} (9): Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA, and SparDA reduce quadratic cost through structured sparsity, token selection, or training-free pruning.
+    \item \textbf{Sparse patterns} (10): Sparse Transformer, Longformer, SWA with attention sinks, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA, and SparDA reduce quadratic cost through structured sparsity, token selection, or training-free pruning.
     \item \textbf{Gated mechanisms} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, and KDA introduce data-dependent control over retention, forgetting, and update strength.
     \item \textbf{Latent compression} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA, and GMA compress key--value state into low-rank bottlenecks or route through a Gaussian-mixture latent memory.
     \item \textbf{Conditional memory} (1): Engram provides test-time read/write memory through learned lookups.
@@ -51,7 +51,7 @@ This family compresses per-token key--value state into a low-rank latent: MLA, G
 \end{figure}
 
 \subsection{Sparse Attention Extensions}
-The registry includes nine sparse blocks \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026}. Two training-free methods, \texttt{fasa\_attn} and \texttt{sparge\_attn}, are evaluation-only and raise an error if used during training. Formulations, pseudocode, per-block characteristics, and a comparison table are collected in Appendix~\ref{sec:annex-sparse}.
+The registry includes ten sparse blocks \citep{child_sparse_transformer_2019,beltagy_longformer_2020,jolicoeur_sliding_window_2026,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026}. Two training-free methods, \texttt{fasa\_attn} and \texttt{sparge\_attn}, are evaluation-only and raise an error if used during training; \texttt{swa\_attn} is also training-free but is a normal trainable mixer, so it runs in both training and inference. Formulations, pseudocode, per-block characteristics, and a comparison table are collected in Appendix~\ref{sec:annex-sparse}.
 
 \begin{figure}[t]
 \centering

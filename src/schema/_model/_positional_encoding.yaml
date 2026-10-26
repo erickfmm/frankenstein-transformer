@@ -320,6 +320,7 @@ properties:
           sparda_attn: { type: boolean, title: "sparda_attn", description: "Model-wide PE for `sparda_attn` layers.", default: true }
           gma_attn: { type: boolean, title: "gma_attn", description: "Model-wide PE for `gma_attn` layers.", default: true }
           longformer_attn: { type: boolean, title: "longformer_attn", description: "Model-wide PE for `longformer_attn` layers.", default: true }
+          swa_attn: { type: boolean, title: "swa_attn", description: "Model-wide PE for `swa_attn` layers.", default: true }
           bigbird_attn: { type: boolean, title: "bigbird_attn", description: "Model-wide PE for `bigbird_attn` layers.", default: true }
           sparse_transformer_attn: { type: boolean, title: "sparse_transformer_attn", description: "Model-wide PE for `sparse_transformer_attn` layers.", default: true }
           sparsek_attn: { type: boolean, title: "sparsek_attn", description: "Model-wide PE for `sparsek_attn` layers.", default: true }

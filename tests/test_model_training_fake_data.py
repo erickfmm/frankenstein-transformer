@@ -243,6 +243,10 @@ class SparseLayerTrainingTests(unittest.TestCase):
         losses = self._train("longformer_attn")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
+    def test_swa_attn_training(self):
+        losses = self._train("swa_attn")
+        self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
+
     def test_bigbird_attn_training(self):
         losses = self._train("bigbird_attn")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))

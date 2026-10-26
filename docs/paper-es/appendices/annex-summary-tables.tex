@@ -41,10 +41,11 @@ titan\_attn & Recurrente & $\mathcal{O}(c^2 + n f)$ & $\mathcal{O}(c^2 + 1)$ & A
 engram\_attn & Memoria & $\mathcal{O}(n \cdot N \cdot H)$ & $\mathcal{O}(1)$ lookup & Memoria condicional de N-gramas; recuperación escalable basada en hash & \citep{cheng2026conditionalmemoryscalablelookup} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Disperso (9)}} \\
+\multicolumn{6}{c}{\textbf{Disperso (10)}} \\
 \midrule
 sparse\_transformer\_attn & Disperso & $\mathcal{O}(n \sqrt{n} \cdot d)$ & $\mathcal{O}(n)$ & Máscaras factorizadas estrideadas + fijas; patrón de dispersidad $\sqrt{n}$ & \citep{child_sparse_transformer_2019} \\
 longformer\_attn & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(n)$ & Ventana deslizante + dilatación + tokens globales; lineal en $n$ & \citep{beltagy_longformer_2020} \\
+swa\_attn & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(w)$ & Ventana deslizante + sumideros de atención; sin entrenamiento, caché KV fija & \citep{jolicoeur_sliding_window_2026} \\
 bigbird\_attn & Disperso & $\mathcal{O}(n)$ & $\mathcal{O}(n)$ & Aleatorio + local + global; atención Turing completa & \citep{zaheer_bigbird_2020} \\
 sparsek\_attn & Disperso & $\mathcal{O}(n \cdot d)$ & $\mathcal{O}(k)$ & Selección top-$k$ diferenciable; máscara de dispersidad aprendida & \citep{lou_sparsek_2024} \\
 nsa\_attn & Disperso & $\mathcal{O}((t/d + n_l + w)d)$ & $\mathcal{O}(n)$ & Diseño de 3 ramas alineado con hardware; token/vecino/ventana & \citep{yuan_nsa_2025} \\

@@ -12,6 +12,7 @@ from .sparse import (
     SparseTransformerAttention,
     SpargeAttention,
     SparDAAttention,
+    SlidingWindowAttention,
 )
 from .grouped_query_attention import GroupedQueryAttention
 from .standard import StandardAttention
@@ -67,6 +68,7 @@ __all__ = [
     "FASAAttention",
     "MSAAttention",
     "SparDAAttention",
+    "SlidingWindowAttention",
     "GatedLinearAttention",
     "DeltaNetAttention",
     "GatedDeltaNetAttention",

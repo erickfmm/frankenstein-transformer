@@ -57,6 +57,7 @@ from .attention.sparse import (
     SparseTransformerAttention,
     SpargeAttention,
     SparDAAttention,
+    SlidingWindowAttention,
 )
 from .attention.standard import StandardAttention
 from .attention.ssog import SSOGAttention
@@ -180,6 +181,7 @@ class HybridLayer(nn.Module):
             "sigmoid_attn": SigmoidAttention,
             "sparse_transformer_attn": SparseTransformerAttention,
             "longformer_attn": LongformerAttention,
+            "swa_attn": SlidingWindowAttention,
             "bigbird_attn": BigBirdAttention,
             "sparsek_attn": SparseKAttention,
             "nsa_attn": NSAAttention,

@@ -129,6 +129,8 @@ _DEFAULT_PAIRS = {
     "properties.model.properties.attention.properties.ode.properties.solver": "ode_solver",
     "properties.model.properties.attention.properties.ode.properties.steps": "ode_steps",
     "properties.model.properties.attention.properties.retnet.properties.heads": "retention_heads",
+    "properties.model.properties.attention.properties.swa.properties.window_size": "swa_window_size",
+    "properties.model.properties.attention.properties.swa.properties.num_sinks": "swa_num_sinks",
 }
 
 

@@ -3,7 +3,7 @@
 
 \subsection{Resumen Ejecutivo}
 
-Los mecanismos de atención dispersa abordan la prohibitiva complejidad computacional y de memoria $\mathcal{O}(n^2)$ de la atención de producto punto escalado estándar al restringir el conjunto de pares clave-valor atendidos. La atención dispersa moderna abarca un rico espacio de diseño distinguido por cuatro dimensiones ortogonales: (i) \textbf{patrón de dispersidad} (geométrico fijo, dependiente de datos o basado en frecuencia), (ii) \textbf{capacidad de entrenamiento} (entrenado de extremo a extremo o solo inferencia), (iii) \textbf{unidad de dispersidad} (tokens individuales, ventanas locales o bloques), y (iv) \textbf{mecanismo} (enmascaramiento, selección, filtrado o compresión). Este anexo sintetiza siete familias principales de atención dispersa---Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn y FASA---proporcionando formulaciones matemáticas, pseudocódigo algorítmico y comparaciones arquitectónicas exhaustivas.
+Los mecanismos de atención dispersa abordan la prohibitiva complejidad computacional y de memoria $\mathcal{O}(n^2)$ de la atención de producto punto escalado estándar al restringir el conjunto de pares clave-valor atendidos. La atención dispersa moderna abarca un rico espacio de diseño distinguido por cuatro dimensiones ortogonales: (i) \textbf{patrón de dispersidad} (geométrico fijo, dependiente de datos o basado en frecuencia), (ii) \textbf{capacidad de entrenamiento} (entrenado de extremo a extremo o solo inferencia), (iii) \textbf{unidad de dispersidad} (tokens individuales, ventanas locales o bloques), y (iv) \textbf{mecanismo} (enmascaramiento, selección, filtrado o compresión). Este anexo sintetiza diez familias principales de atención dispersa---Sparse Transformer, Longformer, SWA con sumideros de atención, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA y SparDA---proporcionando formulaciones matemáticas, pseudocódigo algorítmico y comparaciones arquitectónicas exhaustivas.
 
 \subsection{Sparse Transformer: Patrones Estrideados y Fijos Factorizados}
 
@@ -138,6 +138,58 @@ Los tres patrones se aplican mediante proyecciones separadas. La atención local
     \item \textbf{Cobertura}: Con $L$ capas y tamaño de ventana $w$, el campo receptivo crece a $L \times w$, cubriendo toda la secuencia con redes poco profundas.
     \item \textbf{Fortaleza}: Práctico para tareas a nivel de documentos; la dilatación expande los campos receptivos locales con sobrecarga mínima; los tokens globales proporcionan correspondencia consulta-documento.
     \item \textbf{Limitación}: El tamaño de ventana sigue siendo un hiperparámetro de diseño; subóptimo para tareas que requieren patrones de atención densos.
+\end{itemize}
+
+\subsection{SWA con Sumideros de Atención: Ventana Deslizante Más un Prefijo Sumidero}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/swa.pdf}}
+\caption{Flujo de datos de SWA con sumideros de atención: los primeros $s$ tokens sumidero y una ventana deslizante causal de $w-s$ se unen en una máscara aplicada a la matriz de puntuaciones antes del softmax.}
+\label{fig:mixer-swa}
+\end{figure}
+
+\subsubsection{Formulación Matemática}
+
+SWA con sumideros de atención \citep{jolicoeur_sliding_window_2026} es la política de desalojo de caché KV más simple: en lugar de comprimir la caché o reemplazar la atención por un estado recurrente, restringe cada consulta a un conjunto pequeño y fijo de claves. Denotemos el tamaño de ventana $w$ y el número de sumideros $s$, es decir $\mathrm{SWA}(w,s)$. En modo decoder, la consulta $i$ atiende a
+\[
+\mathcal{A}_i = \underbrace{\{j : j < s,\; j \leq i\}}_{\text{sumideros de atención}} \;\cup\; \underbrace{\{j : i - (w-s) + 1 \leq j \leq i\}}_{\text{ventana deslizante de } w-s},
+\]
+de modo que cada consulta ve como máximo $w$ claves. El recorte causal $j \leq i$ sobre el término de sumideros es esencial: los tokens anteriores a la posición $s$ no deben ver sumideros futuros.
+
+\paragraph{Por qué los sumideros son imprescindibles} Los transformers aprenden a asignar una masa de atención desproporcionadamente grande a los primeros tokens aunque no sean semánticamente relevantes. Estos \emph{sumideros de atención} \citep{xiao_streaming_sinks_2024} actúan como repositorios de la atención sobrante. Cuando el prefijo sale de una ventana deslizante sin sumideros, el modelo pierde su destino de descarga y la calidad colapsa catastróficamente; reincluir los primeros $s$ tokens recupera la mayor parte del rendimiento de la atención completa. El paper fija $s = 4$ y evalúa $w \in \{64, 128, 256, 512\}$.
+
+\paragraph{Extensión a encoder} El paper define $\mathrm{SWA}(w,s)$ para modelos de lenguaje causales. Para encoders bidireccionales la ventana local se hace simétrica, $\{j : |i-j| \leq \lfloor (w-s)/2 \rfloor\}$, y se une con el prefijo sumidero---la misma convención que usa Longformer.
+
+Como la intervención es un cambio puro de máscara de atención, no requiere parámetros adicionales ni matemática QKV nueva: se reutilizan las proyecciones estándar $W_q, W_k, W_v, W_o$. Puede aplicarse a un checkpoint preentrenado en inferencia con cero tokens de entrenamiento, o entrenarse desde cero como un mixer normal.
+
+\subsubsection{Pseudocódigo Algorítmico}
+
+\begin{algorithm}[H]
+\caption{SWA con Sumideros de Atención: Construcción de Máscara y Atención}
+\begin{algorithmic}[1]
+\Require Consulta $\mathbf{Q} \in \mathbb{R}^{n \times d}$, Clave $\mathbf{K}$, Valor $\mathbf{V}$, ventana $w$, sumideros $s$
+\Ensure Salida $\mathbf{Y} \in \mathbb{R}^{n \times d}$
+\State Índices de fila $i$, índices de columna $j$
+\State $\text{causal} \gets [j \leq i]$
+\State $\text{sumideros} \gets [j < s] \wedge \text{causal}$ \Comment{Prefijo sumidero recortado causalmente}
+\State $\text{ventana} \gets [i - (w-s) + 1 \leq j \leq i]$
+\State $M \gets \text{sumideros} \lor \text{ventana}$
+\State $S \gets \mathbf{Q}\mathbf{K}^{\top} / \sqrt{d_k}$
+\State $S \gets \text{mask}(S, M)$ \Comment{$-\infty$ donde $M = 0$}
+\State $\mathbf{Y} \gets \text{softmax}(S)\, \mathbf{V}$
+\Return $\mathbf{Y}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Características Clave}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad}: $\mathcal{O}(n \cdot w \cdot d)$ en tiempo y $\mathcal{O}(w)$ de almacenamiento KV por capa en inferencia (fijo una vez que la secuencia supera $w$).
+    \item \textbf{Entrenable}: Ambos; sin entrenamiento en inferencia sobre checkpoints preentrenados, o entrenado desde cero.
+    \item \textbf{Campo receptivo}: Tras $L$ capas, $L(w-s)$ posiciones más el prefijo sumidero siempre visible.
+    \item \textbf{Fortaleza}: Recupera $\approx 99\%$ de la puntuación media de atención completa en modelos de 1.3B a 72B con cero tokens de entrenamiento, y supera a la atención lineal retrofiteada por 2--10$\times$ en razonamiento de contexto largo (S-NIAH, BABILong) decodificando más rápido y usando menos memoria.
+    \item \textbf{Limitación}: El horizonte es fijo y depende de la tarea---$w=64$ basta para benchmarks de verosimilitud pero colapsa en matemáticas generativas, donde se necesita $w=512$; no hay selección adaptativa al contenido.
 \end{itemize}
 
 \subsection{BigBird: Grafo Disperso Aleatorio, Local y Global}
@@ -632,10 +684,11 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
 
 \subsection{Espacio de Diseño y Criterios de Selección}
 
-Los siete métodos de atención dispersa ocupan posiciones complementarias en un espacio de diseño multidimensional:
+Los diez métodos de atención dispersa ocupan posiciones complementarias en un espacio de diseño multidimensional:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Patrones geométricos/fijos} (Sparse Transformer, Longformer): Simples de implementar y analizar, pero los patrones no se adaptan al contenido.
+    \item \textbf{Desalojo de KV con memoria fija} (SWA con sumideros): La política más barata posible---conservar un prefijo sumidero y una ventana reciente, descartar el resto. Sin parámetros extra, sin entrenamiento, memoria acotada.
     \item \textbf{Selección aprendida} (SparseK, NSA): Permiten adaptación mediante redes de selección entrenables, a costa de mayor complejidad de implementación.
     \item \textbf{Aceleración sin entrenamiento} (FASA, SpargeAttn): Permiten aceleración directa de modelos existentes sin reentrenamiento, adecuados para sistemas desplegados.
     \item \textbf{Garantías teóricas} (BigBird): Proporcionan demostraciones formales de completitud expresiva, importantes para comprender los márgenes de seguridad.
@@ -643,9 +696,9 @@ Los siete métodos de atención dispersa ocupan posiciones complementarias en un
 
 \textbf{Orientación de selección:}
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Entrenamiento de nuevos modelos} donde los recursos lo permitan: NSA o SparseK para máxima aceleración de inferencia; BigBird para garantía teórica.
-    \item \textbf{Comprensión de documentos de contexto largo}: Longformer o FASA por simplicidad práctica; NSA para escala extrema.
-    \item \textbf{Aceleración de modelos existentes}: FASA para LLMs basados en RoPE; SpargeAttn para cualquier arquitectura.
-    \item \textbf{Entornos con recursos limitados}: Sparse Transformer por simplicidad y eficiencia probada a escala moderada.
+    \item \textbf{Entrenamiento de nuevos modelos} donde los recursos lo permitan: NSA o SparseK para máxima aceleración de inferencia; BigBird para garantía teórica; SWA con sumideros como el baseline de bajo costo más fuerte.
+    \item \textbf{Comprensión de documentos de contexto largo}: SWA con sumideros (ventana 256--512) para la mejor precisión por byte de caché KV; Longformer o FASA por simplicidad práctica; NSA para escala extrema.
+    \item \textbf{Aceleración de modelos existentes}: SWA con sumideros como baseline sin entrenamiento por defecto (superó a la mayoría de los retrofits de atención lineal en el estudio original); FASA para LLMs basados en RoPE; SpargeAttn para cualquier arquitectura.
+    \item \textbf{Entornos con recursos limitados}: SWA con sumideros para un presupuesto de memoria fijo; Sparse Transformer por simplicidad y eficiencia probada a escala moderada.
 \end{enumerate}
 

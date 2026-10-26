@@ -7,6 +7,7 @@ from .sparse_transformer_attn import SparseTransformerAttention
 from .sparsek_attn import SparseKAttention
 from .sparge_attn import SpargeAttention
 from .sparda_attn import SparDAAttention
+from .swa_attn import SlidingWindowAttention
 
 __all__ = [
     "SparseTransformerAttention",
@@ -18,4 +19,5 @@ __all__ = [
     "FASAAttention",
     "MSAAttention",
     "SparDAAttention",
+    "SlidingWindowAttention",
 ]

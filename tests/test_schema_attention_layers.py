@@ -25,6 +25,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "sigmoid_attn",
             "sparse_transformer_attn",
             "longformer_attn",
+            "swa_attn",
             "bigbird_attn",
             "sparsek_attn",
             "nsa_attn",
@@ -110,6 +111,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "num_atoms", "lookat", "max_offset", "cold_init",
                 "sigma_floor", "grid_h", "grid_w",
             },
+            "swa": {"window_size", "num_sinks"},
             "falcon": {
                 "chunk_size", "qk_norm", "beta_mode", "lambda_mode",
                 "beta", "lambda", "window", "short_conv", "conv_kernel",

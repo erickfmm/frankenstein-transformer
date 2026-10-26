@@ -3,7 +3,7 @@
 
 \subsection{Executive Summary}
 
-Sparse attention mechanisms address the prohibitive $\mathcal{O}(n^2)$ computational and memory complexity of standard scaled dot-product attention by restricting the set of attended key-value pairs. Modern sparse attention spans a rich design space distinguished by four orthogonal dimensions: (i) \textbf{sparsity pattern} (fixed geometric, data-dependent, or frequency-based), (ii) \textbf{trainability} (end-to-end trained or inference-only), (iii) \textbf{sparsity unit} (individual tokens, local windows, or blocks), and (iv) \textbf{mechanism} (masking, selection, filtering, or compression). This annex synthesizes seven major sparse attention families---Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, and FASA---providing mathematical formulations, algorithmic pseudocode, and comprehensive architectural comparisons.
+Sparse attention mechanisms address the prohibitive $\mathcal{O}(n^2)$ computational and memory complexity of standard scaled dot-product attention by restricting the set of attended key-value pairs. Modern sparse attention spans a rich design space distinguished by four orthogonal dimensions: (i) \textbf{sparsity pattern} (fixed geometric, data-dependent, or frequency-based), (ii) \textbf{trainability} (end-to-end trained or inference-only), (iii) \textbf{sparsity unit} (individual tokens, local windows, or blocks), and (iv) \textbf{mechanism} (masking, selection, filtering, or compression). This annex synthesizes ten major sparse attention families---Sparse Transformer, Longformer, SWA with attention sinks, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, and SparDA---providing mathematical formulations, algorithmic pseudocode, and comprehensive architectural comparisons.
 
 \subsection{Sparse Transformer: Factorized Strided and Fixed Patterns}
 
@@ -138,6 +138,58 @@ The three patterns are applied via separate projections. The local and global at
     \item \textbf{Coverage}: With $L$ layers and window size $w$, receptive field grows to $L \times w$, covering entire sequence with shallow networks.
     \item \textbf{Strength}: Practical for document-level tasks; dilation expands local receptive fields with minimal overhead; global tokens provide query-document correspondence.
     \item \textbf{Limitation}: Window size remains a design hyperparameter; suboptimal for tasks requiring dense attention patterns.
+\end{itemize}
+
+\subsection{SWA with Attention Sinks: Sliding Window Plus a Sink Prefix}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/swa.pdf}}
+\caption{Dataflow of SWA with attention sinks: the first $s$ sink tokens and a causal $w-s$ sliding window are unioned into a mask applied to the score matrix before softmax.}
+\label{fig:mixer-swa}
+\end{figure}
+
+\subsubsection{Mathematical Formulation}
+
+SWA with attention sinks \citep{jolicoeur_sliding_window_2026} is the simplest KV-cache eviction policy: instead of compressing the cache or replacing attention with a recurrent state, it restricts every query to a small, fixed set of keys. Write the window size as $w$ and the number of sinks as $s$, i.e.\ $\mathrm{SWA}(w,s)$. In decoder mode, query $i$ attends to
+\[
+\mathcal{A}_i = \underbrace{\{j : j < s,\; j \leq i\}}_{\text{attention sinks}} \;\cup\; \underbrace{\{j : i - (w-s) + 1 \leq j \leq i\}}_{\text{sliding window of } w-s},
+\]
+so each query sees at most $w$ keys. The causal clip $j \leq i$ on the sink term is essential: tokens before position $s$ must not see future sinks.
+
+\paragraph{Why sinks are indispensable} Transformers learn to assign disproportionately large attention mass to the first few tokens even when they are not semantically relevant. These \emph{attention sinks} \citep{xiao_streaming_sinks_2024} act as repositories for surplus attention. Once the prefix leaves a sink-free sliding window, the model loses its dump target and quality collapses catastrophically; re-including the first $s$ tokens restores most of full-attention performance. The paper fixes $s = 4$ and evaluates $w \in \{64, 128, 256, 512\}$.
+
+\paragraph{Encoder extension} The paper defines $\mathrm{SWA}(w,s)$ for causal language models. For bidirectional encoders the local window is made symmetric, $\{j : |i-j| \leq \lfloor (w-s)/2 \rfloor\}$, and unioned with the sink prefix---the same convention used by Longformer.
+
+Because the intervention is a pure attention-mask change, it requires no additional parameters and no new QKV math: the standard projections $W_q, W_k, W_v, W_o$ are reused. It can be applied to a pretrained checkpoint at inference time with zero training tokens, or trained from scratch as a normal mixer.
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{SWA with Attention Sinks: Mask Construction and Attention}
+\begin{algorithmic}[1]
+\Require Query $\mathbf{Q} \in \mathbb{R}^{n \times d}$, Key $\mathbf{K}$, Value $\mathbf{V}$, window $w$, sinks $s$
+\Ensure Output $\mathbf{Y} \in \mathbb{R}^{n \times d}$
+\State Row indices $i$, column indices $j$
+\State $\text{causal} \gets [j \leq i]$
+\State $\text{sinks} \gets [j < s] \wedge \text{causal}$ \Comment{Causal-clipped sink prefix}
+\State $\text{window} \gets [i - (w-s) + 1 \leq j \leq i]$
+\State $M \gets \text{sinks} \lor \text{window}$
+\State $S \gets \mathbf{Q}\mathbf{K}^{\top} / \sqrt{d_k}$
+\State $S \gets \text{mask}(S, M)$ \Comment{$-\infty$ wherever $M = 0$}
+\State $\mathbf{Y} \gets \text{softmax}(S)\, \mathbf{V}$
+\Return $\mathbf{Y}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: $\mathcal{O}(n \cdot w \cdot d)$ time and $\mathcal{O}(w)$ KV storage per layer at inference (fixed once the sequence exceeds $w$).
+    \item \textbf{Trainable}: Both; training-free at inference on pretrained checkpoints, or trained from scratch.
+    \item \textbf{Receptive field}: After $L$ layers, $L(w-s)$ positions plus the always-visible sink prefix.
+    \item \textbf{Strength}: Recovers $\approx 99\%$ of the average full-attention score across models from 1.3B to 72B with zero training tokens, and beats retrofitted linear attention by 2--10$\times$ on long-context reasoning (S-NIAH, BABILong) while decoding faster and using less memory.
+    \item \textbf{Limitation}: The horizon is fixed and task-dependent---$w=64$ suffices for log-likelihood benchmarks but collapses on generative math, where $w=512$ is needed; there is no content-adaptive selection.
 \end{itemize}
 
 \subsection{BigBird: Random, Local, and Global Sparse Graph}
@@ -632,10 +684,11 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
 
 \subsection{Design Space and Selection Criteria}
 
-The seven sparse attention methods occupy complementary positions in a multidimensional design space:
+The ten sparse attention methods occupy complementary positions in a multidimensional design space:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Geometric/fixed patterns} (Sparse Transformer, Longformer): Simple to implement and analyze, but patterns do not adapt to content.
+    \item \textbf{Fixed-memory KV eviction} (SWA with sinks): The cheapest possible policy---keep a sink prefix and a recent window, discard everything else. No extra parameters, no training required, bounded memory.
     \item \textbf{Learned selection} (SparseK, NSA): Enable adaptation through trainable selection networks, at the cost of higher implementation complexity.
     \item \textbf{Training-free acceleration} (FASA, SpargeAttn): Enable drop-in speedup of existing models without retraining, suited for deployed systems.
     \item \textbf{Theoretical guarantees} (BigBird): Provide formal proofs of expressive completeness, important for understanding safety margins.
@@ -643,9 +696,9 @@ The seven sparse attention methods occupy complementary positions in a multidime
 
 \textbf{Selection guidance:}
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{New model training} where resources permit: NSA or SparseK for maximal inference speedup; BigBird for theoretical assurance.
-    \item \textbf{Long-context document understanding}: Longformer or FASA for practical simplicity; NSA for extreme scale.
-    \item \textbf{Accelerating existing models}: FASA for RoPE-based LLMs; SpargeAttn for any architecture.
-    \item \textbf{Constrained environments}: Sparse Transformer for simplicity and proven efficiency at moderate scale.
+    \item \textbf{New model training} where resources permit: NSA or SparseK for maximal inference speedup; BigBird for theoretical assurance; SWA with sinks as the strongest low-cost baseline.
+    \item \textbf{Long-context document understanding}: SWA with sinks (window 256--512) for the best accuracy per byte of KV cache; Longformer or FASA for practical simplicity; NSA for extreme scale.
+    \item \textbf{Accelerating existing models}: SWA with sinks as the default training-free baseline (beat most linear-attention retrofits in the original study); FASA for RoPE-based LLMs; SpargeAttn for any architecture.
+    \item \textbf{Constrained environments}: SWA with sinks for a fixed memory budget; Sparse Transformer for simplicity and proven efficiency at moderate scale.
 \end{enumerate}
 
