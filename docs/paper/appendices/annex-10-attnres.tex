@@ -9,7 +9,7 @@ to this annex for the mathematical formulation, the four available
 strategies (standard, no-residual, Full AttnRes, Block AttnRes), the
 implementation wiring, the integration with mHC and Mixture-of-Depths,
 and the reported results. The bibliography keys cited here resolve
-against \texttt{docs/bibliography/}.
+against \path{docs/bibliography/}.
 
 \subsection{Motivation: From a Fixed Sum to Depth-Wise Attention}
 
@@ -55,7 +55,7 @@ with naturally large magnitudes from dominating the softmax
 
 The schema field \texttt{model.residuals.type} selects one of four
 strategies, each implemented as a separate module under
-\texttt{src/model/residuals/}.
+\path{src/model/residuals/}.
 
 \subsubsection{Standard Residual (\texttt{"standard"})}
 
@@ -114,17 +114,17 @@ softmax merging).
 
 \subsection{Implementation in Frankenstein Transformer}
 
-The \texttt{src/model/residuals/} package hosts one class per strategy
+The \path{src/model/residuals/} package hosts one class per strategy
 (\texttt{StandardResidual}, \texttt{NoResidual},
 \texttt{FullAttentionResidual}, \texttt{BlockAttentionResidual}) plus
 an abstract \texttt{ResidualBase} that defines the lifecycle hooks
 \texttt{set\_streams}, \texttt{register\_state}, \texttt{reset\_state},
 \texttt{forward}, and \texttt{finalize}. The
 \texttt{build\_residual(config)} factory in
-\texttt{src/model/residuals/factory.py} selects the right class from
+\path{src/model/residuals/factory.py} selects the right class from
 \texttt{FrankensteinModelConfig}.
 
-Wiring in \texttt{src/model/frankenstein\_encoder.py}:
+Wiring in \path{src/model/frankenstein_encoder.py}:
 \begin{itemize}[leftmargin=*]
     \item \texttt{FrankensteinEncoder} owns the
         \texttt{ResidualBase} module as \texttt{self.residual}; the
@@ -142,7 +142,7 @@ Wiring in \texttt{src/model/frankenstein\_encoder.py}:
         residual merge internally.
 \end{itemize}
 
-Wiring in \texttt{src/model/hybrid\_layer.py}:
+Wiring in \path{src/model/hybrid_layer.py}:
 \begin{itemize}[leftmargin=*]
     \item \texttt{HybridLayer} reads \texttt{residual\_type} from the
         config and dispatches the residual merge accordingly. For
@@ -263,6 +263,6 @@ laws, ablations, and a 48B-parameter Kimi Linear extension:
         online softmax merging).
 \end{itemize}
 
-Example configurations: \texttt{configs/examples/full\_attn\_res\_adamw.yaml},
-\texttt{configs/examples/block\_attn\_res\_adamw.yaml},
-\texttt{configs/examples/mhc\_full\_attn\_res\_adamw.yaml}.
+Example configurations: \path{configs/examples/full_attn_res_adamw.yaml},
+\path{configs/examples/block_attn_res_adamw.yaml},
+\path{configs/examples/mhc_full_attn_res_adamw.yaml}.

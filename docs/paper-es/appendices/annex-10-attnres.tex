@@ -10,7 +10,7 @@ estrategias disponibles (estándar, sin residual, Full AttnRes, Block
 AttnRes), el cableado de implementación, la integración con mHC y
 Mixture-of-Depths, y los resultados reportados. Las claves de
 bibliografía citadas aquí se resuelven contra
-\texttt{docs/bibliography/}.
+\path{docs/bibliography/}.
 
 \subsection{Motivación: De una Suma Fija a Atención sobre la Profundidad}
 
@@ -58,7 +58,7 @@ naturalmente grandes dominen el softmax (ablación en el paper:
 
 El campo de esquema \texttt{model.residuals.type} selecciona una de las
 cuatro estrategias, cada una implementada como un módulo separado bajo
-\texttt{src/model/residuals/}.
+\path{src/model/residuals/}.
 
 \subsubsection{Residual Estándar (\texttt{"standard"})}
 
@@ -120,16 +120,16 @@ paper (cómputo en dos fases con fusión online-softmax).
 
 \subsection{Implementación en Frankenstein Transformer}
 
-El paquete \texttt{src/model/residuals/} aloja una clase por estrategia
+El paquete \path{src/model/residuals/} aloja una clase por estrategia
 (\texttt{StandardResidual}, \texttt{NoResidual},
 \texttt{FullAttentionResidual}, \texttt{BlockAttentionResidual}) más
 un \texttt{ResidualBase} abstracto que define los hooks del ciclo de
 vida \texttt{set\_streams}, \texttt{register\_state},
 \texttt{reset\_state}, \texttt{forward} y \texttt{finalize}. La factoría
-\texttt{build\_residual(config)} en \texttt{src/model/residuals/factory.py}
+\texttt{build\_residual(config)} en \path{src/model/residuals/factory.py}
 selecciona la clase correcta desde \texttt{FrankensteinModelConfig}.
 
-Cableado en \texttt{src/model/frankenstein\_encoder.py}:
+Cableado en \path{src/model/frankenstein_encoder.py}:
 \begin{itemize}[leftmargin=*]
     \item \texttt{FrankensteinEncoder} posee el módulo
         \texttt{ResidualBase} como \texttt{self.residual}; la factoría
@@ -147,7 +147,7 @@ Cableado en \texttt{src/model/frankenstein\_encoder.py}:
         residual internamente.
 \end{itemize}
 
-Cableado en \texttt{src/model/hybrid\_layer.py}:
+Cableado en \path{src/model/hybrid_layer.py}:
 \begin{itemize}[leftmargin=*]
     \item \texttt{HybridLayer} lee \texttt{residual\_type} de la
         configuración y despacha el merge residual según corresponda.
@@ -273,6 +273,6 @@ escalado, ablaciones y una extensión Kimi Linear de 48B parámetros:
         de inferencia (cómputo en dos fases con fusión online-softmax).
 \end{itemize}
 
-Configuraciones de ejemplo: \texttt{configs/examples/full\_attn\_res\_adamw.yaml},
-\texttt{configs/examples/block\_attn\_res\_adamw.yaml},
-\texttt{configs/examples/mhc\_full\_attn\_res\_adamw.yaml}.
+Configuraciones de ejemplo: \path{configs/examples/full_attn_res_adamw.yaml},
+\path{configs/examples/block_attn_res_adamw.yaml},
+\path{configs/examples/mhc_full_attn_res_adamw.yaml}.

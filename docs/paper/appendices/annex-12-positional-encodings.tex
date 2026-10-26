@@ -5,11 +5,15 @@ This annex documents the unified positional-encoding (PE) subsystem that
 applies a single \texttt{model.positional\_encoding} choice to every
 attention mixer in the network. The schema contract is:
 \[
-\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{bam},\ \texttt{pape},\ \texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\ \texttt{learned\_absolute},\ \texttt{none}\}
+\begin{gathered}
+\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{bam},\ \texttt{pape},\\
+\texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\\
+\texttt{learned\_absolute},\ \texttt{none}\}
+\end{gathered}
 \]
-The implementation lives in \texttt{src/model/embeddings/} and the shared
-injection helpers in \texttt{src/model/attention/common.py}. Bibliography
-keys cited here resolve against \texttt{docs/bibliography/}.
+The implementation lives in \path{src/model/embeddings/} and the shared
+injection helpers in \path{src/model/attention/common.py}. Bibliography
+keys cited here resolve against \path{docs/bibliography/}.
 
 \subsection{Architecture: One Shared Module, Per-Mixer Opt-Out}
 
@@ -258,7 +262,7 @@ Table~\ref{tab:all-pos-enc} summarises the 12 supported positional
 encodings.
 
 \footnotesize
-\begin{longtable}{p{2.4cm}p{1.7cm}p{4.2cm}p{2.0cm}p{2.0cm}}
+\begin{longtable}{L{2.4cm}L{1.7cm}L{4.2cm}L{2.0cm}L{2.0cm}}
 \toprule
 \textbf{Name} & \textbf{Style} & \textbf{Key Idea} & \textbf{Params} & \textbf{Reference} \\
 \midrule

@@ -5,12 +5,16 @@ Este anexo documenta el subsistema unificado de codificación posicional
 (PE) que aplica una única elección de \texttt{model.positional\_encoding}
 a todos los mezcladores de atención de la red. El contrato del esquema es:
 \[
-\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{bam},\ \texttt{pape},\ \texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\ \texttt{learned\_absolute},\ \texttt{none}\}
+\begin{gathered}
+\texttt{positional\_encoding} \in \{\texttt{rope},\ \texttt{hope},\ \texttt{nope},\ \texttt{alibi},\ \texttt{bam},\ \texttt{pape},\\
+\texttt{pape\_efficient},\ \texttt{pape\_ri},\ \texttt{sinusoidal\_absolute},\ \texttt{sinusoidal\_rotary},\\
+\texttt{learned\_absolute},\ \texttt{none}\}
+\end{gathered}
 \]
-La implementación reside en \texttt{src/model/embeddings/} y los
+La implementación reside en \path{src/model/embeddings/} y los
 ayudantes de inyección compartidos en
-\texttt{src/model/attention/common.py}. Las claves bibliográficas citadas
-aquí se resuelven contra \texttt{docs/bibliography/}.
+\path{src/model/attention/common.py}. Las claves bibliográficas citadas
+aquí se resuelven contra \path{docs/bibliography/}.
 
 \subsection{Arquitectura: Un Módulo Compartido, Exclusión Por Mezclador}
 
@@ -274,7 +278,7 @@ La Tabla~\ref{tab:all-pos-enc} resume las 12 codificaciones posicionales
 soportadas.
 
 \footnotesize
-\begin{longtable}{p{2.4cm}p{1.7cm}p{4.2cm}p{2.0cm}p{2.0cm}}
+\begin{longtable}{L{2.4cm}L{1.7cm}L{4.2cm}L{2.0cm}L{2.0cm}}
 \toprule
 \textbf{Nombre} & \textbf{Estilo} & \textbf{Idea Clave} & \textbf{Parámetros} & \textbf{Referencia} \\
 \midrule

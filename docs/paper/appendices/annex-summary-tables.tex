@@ -8,7 +8,7 @@ This appendix provides a complete reference of all components implemented in the
 Table~\ref{tab:all-mixers} enumerates every sequence mixer supported by the \texttt{layer\_pattern} schema field, organized by architectural family. Training and inference complexity are expressed in terms of sequence length $n$, hidden dimension $d$, and family-specific parameters.
 
 \footnotesize
-\begin{longtable}{p{2.0cm}p{1.3cm}p{2.2cm}p{2.2cm}p{4.0cm}p{2.5cm}}
+\begin{longtable}{L{1.9cm}L{2.0cm}L{2.4cm}L{2.4cm}L{3.3cm}L{2.3cm}}
 \toprule
 \textbf{Name} & \textbf{Family} & \textbf{Training} & \textbf{Inference} & \textbf{Key Characteristic} & \textbf{Reference} \\
 \midrule
@@ -34,7 +34,7 @@ gqa & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Tunable KV compres
 
 \multicolumn{6}{c}{\textbf{Recurrent (5)}} \\
 \midrule
-retnet\_attn & Recurrent & $\mathcal{O}(n^2 d)$ parallel & $\mathcal{O}(1)$ & Multi-scale decay; triple computation mode (parallel/recurrent/chunkwise) & \citep{sun_retentive_2023} \\
+retnet\_attn & Recurrent & $\mathcal{O}(n^2 d)$ parallel & $\mathcal{O}(1)$ & Multi-scale decay; triple computation mode (parallel, recurrent, chunkwise) & \citep{sun_retentive_2023} \\
 mamba & Recurrent & $\mathcal{O}(n d)$ & $\mathcal{O}(1)$ & Selective state-space model; hardware-aware parallel scan & \citep{gu_mamba_2023} \\
 ode & Recurrent & $\mathcal{O}(k \cdot n^2 d)$ & $\mathcal{O}(k n)$ & Continuous-depth RK4 integration; adaptive step solver & \citep{zhang_continuous_2021} \\
 titan\_attn & Recurrent & $\mathcal{O}(c^2 + n f)$ & $\mathcal{O}(c^2 + 1)$ & Test-time memory adaptation; surprise-driven write dynamics & \citep{behrouz_titans_2025} \\
@@ -99,7 +99,7 @@ ssog\_attn & Geometric field & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\math
 Table~\ref{tab:all-optimizers} catalogs all 23 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
 
 \footnotesize
-\begin{longtable}{p{2.0cm}p{2.0cm}p{2.2cm}p{2.0cm}p{3.8cm}p{2.5cm}}
+\begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
 \toprule
 \textbf{Optimizer} & \textbf{Family} & \textbf{State Buffers} & \textbf{Per-Step Cost} & \textbf{Key Hyperparams} & \textbf{Reference} \\
 \midrule
@@ -118,7 +118,7 @@ Table~\ref{tab:all-optimizers} catalogs all 23 supported optimizers with their m
 
 \multicolumn{6}{c}{\textbf{Classical \& Adaptive Baselines}} \\
 \midrule
-SGD+Momentum & Classical & 1 ($m$) & $\mathcal{O}(n)$ & lr, momentum, wd & \citep{polyak_1964} \\
+SGD+\allowbreak Momentum & Classical & 1 ($m$) & $\mathcal{O}(n)$ & lr, momentum, wd & \citep{polyak_1964} \\
 AdamW & Adaptive & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{loshchilov_decoupled_2017} \\
 RAdam & Adaptive & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{liu_variance_2019} \\
 \midrule
@@ -166,7 +166,7 @@ Anon & Adaptivity-tunable & 3 ($m$, $v$, fixed\_lr) & $\mathcal{O}(n)$ & lr, $\b
 Table~\ref{tab:all-norms} summarizes the six normalization methods available through the \texttt{norm\_type} schema field, ranging from classical statistics-based approaches to normalization-free bounded transforms and weightless RMSNorm with fused norm-then-project execution.
 
 \small
-\begin{longtable}{p{2.5cm}p{5.5cm}p{2.5cm}p{3.5cm}}
+\begin{longtable}{L{2.5cm}L{5.5cm}L{2.5cm}L{3.5cm}}
 \toprule
 \textbf{Method} & \textbf{Formula} & \textbf{Stats Needed} & \textbf{Reference} \\
 \midrule
@@ -196,8 +196,8 @@ FlashNorm & $x_i / \sqrt{\frac{1}{d}\sum_j x_j^2 + \epsilon}$ & RMS only (weight
 
 Table~\ref{tab:all-residuals} compares the residual-connection schemes available in the codebase: the standard identity residual, the four Attention Residuals (AttnRes) strategies \citep{sun_attnres_2026}, and the manifold-constrained n-stream residual (mHC) \citep{xie_mhc_2025}. $L$ is the logical depth, $C$ the hidden dimension, $n$ the stream expansion factor, $t_{\max}$ the Sinkhorn--Knopp iteration count, $\alpha$ the mHC gating scalars, and $\mathbf{w}_l$ the per-layer AttnRes pseudo-query (initialized to zero). HC (unconstrained Hyper-Connections) is listed for reference but is \emph{not} exposed in this codebase.
 
-\small
-\begin{longtable}{p{2.2cm}p{4.6cm}p{3.2cm}p{3.0cm}}
+\footnotesize
+\begin{longtable}{L{2.2cm}L{5.8cm}L{3.8cm}L{3.0cm}}
 \toprule
 \textbf{Scheme} & \textbf{Stream Update} & \textbf{Constraint} & \textbf{Reference} \\
 \midrule
@@ -229,7 +229,7 @@ Hyperloop (this codebase) & $y^{(l+1)}_t = H^{\text{res}}_l y^{(l)}_t + H^{\text
 Table~\ref{tab:all-activations} catalogs the 43 feed-forward activation functions available through the \texttt{ffn\_activation} schema field (40 elementwise plus 3 gated-FFN variants), grouped by family. ``Learn.'' marks activations with trainable parameters; the full formulas are in Annex~8.
 
 \scriptsize
-\begin{longtable}{p{2.6cm}p{1.4cm}p{5.2cm}p{0.9cm}p{2.0cm}}
+\begin{longtable}{L{2.6cm}L{1.8cm}L{4.8cm}L{1.2cm}L{2.0cm}}
 \toprule
 \textbf{Name} & \textbf{Family} & \textbf{Formula} & \textbf{Learn.} & \textbf{Reference} \\
 \midrule
@@ -309,7 +309,7 @@ reglu & Gated & $\text{ReLU}(xW_g)\odot(xW_u)\,W_d$ & \textbf{yes} & \citep{shaz
 Table~\ref{tab:all-embeddings} catalogs the positional encodings and structural embedding optimizations supported by the codebase. The 12 positional encodings are configured via the model-wide \texttt{positional\_encoding} field (see Annex~12 for full formulations); the two structural optimizations are controlled by their own flags.
 
 \footnotesize
-\begin{longtable}{p{3.0cm}p{7.5cm}p{3.5cm}}
+\begin{longtable}{L{3.0cm}L{7.5cm}L{3.5cm}}
 \toprule
 \textbf{Method} & \textbf{Description} & \textbf{Reference} \\
 \midrule

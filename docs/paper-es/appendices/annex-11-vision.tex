@@ -48,7 +48,7 @@ Dos tipos de cabeza, seleccionados por el campo de esquema \texttt{seg\_head\_ty
 
 \subsubsection{Cabeza Por-Pixel (\texttt{pixel})}
 
-Cada token de parche se proyecta a \texttt{num\_seg\_classes} canales mediante una $\text{Linear}(D, \text{num\_seg\_classes})$, se redimensiona a $(H/P, W/P)$ y luego un upsampler de convoluciones transpuestas estilo ViTDet lo escala a la resolución completa $(H, W)$. La pérdida combina cross-entropy + Dice. Se soporta segmentación 1D en escala de grises (2 clases) y multicolor no solapada ($N+1$ clases).
+Cada token de parche se proyecta a \texttt{num\_seg\_classes} canales mediante una $\text{Linear}(D,\allowbreak\ \text{num\_seg\_classes})$, se redimensiona a $(H/P, W/P)$ y luego un upsampler de convoluciones transpuestas estilo ViTDet lo escala a la resolución completa $(H, W)$. La pérdida combina cross-entropy + Dice. Se soporta segmentación 1D en escala de grises (2 clases) y multicolor no solapada ($N+1$ clases).
 
 \subsubsection{Encoder-only Mask Transformer (\texttt{eomt})}
 

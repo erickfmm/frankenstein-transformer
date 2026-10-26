@@ -104,12 +104,15 @@ produce escrituras puramente aditivas (hebbianas) con ganancias normalizadas por
 \label{fig:mixer-falcon2a}
 \end{figure}
 
+{\footnotesize
 \[
+\begin{gathered}
 \text{Falcon-1A:}\quad S_t = \gamma_t S_{t-1} + \eta_t\, x_t v_t^\top,
-\quad \gamma_t = 1 - \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma);
-\qquad
+\quad \gamma_t = 1 - \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma);\\
 \text{Falcon-2A:}\quad S_t = S_{t-1}\operatorname{Diag}(\boldsymbol{\gamma}_t) + x_t (\boldsymbol{\eta}_t \odot v_t)^\top .
+\end{gathered}
 \]
+}
 Con $\lambda_t = 0$ y la asignación sin desplazar esto es exactamente la atención lineal estándar / acumulación Mamba-2; el flujo desplazado lo convierte en la variante next-latent desplazada un paso. El denominador de la familia A no lo exige la curvatura (el objetivo es lineal) --- conserva la escritura normalizada por energía como estabilizador de magnitud. La forma chunk-parallel es atención lineal con máscara de decaimiento $M_{t,i} = \eta_i \prod_{r=i+1}^{t} \gamma_r$ (máscaras por canal para Falcon-2A).
 
 \subsubsection{Falcon-3A: Producto Interno con Ventana Deslizante}
@@ -122,15 +125,17 @@ Con $\lambda_t = 0$ y la asignación sin desplazar esto es exactamente la atenci
 \end{figure}
 
 La variante aditiva con ventana --- la mejor configuración de extrapolación de longitud de la familia:
+{\footnotesize
 \[
 \bar{N}_t^{(B)} = \frac{1}{B_t} \sum_{j \in \mathcal{I}_t} x_j v_j^\top,
-\qquad
+\quad
 \bar{E}_t^{(B)} = \frac{1}{B_t} \sum_{j \in \mathcal{I}_t} \|x_j\|^2,
-\qquad
+\quad
 \eta_t = \frac{\beta_t}{\bar{E}_t^{(B)} + \lambda_t + \varepsilon},
 \qquad
 S_t = \gamma_t S_{t-1} + \eta_t\, \bar{N}_t^{(B)} .
 \]
+}
 La máscara de decaimiento con banda de ventana factoriza como $M = D \cdot \operatorname{Diag}(\boldsymbol{\eta}) \cdot A$, donde $A$ es el operador de ventana de banda $B$ y $D$ el kernel de decaimiento causal, evaluada sobre la porción extendida (Algoritmo~4).
 
 \subsection{Interfaz de Configuración}

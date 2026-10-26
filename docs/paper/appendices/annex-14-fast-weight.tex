@@ -104,12 +104,15 @@ yields purely additive (Hebbian) writes with energy-normalized gains.
 \label{fig:mixer-falcon2a}
 \end{figure}
 
+{\footnotesize
 \[
+\begin{gathered}
 \text{Falcon-1A:}\quad S_t = \gamma_t S_{t-1} + \eta_t\, x_t v_t^\top,
-\quad \gamma_t = 1 - \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma);
-\qquad
+\quad \gamma_t = 1 - \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma);\\
 \text{Falcon-2A:}\quad S_t = S_{t-1}\operatorname{Diag}(\boldsymbol{\gamma}_t) + x_t (\boldsymbol{\eta}_t \odot v_t)^\top .
+\end{gathered}
 \]
+}
 With $\lambda_t = 0$ and the unshifted assignment this is exactly standard linear attention / Mamba-2 accumulation; the shifted stream makes it the one-step-shifted next-latent variant. The A-family's denominator is not required by curvature (the objective is linear) --- it retains the energy-normalized write as a magnitude stabilizer. The chunk-parallel form is decay-mask linear attention with $M_{t,i} = \eta_i \prod_{r=i+1}^{t} \gamma_r$ (per-channel masks for Falcon-2A).
 
 \subsubsection{Falcon-3A: Sliding-Window Inner-Product}
@@ -122,15 +125,17 @@ With $\lambda_t = 0$ and the unshifted assignment this is exactly standard linea
 \end{figure}
 
 The windowed additive variant --- the family's best length-extrapolation configuration:
+{\footnotesize
 \[
 \bar{N}_t^{(B)} = \frac{1}{B_t} \sum_{j \in \mathcal{I}_t} x_j v_j^\top,
-\qquad
+\quad
 \bar{E}_t^{(B)} = \frac{1}{B_t} \sum_{j \in \mathcal{I}_t} \|x_j\|^2,
-\qquad
+\quad
 \eta_t = \frac{\beta_t}{\bar{E}_t^{(B)} + \lambda_t + \varepsilon},
 \qquad
 S_t = \gamma_t S_{t-1} + \eta_t\, \bar{N}_t^{(B)} .
 \]
+}
 The window-banded decay mask factors as $M = D \cdot \operatorname{Diag}(\boldsymbol{\eta}) \cdot A$, where $A$ is the $B$-banded window operator and $D$ the causal decay kernel, evaluated over the extended slice (Algorithm~4).
 
 \subsection{Configuration Interface}

@@ -8,7 +8,7 @@ Este anexo proporciona una referencia completa de todos los componentes implemen
 La Tabla~\ref{tab:all-mixers} enumera cada mezclador de secuencia soportado por el campo de esquema \texttt{layer\_pattern}, organizado por familia arquitectónica. La complejidad de entrenamiento e inferencia se expresa en términos de la longitud de secuencia $n$, la dimensión oculta $d$ y parámetros específicos de cada familia.
 
 \footnotesize
-\begin{longtable}{p{2.0cm}p{1.3cm}p{2.2cm}p{2.2cm}p{4.0cm}p{2.5cm}}
+\begin{longtable}{L{1.9cm}L{2.0cm}L{2.4cm}L{2.4cm}L{3.3cm}L{2.3cm}}
 \toprule
 \textbf{Nombre} & \textbf{Familia} & \textbf{Entrenamiento} & \textbf{Inferencia} & \textbf{Característica Clave} & \textbf{Referencia} \\
 \midrule
@@ -99,7 +99,7 @@ ssog\_attn & Campo geométrico & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\ma
 La Tabla~\ref{tab:all-optimizers} cataloga los 23 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
 
 \footnotesize
-\begin{longtable}{p{2.0cm}p{2.0cm}p{2.2cm}p{2.0cm}p{3.8cm}p{2.5cm}}
+\begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
 \toprule
 \textbf{Optimizador} & \textbf{Familia} & \textbf{Búferes de Estado} & \textbf{Costo por Paso} & \textbf{Hiperparámetros Clave} & \textbf{Referencia} \\
 \midrule
@@ -118,7 +118,7 @@ La Tabla~\ref{tab:all-optimizers} cataloga los 23 optimizadores soportados con s
 
 \multicolumn{6}{c}{\textbf{Líneas Base Clásicas y Adaptativas}} \\
 \midrule
-SGD+Momentum & Clásico & 1 ($m$) & $\mathcal{O}(n)$ & lr, momentum, wd & \citep{polyak_1964} \\
+SGD+\allowbreak Momentum & Clásico & 1 ($m$) & $\mathcal{O}(n)$ & lr, momentum, wd & \citep{polyak_1964} \\
 AdamW & Adaptativo & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{loshchilov_decoupled_2017} \\
 RAdam & Adaptativo & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{liu_variance_2019} \\
 \midrule
@@ -166,7 +166,7 @@ Anon & Adaptividad ajustable & 3 ($m$, $v$, fixed\_lr) & $\mathcal{O}(n)$ & lr, 
 La Tabla~\ref{tab:all-norms} resume los seis métodos de normalización disponibles a través del campo de esquema \texttt{norm\_type}, desde enfoques clásicos basados en estadísticas hasta transformaciones acotadas sin normalización y RMSNorm sin pesos con ejecución norm-then-project fusionada.
 
 \small
-\begin{longtable}{p{2.5cm}p{5.5cm}p{2.5cm}p{3.5cm}}
+\begin{longtable}{L{2.5cm}L{5.5cm}L{2.5cm}L{3.5cm}}
 \toprule
 \textbf{Método} & \textbf{Fórmula} & \textbf{Estadísticas Necesarias} & \textbf{Referencia} \\
 \midrule
@@ -196,8 +196,8 @@ FlashNorm & $x_i / \sqrt{\frac{1}{d}\sum_j x_j^2 + \epsilon}$ & solo RMS (sin pe
 
 La Tabla~\ref{tab:all-residuals} compara los esquemas de conexión residual disponibles en el código base: el residual de identidad estándar, las cuatro estrategias de Residuales de Atención (AttnRes) \citep{sun_attnres_2026} y el flujo residual de $n$ streams restringido por variedad (mHC) \citep{xie_mhc_2025}. $L$ es la profundidad lógica, $C$ la dimensión oculta, $n$ el factor de expansión del flujo, $t_{\max}$ el número de iteraciones Sinkhorn--Knopp, $\alpha$ los escalares de compuerta de mHC y $\mathbf{w}_l$ el pseudo-query por capa de AttnRes (inicializado a cero). HC (Hyper-Connexions sin restricción) se lista como referencia pero \emph{no} está expuesto en este código base.
 
-\small
-\begin{longtable}{p{2.2cm}p{4.6cm}p{3.2cm}p{3.0cm}}
+\footnotesize
+\begin{longtable}{L{2.2cm}L{5.8cm}L{3.8cm}L{3.0cm}}
 \toprule
 \textbf{Esquema} & \textbf{Actualización del Flujo} & \textbf{Restricción} & \textbf{Referencia} \\
 \midrule
@@ -229,7 +229,7 @@ Hyperloop (este código base) & $y^{(l+1)}_t = H^{\text{res}}_l y^{(l)}_t + H^{\
 La Tabla~\ref{tab:all-activations-es} cataloga las 43 funciones de activación disponibles a través del campo de esquema \texttt{ffn\_activation} (40 elementales más 3 variantes de FFN con compuerta), agrupadas por familia. ``Aprend.'' marca las activaciones con parámetros entrenables; las fórmulas completas están en el Anexo~8.
 
 \scriptsize
-\begin{longtable}{p{2.6cm}p{1.4cm}p{5.2cm}p{0.9cm}p{2.0cm}}
+\begin{longtable}{L{2.6cm}L{1.8cm}L{4.8cm}L{1.2cm}L{2.0cm}}
 \toprule
 \textbf{Nombre} & \textbf{Familia} & \textbf{Fórmula} & \textbf{Aprend.} & \textbf{Referencia} \\
 \midrule
@@ -309,7 +309,7 @@ reglu & Compuerta & $\text{ReLU}(xW_g)\odot(xW_u)\,W_d$ & \textbf{sí} & \citep{
 La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y optimizaciones estructurales de embedding soportadas por el código base. Las 12 codificaciones posicionales se configuran mediante el campo \texttt{positional\_encoding} de todo el modelo (ver Anexo~12 para las formulaciones completas); las dos optimizaciones estructurales se controlan con sus propias banderas.
 
 \footnotesize
-\begin{longtable}{p{3.0cm}p{7.5cm}p{3.5cm}}
+\begin{longtable}{L{3.0cm}L{7.5cm}L{3.5cm}}
 \toprule
 \textbf{Método} & \textbf{Descripción} & \textbf{Referencia} \\
 \midrule

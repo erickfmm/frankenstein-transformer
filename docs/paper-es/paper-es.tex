@@ -16,6 +16,18 @@
 \usepackage{graphicx}
 \usepackage{adjustbox}
 \usepackage{float}
+\usepackage{microtype}
+\usepackage{xurl}
+% Keep wide tables and long identifiers inside the text block.
+\setlength{\emergencystretch}{3em}
+\setlength{\tabcolsep}{3.5pt}
+\setlength{\LTcapwidth}{\linewidth}
+% Permit line breaks after underscores so schema keys and mixer names wrap
+% instead of running past the right margin (both in prose and in tables).
+\let\fsunderscore\_
+\renewcommand{\_}{\fsunderscore\allowbreak}
+% Ragged-right fixed-width column: avoids overfull cells in narrow tables.
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 % Double rules at the top and bottom of every algorithm float.
 \makeatletter
 \newcommand\fs@dblrulled{%

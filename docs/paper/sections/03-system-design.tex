@@ -6,7 +6,7 @@
 
 Experimentation in this project is \emph{schema first}. Rather than exposing loosely checked flags, model topology, optimizer family, training limits, and telemetry pass through a single validated configuration document, which reduces ambiguity when reproducing results and lets many architectures share one operational interface.
 
-The authoritative contract is \texttt{src/schema.yaml}, a modular JSON Schema whose modules under \texttt{src/schema/} cover the model, model class, tokenizer, optimizer, SBERT, training, and dataset blocks. The top-level objects are \texttt{base\_model}, \texttt{tokenizer}, \texttt{model\_class}, \texttt{model}, \texttt{training}, \texttt{image}, \texttt{vision\_dataset}, and \texttt{text\_dataset}.
+The authoritative contract is \path{src/schema.yaml}, a modular JSON Schema whose modules under \path{src/schema/} cover the model, model class, tokenizer, optimizer, SBERT, training, and dataset blocks. The top-level objects are \texttt{base\_model}, \texttt{tokenizer}, \texttt{model\_class}, \texttt{model}, \texttt{training}, \texttt{image}, \texttt{vision\_dataset}, and \texttt{text\_dataset}.
 
 \paragraph{Model class.} The \texttt{model\_class} field selects among three variants:
 \begin{itemize}[leftmargin=*]

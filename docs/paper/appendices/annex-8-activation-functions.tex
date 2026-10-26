@@ -24,6 +24,7 @@ The classical family comprises smooth, stateless activations rooted in
 logistic and algebraic functions~\citep{lederer2021activations,dubey2021activations}.
 All share monotonicity or near-monotonicity and are continuously differentiable.
 
+{\footnotesize
 \begin{align}
   \text{Sigmoid}(x) &= \frac{1}{1+e^{-x}}
     & \text{Range: } (0,1),\;\text{monotonic, smooth}
@@ -44,7 +45,9 @@ All share monotonicity or near-monotonicity and are continuously differentiable.
     & \text{Range: } (-\infty,\infty),\;\text{linear, }C^\infty
     & \quad \text{(internal)}
 \end{align}
+}  % end size group
 
+{\scriptsize
 \begin{align}
   \text{Softplus}(x) &= \log(1+e^{x})
     & \text{Range: } [0,\infty),\;\text{smooth, }C^\infty
@@ -67,6 +70,7 @@ All share monotonicity or near-monotonicity and are continuously differentiable.
     & \text{Range: } (\approx{-0.278},\infty),\;\text{non-monotonic, smooth}
     & \quad \text{\citep{elfwing2018silu}}
 \end{align}
+}  % end size group
 
 \noindent\textbf{SiLU} (Sigmoid Linear Unit) is the default activation
 (\texttt{ffn\_activation=silu}). When $\beta=1$, the parametric Swish reduces
@@ -80,6 +84,7 @@ outperform Swish on several benchmarks.
 The rectifier family extends ReLU with learnable slopes, bounded variants, and
 rectified-hyperbolic forms~\citep{nair2010relu,dubey2021activations}.
 
+{\scriptsize
 \begin{align}
   \text{LeakyReLU}(x) &= \begin{cases} x & x\ge 0 \\ a\,x & x < 0 \end{cases},
     \quad a=0.01
@@ -94,14 +99,16 @@ rectified-hyperbolic forms~\citep{nair2010relu,dubey2021activations}.
   \text{PReLU}(x) &= \max(0,x)+\mathbf{p}\odot\min(0,x)
     & \text{Learnable per-channel slope } \mathbf{p},\;\text{init 0.25}
     & \quad \text{\citep{he2015prelu}} \\[4pt]
-  \text{AbsReLU}(x) &= \max(0,x)-\max(0,-x) = x\;\text{rectified to sign-ramp}
+  \text{AbsReLU}(x) &= \max(0,x)-\max(0,-x) = x\;\text{(sign-ramp)}
     & \text{Range: } (-\infty,\infty)
     & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{NLReLU}(x) &= \beta\,\log\!\big(1+\max(0,x)\big)
     & \text{Range: } [0,\infty),\;\beta=1.0,\;\text{logarithmic compression}
     & \quad \text{\citep{dubey2021activations}}
 \end{align}
+}  % end size group
 
+{\scriptsize
 \begin{align}
   \text{BReLU}(x) &= \min\!\big(\max(0,x),\,t\big),\quad t=1.0
     & \text{Range: } [0,t],\;\text{bounded rectifier}
@@ -122,6 +129,7 @@ rectified-hyperbolic forms~\citep{nair2010relu,dubey2021activations}.
     & \text{Range: } [0,\infty)\;\text{(magnitude), non-monotonic, smooth}
     & \quad \text{\citep{roy2019lisht}}
 \end{align}
+}  % end size group
 
 \noindent\textbf{PReLU}~\citep{he2015prelu} makes the negative slope a
 per-channel learnable parameter, enabling the network to learn the optimal
@@ -157,6 +165,7 @@ Several members introduce per-channel learnable parameters.
     & \quad \text{\citep{dubey2021activations}}
 \end{align}
 
+{\footnotesize
 \begin{align}
   \text{FELU}(x) &= \begin{cases} x & x\ge 0 \\ \alpha(e^{x}-1) & x<0 \end{cases}
     & \alpha\text{ learnable, clamped to } [0,1]
@@ -179,7 +188,9 @@ Several members introduce per-channel learnable parameters.
     & \alpha\text{ learnable; exp/linear/log interpolation}
     & \quad \text{\citep{godfrey2015softexp}}
 \end{align}
+}  % end size group
 
+{\footnotesize
 \begin{align}
   \text{ELiSH}(x) &= \begin{cases} x\,\sigma(x) & x\ge 0 \\
     (e^{x}-1)\,\sigma(x) & x<0 \end{cases}
@@ -190,6 +201,7 @@ Several members introduce per-channel learnable parameters.
     & \text{Hard-sigmoid variant of ELiSH}
     & \quad \text{\citep{basirat2019elish}}
 \end{align}
+}  % end size group
 
 \noindent where $\text{hard\_sigmoid}(x)=\text{ReLU6}(x+3)/6$.
 

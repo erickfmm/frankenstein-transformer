@@ -1,7 +1,7 @@
 \section{Configuration Schema Structure}
 \label{sec:annex-schema}
 
-The Frankenstein Transformer toolkit enforces a strict YAML configuration schema with \texttt{additionalProperties: false} at all levels. The schema is defined in \texttt{src/schema.yaml}, which references modular sub-schemas in \texttt{src/schema/}. Every configurable field must be declared in the schema; unrecognized keys are rejected at validation time. This appendix documents the complete schema structure, including all fields, their types, constraints, and cross-component validation rules.
+The Frankenstein Transformer toolkit enforces a strict YAML configuration schema with \texttt{additionalProperties: false} at all levels. The schema is defined in \path{src/schema.yaml}, which references modular sub-schemas in \path{src/schema/}. Every configurable field must be declared in the schema; unrecognized keys are rejected at validation time. This appendix documents the complete schema structure, including all fields, their types, constraints, and cross-component validation rules.
 
 \subsection{Top-Level Structure}
 
@@ -22,7 +22,7 @@ The schema enforces a mutual-exclusivity rule: either \texttt{base\_model} must 
 
 The \texttt{model} object defines all architectural hyperparameters. Required fields are \texttt{dims.vocab\_size}, \texttt{dims.hidden\_size}, \texttt{dims.num\_layers}, \texttt{dims.num\_heads}, and \texttt{dims.layer\_pattern}. Table~\ref{tab:model-fields} lists all model fields with their types and descriptions.
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{8.5cm}}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{5.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{6.9cm}}
 \toprule
 \textbf{Field} & \textbf{Type} & \textbf{Description} \\
 \midrule
@@ -203,7 +203,7 @@ Fields are grouped under hierarchical sub-objects (\texttt{dims}, \texttt{norm},
 
 The \texttt{model.dims.layer\_pattern} array accepts the following 43 mixer codes. Each element defines one physical layer in the model stack. Table~\ref{tab:layer-pattern-enum} lists all available types with their training and inference support.
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{5.5cm}cc}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{4.7cm}>{\raggedright\arraybackslash}p{5.0cm}cc}
 \toprule
 \textbf{Type} & \textbf{Description} & \textbf{Train} & \textbf{Infer} \\
 \midrule
@@ -263,7 +263,7 @@ ssog\_attn & Separable Sum of Gaussians --- Gaussian field over relative positio
 
 The \texttt{training} object controls the entire training pipeline. The only required field is \texttt{task}. Table~\ref{tab:training-fields} lists all training fields.
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{8.5cm}}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{5.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{6.9cm}}
 \toprule
 \textbf{Field} & \textbf{Type} & \textbf{Description} \\
 \midrule
@@ -342,7 +342,7 @@ The top-level \texttt{tokenizer} object is available to both training paths: the
 
 Table~\ref{tab:tokenizer-training} lists the \texttt{tokenizer.training} sub-object fields.
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{8.5cm}}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{5.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{6.9cm}}
 \toprule
 \textbf{Field} & \textbf{Type} & \textbf{Description} \\
 \midrule
@@ -393,7 +393,7 @@ Note: parameters of ODE, RetNet, and Mamba mixers are routed into the \texttt{at
 
 Table~\ref{tab:optimizer-specific-suffixes} lists the additional global suffixes supported by each optimizer (prefixed by the optimizer name).
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{10cm}}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{5.2cm}>{\raggedright\arraybackslash}p{9.7cm}}
 \toprule
 \textbf{Optimizer} & \textbf{Specific Global Suffixes} \\
 \midrule
@@ -475,8 +475,8 @@ The schema enforces the following cross-component validation rules, implemented 
     \item \texttt{model.dims.hidden\_size} must be divisible by \texttt{model.dims.num\_heads}. The per-head dimension is $\texttt{hidden\_size} / \texttt{num\_heads}$.
     \item \texttt{model.dims.num\_kv\_heads} must divide \texttt{model.dims.num\_heads} exactly when Grouped-Query Attention is used.
     \item \texttt{vocab\_size} must match the tokenizer's vocabulary size. Mismatch causes token ID corruption and unrecoverable training failure.
-    \item When \texttt{base\_model} is set, \texttt{training.task} is required. If \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} is also required --- unless \texttt{tokenizer.source=train\_from\_dataset}, in which case the tokenizer is trained from the corpus and no name is needed.
-    \item \texttt{tokenizer.source=train\_from\_dataset} requires the \texttt{tokenizer.training} sub-object (with \texttt{vocab\_size} for \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}) and is mutually exclusive with \texttt{tokenizer.name\_or\_path}. The trained vocabulary overrides \texttt{model.dims.vocab\_size} before model construction.
+    \item When \texttt{base\_model} is set, \texttt{training.task} is required. If \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} is also required --- unless \texttt{tokenizer.source=\allowbreak train\_from\_dataset}, in which case the tokenizer is trained from the corpus and no name is needed.
+    \item \texttt{tokenizer.source=\allowbreak train\_from\_dataset} requires the \texttt{tokenizer.training} sub-object (with \texttt{vocab\_size} for \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}) and is mutually exclusive with \texttt{tokenizer.name\_or\_path}. The trained vocabulary overrides \texttt{model.dims.vocab\_size} before model construction.
     \item \texttt{task: mlm} requires \texttt{training.optimizer}; \texttt{task: sbert} requires \texttt{training.sbert}; \texttt{task: causal\_lm} requires \texttt{training.optimizer} and \texttt{model\_class='frankenstein\_text\_decoder'}.
     \item \texttt{bitnet.routers=true} requires \texttt{bitnet.enabled=true}. The flag has no effect otherwise.
     \item \texttt{mhc.enabled=true} (mHC n-stream residual) and \texttt{mixture\_of\_depths.enabled=true} are mutually exclusive. Enabling both raises a \texttt{ValueError}: MoD token routing operates on a single $C$-dimensional stream, which conflicts with the n-stream residual.

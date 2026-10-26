@@ -89,7 +89,7 @@ Plegar un $\mathbf{g}$ de coma flotante en el tensor de pesos ternarios de BitNe
 \If{$\mathbf{c}=\texttt{None}$}
     \State \textbf{retornar} $\mathbf{b}\cdot\mathrm{rms\_inv}$ \Comment{una sola multiplicación vectorial--escalar}
 \Else
-    \State \texttt{// Observación 1: la ruta con bias es secuencial; matmul y RMS aún paralelizan}
+    \State \texttt{// Obs. 1: ruta con bias secuencial; matmul/RMS paralelizan}
     \State \textbf{retornar} $(\mathbf{a}\cdot\mathrm{rms\_inv})\mathbf{W}^{*\top}+\mathbf{c}$
 \EndIf
 \end{algorithmic}
@@ -128,7 +128,7 @@ La preservación de calidad en \texttt{lm-evaluation-harness} (wikitext word\_pp
 
 \subsubsection{Comparación}
 \scriptsize
-\begin{longtable}{p{2.2cm}p{3.4cm}p{2.0cm}p{4.0cm}}
+\begin{longtable}{L{2.2cm}L{3.4cm}L{2.0cm}L{4.0cm}}
 \toprule
 \textbf{Método} & \textbf{Fórmula} & \textbf{Estadísticas Necesarias} & \textbf{Notas} \\
 \midrule

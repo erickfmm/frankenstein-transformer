@@ -6,7 +6,7 @@
 
 La experimentación en este proyecto es \emph{primero el esquema}. En lugar de exponer banderas con validación laxa, la topología del modelo, la familia del optimizador, los límites de entrenamiento y la telemetría pasan por un único documento de configuración validado, lo que reduce la ambigüedad al reproducir resultados y permite que muchas arquitecturas compartan una misma interfaz operativa.
 
-El contrato autoritativo es \texttt{src/schema.yaml}, un esquema JSON modular cuyos módulos bajo \texttt{src/schema/} cubren los bloques de modelo, clase de modelo, tokenizer, optimizador, SBERT, entrenamiento y datasets. Los objetos de primer nivel son \texttt{base\_model}, \texttt{tokenizer}, \texttt{model\_class}, \texttt{model}, \texttt{training}, \texttt{image}, \texttt{vision\_dataset} y \texttt{text\_dataset}.
+El contrato autoritativo es \path{src/schema.yaml}, un esquema JSON modular cuyos módulos bajo \path{src/schema/} cubren los bloques de modelo, clase de modelo, tokenizer, optimizador, SBERT, entrenamiento y datasets. Los objetos de primer nivel son \texttt{base\_model}, \texttt{tokenizer}, \texttt{model\_class}, \texttt{model}, \texttt{training}, \texttt{image}, \texttt{vision\_dataset} y \texttt{text\_dataset}.
 
 \paragraph{Clase de modelo.} El campo \texttt{model\_class} selecciona entre tres variantes:
 \begin{itemize}[leftmargin=*]

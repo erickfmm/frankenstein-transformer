@@ -8,7 +8,7 @@ residual de identidad estándar por un flujo residual de $n$ streams cuya
 matriz de mezcla de flujo se restringe al politopo de Birkhoff. El cuerpo
 principal difiere a este anexo la formulación matemática, los detalles de
 implementación y los resultados reportados; las claves bibliográficas citadas
-aquí se resuelven contra \texttt{docs/bibliography/}.
+aquí se resuelven contra \path{docs/bibliography/}.
 
 \subsection{Motivación: la Propiedad de Mapeo de Identidad}
 
@@ -163,7 +163,7 @@ sub-objeto:
         \texttt{BitLinear}.
 \end{itemize}
 
-El módulo vive en \texttt{src/model/mhc.py}:
+El módulo vive en \path{src/model/mhc.py}:
 \begin{itemize}[leftmargin=*]
     \item \texttt{Sinkhorn\-Knopp\-Function} (\texttt{torch.autograd.Function}):
         el pase hacia adelante aplica las normalizaciones alternadas de filas y
@@ -180,7 +180,7 @@ El módulo vive en \texttt{src/model/mhc.py}:
         H^{\text{post}}, H^{\text{res}}$).
 \end{itemize}
 
-Cableado en \texttt{src/model/frankenstein\_model.py}:
+Cableado en \path{src/model/frankenstein_model.py}:
 \begin{itemize}[leftmargin=*]
     \item \texttt{HybridLayer} gana módulos opcionales \texttt{mhc\_attn} y
         \texttt{mhc\_ffn} (un módulo mHC por función de capa); la ruta
@@ -198,7 +198,7 @@ Cableado en \texttt{src/model/frankenstein\_model.py}:
         \texttt{ValueError} si ambos están habilitados.
 \end{itemize}
 
-Ejemplo de configuración: \texttt{configs/examples/es\_arch\_mhc\_adamw.yaml}.
+Ejemplo de configuración: \path{configs/examples/es_arch_mhc_adamw.yaml}.
 
 \subsection{Resultados Reportados}
 
@@ -290,7 +290,7 @@ adicionales:
         \texttt{Sinkhorn\-Knopp\-Function}) o \texttt{identity}.
 \end{itemize}
 
-Implementación: \texttt{src/model/hyperloop.py} aloja
+Implementación: \path{src/model/hyperloop.py} aloja
 \texttt{HyperloopConnections} con \texttt{projs} / \texttt{biases} /
 \texttt{alphas\_\*} / \texttt{loop\_pos\_embs} ($e_l$, inicializados a cero
 para que al inicio la actualización se reduzca a la recurrencia del
@@ -309,7 +309,7 @@ por bucle es $3n^2C + 3n + 3 + C$ (diagonal): para el modelo de 136M del
 paper ($C = 1024$, $n = 4$, 3 bucles) solo $\approx$150K parámetros más allá
 del Transformer en bucle simple.
 
-Ejemplo de configuración: \texttt{configs/examples/hyperloop\_mhc\_adamw.yaml}.
+Ejemplo de configuración: \path{configs/examples/hyperloop_mhc_adamw.yaml}.
 
 \subsubsection*{Resultados reportados (arXiv:2604.21254)}
 

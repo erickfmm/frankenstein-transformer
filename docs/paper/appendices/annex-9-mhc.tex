@@ -7,7 +7,7 @@ that replaces the standard identity residual with an $n$-stream residual whose
 stream-mixing matrix is constrained to the Birkhoff polytope. The main body
 delegates to this annex for the mathematical formulation, the implementation
 details, and the reported results; the bibliography keys cited here resolve
-against \texttt{docs/bibliography/}.
+against \path{docs/bibliography/}.
 
 \subsection{Motivation: The Identity-Mapping Property}
 
@@ -152,7 +152,7 @@ sub-object level:
         uses \texttt{BitLinear}.
 \end{itemize}
 
-The module lives in \texttt{src/model/mhc.py}:
+The module lives in \path{src/model/mhc.py}:
 \begin{itemize}[leftmargin=*]
     \item \texttt{Sinkhorn\-Knopp\-Function} (\texttt{torch.autograd.Function}):
         the forward pass applies the alternating row/column normalizations of
@@ -169,7 +169,7 @@ The module lives in \texttt{src/model/mhc.py}:
         H^{\text{res}}$).
 \end{itemize}
 
-Wiring in \texttt{src/model/frankenstein\_model.py}:
+Wiring in \path{src/model/frankenstein_model.py}:
 \begin{itemize}[leftmargin=*]
     \item \texttt{HybridLayer} gains optional \texttt{mhc\_attn} and
         \texttt{mhc\_ffn} modules (one mHC module per layer function); the
@@ -186,7 +186,7 @@ Wiring in \texttt{src/model/frankenstein\_model.py}:
         if both are enabled.
 \end{itemize}
 
-Example configuration: \texttt{configs/examples/es\_arch\_mhc\_adamw.yaml}.
+Example configuration: \path{configs/examples/es_arch_mhc_adamw.yaml}.
 
 \subsection{Reported Results}
 
@@ -272,7 +272,7 @@ boolean (flat \texttt{mhc\_hyperloop}; requires \texttt{mhc.enabled} and
         \texttt{Sinkhorn\-Knopp\-Function}) or \texttt{identity}.
 \end{itemize}
 
-Implementation: \texttt{src/model/hyperloop.py} hosts
+Implementation: \path{src/model/hyperloop.py} hosts
 \texttt{HyperloopConnections} with per-loop \texttt{projs} / \texttt{biases} /
 \texttt{alphas\_\*} / \texttt{loop\_pos\_embs} ($e_l$, zero-initialized so
 that at initialisation the update reduces to the plain looped-Transformer
@@ -289,7 +289,7 @@ The per-loop parameter budget is $3n^2C + 3n + 3 + C$ (diagonal): for the
 paper's 136M model ($C = 1024$, $n = 4$, 3 loops) only $\approx$150K
 parameters beyond the plain looped Transformer.
 
-Example configuration: \texttt{configs/examples/hyperloop\_mhc\_adamw.yaml}.
+Example configuration: \path{configs/examples/hyperloop_mhc_adamw.yaml}.
 
 \subsubsection*{Reported results (arXiv:2604.21254)}
 

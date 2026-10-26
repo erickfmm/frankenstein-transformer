@@ -1,7 +1,7 @@
 \section{Estructura del Esquema de Configuración}
 \label{sec:annex-schema}
 
-El conjunto de herramientas Frankenstein Transformer impone un esquema de configuración YAML estricto con \texttt{additionalProperties: false} en todos los niveles. El esquema se define en \texttt{src/schema.yaml}, que referencia sub-esquemas modulares en \texttt{src/schema/}. Cada campo configurable debe declararse en el esquema; las claves no reconocidas se rechazan en tiempo de validación. Este anexo documenta la estructura completa del esquema, incluyendo todos los campos, sus tipos, restricciones y reglas de validación entre componentes.
+El conjunto de herramientas Frankenstein Transformer impone un esquema de configuración YAML estricto con \texttt{additionalProperties: false} en todos los niveles. El esquema se define en \path{src/schema.yaml}, que referencia sub-esquemas modulares en \path{src/schema/}. Cada campo configurable debe declararse en el esquema; las claves no reconocidas se rechazan en tiempo de validación. Este anexo documenta la estructura completa del esquema, incluyendo todos los campos, sus tipos, restricciones y reglas de validación entre componentes.
 
 \subsection{Estructura de Nivel Superior}
 
@@ -22,7 +22,7 @@ El esquema impone una regla de exclusión mutua: o bien \texttt{base\_model} deb
 
 El objeto \texttt{model} define todos los hiperparámetros arquitectónicos. Los campos obligatorios son \texttt{dims.vocab\_size}, \texttt{dims.hidden\_size}, \texttt{dims.num\_layers}, \texttt{dims.num\_heads} y \texttt{dims.layer\_pattern}. La Tabla~\ref{tab:model-fields} enumera todos los campos del modelo con sus tipos y descripciones.
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{8.5cm}}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{5.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{6.9cm}}
 \toprule
 \textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
 \midrule
@@ -203,7 +203,7 @@ Los campos se agrupan bajo sub-objetos jerárquicos (\texttt{dims}, \texttt{norm
 
 El array \texttt{model.dims.layer\_pattern} acepta los siguientes 43 códigos de mezclador. Cada elemento define una capa física en la pila del modelo. La Tabla~\ref{tab:layer-pattern-enum} enumera todos los tipos disponibles con su soporte de entrenamiento e inferencia.
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{5.5cm}cc}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{4.7cm}>{\raggedright\arraybackslash}p{5.0cm}cc}
 \toprule
 \textbf{Tipo} & \textbf{Descripción} & \textbf{Entrenar} & \textbf{Inferir} \\
 \midrule
@@ -262,7 +262,7 @@ gma\_attn & Atención de Mezcla Gaussiana --- enrutamiento latente probabilísti
 
 El objeto \texttt{training} controla todo el pipeline de entrenamiento. El único campo obligatorio es \texttt{task}. La Tabla~\ref{tab:training-fields} enumera todos los campos de entrenamiento.
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{8.5cm}}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{5.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{6.9cm}}
 \toprule
 \textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
 \midrule
@@ -341,7 +341,7 @@ El objeto \texttt{tokenizer} de nivel superior está disponible para ambas rutas
 
 La Tabla~\ref{tab:tokenizer-training} enumera los campos del sub-objeto \texttt{tokenizer.training}.
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{8.5cm}}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{5.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{6.9cm}}
 \toprule
 \textbf{Campo} & \textbf{Tipo} & \textbf{Descripción} \\
 \midrule
@@ -392,7 +392,7 @@ Nota: los parámetros de los mezcladores ODE, RetNet y Mamba se enrutan al grupo
 
 La Tabla~\ref{tab:optimizer-specific-suffixes} enumera los sufijos globales adicionales soportados por cada optimizador (prefijados por el nombre del optimizador).
 
-\begin{longtable}{>{\ttfamily}l>{\raggedright\arraybackslash}p{10cm}}
+\begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{5.2cm}>{\raggedright\arraybackslash}p{9.7cm}}
 \toprule
 \textbf{Optimizador} & \textbf{Sufijos Globales Específicos} \\
 \midrule
@@ -474,8 +474,8 @@ El esquema impone las siguientes reglas de validación entre componentes, implem
     \item \texttt{model.dims.hidden\_size} debe ser divisible por \texttt{model.dims.num\_heads}. La dimensión por cabeza es $\texttt{hidden\_size} / \texttt{num\_heads}$.
     \item \texttt{model.dims.num\_kv\_heads} debe dividir \texttt{model.dims.num\_heads} exactamente cuando se usa Atención por Consultas Agrupadas.
     \item \texttt{vocab\_size} debe coincidir con el tamaño de vocabulario del tokenizador. Una discrepancia causa corrupción de IDs de token y fallo de entrenamiento irrecuperable.
-    \item Cuando \texttt{base\_model} está configurado, \texttt{training.task} es obligatorio. Si \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} también es obligatorio --- salvo cuando \texttt{tokenizer.source=train\_from\_dataset}, en cuyo caso el tokenizador se entrena desde el corpus y no se necesita nombre.
-    \item \texttt{tokenizer.source=train\_from\_dataset} requiere el sub-objeto \texttt{tokenizer.training} (con \texttt{vocab\_size} para \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}) y es mutuamente excluyente con \texttt{tokenizer.name\_or\_path}. El vocabulario entrenado sobrescribe \texttt{model.dims.vocab\_size} antes de construir el modelo.
+    \item Cuando \texttt{base\_model} está configurado, \texttt{training.task} es obligatorio. Si \texttt{task=mlm}, \texttt{tokenizer.name\_or\_path} también es obligatorio --- salvo cuando \texttt{tokenizer.source=\allowbreak train\_from\_dataset}, en cuyo caso el tokenizador se entrena desde el corpus y no se necesita nombre.
+    \item \texttt{tokenizer.source=\allowbreak train\_from\_dataset} requiere el sub-objeto \texttt{tokenizer.training} (con \texttt{vocab\_size} para \texttt{bpe}/\texttt{wordpiece}/\texttt{wordlevel}) y es mutuamente excluyente con \texttt{tokenizer.name\_or\_path}. El vocabulario entrenado sobrescribe \texttt{model.dims.vocab\_size} antes de construir el modelo.
     \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}; \texttt{task: causal\_lm} requiere \texttt{training.optimizer} y \texttt{model\_class='frankenstein\_text\_decoder'}.
     \item \texttt{bitnet.routers=true} requiere \texttt{bitnet.enabled=true}. La bandera no tiene efecto en caso contrario.
     \item \texttt{use\_mhc=true} (flujo residual de $n$ streams mHC) y \texttt{use\_mixture\_of\_depths=true} son mutuamente excluyentes. Habilitar ambos lanza un \texttt{ValueError}: el enrutamiento MoD de tokens opera sobre un flujo $C$-dimensional único, en conflicto con el flujo residual de $n$ streams.

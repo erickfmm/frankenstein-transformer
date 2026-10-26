@@ -188,11 +188,13 @@ Casos especiales: MHA $\Leftrightarrow q_{\text{rank}} = k_{\text{rank}} = v_{\t
 La Atención de Cabezas Entrelazadas (IHA, por sus siglas en inglés) \citep{duvvuri_iha_2026} construye $P$ pseudo-cabezas por cabeza original (típicamente $P = H$) donde cada consulta/clave/valor pseudo es una combinación lineal aprendida de todas las $H$ cabezas originales. Esto induce hasta $P^2$ patrones de atención distintos por cabeza con una sobrecarga de $\mathcal{O}(H^2 P)$. Teóricamente, IHA necesita sólo $\Theta(\sqrt{k}\, n^2)$ parámetros frente a $\Theta(k\, n^2)$ de MHA en la tarea Polinomial; empíricamente entrega $+10$--$20\%$ en RULER de recuperación multi-clave, $+5.8\%$ en GSM8K y $+2.8\%$ en MATH-500.
 
 \subsubsection{Formulación Matemática}
+{\small
 \[
 q_{\text{pseudo}}[p] = \sum_{h=1}^{H} \text{mix}_q[p, h]\, q[h], \quad
 k_{\text{pseudo}}[p] = \sum_{h} \text{mix}_k[p, h]\, k[h], \quad
 v_{\text{pseudo}}[p] = \sum_{h} \text{mix}_v[p, h]\, v[h].
 \]
+}
 \[
 \text{atencion}_p = \texttt{softmax}\!\left(\frac{q_{\text{pseudo}}[p]\, k_{\text{pseudo}}[p]^\top}{\sqrt{d_h}}\right) v_{\text{pseudo}}[p],
 \qquad
@@ -230,10 +232,12 @@ v_{\text{pseudo}}[p] = \sum_{h} \text{mix}_v[p, h]\, v[h].
 La Atención laTenT por Cabezas Agrupadas (GTA, por sus siglas en inglés) \citep{sun_gta_2025} combina dos compresiones: (1) un \emph{mapa de atención compartido} --- un tensor de puntajes de atención por grupo de cabezas, reutilizado entre todas las cabezas del grupo, reduciendo el caché de claves; y (2) un \emph{decodificador de valores no lineal} --- el caché de valores se comprime a un latente mediante una down-proyección y se reconstruye por una up-proyección con compuerta SiLU antes de la proyección de salida. GTA reduce los FLOPs de atención hasta 62.5\% frente a GQA, encoge el caché KV hasta 70\%, y produce una aceleración de inferencia de 2$\times$ de extremo a extremo.
 
 \subsubsection{Formulación Matemática}
+{\footnotesize
 \[
 q_g = \texttt{mean}(q[\text{grupo } g]), \quad k_g = \texttt{mean}(k[\text{grupo } g]), \quad
 \text{atencion}_g = \texttt{softmax}\!\left(\frac{q_g\, k_g^\top}{\sqrt{d_h}}\right) \text{ (reutilizado en el grupo)}.
 \]
+}
 \[
 v_{\text{latente}} = W_{DV}\, x, \qquad v = \text{SiLU}(W_{UV}\, v_{\text{latente}}), \qquad
 \mathbf{Y} = \text{atencion}_g \cdot v.

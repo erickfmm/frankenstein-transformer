@@ -105,10 +105,12 @@ DeltaNet \citep{yang_deltanet_2024} aplica una \textbf{regla de aprendizaje delt
 \mathbf{S}_t = \mathbf{S}_{t-1}(\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top) + \beta_t \mathbf{v}_t \mathbf{k}_t^\top
 \]
 donde $\beta_t \in (0,1)$ es un escalar de \textbf{intensidad de escritura} dependiente de los datos. Esta actualización puede descomponerse como una operación de borrado-escritura:
+{\small
 \[
 \mathbf{v}_t^\text{anterior} = \mathbf{S}_{t-1} \mathbf{k}_t \quad \text{(predicción actual)}, \quad
 \mathbf{v}_t^\text{actualizado} = \beta_t \mathbf{v}_t + (1-\beta_t)\mathbf{v}_t^\text{anterior} \quad \text{(mezcla anterior/nuevo)}
 \]
+}
 de modo que:
 \[
 \mathbf{S}_t = \mathbf{S}_{t-1} - \mathbf{v}_t^\text{anterior}\mathbf{k}_t^\top + \mathbf{v}_t^\text{actualizado}\mathbf{k}_t^\top

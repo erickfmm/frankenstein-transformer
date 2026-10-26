@@ -188,11 +188,13 @@ Special cases: MHA $\Leftrightarrow q_{\text{rank}} = k_{\text{rank}} = v_{\text
 Interleaved Head Attention (IHA) \citep{duvvuri_iha_2026} constructs $P$ pseudo-heads per original head (typically $P = H$) where each pseudo query/key/value is a learned linear combination of all $H$ original heads. This induces up to $P^2$ distinct attention patterns per head at an $\mathcal{O}(H^2 P)$ overhead. Theoretically, IHA needs only $\Theta(\sqrt{k}\, n^2)$ parameters versus $\Theta(k\, n^2)$ for MHA on the Polynomial task; empirically it delivers $+10$--$20\%$ on RULER multi-key retrieval, $+5.8\%$ on GSM8K and $+2.8\%$ on MATH-500.
 
 \subsubsection{Mathematical Formulation}
+{\small
 \[
 q_{\text{pseudo}}[p] = \sum_{h=1}^{H} \text{mix}_q[p, h]\, q[h], \quad
 k_{\text{pseudo}}[p] = \sum_{h} \text{mix}_k[p, h]\, k[h], \quad
 v_{\text{pseudo}}[p] = \sum_{h} \text{mix}_v[p, h]\, v[h].
 \]
+}
 \[
 \text{attn}_p = \texttt{softmax}\!\left(\frac{q_{\text{pseudo}}[p]\, k_{\text{pseudo}}[p]^\top}{\sqrt{d_h}}\right) v_{\text{pseudo}}[p],
 \qquad
@@ -230,10 +232,12 @@ v_{\text{pseudo}}[p] = \sum_{h} \text{mix}_v[p, h]\, v[h].
 Grouped-head laTenT Attention (GTA) \citep{sun_gta_2025} combines two compressions: (1) a \emph{shared attention map} --- one attention-score tensor per group of heads, reused across all heads in the group, shrinking the key cache; and (2) a \emph{nonlinear value decoder} --- the value cache is compressed to a latent by a down-projection and reconstructed by a SiLU-gated up-projection before the output projection. GTA cuts attention FLOPs by up to 62.5\% versus GQA, shrinks the KV cache by up to 70\%, and yields a 2$\times$ end-to-end inference speedup.
 
 \subsubsection{Mathematical Formulation}
+{\footnotesize
 \[
 q_g = \texttt{mean}(q[\text{group } g]), \quad k_g = \texttt{mean}(k[\text{group } g]), \quad
 \text{attn}_g = \texttt{softmax}\!\left(\frac{q_g\, k_g^\top}{\sqrt{d_h}}\right) \text{ (reused across the group)}.
 \]
+}
 \[
 v_{\text{latent}} = W_{DV}\, x, \qquad v = \text{SiLU}(W_{UV}\, v_{\text{latent}}), \qquad
 \mathbf{Y} = \text{attn}_g \cdot v.

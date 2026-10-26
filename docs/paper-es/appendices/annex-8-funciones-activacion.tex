@@ -25,6 +25,7 @@ La familia clásica comprende activaciones suaves, sin estado, basadas en
 funciones logísticas y algebraicas~\citep{lederer2021activations,dubey2021activations}.
 Todas comparten monotonicía o casi-monotonicía y son continuamente derivables.
 
+{\footnotesize
 \begin{align}
   \text{Sigmoid}(x) &= \frac{1}{1+e^{-x}}
     & \text{Rango: } (0,1),\;\text{monótona, suave}
@@ -45,7 +46,9 @@ Todas comparten monotonicía o casi-monotonicía y son continuamente derivables.
     & \text{Rango: } (-\infty,\infty),\;\text{lineal, }C^\infty
     & \quad \text{(interna)}
 \end{align}
+}  % end size group
 
+{\scriptsize
 \begin{align}
   \text{Softplus}(x) &= \log(1+e^{x})
     & \text{Rango: } [0,\infty),\;\text{suave, }C^\infty
@@ -68,6 +71,7 @@ Todas comparten monotonicía o casi-monotonicía y son continuamente derivables.
     & \text{Rango: } (\approx{-0.278},\infty),\;\text{no monótona, suave}
     & \quad \text{\citep{elfwing2018silu}}
 \end{align}
+}  % end size group
 
 \noindent\textbf{SiLU} (Sigmoid Linear Unit) es la activación por defecto
 (\texttt{ffn\_activation=silu}). Cuando $\beta=1$, el Swish paramétrico se
@@ -82,6 +86,7 @@ La familia de rectificadores extiende ReLU con pendientes aprendibles,
 variantes acotadas y formas hiperbólicas
 rectificadas~\citep{nair2010relu,dubey2021activations}.
 
+{\scriptsize
 \begin{align}
   \text{LeakyReLU}(x) &= \begin{cases} x & x\ge 0 \\ a\,x & x < 0 \end{cases},
     \quad a=0.01
@@ -96,14 +101,16 @@ rectificadas~\citep{nair2010relu,dubey2021activations}.
   \text{PReLU}(x) &= \max(0,x)+\mathbf{p}\odot\min(0,x)
     & \text{Pendiente por canal aprendible } \mathbf{p},\;\text{init 0.25}
     & \quad \text{\citep{he2015prelu}} \\[4pt]
-  \text{AbsReLU}(x) &= \max(0,x)-\max(0,-x) = x\;\text{rectificado a rampa de signo}
+  \text{AbsReLU}(x) &= \max(0,x)-\max(0,-x) = x\;\text{(rampa de signo)}
     & \text{Rango: } (-\infty,\infty)
     & \quad \text{\citep{dubey2021activations}} \\[4pt]
   \text{NLReLU}(x) &= \beta\,\log\!\big(1+\max(0,x)\big)
-    & \text{Rango: } [0,\infty),\;\beta=1.0,\;\text{compresión logarítmica}
+    & \text{Rango: } [0,\infty),\;\beta=1.0,\;\text{compresión log.}
     & \quad \text{\citep{dubey2021activations}}
 \end{align}
+}  % end size group
 
+{\scriptsize
 \begin{align}
   \text{BReLU}(x) &= \min\!\big(\max(0,x),\,t\big),\quad t=1.0
     & \text{Rango: } [0,t],\;\text{rectificador acotado}
@@ -124,6 +131,7 @@ rectificadas~\citep{nair2010relu,dubey2021activations}.
     & \text{Rango: } [0,\infty)\;\text{(magnitud), no monótona, suave}
     & \quad \text{\citep{roy2019lisht}}
 \end{align}
+}  % end size group
 
 \noindent\textbf{PReLU}~\citep{he2015prelu} convierte la pendiente negativa en
 un parámetro aprendible por canal, permitiendo a la red aprender la fuga
@@ -160,6 +168,7 @@ Varios miembros introducen parámetros aprendibles por canal.
     & \quad \text{\citep{dubey2021activations}}
 \end{align}
 
+{\footnotesize
 \begin{align}
   \text{FELU}(x) &= \begin{cases} x & x\ge 0 \\ \alpha(e^{x}-1) & x<0 \end{cases}
     & \alpha\text{ aprendible, acotado a } [0,1]
@@ -182,7 +191,9 @@ Varios miembros introducen parámetros aprendibles por canal.
     & \alpha\text{ aprendible; interp.\ exp/lineal/log}
     & \quad \text{\citep{godfrey2015softexp}}
 \end{align}
+}  % end size group
 
+{\footnotesize
 \begin{align}
   \text{ELiSH}(x) &= \begin{cases} x\,\sigma(x) & x\ge 0 \\
     (e^{x}-1)\,\sigma(x) & x<0 \end{cases}
@@ -193,6 +204,7 @@ Varios miembros introducen parámetros aprendibles por canal.
     & \text{Variante con sigmoide rígida de ELiSH}
     & \quad \text{\citep{basirat2019elish}}
 \end{align}
+}  % end size group
 
 \noindent donde $\text{hard\_sigmoid}(x)=\text{ReLU6}(x+3)/6$.
 
