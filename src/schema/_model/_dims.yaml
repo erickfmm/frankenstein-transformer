@@ -212,8 +212,8 @@ properties:
       | `bigbird_attn` | BigBird: local + random + global attention | ✅ | ✅ |
       | `sparse_transformer_attn` | Sparse Transformer: factorized patterns | ✅ | ✅ |
       | `sparsek_attn` | SparseK: differentiable top-k KV selection | ✅ | ✅ |
-      | `sparge_attn` ⚠️ | SpargeAttn — **eval-only**, two-stage block pruning | ❌ | ✅ |
-      | `fasa_attn` ⚠️ | FASA — **eval-only**, frequency-aware token selection | ❌ | ✅ |
+      | `sparge_attn` ⚠️ | SpargeAttn — two-stage block pruning; **trains as dense attention**, sparse filter at inference | ✅ (dense) | ✅ (sparse) |
+      | `fasa_attn` ⚠️ | FASA — frequency-aware token selection; **trains as dense attention**, sparse selection at inference | ✅ (dense) | ✅ (sparse) |
       | `msa_attn` | MiniMax Sparse Attention — block-sparse on GQA (arXiv:2606.13392) | ✅ | ✅ |
       | `sparda_attn` | SparDA — decoupled sparse attention with a Forecast projection (arXiv:2606.04511) | ✅ | ✅ |
       | `kda_attn` | Kimi Delta Attention — channel-wise decay + scalar write gate (arXiv:2510.26692) | ✅ | ✅ |
@@ -240,6 +240,7 @@ properties:
       - `[retnet, titan_attn, retnet, mamba, titan_attn, ode]` with `num_layers=6`: Mixed architecture combining recurrent retention (efficient long-range), Titan attention with positional encoding (precise local attention), Mamba SSM (linear-time sequence modeling), and ODE continuous depth. Each position gets a different type of computation, enabling diverse representations.
       - `[standard_attn, standard_attn, longformer_attn]` with `num_layers=3`: Hybrid dense + sparse. Start with 2 dense attention layers for fine-grained interactions, then use Longformer for efficient long-sequence processing. Good for documents > 512 tokens.
       - Mixing recurrent (retnet, mamba) with attention (standard_attn, titan_attn): Recurrent layers provide memory and long-range context at O(1) inference cost, while attention layers provide high-precision local interactions. This is the recommended pattern for models that need both efficiency and quality.
+      - ⚠️ `sparge_attn` and `fasa_attn` apply their sparse heuristic **only in evaluation/inference**. While training, `HybridLayer` substitutes standard dense attention over the same projections (`q/k/v/out`), so they can be trained from scratch; the trained weights are exactly the ones the sparse path reads at eval time.
     description_es: |-
       Secuencia ordenada de tipos de capa apilados en el modelo. Cada elemento define una
       capa física. La longitud del patrón debe igualar `num_layers`. Tipos disponibles:
@@ -266,8 +267,8 @@ properties:
       | `bigbird_attn` | BigBird: local + aleatorio + global | ✅ | ✅ |
       | `sparse_transformer_attn` | Sparse Transformer: patrones factorizados | ✅ | ✅ |
       | `sparsek_attn` | SparseK: selección top-k diferenciable | ✅ | ✅ |
-      | `sparge_attn` ⚠️ | SpargeAttn — **solo evaluación** | ❌ | ✅ |
-      | `fasa_attn` ⚠️ | FASA — **solo evaluación** | ❌ | ✅ |
+      | `sparge_attn` ⚠️ | SpargeAttn — poda de bloques en dos etapas; **entrena como atención densa**, filtro disperso en inferencia | ✅ (densa) | ✅ (dispersa) |
+      | `fasa_attn` ⚠️ | FASA — selección de tokens consciente de frecuencia; **entrena como atención densa**, selección dispersa en inferencia | ✅ (densa) | ✅ (dispersa) |
       | `msa_attn` | MiniMax Sparse Attention — bloques dispersos sobre GQA (arXiv:2606.13392) | ✅ | ✅ |
       | `sparda_attn` | SparDA — atención dispersa desacoplada con proyección Forecast (arXiv:2606.04511) | ✅ | ✅ |
       | `kda_attn` | Kimi Delta Attention — decaimiento canalizado + compuerta escalar (arXiv:2510.26692) | ✅ | ✅ |
@@ -293,7 +294,7 @@ properties:
       - `[retnet, titan_attn, retnet, mamba, titan_attn, ode]` con `num_layers=6`: Arquitectura mixta que combina retención recurrente (largo alcance eficiente), atención Titan con codificación posicional (atención local precisa), Mamba SSM (modelado de secuencias en tiempo lineal) y ODE de profundidad continua. Cada posición recibe un tipo diferente de cómputo, permitiendo representaciones diversas.
       - `[standard_attn, standard_attn, longformer_attn]` con `num_layers=3`: Híbrido denso + disperso. Empieza con 2 capas de atención densa para interacciones detalladas, luego usa Longformer para procesamiento eficiente de secuencias largas. Bueno para documentos > 512 tokens.
       - Mezcla de recurrente (retnet, mamba) con atención (standard_attn, titan_attn): Las capas recurrentes proporcionan memoria y contexto de largo alcance a costo O(1) en inferencia, mientras que las capas de atención proporcionan interacciones locales de alta precisión. Este es el patrón recomendado para modelos que necesitan tanto eficiencia como calidad.
-      - ⚠️ `sparge_attn` y `fasa_attn` son bloques **solo de evaluación** — lanzan error en tiempo de ejecución si se usan durante entrenamiento. No incluirlos en el patrón para entrenamiento desde cero.
+      - ⚠️ `sparge_attn` y `fasa_attn` aplican su heurística dispersa **solo en evaluación/inferencia**. Durante el entrenamiento `HybridLayer` sustituye atención estándar densa sobre las mismas proyecciones (`q/k/v/out`), por lo que pueden entrenarse desde cero; los pesos entrenados son exactamente los que usa la ruta dispersa al evaluar.
     items:
       type: string
       enum:

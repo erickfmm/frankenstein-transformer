@@ -490,6 +490,8 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
     \item \textbf{Limitation}: Offline offline calibration required; dominant FC identification adds preprocessing overhead.
 \end{itemize}
 
+\paragraph{Implementation note (training vs.\ inference).} In this repository the sparse TIP/FAC path is inference-only. While the model is in training mode, the enclosing hybrid layer substitutes standard dense attention over the same $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$ projections, so the mixer can be trained from scratch and the weights optimized during training are exactly the ones the sparse path reads at evaluation.
+
 \subsection{SpargeAttn: Two-Stage Block-Level Filtering}
 
 \begin{figure}[H]
@@ -562,6 +564,8 @@ where $m_{\text{old}}, m_{\text{new}}$ are online softmax running maxima (comput
     \item \textbf{Strength}: 2.5--5$\times$ speedup compared to dense or previous sparse methods; compatible with quantization (SageAttention integration).
     \item \textbf{Limitation}: Speedup depends on inherent sparsity; block-level granularity may miss finer patterns; threshold tuning required per model family.
 \end{itemize}
+
+\paragraph{Implementation note (training vs.\ inference).} In this repository the two-stage block filter is inference-only. While the model is in training mode, the enclosing hybrid layer substitutes standard dense attention over the same $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$ projections, so the mixer can be trained from scratch and the weights optimized during training are exactly the ones the sparse path reads at evaluation.
 
 \subsection{MSA (MiniMax Sparse Attention): Blockwise Sparse Attention with Lightweight Index Branch}
 

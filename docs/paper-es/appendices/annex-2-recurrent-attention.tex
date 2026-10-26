@@ -226,7 +226,7 @@ El módulo de memoria $\mathcal{M}$ se actualiza literalmente durante el paso ha
 
 \subsection{Despacho de Mezclador Guiado por Patrón}
 
-El código base selecciona un mezclador por bloque a partir del \texttt{layer\_pattern} configurado. La lógica de despacho impone la política sin entrenamiento para bloques de solo evaluación y enruta a la implementación de familia correspondiente.
+El código base selecciona un mezclador por bloque a partir del \texttt{layer\_pattern} configurado. La lógica de despacho enruta los bloques dispersos en tiempo de inferencia (\texttt{fasa\_attn}, \texttt{sparge\_attn}) a atención estándar densa mientras el modelo está en modo entrenamiento, y a su implementación dispersa durante la evaluación; el resto de bloques se enruta a la implementación de familia correspondiente.
 
 \begin{algorithm}[t]
 \caption{Paso Adelante del Mezclador Guiado por Patrón (Conceptual)}
@@ -234,7 +234,7 @@ El código base selecciona un mezclador por bloque a partir del \texttt{layer\_p
 \Require Estados ocultos $H$, patrón $P$, índice de capa $\ell$
 \State $m \gets P[\ell \bmod |P|]$
 \If{$m \in \{\texttt{fasa\_attn}, \texttt{sparge\_attn}\}$ y el modelo está en modo entrenamiento}
-    \State lanzar error de configuración/tiempo de ejecución (bloque sin entrenamiento en modo entrenar)
+    \State $H \gets \text{softmax-attention}(H)$ \Comment{atención densa sustituta, mismas proyecciones}
 \ElsIf{$m=\texttt{standard\_attn}$}
     \State $H \gets \text{softmax-attention}(H)$
 \ElsIf{$m=\texttt{sigmoid\_attn}$}

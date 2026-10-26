@@ -216,7 +216,7 @@ El array \texttt{model.dims.layer\_pattern} acepta los siguientes 43 códigos de
 \multicolumn{4}{r}{\textit{continúa en la página siguiente}} \\
 \endfoot
 \bottomrule
-\caption{Enumeración completa de \texttt{layer\_pattern}. $\checkmark$ = soportado, $\times$ = no soportado.}
+\caption{Enumeración completa de \texttt{layer\_pattern}. $\checkmark$ = soportado, $\times$ = no soportado. \texttt{fasa\_attn} y \texttt{sparge\_attn} entrenan como atención estándar densa sobre sus propias proyecciones y aplican su heurística dispersa solo en inferencia.}
 \label{tab:layer-pattern-enum}
 \endlastfoot
 standard\_attn & Atención multi-cabeza clásica (estilo BERT) & \checkmark & \checkmark \\
@@ -238,8 +238,8 @@ longformer\_attn & Longformer: ventanas deslizantes + tokens globales & \checkma
 bigbird\_attn & BigBird: atención local + aleatoria + global & \checkmark & \checkmark \\
 sparse\_transformer\_attn & Sparse Transformer: patrones factorizados & \checkmark & \checkmark \\
 sparsek\_attn & SparseK: selección KV top-k diferenciable & \checkmark & \checkmark \\
-sparge\_attn & SpargeAttn --- poda de bloques en dos etapas & $\times$ & \checkmark \\
-fasa\_attn & FASA --- selección de tokens consciente de frecuencia & $\times$ & \checkmark \\
+sparge\_attn & SpargeAttn --- poda de bloques en dos etapas; entrenamiento denso, inferencia dispersa & \checkmark & \checkmark \\
+fasa\_attn & FASA --- selección de tokens consciente de frecuencia; entrenamiento denso, inferencia dispersa & \checkmark & \checkmark \\
 msa\_attn & MiniMax Sparse Attention --- bloques dispersos sobre GQA & \checkmark & \checkmark \\
 sparda\_attn & SparDA --- atención dispersa desacoplada con proyección Forecast & \checkmark & \checkmark \\
 kda\_attn & Kimi Delta Attention --- decaimiento por canal + compuerta de escritura escalar & \checkmark & \checkmark \\
@@ -479,7 +479,7 @@ El esquema impone las siguientes reglas de validación entre componentes, implem
     \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}; \texttt{task: causal\_lm} requiere \texttt{training.optimizer} y \texttt{model\_class='frankenstein\_text\_decoder'}.
     \item \texttt{bitnet.routers=true} requiere \texttt{bitnet.enabled=true}. La bandera no tiene efecto en caso contrario.
     \item \texttt{use\_mhc=true} (flujo residual de $n$ streams mHC) y \texttt{use\_mixture\_of\_depths=true} son mutuamente excluyentes. Habilitar ambos lanza un \texttt{ValueError}: el enrutamiento MoD de tokens opera sobre un flujo $C$-dimensional único, en conflicto con el flujo residual de $n$ streams.
-    \item \texttt{fasa\_attn} y \texttt{sparge\_attn} son tipos de capa solo para evaluación. Lanzan \texttt{RuntimeError} si se usan durante el entrenamiento. No deben aparecer en \texttt{model.dims.layer\_pattern} para ejecuciones de entrenamiento.
+    \item \texttt{fasa\_attn} y \texttt{sparge\_attn} son tipos de capa dispersos en inferencia: aplican su heurística dispersa solo en modo evaluación. Durante el entrenamiento la capa híbrida contenedora sustituye atención estándar densa sobre las mismas proyecciones $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$, por lo que pueden aparecer en \texttt{model.dims.layer\_pattern} para ejecuciones de entrenamiento; los pesos entrenados son los que lee la ruta dispersa en inferencia.
     \item \texttt{model\_class: frankenstein\_text\_decoder} fuerza \texttt{model.dims.mode: decoder} en tiempo de ejecución. Establecer \texttt{model.dims.mode: encoder} con esta clase se sobrescribe.
     \item O bien \texttt{base\_model} debe estar presente, o bien tanto \texttt{model\_class} como \texttt{model} deben estar presentes. El esquema rechaza configuraciones que no proporcionen ninguno o una combinación incompleta.
 \end{enumerate}

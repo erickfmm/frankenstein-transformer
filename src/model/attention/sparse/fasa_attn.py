@@ -9,9 +9,12 @@ attention is computed exclusively over the top-k most important tokens. This
 avoids training or fine-tuning while achieving significant sparsity.
 
 .. note::
-    This module is **eval-only** in this repository. The enclosing
-    ``HybridLayer`` raises a ``RuntimeError`` if it is invoked in
-    training mode (``model.train()``).
+    The **sparse selection path is inference-only**. When the enclosing
+    ``HybridLayer`` runs in training mode it routes this mixer through
+    :func:`~src.model.attention.common.dense_attention_forward` instead: the
+    layer is trained as standard dense attention over the same ``q/k/v/out``
+    projections, and the frequency-aware top-k heuristic only activates in
+    ``eval()``.
 
 Reference:
     Wang, J., Li, Y., Zhang, H., Chen, X., Liu, Z., & Sun, M. (2026).
@@ -29,7 +32,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..common import BitLinear, apply_pe_to_qk
+from ..common import BitLinear, apply_pe_to_qk, dense_attention_forward
 
 
 class FASAAttention(nn.Module):
@@ -45,8 +48,12 @@ class FASAAttention(nn.Module):
     buffer and is head-specific, ensuring diversity across heads.
 
     .. note::
-        This module is **eval-only**. The enclosing ``HybridLayer`` raises
-        a ``RuntimeError`` if called in training mode.
+        The **sparse selection path is inference-only**. In training mode the
+        enclosing ``HybridLayer`` substitutes standard dense attention over
+        this module's own projections (see
+        :func:`~src.model.attention.common.dense_attention_forward`), so the
+        mixer can be trained from scratch and its sparse heuristic is used
+        from ``eval()`` onward.
 
     Attributes:
         hidden_size (int): Dimensionality of the input and output embeddings.
@@ -147,6 +154,32 @@ class FASAAttention(nn.Module):
         kwargs = cache.codec_slot_kwargs()
         return KVSlot(meta, codec=kwargs["codec"], policy=None, num_sinks=kwargs["num_sinks"])
 
+    def dense_forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+    ) -> torch.Tensor:
+        """Run standard dense attention with FASA's own projections (training).
+
+        Used by ``HybridLayer`` while ``model.train()`` is active: the layer
+        is trained as full dense attention and the frequency-aware top-k
+        selection is deferred to eval/inference.
+
+        Args:
+            x: Input tensor of shape ``(batch, seq_len, hidden_size)``.
+            logical_layer_idx: Logical layer index forwarded to the positional
+                encoder.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
+
+        Returns:
+            Output tensor of shape ``(batch, seq_len, hidden_size)``.
+        """
+        return dense_attention_forward(
+            self, x, logical_layer_idx=logical_layer_idx, pos_encoder=pos_encoder
+        )
+
     def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None, cache=None, cache_position: Optional[int] = None) -> torch.Tensor:
         """Compute frequency-aware sparse attention.
 
@@ -177,8 +210,8 @@ class FASAAttention(nn.Module):
             torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
 
         Raises:
-            RuntimeError: If called in training mode (enforced by the
-                enclosing ``HybridLayer``, not by this module directly).
+            Nothing is raised in training mode: ``HybridLayer`` routes training
+                calls to :meth:`dense_forward` instead of this method.
         """
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
 

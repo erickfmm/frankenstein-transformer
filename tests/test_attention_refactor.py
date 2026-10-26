@@ -1,4 +1,5 @@
 import unittest
+import warnings
 
 import torch
 
@@ -191,14 +192,18 @@ class AttentionRefactorTests(unittest.TestCase):
                 y = model(x)
             self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
 
-    def test_training_free_sparse_layers_raise_in_train_mode(self):
+    def test_training_free_sparse_layers_train_as_dense(self):
+        # Training-free mixers train through standard dense attention over
+        # their own projections; the sparse path activates in eval only.
         for layer_type in ["fasa_attn", "sparge_attn"]:
             config = self._build_config([layer_type])
             model = FrankensteinEncoder(config)
             model.train()
             x = torch.randint(0, config.vocab_size, (1, 6))
-            with self.assertRaisesRegex(ValueError, "training-free"):
-                _ = model(x)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                y = model(x)
+            self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
 
     def test_invalid_mixture_of_depths_capacity_ratio_raises(self):
         with self.assertRaisesRegex(ValueError, "mixture_of_depths_capacity_ratio"):

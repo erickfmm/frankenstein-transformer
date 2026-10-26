@@ -216,7 +216,7 @@ The \texttt{model.dims.layer\_pattern} array accepts the following 43 mixer code
 \multicolumn{4}{r}{\textit{continued on next page}} \\
 \endfoot
 \bottomrule
-\caption{Complete \texttt{layer\_pattern} enumeration. $\checkmark$ = supported, $\times$ = not supported.}
+\caption{Complete \texttt{layer\_pattern} enumeration. $\checkmark$ = supported, $\times$ = not supported. \texttt{fasa\_attn} and \texttt{sparge\_attn} train as standard dense attention over their own projections and apply their sparse heuristic only at inference.}
 \label{tab:layer-pattern-enum}
 \endlastfoot
 standard\_attn & Classic multi-head self-attention (BERT-style) & \checkmark & \checkmark \\
@@ -238,8 +238,8 @@ longformer\_attn & Longformer: sliding windows + global tokens & \checkmark & \c
 bigbird\_attn & BigBird: local + random + global attention & \checkmark & \checkmark \\
 sparse\_transformer\_attn & Sparse Transformer: factorized patterns & \checkmark & \checkmark \\
 sparsek\_attn & SparseK: differentiable top-k KV selection & \checkmark & \checkmark \\
-sparge\_attn & SpargeAttn --- two-stage block pruning & $\times$ & \checkmark \\
-fasa\_attn & FASA --- frequency-aware token selection & $\times$ & \checkmark \\
+sparge\_attn & SpargeAttn --- two-stage block pruning; dense training, sparse inference & \checkmark & \checkmark \\
+fasa\_attn & FASA --- frequency-aware token selection; dense training, sparse inference & \checkmark & \checkmark \\
 msa\_attn & MiniMax Sparse Attention --- block-sparse on GQA & \checkmark & \checkmark \\
 sparda\_attn & SparDA --- decoupled sparse attention with Forecast projection & \checkmark & \checkmark \\
 kda\_attn & Kimi Delta Attention --- channel-wise decay + scalar write gate & \checkmark & \checkmark \\
@@ -480,7 +480,7 @@ The schema enforces the following cross-component validation rules, implemented 
     \item \texttt{task: mlm} requires \texttt{training.optimizer}; \texttt{task: sbert} requires \texttt{training.sbert}; \texttt{task: causal\_lm} requires \texttt{training.optimizer} and \texttt{model\_class='frankenstein\_text\_decoder'}.
     \item \texttt{bitnet.routers=true} requires \texttt{bitnet.enabled=true}. The flag has no effect otherwise.
     \item \texttt{mhc.enabled=true} (mHC n-stream residual) and \texttt{mixture\_of\_depths.enabled=true} are mutually exclusive. Enabling both raises a \texttt{ValueError}: MoD token routing operates on a single $C$-dimensional stream, which conflicts with the n-stream residual.
-    \item \texttt{fasa\_attn} and \texttt{sparge\_attn} are evaluation-only layer types. They raise \texttt{RuntimeError} if used during training. They must not appear in \texttt{model.dims.layer\_pattern} for training runs.
+    \item \texttt{fasa\_attn} and \texttt{sparge\_attn} are inference-sparse layer types: they apply their sparse heuristic only in evaluation mode. During training the enclosing hybrid layer substitutes standard dense attention over the same $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$ projections, so they can appear in \texttt{model.dims.layer\_pattern} for training runs; the trained weights are the ones the sparse path reads at inference.
     \item \texttt{model\_class: frankenstein\_text\_decoder} forces \texttt{model.dims.mode: decoder} at runtime. Setting \texttt{model.dims.mode: encoder} with this class is overridden.
     \item Either \texttt{base\_model} must be present, or both \texttt{model\_class} and \texttt{model} must be present. The schema rejects configurations that provide neither or an incomplete combination.
 \end{enumerate}

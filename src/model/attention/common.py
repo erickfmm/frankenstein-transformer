@@ -352,4 +352,65 @@ def apply_pe_to_scores(
     return attn_scores
 
 
+def dense_attention_forward(
+    module,
+    x: "torch.Tensor",
+    logical_layer_idx: Optional[int] = None,
+    pos_encoder=None,
+) -> "torch.Tensor":
+    """Compute standard dense multi-head attention with ``module``'s weights.
+
+    Training-free mixers (FASA, SpargeAttn) only define their sparse
+    selection heuristic for inference. Their enclosing ``HybridLayer`` calls
+    this helper in training mode so the sparse mixers are trained as standard
+    dense attention (Vaswani et al., 2017) over the *same* projections that
+    the sparse forward uses at eval time. Sharing the projections is what
+    makes the dense surrogate meaningful: gradients update exactly the
+    weights the inference path will read.
+
+    The computation mirrors ``StandardAttention.forward`` (no cache):
+    q/k/v projection, positional encoding on q/k, optional additive score
+    bias (ALiBi/BAM + SSMax), causal mask in decoder mode, softmax, dropout
+    on the attention weights, value aggregation and output projection.
+
+    Args:
+        module: Mixer instance exposing ``q_proj``, ``k_proj``, ``v_proj``,
+            ``out_proj``, ``dropout``, ``scale``, ``mode``, ``pe_type`` and
+            ``use_pe`` (both training-free mixers satisfy this).
+        x: Input tensor of shape ``(batch, seq_len, hidden_size)``.
+        logical_layer_idx: Logical layer index forwarded to the positional
+            encoder.
+        pos_encoder: Optional positional encoding module overriding the
+            mixer's own ``pos_encoder`` for this call.
+
+    Returns:
+        Output tensor of shape ``(batch, seq_len, hidden_size)``.
+    """
+    pe = pos_encoder if pos_encoder is not None else getattr(module, "pos_encoder", None)
+    bsz, seq_len, hidden = x.shape
+    num_heads = module.num_heads
+    head_dim = module.head_dim
+    idx = logical_layer_idx or 0
+
+    q = module.q_proj(x).view(bsz, seq_len, num_heads, head_dim).transpose(1, 2)
+    k = module.k_proj(x).view(bsz, seq_len, num_heads, head_dim).transpose(1, 2)
+    v = module.v_proj(x).view(bsz, seq_len, num_heads, head_dim).transpose(1, 2)
+
+    q, k = apply_pe_to_qk(pe, module.pe_type, q, k, x, idx, module.use_pe)
+
+    attn_scores = (q @ k.transpose(-2, -1)) * module.scale
+    attn_scores = apply_pe_to_scores(pe, module.pe_type, attn_scores, q, module.use_pe)
+    if module.mode == "decoder":
+        causal_mask = torch.triu(
+            torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool),
+            diagonal=1,
+        )
+        attn_scores = attn_scores.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+    attn_weights = F.softmax(attn_scores, dim=-1)
+    attn_weights = module.dropout(attn_weights)
+
+    out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+    return module.out_proj(out)
+
+
 

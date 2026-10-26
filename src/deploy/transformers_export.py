@@ -353,12 +353,15 @@ def _build_compatibility_report(
             "Unknown layer types (not in schema enum): " + ", ".join(unknown_layers)
         )
 
-    eval_only_layers = {"fasa_attn", "sparge_attn"}
-    used_eval_only = sorted(set(model_layers) & eval_only_layers)
-    if used_eval_only:
+    inference_sparse_layers = {"fasa_attn", "sparge_attn"}
+    used_sparse_layers = sorted(set(model_layers) & inference_sparse_layers)
+    if used_sparse_layers:
         warnings.append(
-            "Eval-only layer types present (inference export is valid, training with these is not): "
-            + ", ".join(used_eval_only)
+            "Inference-sparse layer types present ("
+            + ", ".join(used_sparse_layers)
+            + "): these train as standard dense attention over their own "
+            "projections and apply the sparse heuristic only in eval/inference; "
+            "the exported checkpoint keeps the sparse eval path."
         )
 
     use_bitnet = bool(model_config.get("use_bitnet", False))

@@ -53,7 +53,7 @@
 2. **Invariants**: `hidden_size % num_heads == 0`; `num_kv_heads` divides `num_heads`; `len(layer_pattern) == num_layers`; `vocab_size` matches the tokenizer.
 3. **BitNet is on by default** (`bitnet.enabled: true`). `bitnet.routers: true` requires `bitnet.enabled: true`; `bitnet.conv` requires BitNet + `embedding.conv.enabled`.
 4. **Normalization**: enum `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`. `prms_norm` uses `norm.partial_ratio`; `flash_norm` composes with `norm.flashnorm_partial_ratio`.
-5. **`fasa_attn` / `sparge_attn` are eval-only** (`HybridLayer.TRAINING_FREE_LAYERS`). Never put them in a training preset.
+5. **`fasa_attn` / `sparge_attn` are inference-sparse** (`HybridLayer.TRAINING_FREE_LAYERS`). In `train()` mode `HybridLayer` runs standard dense attention over the mixer's own projections (`mixer.dense_forward`); the sparse heuristic activates in `eval()` only. They are valid in training presets.
 6. **Forced modes**: `frankenstein_text_decoder` → `mode: decoder`; `frankenstein_vit` → `mode: encoder`. `training.task: causal_lm` requires the decoder; vision tasks require the ViT.
 7. **Optimizer keys are prefixed**: `<optimizer>-<group>_<param>` or `<optimizer>-<param>`. Groups: `embeddings`, `norms`, `attention`, `other`. A new family needs an enum value, a `by_optimizer` prefix, and a matching `if/then` rule.
 8. **`training.task` is required**, one of `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`. No legacy top-level optimizer keys.
@@ -97,7 +97,7 @@
 | D2 | One flat `FrankensteinModelConfig` + explicit flattener (no nested runtime config) |
 | D3 | Model core split into `config.py` / `hybrid_layer.py` / encoder / decoder / ViT; no `frankenstein_model.py` |
 | D4 | BitNet enabled by default |
-| D5 | `fasa_attn` / `sparge_attn` are eval-only |
+| D5 | `fasa_attn` / `sparge_attn` train as dense attention, sparse eval |
 | D6 | mHC and Mixture-of-Depths are mutually exclusive |
 | D7 | CPU-first development and testing; CUDA only for real runs |
 | D8 | Every preset/example is schema-smoke-tested |

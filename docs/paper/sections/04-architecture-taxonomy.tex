@@ -51,7 +51,7 @@ This family compresses per-token key--value state into a low-rank latent: MLA, G
 \end{figure}
 
 \subsection{Sparse Attention Extensions}
-The registry includes ten sparse blocks \citep{child_sparse_transformer_2019,beltagy_longformer_2020,jolicoeur_sliding_window_2026,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026}. Two training-free methods, \texttt{fasa\_attn} and \texttt{sparge\_attn}, are evaluation-only and raise an error if used during training; \texttt{swa\_attn} is also training-free but is a normal trainable mixer, so it runs in both training and inference. Formulations, pseudocode, per-block characteristics, and a comparison table are collected in Appendix~\ref{sec:annex-sparse}.
+The registry includes ten sparse blocks \citep{child_sparse_transformer_2019,beltagy_longformer_2020,jolicoeur_sliding_window_2026,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026}. Two inference-time methods, \texttt{fasa\_attn} and \texttt{sparge\_attn}, apply their sparse heuristic only when the model is in evaluation mode: during training the enclosing hybrid layer substitutes standard dense attention over the same $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$ projections, so the trained weights are exactly the ones the sparse path reads at inference. \texttt{swa\_attn} is also training-free but is a normal trainable mixer, so it runs its windowed pattern in both training and inference. Formulations, pseudocode, per-block characteristics, and a comparison table are collected in Appendix~\ref{sec:annex-sparse}.
 
 \begin{figure}[t]
 \centering

@@ -49,8 +49,8 @@ swa\_attn & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(w)$ & Ven
 bigbird\_attn & Disperso & $\mathcal{O}(n)$ & $\mathcal{O}(n)$ & Aleatorio + local + global; atención Turing completa & \citep{zaheer_bigbird_2020} \\
 sparsek\_attn & Disperso & $\mathcal{O}(n \cdot d)$ & $\mathcal{O}(k)$ & Selección top-$k$ diferenciable; máscara de dispersidad aprendida & \citep{lou_sparsek_2024} \\
 nsa\_attn & Disperso & $\mathcal{O}((t/d + n_l + w)d)$ & $\mathcal{O}(n)$ & Diseño de 3 ramas alineado con hardware; token/vecino/ventana & \citep{yuan_nsa_2025} \\
-sparge\_attn & Disperso & $\mathcal{O}(n^2 \cdot s \cdot d)$ & $\mathcal{O}(n)$ & Filtrado de bloques en dos etapas; solo evaluación (sin entrenamiento) & \citep{zhang_spargeattn_2025} \\
-fasa\_attn & Disperso & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ & $\mathcal{O}(n)$ & Dispersidad consciente de frecuencia RoPE; solo evaluación & \citep{wang_fasa_2026} \\
+sparge\_attn & Disperso & $\mathcal{O}(n^2 \cdot s \cdot d)$ & $\mathcal{O}(n)$ & Filtrado de bloques en dos etapas; entrenamiento denso, inferencia dispersa & \citep{zhang_spargeattn_2025} \\
+fasa\_attn & Disperso & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ & $\mathcal{O}(n)$ & Dispersidad consciente de frecuencia RoPE; entrenamiento denso, inferencia dispersa & \citep{wang_fasa_2026} \\
 msa\_attn & Disperso & $\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}} \cdot N^2 + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Bloques dispersos con rama índice; desplegado a escala 109B & \citep{lai_minimax_2026} \\
 sparda\_attn & Disperso & $\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot N_b + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Prefetch anticipado guiado por pronóstico; dispersidad predictiva & \citep{fu_sparda_2026} \\
 \midrule

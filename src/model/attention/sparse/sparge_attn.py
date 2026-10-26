@@ -8,9 +8,11 @@ maxima fall below the threshold. The method requires no training or
 fine-tuning and can be applied directly to pre-trained dense models.
 
 .. note::
-    This module is **eval-only** in this repository. The enclosing
-    ``HybridLayer`` raises a ``RuntimeError`` if it is invoked in
-    training mode (``model.train()``).
+    The **sparse pruning path is inference-only**. When the enclosing
+    ``HybridLayer`` runs in training mode it routes this mixer through
+    :func:`~src.model.attention.common.dense_attention_forward` instead: the
+    layer is trained as standard dense attention over the same ``q/k/v/out``
+    projections, and the two-stage block filter only activates in ``eval()``.
 
 Reference:
     Zhang, Z., Liu, Y., Peng, B., Gao, J., Li, Y., Wang, Z., & Sun, M. (2025).
@@ -28,7 +30,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..common import BitLinear, apply_pe_to_qk
+from ..common import BitLinear, apply_pe_to_qk, dense_attention_forward
 
 
 class SpargeAttention(nn.Module):
@@ -49,8 +51,12 @@ class SpargeAttention(nn.Module):
     a causal mask is additionally applied.
 
     .. note::
-        This module is **eval-only**. The enclosing ``HybridLayer`` raises
-        a ``RuntimeError`` if called in training mode.
+        The **sparse pruning path is inference-only**. In training mode the
+        enclosing ``HybridLayer`` substitutes standard dense attention over
+        this module's own projections (see
+        :func:`~src.model.attention.common.dense_attention_forward`), so the
+        mixer can be trained from scratch and its block filter is used from
+        ``eval()`` onward.
 
     Attributes:
         hidden_size (int): Dimensionality of the input and output embeddings.
@@ -118,6 +124,32 @@ class SpargeAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "sparge_attn_use_pe", True))
 
+    def dense_forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+    ) -> torch.Tensor:
+        """Run standard dense attention with SpargeAttn's own projections.
+
+        Used by ``HybridLayer`` while ``model.train()`` is active: the layer
+        is trained as full dense attention and the two-stage block filter is
+        deferred to eval/inference.
+
+        Args:
+            x: Input tensor of shape ``(batch, seq_len, hidden_size)``.
+            logical_layer_idx: Logical layer index forwarded to the positional
+                encoder.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
+
+        Returns:
+            Output tensor of shape ``(batch, seq_len, hidden_size)``.
+        """
+        return dense_attention_forward(
+            self, x, logical_layer_idx=logical_layer_idx, pos_encoder=pos_encoder
+        )
+
     def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute two-stage block-level sparse attention.
 
@@ -141,8 +173,8 @@ class SpargeAttention(nn.Module):
             torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
 
         Raises:
-            RuntimeError: If called in training mode (enforced by the
-                enclosing ``HybridLayer``, not by this module directly).
+            Nothing is raised in training mode: ``HybridLayer`` routes training
+                calls to :meth:`dense_forward` instead of this method.
         """
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
 

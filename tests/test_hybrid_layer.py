@@ -1,5 +1,6 @@
 """Unit tests for HybridLayer."""
 import unittest
+import warnings
 from importlib.util import find_spec
 
 TORCH_AVAILABLE = find_spec("torch") is not None
@@ -101,17 +102,30 @@ class HybridLayerMoETests(unittest.TestCase):
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class HybridLayerTrainingFreeTests(unittest.TestCase):
-    def test_fasa_raises_in_train_mode(self):
-        layer = HybridLayer(_cfg(), layer_type="fasa_attn")
-        layer.train()
-        with self.assertRaisesRegex(ValueError, "training-free"):
-            layer(_x())
+    """Training-free mixers train as dense attention, infer sparsely."""
 
-    def test_sparge_raises_in_train_mode(self):
-        layer = HybridLayer(_cfg(), layer_type="sparge_attn")
+    def _assert_dense_fallback(self, layer_type):
+        layer = HybridLayer(_cfg(), layer_type=layer_type)
         layer.train()
-        with self.assertRaisesRegex(ValueError, "training-free"):
-            layer(_x())
+        with self.assertWarnsRegex(UserWarning, "training-free"):
+            y = layer(_x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+        # Gradients reach the projections shared with the sparse eval path.
+        y.sum().backward()
+        self.assertIsNotNone(layer.mixer.q_proj.weight.grad)
+        self.assertIsNotNone(layer.mixer.out_proj.weight.grad)
+        # The warning is emitted only once per layer instance.
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            y2 = layer(_x())
+        self.assertEqual(y2.shape, (BSZ, SEQ, DIM))
+        self.assertEqual([w for w in caught if "training-free" in str(w.message)], [])
+
+    def test_fasa_dense_fallback_in_train_mode(self):
+        self._assert_dense_fallback("fasa_attn")
+
+    def test_sparge_dense_fallback_in_train_mode(self):
+        self._assert_dense_fallback("sparge_attn")
 
     def test_fasa_works_in_eval_mode(self):
         layer = HybridLayer(_cfg(), layer_type="fasa_attn")
@@ -126,6 +140,29 @@ class HybridLayerTrainingFreeTests(unittest.TestCase):
         with torch.no_grad():
             y = layer(_x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_dense_fallback_equals_standard_attention(self):
+        """Train-mode fallback is exactly standard attention (shared weights)."""
+        from src.model.attention.standard import StandardAttention
+
+        layer = HybridLayer(_cfg(), layer_type="fasa_attn")
+        standard = StandardAttention(_cfg())
+        # Share the projections: the fallback must read the mixer weights.
+        standard.q_proj = layer.mixer.q_proj
+        standard.k_proj = layer.mixer.k_proj
+        standard.v_proj = layer.mixer.v_proj
+        standard.out_proj = layer.mixer.out_proj
+        standard.pe_type = layer.mixer.pe_type
+        standard.use_pe = layer.mixer.use_pe
+        standard.pos_encoder = layer.mixer.pos_encoder
+
+        x = _x()
+        layer.train()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            got = layer.mixer.dense_forward(x, pos_encoder=layer.pos_encoder)
+        expected = standard(x)
+        self.assertTrue(torch.allclose(got, expected, atol=1e-6))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

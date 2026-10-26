@@ -10,6 +10,7 @@ Mixture-of-Depths token routing and Manifold-constrained Hyper-Connections
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Optional
 
 import torch
@@ -86,8 +87,12 @@ class HybridLayer(nn.Module):
     top-capacity tokens are passed through the full layer; remaining tokens
     are scattered back unchanged.
 
-    Training-free layers (``fasa_attn``, ``sparge_attn``) raise a
-    RuntimeError if called in training mode.
+    Mixers listed in :attr:`TRAINING_FREE_LAYERS` (``fasa_attn``,
+    ``sparge_attn``) define only an inference-time sparse heuristic. In
+    training mode this layer substitutes standard dense attention over the
+    mixer's own projections (``mixer.dense_forward``), so they train from
+    scratch and switch to the sparse path at eval time. A one-time warning is
+    emitted the first time a layer takes the dense surrogate.
 
     Attributes:
         layer_type: The mixer type string (e.g. ``"retnet"``, ``"ode"``).
@@ -130,6 +135,7 @@ class HybridLayer(nn.Module):
         super().__init__()
         self.layer_type = layer_type
         self.pos_encoder = pos_encoder
+        self._dense_fallback_warned = False
         # Hyperloop (arXiv:2604.21254) replaces the per-sublayer mHC wiring
         # with loop-level hyper-connections owned by the encoder: layers run
         # the standard C-dimensional path, and MoD becomes compatible again
@@ -323,6 +329,39 @@ class HybridLayer(nn.Module):
             self.mhc_attn = None
             self.mhc_ffn = None
 
+    def _training_free_dense_forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+    ) -> torch.Tensor:
+        """Run the dense surrogate for a training-free mixer.
+
+        Training-free mixers (``fasa_attn``, ``sparge_attn``) only implement
+        their sparse heuristic for inference. During training the layer runs
+        standard dense attention with the mixer's own projections so gradients
+        land on the weights the eval path reads.
+
+        Args:
+            x: Input tensor of shape ``(batch, seq_len, hidden_size)``.
+            logical_layer_idx: Logical layer index forwarded to the
+                positional encoder.
+
+        Returns:
+            Output tensor of shape ``(batch, seq_len, hidden_size)``.
+        """
+        if not self._dense_fallback_warned:
+            self._dense_fallback_warned = True
+            warnings.warn(
+                f"Layer '{self.layer_type}' is a training-free inference mixer: "
+                "training now uses standard dense attention over the mixer's "
+                "projections and the sparse path activates at eval time.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return self.mixer.dense_forward(
+            x, logical_layer_idx=logical_layer_idx, pos_encoder=self.pos_encoder
+        )
+
     def _forward_dense(
         self,
         x,
@@ -347,8 +386,8 @@ class HybridLayer(nn.Module):
             Output tensor of shape ``(B, S, hidden_size)``.
 
         Raises:
-            ValueError: If the layer is training-free and called in training
-                mode.
+            Nothing is raised for training-free mixers: they are trained via
+                the dense surrogate.
         """
         # ---- mHC path: the stream is (B, S, n, C) across the whole layer.
         # Attention and FFN each act as a layer function on the C-dim pre-
@@ -365,11 +404,6 @@ class HybridLayer(nn.Module):
         residual = x
         x = self.norm1(x)
 
-        if self.training and self.layer_type in self.TRAINING_FREE_LAYERS:
-            raise ValueError(
-                f"Layer '{self.layer_type}' is training-free and only supported in eval/inference mode."
-            )
-
         # Slot resolution is declarative: unsupported / unimplemented /
         # per-mixer-disabled mixers receive ``None`` and run the legacy path
         # (D5 — inference never fails because of the cache). The n-stream
@@ -379,7 +413,11 @@ class HybridLayer(nn.Module):
         if cache is not None:
             slot = cache.resolve_slot(logical_layer_idx or 0, self)
 
-        if self.layer_type == "mamba":
+        if self.training and self.layer_type in self.TRAINING_FREE_LAYERS:
+            # Training-free inference mixer: train as standard dense attention
+            # over the mixer's own projections (training never uses a cache).
+            x = self._training_free_dense_forward(x, logical_layer_idx=logical_layer_idx)
+        elif self.layer_type == "mamba":
             x = x + self.mixer(x)
         elif self.layer_type in {"ode", "retnet"}:
             # Call shape S2: the mixer replaces x wholesale. State slots are
@@ -479,14 +517,9 @@ class HybridLayer(nn.Module):
             Updated stream of shape ``(B, S, n, C)``.
 
         Raises:
-            ValueError: If the layer is training-free and called in training
-                mode.
+            Nothing is raised for training-free mixers: they are trained via
+                the dense surrogate.
         """
-        if self.training and self.layer_type in self.TRAINING_FREE_LAYERS:
-            raise ValueError(
-                f"Layer '{self.layer_type}' is training-free and only supported in eval/inference mode."
-            )
-
         # Slot resolution mirrors the dense path (declarative, D5).
         slot = None
         if cache is not None:
@@ -495,7 +528,13 @@ class HybridLayer(nn.Module):
         # Attention sub-function.
         fpre = self.mhc_attn.fpre(x)
         attn_in = self.norm1(fpre)
-        if self.layer_type == "mamba":
+        if self.training and self.layer_type in self.TRAINING_FREE_LAYERS:
+            # Training-free inference mixer: dense surrogate over the mixer's
+            # own projections (training never uses a cache).
+            attn_out = self._training_free_dense_forward(
+                attn_in, logical_layer_idx=logical_layer_idx
+            )
+        elif self.layer_type == "mamba":
             attn_out = self.mixer(attn_in)
         elif self.layer_type in {"ode", "retnet"}:
             if slot is not None:

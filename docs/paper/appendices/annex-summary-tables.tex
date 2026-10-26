@@ -49,8 +49,8 @@ swa\_attn & Sparse & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(w)$ & Slidi
 bigbird\_attn & Sparse & $\mathcal{O}(n)$ & $\mathcal{O}(n)$ & Random + local + global; Turing complete attention & \citep{zaheer_bigbird_2020} \\
 sparsek\_attn & Sparse & $\mathcal{O}(n \cdot d)$ & $\mathcal{O}(k)$ & Differentiable top-$k$ selection; learned sparsity mask & \citep{lou_sparsek_2024} \\
 nsa\_attn & Sparse & $\mathcal{O}((t/d + n_l + w)d)$ & $\mathcal{O}(n)$ & Hardware-aligned 3-branch design; token/neighbor/window & \citep{yuan_nsa_2025} \\
-sparge\_attn & Sparse & $\mathcal{O}(n^2 \cdot s \cdot d)$ & $\mathcal{O}(n)$ & Two-stage block filtering; eval-only (no training) & \citep{zhang_spargeattn_2025} \\
-fasa\_attn & Sparse & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ & $\mathcal{O}(n)$ & RoPE frequency-aware sparse; eval-only & \citep{wang_fasa_2026} \\
+sparge\_attn & Sparse & $\mathcal{O}(n^2 \cdot s \cdot d)$ & $\mathcal{O}(n)$ & Two-stage block filtering; dense training, sparse inference & \citep{zhang_spargeattn_2025} \\
+fasa\_attn & Sparse & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ & $\mathcal{O}(n)$ & RoPE frequency-aware sparse; dense training, sparse inference & \citep{wang_fasa_2026} \\
 msa\_attn & Sparse & $\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}} \cdot N^2 + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Index-branch block sparse; deployed at 109B scale & \citep{lai_minimax_2026} \\
 sparda\_attn & Sparse & $\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot N_b + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Forecast-guided lookahead prefetch; predictive sparsity & \citep{fu_sparda_2026} \\
 \midrule

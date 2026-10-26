@@ -12,6 +12,7 @@ All models use tiny configs (small hidden_size, short sequences, few layers)
 so each test completes in a few seconds on CPU.
 """
 import unittest
+import warnings
 from importlib.util import find_spec
 
 TORCH_AVAILABLE = find_spec("torch") is not None
@@ -217,7 +218,7 @@ class GatedLayerTrainingTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Sparse attention families (eval-only guards for sparge/fasa)
+# Sparse attention families (dense-fallback training for sparge/fasa)
 # ---------------------------------------------------------------------------
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -259,27 +260,27 @@ class SparseLayerTrainingTests(unittest.TestCase):
         losses = self._train("nsa_attn")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_sparge_attn_raises_in_train_mode(self):
-        # sparge_attn is inference/eval-only; must raise when model.train() is active
-        model = FrankensteinEncoder(_cfg(["sparge_attn"]))
-        model.train()
-        ids, _ = _fake_batch()
-        with self.assertRaises(ValueError):
-            model(ids)
+    def test_sparge_attn_dense_fallback_training(self):
+        # sparge_attn's sparse filter is inference-only; training runs
+        # standard dense attention over the same projections.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            losses = self._train("sparge_attn")
+        self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_fasa_attn_raises_in_train_mode(self):
-        # fasa_attn is inference/eval-only; must raise when model.train() is active
-        model = FrankensteinEncoder(_cfg(["fasa_attn"]))
-        model.train()
-        ids, _ = _fake_batch()
-        with self.assertRaises(ValueError):
-            model(ids)
+    def test_fasa_attn_dense_fallback_training(self):
+        # fasa_attn's frequency-aware selection is inference-only; training
+        # runs standard dense attention over the same projections.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            losses = self._train("fasa_attn")
+        self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_sparge_attn_eval_ok(self):
+    def test_sparge_attn_eval_sparse_path_ok(self):
         logits = self._eval_forward("sparge_attn")
         self.assertEqual(logits.shape, (BSZ, SEQ, VOCAB))
 
-    def test_fasa_attn_eval_ok(self):
+    def test_fasa_attn_eval_sparse_path_ok(self):
         logits = self._eval_forward("fasa_attn")
         self.assertEqual(logits.shape, (BSZ, SEQ, VOCAB))
 

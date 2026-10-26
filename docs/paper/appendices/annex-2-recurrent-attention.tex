@@ -226,7 +226,7 @@ The memory module $\mathcal{M}$ is literally updated during the forward pass by 
 
 \subsection{Pattern-Driven Mixer Dispatch}
 
-The codebase selects a mixer per block from the configured \texttt{layer\_pattern}. The dispatch logic enforces the training-free policy for eval-only blocks and routes to the corresponding family implementation.
+The codebase selects a mixer per block from the configured \texttt{layer\_pattern}. The dispatch logic routes inference-time sparse blocks (\texttt{fasa\_attn}, \texttt{sparge\_attn}) to standard dense attention while the model is in training mode, and to their sparse implementation during evaluation; all other blocks route to the corresponding family implementation.
 
 \begin{algorithm}[t]
 \caption{Pattern-Driven Mixer Forward (Conceptual)}
@@ -234,7 +234,7 @@ The codebase selects a mixer per block from the configured \texttt{layer\_patter
 \Require Hidden states $H$, pattern $P$, layer index $\ell$
 \State $m \gets P[\ell \bmod |P|]$
 \If{$m \in \{\texttt{fasa\_attn}, \texttt{sparge\_attn}\}$ and model is in training mode}
-    \State raise configuration/runtime error (training-free block in train mode)
+    \State $H \gets \text{softmax-attention}(H)$ \Comment{dense surrogate, same projections}
 \ElsIf{$m=\texttt{standard\_attn}$}
     \State $H \gets \text{softmax-attention}(H)$
 \ElsIf{$m=\texttt{sigmoid\_attn}$}

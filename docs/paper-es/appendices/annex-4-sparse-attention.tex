@@ -490,6 +490,8 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
     \item \textbf{Limitación}: Requiere calibración fuera de línea; la identificación de FC dominantes añade sobrecarga de preprocesamiento.
 \end{itemize}
 
+\paragraph{Nota de implementación (entrenamiento vs.\ inferencia).} En este repositorio la ruta dispersa TIP/FAC es solo de inferencia. Mientras el modelo está en modo entrenamiento, la capa híbrida contenedora sustituye atención estándar densa sobre las mismas proyecciones $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$, de modo que el mixer puede entrenarse desde cero y los pesos optimizados durante el entrenamiento son exactamente los que lee la ruta dispersa en evaluación.
+
 \subsection{SpargeAttn: Filtrado de Dos Etapas a Nivel de Bloques}
 
 \begin{figure}[H]
@@ -562,6 +564,8 @@ donde $m_{\text{antiguo}}, m_{\text{nuevo}}$ son máximos del softmax en línea 
     \item \textbf{Fortaleza}: 2.5--5$\times$ de aceleración comparado con métodos densos o dispersos anteriores; compatible con cuantización (integración SageAttention).
     \item \textbf{Limitación}: La aceleración depende de la dispersidad inherente; la granularidad a nivel de bloque puede pasar por alto patrones más finos; se requiere ajuste de umbral por familia de modelos.
 \end{itemize}
+
+\paragraph{Nota de implementación (entrenamiento vs.\ inferencia).} En este repositorio el filtro de bloques en dos etapas es solo de inferencia. Mientras el modelo está en modo entrenamiento, la capa híbrida contenedora sustituye atención estándar densa sobre las mismas proyecciones $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$, de modo que el mixer puede entrenarse desde cero y los pesos optimizados durante el entrenamiento son exactamente los que lee la ruta dispersa en evaluación.
 
 \subsection{MSA (MiniMax Sparse Attention): Atención Dispersa por Bloques con Rama de Índice Ligera}
 

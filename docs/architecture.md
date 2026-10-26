@@ -300,8 +300,8 @@ Cross-field rules enforced in `config_loader.py` and
 | `nsa_attn` | Sparse | — | yes |
 | `msa_attn` | Sparse | `msa.*` | yes |
 | `sparda_attn` | Sparse | `sparda.*` | yes |
-| `sparge_attn` | Sparse | — | **eval only** |
-| `fasa_attn` | Sparse | — | **eval only** |
+| `sparge_attn` | Sparse | — | yes (dense train, sparse eval) |
+| `fasa_attn` | Sparse | — | yes (dense train, sparse eval) |
 | `gla_attn` | Gated | — | yes |
 | `deltanet_attn` | Gated | — | yes |
 | `gated_deltanet_attn` | Gated | — | yes |
@@ -328,8 +328,11 @@ Cross-field rules enforced in `config_loader.py` and
 | `gma_attn` | Latent (Gaussian mixture) | `gma.*` | yes |
 | `ssog_attn` | Geometric field | `ssog.*` | yes (encoder, grid input) |
 
-Training-free guard: `HybridLayer.TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}`
-raises when used in `train()` mode. Never put them in a training preset.
+Inference-sparse mixers: `HybridLayer.TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}`
+run standard dense attention in `train()` mode (via `mixer.dense_forward`, sharing
+the mixer's own `q/k/v/out` projections) and their sparse heuristic in `eval()`
+mode. They can therefore appear in a training preset; the one-time `UserWarning`
+marks the dense surrogate. See §2 (dispatch) and §9 (cache).
 
 `swa_attn` implements SWA($w$, $s$) from arXiv:2608.28444: every query attends
 to the first `swa.num_sinks` tokens plus the `swa.window_size -
@@ -848,7 +851,7 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 | D2 | Keep one flat `FrankensteinModelConfig` plus an explicit flattener | The runtime stays simple and old checkpoints stay loadable |
 | D3 | Split the old `frankenstein_model.py` into `config.py`, `hybrid_layer.py`, encoder/decoder/ViT | Smaller coupling surface; enforced by a regression test |
 | D4 | `model.bitnet.enabled` defaults to **true** | BitNet is the project's deployment story; disable explicitly for FP32 |
-| D5 | `fasa_attn` and `sparge_attn` are eval-only | Their algorithms assume a pretrained model; training raises |
+| D5 | `fasa_attn` and `sparge_attn` train as dense attention and infer sparsely | Their selection/pruning rules are inference-time by design; the dense surrogate shares the projections so trained weights are exactly the ones the sparse path reads |
 | D6 | mHC and Mixture-of-Depths are mutually exclusive | MoD routes a single C-dimensional stream; mHC keeps `n` streams |
 | D7 | Develop and test on CPU | Reproducible, CI-parity, no GPU required; CUDA is only for real runs |
 | D8 | Every preset/example is schema-smoke-tested | A broken YAML cannot reach `main` |
@@ -859,7 +862,7 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 
 ## 14. Known limitations
 
-- `fasa_attn` / `sparge_attn` cannot be trained from scratch.
+- `fasa_attn` / `sparge_attn` train as standard dense attention (no learned sparse rule); their sparse path is inference-only.
 - mHC and MoD cannot be enabled together.
 - `ssog_attn` is encoder-oriented and expects a `grid_h × grid_w` raster.
 - `mamba` is currently a linear placeholder in the registry, not a full SSM.
