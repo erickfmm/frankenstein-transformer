@@ -107,9 +107,21 @@ class HybridLayerTrainingFreeTests(unittest.TestCase):
     def _assert_dense_fallback(self, layer_type):
         layer = HybridLayer(_cfg(), layer_type=layer_type)
         layer.train()
-        with self.assertWarnsRegex(UserWarning, "training-free"):
+        # Do not use unittest's assertWarns* here: on Python 3.10 its
+        # __enter__ scans sys.modules and probes __warningregistry__ on every
+        # module. transformers 5.20.x (the last 5.x installable on 3.10)
+        # registers lazy "fast image processor" module aliases whose
+        # __getattr__ forwards any attribute to the real module, so that probe
+        # imports optional deps (torchvision) and raises ModuleNotFoundError
+        # from an unrelated warning assertion.
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             y = layer(_x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+        self.assertTrue(
+            [w for w in caught if "training-free" in str(w.message)],
+            f"expected a training-free fallback warning, caught {caught!r}",
+        )
         # Gradients reach the projections shared with the sparse eval path.
         y.sum().backward()
         self.assertIsNotNone(layer.mixer.q_proj.weight.grad)
