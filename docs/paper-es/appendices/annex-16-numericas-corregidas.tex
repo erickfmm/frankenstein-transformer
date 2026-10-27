@@ -1,0 +1,194 @@
+\section{Softmax y Cross-Entropy Numéricamente Corregidos}
+\label{sec:annex-fixed-numerics}
+
+Las implementaciones estándar de softmax, log-softmax y cross-entropy restan el logit máximo antes de exponenciar, lo que evita el desbordamiento pero deja dos defectos de punto flotante \citep{barron_fixed_softmax_ce_2026}. El primero, el \emph{Colapso de Softmax}, redondea a cero el gradiente del objetivo (o del argmax) cuando los logits se vuelven suficientemente confiados, rompiendo la propiedad de suma cero del gradiente y produciendo los picos de pérdida ``Slingshot'' observados con optimizadores adaptativos. El segundo, la \emph{Cancelación de Softmax}, degrada los gradientes de objetivo blando (destilación) cuando los logits del estudiante y del profesor casi coinciden. Este anexo documenta la implementación opcional de la primera corrección en el toolkit --- softmax, log-softmax y cross-entropy de objetivo duro sin cancelación ---, su paso backward personalizado, su superficie de integración y su validación. La cross-entropy de objetivo blando queda fuera de alcance porque el toolkit no expone un objetivo de destilación; la ruta de embeddings de frases delega sus pérdidas en \texttt{sentence-transformers}.
+
+\subsection{Los Dos Defectos de Punto Flotante}
+
+Para logits $z \in \mathbb{R}^{K}$ y clase objetivo $t$, los cálculos estabilizados estándar son
+\begin{equation}
+\tilde{z}_k = z_k - z_{\max}, \qquad
+\operatorname{logsoftmax}(z)_k = \tilde{z}_k - \log \sum_j e^{\tilde{z}_j}, \qquad
+q_k = \frac{e^{\tilde{z}_k}}{\sum_j e^{\tilde{z}_j}},
+\label{eq:standard-softmax}
+\end{equation}
+y la cross-entropy es $L(z,t) = -\operatorname{logsoftmax}(z)_t$, cuyo gradiente exacto es $g = q - p$ para una distribución objetivo $p$.
+
+\paragraph{Colapso de Softmax.} Defínase el margen de logits
+\begin{equation}
+m = z_t - \log \sum_{j \neq t} e^{z_j}.
+\label{eq:margin}
+\end{equation}
+Cuando el objetivo es también el logit máximo, $\tilde{z}_t = 0$ y el denominador pasa a ser $1 + e^{-m}$. Los números en punto flotante son mucho más densos cerca de cero que cerca de uno: en fp32, los valores cerca de $0$ se resuelven hasta $\sim\!10^{-38}$, mientras que los términos sumados a $1.0$ se pierden por debajo del redondeo unitario $u = 2^{-p}$. El denominador se redondea por tanto a exactamente $1.0$ cuando $m$ supera el \emph{acantilado de precisión}
+\begin{equation}
+c_d = -\ln u = p \ln 2 ,
+\qquad
+c_{16} \approx 5.5, \quad c_{32} \approx 16.6, \quad c_{64} \approx 36.7,
+\label{eq:cliff}
+\end{equation}
+para bf16 ($p = 8$), fp32 ($p = 24$) y fp64 ($p = 53$). Pasado el acantilado, la pérdida forward se vuelve $\log(1) = 0$ y el gradiente objetivo $q_t - 1$ pasa a ser exactamente $0$, mientras que los gradientes no objetivo $q_j = e^{z_j - z_t}/(1 + e^{-m})$ siguen siendo positivos hasta el subdesbordamiento del exponente ($m \approx 88$ en fp32). El gradiente deja de sumar cero,
+\begin{equation}
+\sum_k g_k \approx \sum_{j \neq t} q_j > 0 ,
+\label{eq:broken-zero-sum}
+\end{equation}
+lo que sesga cada actualización de parámetros e interactúa mal con la normalización por coordenada de Adam: cuando el gradiente objetivo perdido reaparece más tarde, la estimación del segundo momento ya ha decaído y la actualización produce un pico.
+
+\paragraph{Cancelación de Softmax.} Para objetivos blandos $p = \operatorname{softmax}(z^{T})$, el gradiente $q - p$ es la diferencia de dos vectores de probabilidad casi iguales. Calculados por separado, se pierde la pequeña diferencia que porta la señal y queda un residuo distinto de cero incluso cuando $z^{S} = z^{T}$. La corrección del artículo calcula la diferencia directamente en espacio logarítmico con \texttt{expm1}/\texttt{log1p}; este toolkit no tiene pérdida de destilación y por tanto no la implementa.
+
+\subsection{Formulaciones Sin Cancelación}
+\label{sec:fixed-formulations}
+
+Ambas correcciones excluyen la entrada argmax del log-sum-exp y la reintroducen mediante un softplus estable. Sean $a = \arg\max_k z_k$, $z_{\max} = z_a$ y
+\begin{equation}
+s = \operatorname{softplus}\!\left(-m\right) = \log\!\left(1 + e^{-m}\right)
+    = \log \sum_{j \neq a} e^{z_j - z_{\max}} ,
+\qquad m = z_{\max} - \log \sum_{j \neq a} e^{z_j}.
+\label{eq:softplus-margin}
+\end{equation}
+Entonces
+\begin{equation}
+\operatorname{logsoftmax}(z)_k = z_k - z_{\max} - s,
+\qquad
+q_k = \exp\!\left(z_k - z_{\max} - s\right),
+\label{eq:fixed-values}
+\end{equation}
+con la entrada argmax evaluada exactamente como $-s$ y $\exp(-s)$ respectivamente. Dado que $s$ se calcula como $\log(1 + e^{-m})$ (equivalentemente $\log\!\operatorname{1p}(e^{-m})$), el diminuto término $e^{-m}$ sobrevive mucho más allá del acantilado estándar, hasta el subdesbordamiento del exponente.
+
+El complemento de la probabilidad máxima es la cantidad crítica para el paso backward. En lugar de formar $1 - q_{\max}$ (que se cancela en el dtype de salida), la implementación usa la identidad
+\begin{equation}
+1 - q_{\max} = -\operatorname{expm1}(-s),
+\label{eq:one-minus-qmax}
+\end{equation}
+que es exacta para $s$ arbitrariamente pequeño.
+
+\paragraph{Cross-entropy de objetivo duro.} Usando el logit objetivo como referencia, la pérdida es
+\begin{equation}
+L(z,t) = \operatorname{softplus}\!\left(\operatorname{logsumexp}_{j \neq t}\left(z_j - z_t\right)\right)
+       = \log\!\left(1 + \sum_{j \neq t} e^{z_j - z_t}\right),
+\label{eq:fixed-ce}
+\end{equation}
+algebraicamente idéntica a $\log(1 + e^{-m})$ pero sin sumar nunca el término pequeño a uno. Escribir $z_t$ mediante las diferencias $z_j - z_t$ hace que la diferenciación automática devuelva
+\begin{equation}
+g_t = -\frac{e^{-m}}{1 + e^{-m}}, \qquad
+g_j = \frac{e^{z_j - z_t}}{1 + e^{-m}} \quad (j \neq t),
+\label{eq:fixed-gradients}
+\end{equation}
+de modo que el gradiente objetivo se obtiene como menos la suma de los gradientes no objetivo y $\sum_k g_k = 0$ se cumple por construcción, con cualquier margen. La magnitud $e^{-m}/(1+e^{-m})$ se preserva hasta el subdesbordamiento del exponente --- precisamente la componente que la implementación estándar redondea a cero.
+
+\paragraph{Jacobianos de softmax y log-softmax.} Para un softmax aislado, los valores forward de la Ecuación~\ref{eq:fixed-values} aún pueden redondear a uno en el dtype de salida (es inevitable para la probabilidad almacenada), pero el jacobiano no debe colapsar. Dado un gradiente aguas arriba $g$, el producto vector--jacobiano del softmax es
+\begin{equation}
+\frac{\partial L}{\partial z} = q \odot \left(g - \langle g, q\rangle\right),
+\label{eq:softmax-vjp}
+\end{equation}
+cuya entrada argmax se reescribe como
+\begin{equation}
+\left.\frac{\partial L}{\partial z_a}\right|_{\text{fixed}}
+= q_{\max}\left(g_{\max}\,(1 - q_{\max}) - \sum_{j \neq a} g_j q_j\right),
+\label{eq:argmax-vjp}
+\end{equation}
+con $1 - q_{\max}$ tomado de la Ecuación~\ref{eq:one-minus-qmax}. La entrada verdadera del jacobiano $q_{\max}(1 - q_{\max}) \approx e^{-m}$ sobrevive así al acantilado. Para log-softmax ($\partial \operatorname{logsoftmax}_k/\partial z_j = \delta_{kj} - q_j$) la entrada argmax se reescribe igualmente como
+\begin{equation}
+\left.\frac{\partial L}{\partial z_a}\right|_{\text{fixed}}
+= -\sum_{j \neq a} g_j + (1 - q_{\max}) \sum_k g_k .
+\label{eq:logsoftmax-vjp}
+\end{equation}
+
+La Tabla~\ref{tab:collapse-regimes} contrasta ambos regímenes. Los valores son las cantidades exactas de las Ecuaciones~\ref{eq:fixed-gradients}--\ref{eq:argmax-vjp}; la columna estándar es lo que produce la Ecuación~\ref{eq:standard-softmax} una vez que $m > c_d$.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{L{3.9cm}L{4.5cm}L{4.5cm}}
+\toprule
+\textbf{Cantidad} & \textbf{Estándar} & \textbf{Corregido} \\
+\midrule
+$q_{\max}$ & $1.0$ (redondeado) & $e^{-s}$ (valores; puede redondear) \\
+$1 - q_{\max}$ & $0.0$ (redondeado) & $-\operatorname{expm1}(-s)$ \\
+Pérdida CE & $\log(1)=0$ & $\operatorname{softplus}(s)>0$ \\
+$g_t$ & $0.0$ & $-e^{-m}/(1+e^{-m})$ \\
+$\sum_k g_k$ & $\sum_{j \neq t} q_j > 0$ & $0$ (por construcción) \\
+$\partial q_{\max}/\partial z_{\max}$ & $0.0$ & $q_{\max}(1-q_{\max})$ \\
+\bottomrule
+\end{tabular}
+\caption{Comportamiento de los cálculos estándar y corregido más allá del acantilado de precisión $m > c_d$. La columna corregida preserva cada cantidad exponencialmente pequeña de las Ecuaciones~\ref{eq:fixed-gradients}--\ref{eq:argmax-vjp}; la columna estándar redondea a cero los términos del objetivo/argmax.}
+\label{tab:collapse-regimes}
+\end{table}
+
+\subsection{Implementación en el Toolkit}
+\label{sec:fixed-implementation}
+
+Las correcciones viven en \path{src/model/numerics.py} y se exponen como dos casillas booleanas bajo el grupo de esquema \texttt{model.numerics}, ambas con valor por defecto \texttt{false}:
+
+\begin{verbatim}
+model:
+  numerics:
+    fixed_softmax: true          # todo softmax / log-softmax explícito
+    fixed_cross_entropy: true    # pérdidas de tarea con objetivo duro
+\end{verbatim}
+
+Ninguna bandera añade parámetros, buffers ni entradas al \emph{state-dict}, por lo que los checkpoints, el conteo de parámetros y la exportación (PyTorch, Transformers, GGUF) no se ven afectados; las banderas viajan con la configuración del modelo. Cuando están desactivadas, las rutas de código se reducen a las llamadas originales de \texttt{torch} con una única consulta de atributo por softmax, de modo que el comportamiento y el rendimiento por defecto no cambian. Las pérdidas corregidas aceptan la misma semántica de \texttt{ignore\_index} y de reducción que \texttt{torch.nn.functional.cross\_entropy} y calculan en el dtype de entrada (sin promoción implícita), lo que mantiene la corrección efectiva tanto en bf16 como en fp32/fp64.
+
+\subsubsection{Paso Backward}
+
+El grafo de autograd de PyTorch para la Ecuación~\ref{eq:fixed-values} sigue conteniendo la resta que produce $1 - q_{\max}$, y evaluarla allí reintroduce la cancelación. Por ello la implementación define las dos funciones softmax como objetos \texttt{torch.autograd.Function} cuyo \texttt{forward} calcula la Ecuación~\ref{eq:fixed-values} y cuyo \texttt{backward} usa las Ecuaciones~\ref{eq:softmax-vjp}--\ref{eq:logsoftmax-vjp}. La cross-entropy no necesita backward personalizado: el grafo de la Ecuación~\ref{eq:fixed-ce} ya produce la Ecuación~\ref{eq:fixed-gradients} exactamente, porque $z_t$ entra en cada logit desplazado con coeficiente $-1$ y la fila objetivo queda excluida del log-sum-exp.
+
+\begin{algorithm}[H]
+\caption{Softmax corregido (forward + producto vector--jacobiano)}
+\begin{algorithmic}[1]
+\Require logits $z \in \mathbb{R}^{K}$ a lo largo de un eje de normalización, gradiente aguas arriba $g$
+\State $a \gets \arg\max_k z_k$, \quad $z_{\max} \gets z_a$
+\State $\ell \gets \operatorname{logsumexp}\{z_k - z_{\max} : k \neq a\}$ \Comment{argmax excluido}
+\State $s \gets \operatorname{softplus}(\ell)$ \Comment{$=\log(1+e^{-m})$}
+\State $c \gets -\operatorname{expm1}(-s)$ \Comment{$=1-q_{\max}$, sin cancelación}
+\State $q \gets \exp(z - z_{\max} - s)$ \Comment{salida forward}
+\State \textbf{backward:}
+\State $\tau \gets \sum_k g_k q_k$, \quad $\sigma \gets \sum_{k \neq a} g_k q_k$
+\State $\nabla z \gets q \odot (g - \tau)$
+\State $\nabla z_a \gets q_a\left(g_a\,c - \sigma\right)$ \Comment{entrada argmax exacta}
+\State \textbf{return} $q$; \quad \textbf{return} $\nabla z$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Superficie de Integración}
+
+Un único interruptor debe llegar a cada lugar donde el toolkit materializa probabilidades o logits. \texttt{HybridLayer} adjunta la bandera resuelta a cada mixer como \texttt{use\_fixed\_softmax}; la fábrica de residuales hace lo mismo para los residuales de atención en profundidad; los hooks de la caché KV reciben un argumento explícito \texttt{use\_fixed\_softmax}. Un helper de despacho selecciona entonces la implementación en cada punto de llamada. La Tabla~\ref{tab:fixed-coverage} enumera las superficies cubiertas.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{L{4.1cm}L{8.8cm}}
+\toprule
+\textbf{Superficie} & \textbf{Puntos cubiertos} \\
+\midrule
+Mixers de atención & \texttt{standard}, \texttt{titan}, \texttt{gqa}, \texttt{ode}; familia latente (\texttt{mla}, \texttt{gqla}, \texttt{mlra}, \texttt{tucker}, \texttt{iha}, \texttt{gta}, \texttt{mtla}, \texttt{cca}, \texttt{ccgqa}, \texttt{gma}); con compuerta (\texttt{gated\_softmax}, \texttt{fox}); dispersos (\texttt{fasa}, \texttt{sparge}, \texttt{msa}, \texttt{nsa}, \texttt{bigbird}, \texttt{longformer}, \texttt{sparse\_transformer}, \texttt{sparsek}, \texttt{swa}, \texttt{sparda}); sustituto denso de los mixers sin entrenamiento \\
+Routers & softmax top-$k$ de MoE y Mixture-of-Depths \\
+Residuales & softmax en profundidad de Full y Block AttnRes \\
+Caché KV & normalizador de recomputación/fallback en \texttt{src/model/cache/hooks.py} \\
+Decodificación & filtrado de núcleo top-$p$ y distribución de muestreo final \\
+Despliegue & lectura de probabilidades de \texttt{inference.predict} \\
+Pérdidas de entrenamiento & \texttt{mlm}, \texttt{causal\_lm}, \texttt{classification}, \texttt{segmentation} (CE y softmax de Dice), \texttt{text\_classification}, \texttt{patch\_prediction} \\
+\bottomrule
+\end{tabular}
+\caption{Cobertura de las banderas \texttt{fixed\_softmax} y \texttt{fixed\_cross\_entropy}. Los núcleos LSE internos de SSOG (Gaussianas separables) conservan su propia formulación: no son softmax categóricos sobre el mismo eje.}
+\label{tab:fixed-coverage}
+\end{table}
+
+El lado de las pérdidas se despacha mediante un único helper del trainer, de modo que todas las tareas comparten la misma semántica:
+\begin{verbatim}
+def _task_cross_entropy(self, logits, targets, **kwargs):
+    if self._use_fixed_cross_entropy():
+        return fixed_cross_entropy(
+            logits, targets, ignore_index=kwargs.get("ignore_index", -100))
+    return F.cross_entropy(logits, targets, **kwargs)
+\end{verbatim}
+
+\subsection{Costo, Alcance y Validación}
+\label{sec:fixed-validation}
+
+\paragraph{Costo.} Las rutas corregidas tienen la misma complejidad asintótica que las estándar y tocan cada fila con un número constante de operaciones elementales adicionales (un log-sum-exp enmascarado y un softplus; un \texttt{expm1} en el backward). No hay multiplicaciones de matrices, ni memoria adicional de orden $K$ más allá de temporales, ni parámetros. Con logits ordinarios, los valores corregidos y estándar coinciden dentro de la tolerancia de punto flotante; solo cambia el régimen sub-redondeo que la ruta estándar colapsa.
+
+\paragraph{Alcance.} Las banderas apuntan a pérdidas de clasificación con objetivo duro. La cross-entropy de objetivo blando (destilación de conocimiento, regularización KL) necesitaría la construcción de diferencias con \texttt{expm1}/\texttt{log1p} del artículo, que este toolkit no implementa porque no tiene ruta de destilación. Los núcleos LSE internos del mixer SSOG y el normalizador de atención sigmoide (que no es un softmax) se dejan intactos deliberadamente.
+
+\paragraph{Validación.} El repositorio incluye \path{tests/test_fixed_numerics.py}, que verifica (i) la paridad forward con \texttt{torch} para softmax, log-softmax y cross-entropy en fp32/fp64, incluidas entradas enmascaradas ($-\infty$) y de una sola clave; (ii) las regresiones del acantilado de la Tabla~\ref{tab:collapse-regimes} con márgenes $25 > c_{32}$ y $40 > c_{64}$ --- los gradientes estándar del objetivo/argmax son exactamente cero y los corregidos no, con gradiente de suma cero en el caso corregido; (iii) la semántica de \texttt{ignore\_index}, reducción y despacho; (iv) la paridad forward del modelo completo (corregido frente a estándar es matemáticamente idéntico) y pasadas backward finitas; (v) la paridad prefill$+$decode de la caché KV con la bandera activada; y (vi) el despacho del trainer. El arnés combinatorio de extremo a extremo entrena además modelos MLM y causal-LM reales con \texttt{fixed\_softmax}, \texttt{fixed\_cross\_entropy}, ambos juntos y la interacción con SSMax y BitNet, todo en CPU. Un preset listo para ejecutar es \path{configs/examples/numerics_fixed.yaml}.
+
+\paragraph{Cuándo activarlo.} La corrección importa cuando los márgenes de logits pueden crecer mucho durante el entrenamiento: conjuntos algorítmicos pequeños que exhiben \emph{grokking}, entrenamientos largos con decaimiento de pesos y optimizadores adaptativos, y cualquier régimen en el que la pérdida se vuelva extremadamente confiada. En el entrenamiento ordinario a gran escala la ruta estándar suele ser indistinguible; la corregida es una candidata segura por defecto porque es matemáticamente idéntica en la pasada forward y está estrictamente mejor condicionada en la backward.

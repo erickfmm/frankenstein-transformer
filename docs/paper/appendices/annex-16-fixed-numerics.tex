@@ -1,0 +1,195 @@
+\section{Numerically Fixed Softmax and Cross-Entropy}
+\label{sec:annex-fixed-numerics}
+
+Standard implementations of softmax, log-softmax and cross-entropy subtract the maximum logit before exponentiating, which prevents overflow but leaves two floating-point defects \citep{barron_fixed_softmax_ce_2026}. The first, \emph{Softmax Collapse}, rounds the target (or argmax) gradient to zero once the logits become sufficiently confident, breaking the zero-sum property of the gradient and producing the ``Slingshot'' loss spikes observed with adaptive optimizers. The second, \emph{Softmax Cancellation}, degrades soft-target (distillation) gradients when student and teacher logits nearly coincide. This annex documents the toolkit's opt-in implementation of the first fix --- cancellation-free softmax, log-softmax and hard-target cross-entropy --- its custom backward pass, its integration surface and its validation. Soft-target cross-entropy is out of scope because the toolkit exposes no distillation objective; the sentence-embedding path delegates its losses to \texttt{sentence-transformers}.
+
+\subsection{The Two Floating-Point Defects}
+
+For logits $z \in \mathbb{R}^{K}$ and target class $t$, the standard stabilised computations are
+\begin{equation}
+\tilde{z}_k = z_k - z_{\max}, \qquad
+\operatorname{logsoftmax}(z)_k = \tilde{z}_k - \log \sum_j e^{\tilde{z}_j}, \qquad
+q_k = \frac{e^{\tilde{z}_k}}{\sum_j e^{\tilde{z}_j}},
+\label{eq:standard-softmax}
+\end{equation}
+and the cross-entropy is $L(z,t) = -\operatorname{logsoftmax}(z)_t$, whose exact gradient is $g = q - p$ for a target distribution $p$.
+
+\paragraph{Softmax Collapse.} Define the logit margin
+\begin{equation}
+m = z_t - \log \sum_{j \neq t} e^{z_j}.
+\label{eq:margin}
+\end{equation}
+When the target is also the maximum logit, $\tilde{z}_t = 0$ and the denominator becomes $1 + e^{-m}$. Floating-point numbers are much denser near zero than near one: in fp32, values near $0$ resolve down to $\sim\!10^{-38}$, while terms added to $1.0$ are lost below the unit roundoff $u = 2^{-p}$. The denominator therefore rounds to exactly $1.0$ once $m$ exceeds the \emph{precision cliff}
+\begin{equation}
+c_d = -\ln u = p \ln 2 ,
+\qquad
+c_{16} \approx 5.5, \quad c_{32} \approx 16.6, \quad c_{64} \approx 36.7,
+\label{eq:cliff}
+\end{equation}
+for bf16 ($p = 8$), fp32 ($p = 24$) and fp64 ($p = 53$). Past the cliff, the forward loss becomes $\log(1) = 0$ and the target gradient $q_t - 1$ becomes exactly $0$, while the non-target gradients $q_j = e^{z_j - z_t}/(1 + e^{-m})$ remain positive down to exponent underflow ($m \approx 88$ in fp32). The gradient no longer sums to zero,
+\begin{equation}
+\sum_k g_k \approx \sum_{j \neq t} q_j > 0 ,
+\label{eq:broken-zero-sum}
+\end{equation}
+which biases every parameter update and interacts badly with Adam's per-coordinate normalisation: when the missing target gradient later reappears, the second-moment estimate has decayed and the update spikes.
+
+\paragraph{Softmax Cancellation.} For soft targets $p = \operatorname{softmax}(z^{T})$, the gradient $q - p$ is the difference of two nearly equal probability vectors. Computing them separately loses the small difference that carries the signal and leaves a non-zero residual even when $z^{S} = z^{T}$. The paper's fix computes the difference directly in log space with \texttt{expm1}/\texttt{log1p}; this toolkit has no distillation loss and therefore does not implement it.
+
+\subsection{Cancellation-Free Formulations}
+\label{sec:fixed-formulations}
+
+Both fixes exclude the argmax entry from the log-sum-exp and reintroduce it through a stable softplus. Let $a = \arg\max_k z_k$, $z_{\max} = z_a$, and
+\begin{equation}
+s = \operatorname{softplus}\!\left(-m\right) = \log\!\left(1 + e^{-m}\right)
+    = \log \sum_{j \neq a} e^{z_j - z_{\max}} ,
+\qquad m = z_{\max} - \log \sum_{j \neq a} e^{z_j}.
+\label{eq:softplus-margin}
+\end{equation}
+Then
+\begin{equation}
+\operatorname{logsoftmax}(z)_k = z_k - z_{\max} - s,
+\qquad
+q_k = \exp\!\left(z_k - z_{\max} - s\right),
+\label{eq:fixed-values}
+\end{equation}
+with the argmax entry evaluated as exactly $-s$ and $\exp(-s)$ respectively. Because $s$ is computed as $\log(1 + e^{-m})$ (equivalently $\log\!\operatorname{1p}(e^{-m})$), the tiny $e^{-m}$ term survives far beyond the standard cliff, down to exponent underflow.
+
+The complement of the maximum probability is the load-bearing quantity for the backward pass. Rather than forming $1 - q_{\max}$ (which cancels in the output dtype), the implementation uses the identity
+\begin{equation}
+1 - q_{\max} = -\operatorname{expm1}(-s),
+\label{eq:one-minus-qmax}
+\end{equation}
+which is accurate for arbitrarily small $s$.
+
+\paragraph{Hard-target cross-entropy.} Using the target logit as the reference, the loss is
+\begin{equation}
+L(z,t) = \operatorname{softplus}\!\left(\operatorname{logsumexp}_{j \neq t}\left(z_j - z_t\right)\right)
+       = \log\!\left(1 + \sum_{j \neq t} e^{z_j - z_t}\right),
+\label{eq:fixed-ce}
+\end{equation}
+which is algebraically identical to $\log(1 + e^{-m})$ but never adds the small term to one. Writing $z_t$ through the differences $z_j - z_t$ makes automatic differentiation return
+\begin{equation}
+g_t = -\frac{e^{-m}}{1 + e^{-m}}, \qquad
+g_j = \frac{e^{z_j - z_t}}{1 + e^{-m}} \quad (j \neq t),
+\label{eq:fixed-gradients}
+\end{equation}
+so the target gradient is obtained as minus the sum of the non-target gradients and
+$\sum_k g_k = 0$ holds by construction, at any margin. The magnitude $e^{-m}/(1+e^{-m})$ is preserved down to exponent underflow --- precisely the component the standard implementation rounds to zero.
+
+\paragraph{Softmax and log-softmax Jacobians.} For a standalone softmax the forward values of Equation~\ref{eq:fixed-values} may still round to one in the output dtype (that is unavoidable for the stored probability), but the Jacobian must not collapse. Given an upstream gradient $g$, the softmax vector--Jacobian product is
+\begin{equation}
+\frac{\partial L}{\partial z} = q \odot \left(g - \langle g, q\rangle\right),
+\label{eq:softmax-vjp}
+\end{equation}
+whose argmax entry is rewritten as
+\begin{equation}
+\left.\frac{\partial L}{\partial z_a}\right|_{\text{fixed}}
+= q_{\max}\left(g_{\max}\,(1 - q_{\max}) - \sum_{j \neq a} g_j q_j\right),
+\label{eq:argmax-vjp}
+\end{equation}
+with $1 - q_{\max}$ taken from Equation~\ref{eq:one-minus-qmax}. The true Jacobian entry $q_{\max}(1 - q_{\max}) \approx e^{-m}$ thus survives the cliff. For log-softmax ($\partial \operatorname{logsoftmax}_k/\partial z_j = \delta_{kj} - q_j$) the argmax entry is likewise rewritten as
+\begin{equation}
+\left.\frac{\partial L}{\partial z_a}\right|_{\text{fixed}}
+= -\sum_{j \neq a} g_j + (1 - q_{\max}) \sum_k g_k .
+\label{eq:logsoftmax-vjp}
+\end{equation}
+
+Table~\ref{tab:collapse-regimes} contrasts the two regimes. The values are the exact quantities of Equations~\ref{eq:fixed-gradients}--\ref{eq:argmax-vjp}; the standard column is what Equation~\ref{eq:standard-softmax} produces once $m > c_d$.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{L{3.9cm}L{4.5cm}L{4.5cm}}
+\toprule
+\textbf{Quantity} & \textbf{Standard} & \textbf{Fixed} \\
+\midrule
+$q_{\max}$ & $1.0$ (rounded) & $e^{-s}$ (values; may round) \\
+$1 - q_{\max}$ & $0.0$ (rounded) & $-\operatorname{expm1}(-s)$ \\
+CE loss & $\log(1)=0$ & $\operatorname{softplus}(s)>0$ \\
+$g_t$ & $0.0$ & $-e^{-m}/(1+e^{-m})$ \\
+$\sum_k g_k$ & $\sum_{j \neq t} q_j > 0$ & $0$ (by construction) \\
+$\partial q_{\max}/\partial z_{\max}$ & $0.0$ & $q_{\max}(1-q_{\max})$ \\
+\bottomrule
+\end{tabular}
+\caption{Behaviour of the standard and fixed computations past the precision cliff $m > c_d$. The fixed column preserves every exponentially small quantity in Equations~\ref{eq:fixed-gradients}--\ref{eq:argmax-vjp}; the standard column rounds the target/argmax terms to zero.}
+\label{tab:collapse-regimes}
+\end{table}
+
+\subsection{Implementation in the Toolkit}
+\label{sec:fixed-implementation}
+
+The fixes live in \path{src/model/numerics.py} and are exposed as two boolean checkboxes under the \texttt{model.numerics} schema group, both defaulting to \texttt{false}:
+
+\begin{verbatim}
+model:
+  numerics:
+    fixed_softmax: true          # every explicit softmax / log-softmax
+    fixed_cross_entropy: true    # hard-target task losses
+\end{verbatim}
+
+Neither flag adds parameters, buffers or state-dict entries, so checkpoints, parameter counting and export (PyTorch, Transformers, GGUF) are unaffected; the flags travel with the model configuration. When disabled, the code paths reduce to the original \texttt{torch} calls with a single attribute lookup per softmax, so the default behaviour and performance are unchanged. The fixed losses accept the same \texttt{ignore\_index} and reduction semantics as \texttt{torch.nn.functional.cross\_entropy} and compute in the input dtype (no implicit upcast), which keeps the fix effective in bf16 as well as fp32/fp64.
+
+\subsubsection{Backward Pass}
+
+PyTorch's autograd graph for Equation~\ref{eq:fixed-values} still contains the subtraction that produces $1 - q_{\max}$, and evaluating it there re-introduces the cancellation. The implementation therefore defines the two softmax functions as \texttt{torch.autograd.Function} objects whose \texttt{forward} computes Equation~\ref{eq:fixed-values} and whose \texttt{backward} uses Equations~\ref{eq:softmax-vjp}--\ref{eq:logsoftmax-vjp}. The cross-entropy needs no custom backward: the graph of Equation~\ref{eq:fixed-ce} already yields Equation~\ref{eq:fixed-gradients} exactly, because $z_t$ enters every shifted logit with coefficient $-1$ and the target row is excluded from the log-sum-exp.
+
+\begin{algorithm}[H]
+\caption{Fixed softmax (forward + vector--Jacobian product)}
+\begin{algorithmic}[1]
+\Require logits $z \in \mathbb{R}^{K}$ along a normalisation axis, upstream gradient $g$
+\State $a \gets \arg\max_k z_k$, \quad $z_{\max} \gets z_a$
+\State $\ell \gets \operatorname{logsumexp}\{z_k - z_{\max} : k \neq a\}$ \Comment{argmax excluded}
+\State $s \gets \operatorname{softplus}(\ell)$ \Comment{$=\log(1+e^{-m})$}
+\State $c \gets -\operatorname{expm1}(-s)$ \Comment{$=1-q_{\max}$, no cancellation}
+\State $q \gets \exp(z - z_{\max} - s)$ \Comment{forward output}
+\State \textbf{backward:}
+\State $\tau \gets \sum_k g_k q_k$, \quad $\sigma \gets \sum_{k \neq a} g_k q_k$
+\State $\nabla z \gets q \odot (g - \tau)$
+\State $\nabla z_a \gets q_a\left(g_a\,c - \sigma\right)$ \Comment{accurate argmax entry}
+\State \textbf{return} $q$; \quad \textbf{return} $\nabla z$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Integration Surface}
+
+A single switch must reach every place where the toolkit materialises probabilities or logits. \texttt{HybridLayer} attaches the resolved flag to each mixer as \texttt{use\_fixed\_softmax}; the residual factory does the same for the depth-wise attention residuals; the KV-cache hooks take an explicit \texttt{use\_fixed\_softmax} argument. A dispatch helper then selects the implementation per call site. Table~\ref{tab:fixed-coverage} lists the covered surfaces.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{L{4.1cm}L{8.8cm}}
+\toprule
+\textbf{Surface} & \textbf{Covered sites} \\
+\midrule
+Attention mixers & \texttt{standard}, \texttt{titan}, \texttt{gqa}, \texttt{ode}; latent family (\texttt{mla}, \texttt{gqla}, \texttt{mlra}, \texttt{tucker}, \texttt{iha}, \texttt{gta}, \texttt{mtla}, \texttt{cca}, \texttt{ccgqa}, \texttt{gma}); gated (\texttt{gated\_softmax}, \texttt{fox}); sparse (\texttt{fasa}, \texttt{sparge}, \texttt{msa}, \texttt{nsa}, \texttt{bigbird}, \texttt{longformer}, \texttt{sparse\_transformer}, \texttt{sparsek}, \texttt{swa}, \texttt{sparda}); dense surrogate of training-free mixers \\
+Routers & MoE and Mixture-of-Depths top-$k$ softmax \\
+Residuals & Full and Block AttnRes depth-wise softmax \\
+KV cache & recompute/fallback normaliser in \texttt{src/model/cache/hooks.py} \\
+Decoding & top-$p$ nucleus filtering and final sampling distribution \\
+Deployment & \texttt{inference.predict} probability readout \\
+Training losses & \texttt{mlm}, \texttt{causal\_lm}, \texttt{classification}, \texttt{segmentation} (CE and Dice softmax), \texttt{text\_classification}, \texttt{patch\_prediction} \\
+\bottomrule
+\end{tabular}
+\caption{Coverage of the \texttt{fixed\_softmax} and \texttt{fixed\_cross\_entropy} flags. SSOG's internal separable-Gaussian LSE kernels keep their own formulation: they are not categorical softmaxes over the same axis.}
+\label{tab:fixed-coverage}
+\end{table}
+
+The loss side is dispatched by a single trainer helper, so every task shares the same semantics:
+\begin{verbatim}
+def _task_cross_entropy(self, logits, targets, **kwargs):
+    if self._use_fixed_cross_entropy():
+        return fixed_cross_entropy(
+            logits, targets, ignore_index=kwargs.get("ignore_index", -100))
+    return F.cross_entropy(logits, targets, **kwargs)
+\end{verbatim}
+
+\subsection{Cost, Scope and Validation}
+\label{sec:fixed-validation}
+
+\paragraph{Cost.} The fixed paths have the same asymptotic complexity as the standard ones and touch each row with a constant number of extra element-wise operations (one masked log-sum-exp and one softplus; one \texttt{expm1} in the backward). There are no matrix multiplications, no additional memory of order $K$ beyond temporaries, and no parameters. On ordinary logits the fixed and standard values agree to within floating-point tolerance; only the sub-roundoff regime that the standard path collapses changes.
+
+\paragraph{Scope.} The flags target hard-target classification-style losses. Soft-target cross-entropy (knowledge distillation, KL regularisation) would need the paper's \texttt{expm1}/\texttt{log1p} difference construction, which this toolkit does not implement because it has no distillation path. The SSOG mixer's internal LSE kernels, and the sigmoid attention normaliser (which is not a softmax), are intentionally left unchanged.
+
+\paragraph{Validation.} The repository ships \path{tests/test_fixed_numerics.py}, which asserts (i) forward parity with \texttt{torch} for softmax, log-softmax and cross-entropy in fp32/fp64, including masked ($-\infty$) and single-key inputs; (ii) the cliff regressions of Table~\ref{tab:collapse-regimes} at margins $25 > c_{32}$ and $40 > c_{64}$ --- the standard target/argmax gradients are exactly zero and the fixed ones are not, with a zero-sum gradient in the fixed case; (iii) \texttt{ignore\_index}, reduction and dispatch semantics; (iv) full-model forward parity (fixed versus standard is mathematically identical) and finite backward passes; (v) KV-cache prefill$+$decode parity with the flag enabled; and (vi) trainer dispatch. The combinatoric end-to-end harness additionally trains real MLM and causal-LM models with \texttt{fixed\_softmax}, \texttt{fixed\_cross\_entropy}, both together, and the interplay with SSMax and BitNet, all on CPU. A ready-to-run preset is \path{configs/examples/numerics_fixed.yaml}.
+
+\paragraph{When to enable.} The fix matters when logit margins can grow large during training: small algorithmic datasets that exhibit grokking, long training with weight decay and adaptive optimizers, and any regime where the loss becomes extremely confident. In ordinary large-scale training the standard path is usually indistinguishable; the fixed path is a safe default candidate because it is mathematically identical in the forward pass and strictly better conditioned in the backward pass.

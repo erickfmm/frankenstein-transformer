@@ -183,6 +183,11 @@ mixture\_of\_depths.router\_aux\_loss\_weight & float $\ge 0$ & Peso de la pérd
 ssmax.enabled & bool & Activar Scalable Softmax (arXiv:2505.22842). Por defecto: \texttt{false}. \\
 ssmax.s\_init & float $> 0$ & Escalar SSMax inicial por cabeza. Por defecto: 1.0. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.numerics.*}} \\
+\midrule
+numerics.fixed\_softmax & bool & Softmax/log-softmax sin cancelación (arXiv:2610.31642). Por defecto: \texttt{false}. \\
+numerics.fixed\_cross\_entropy & bool & CE de objetivo duro con gradiente de suma cero por construcción (arXiv:2610.31642). Por defecto: \texttt{false}. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.ffn.*}} \\
 \midrule
 ffn.hidden\_size & int $\ge 1$ & Dimensión intermedia FFN. Por defecto: $2\times$ \texttt{hidden\_size}. \\
@@ -196,7 +201,7 @@ classification\_head.num\_labels & int o null & Número de clases. \\
 classification\_head.pooling\_mode & enum (cls, gap) & Pooling de la cabeza de clasificación. Por defecto: \texttt{cls}. \\
 \end{longtable}
 
-Los campos se agrupan bajo sub-objetos jerárquicos (\texttt{dims}, \texttt{norm}, \texttt{embedding}, \texttt{attention}, \texttt{moe}, \texttt{bitnet}, \texttt{mixture\_of\_depths}, \texttt{ssmax}, \texttt{ffn}, \texttt{classification\_head}, \texttt{mhc}, \texttt{residuals}); cada fila de sub-encabezado marca el prefijo vigente para las filas que le siguen. No hay claves de características planas en \texttt{model.*}.
+Los campos se agrupan bajo sub-objetos jerárquicos (\texttt{dims}, \texttt{norm}, \texttt{embedding}, \texttt{attention}, \texttt{moe}, \texttt{bitnet}, \texttt{mixture\_of\_depths}, \texttt{ssmax}, \texttt{numerics}, \texttt{ffn}, \texttt{classification\_head}, \texttt{mhc}, \texttt{residuals}); cada fila de sub-encabezado marca el prefijo vigente para las filas que le siguen. No hay claves de características planas en \texttt{model.*}.
 
 \subsubsection{Enumeración del Patrón de Capas}
 \label{tab:layer-pattern}
