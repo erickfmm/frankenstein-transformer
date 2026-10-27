@@ -43,6 +43,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk
 
@@ -219,7 +220,7 @@ class MSAAttention(nn.Module):
                 scores_visible = scores_visible.masked_fill(
                     causal_mask.view(1, 1, seq_len, end - start), float("-inf")
                 )
-            attn = F.softmax(scores_visible, dim=-1)
+            attn = module_softmax(self, scores_visible, dim=-1)
             attn = self.dropout(attn)
             out_blk = attn @ v_blk
             sel_b = sel.view(bsz, seq_len, h_kv, 1).expand(bsz, seq_len, h_kv, G).reshape(bsz, seq_len, h_q)

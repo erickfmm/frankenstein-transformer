@@ -22,6 +22,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ..numerics import module_softmax
 
 from .common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 from ..norm import get_norm
@@ -106,7 +107,7 @@ class ODEFunc(nn.Module):
             causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1)
             attn = attn.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
         attn = apply_pe_to_scores(pe, self.pe_type, attn, q, self.use_pe)
-        attn = attn.softmax(dim=-1)
+        attn = module_softmax(self, attn, dim=-1)
         attn = self.dropout(attn)
 
         out = (attn @ v).transpose(1, 2).reshape(bsz, seq_len, dim)

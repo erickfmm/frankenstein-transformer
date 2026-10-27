@@ -22,6 +22,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
@@ -276,7 +277,7 @@ class SparseTransformerAttention(nn.Module):
                 q_offset=0 if offset is None else int(offset),
                 kv_positions=kv_positions,
             )
-            attn = _F.softmax(scores, dim=-1)
+            attn = module_softmax(self, scores, dim=-1)
             attn = self.dropout(attn)
             out = (attn @ V).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
             return self.out_proj(out)
@@ -299,7 +300,7 @@ class SparseTransformerAttention(nn.Module):
         scores[:, half:] = scores[:, half:].masked_fill(~fixed_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
 
         scores = apply_pe_to_scores(pe, self.pe_type, scores, q, self.use_pe)
-        attn = F.softmax(scores, dim=-1)
+        attn = module_softmax(self, scores, dim=-1)
         attn = self.dropout(attn)
         out = (attn @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
         return self.out_proj(out)

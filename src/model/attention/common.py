@@ -16,6 +16,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ..numerics import module_softmax
 
 
 def activation_quant(x):
@@ -406,7 +407,7 @@ def dense_attention_forward(
             diagonal=1,
         )
         attn_scores = attn_scores.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
-    attn_weights = F.softmax(attn_scores, dim=-1)
+    attn_weights = module_softmax(module, attn_scores, dim=-1)
     attn_weights = module.dropout(attn_weights)
 
     out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)

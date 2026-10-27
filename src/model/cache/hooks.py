@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import torch
 
+from ..numerics import fixed_softmax
 from .base import CacheSlot, SlotMeta
 
 __all__ = [
@@ -155,6 +156,7 @@ def cached_qk_attention(
     dropout=None,
     causal: bool = True,
     rotate: bool = True,
+    use_fixed_softmax: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Generic cached QK^T attention over a KV/Ring slot (F1 recipe).
 
@@ -187,6 +189,9 @@ def cached_qk_attention(
         rotate: When False, ``q``/``k`` arrive already rotated (mixers like
             IHA that rotate real heads before head-space mixing); the PE
             score bias is still applied.
+        use_fixed_softmax: Use the cancellation-free softmax of
+            arXiv:2610.31642 for the default normalizer (mirrors the mixer's
+            ``use_fixed_softmax`` attribute).
 
     Returns:
         ``(output, K, kv_positions)`` where ``output`` is the attended
@@ -217,7 +222,11 @@ def cached_qk_attention(
         mask = causal_mask_from_positions(positions, kv_positions)
         attn_scores = attn_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
     if normalize is None:
-        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_weights = (
+            fixed_softmax(attn_scores, dim=-1)
+            if use_fixed_softmax
+            else F.softmax(attn_scores, dim=-1)
+        )
     else:
         attn_weights = normalize(attn_scores)
     if dropout is not None:
@@ -240,6 +249,7 @@ def cached_latent_attention(
     logical_layer_idx: int = 0,
     dropout=None,
     causal: bool = True,
+    use_fixed_softmax: bool = False,
 ) -> torch.Tensor:
     """Generic cached latent attention (latent family, F1 recipe).
 
@@ -262,6 +272,8 @@ def cached_latent_attention(
             (rotation applied with the absolute offset).
         dropout: Optional attention-weight dropout module.
         causal: Apply the position-derived causal mask.
+        use_fixed_softmax: Use the cancellation-free softmax of
+            arXiv:2610.31642 (mirrors the mixer's ``use_fixed_softmax``).
 
     Returns:
         Attended values ``(B, H, S, D)`` (pre out-projection).
@@ -305,7 +317,11 @@ def cached_latent_attention(
     if causal:
         mask = causal_mask_from_positions(positions, kv_positions)
         attn_scores = attn_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
-    attn_weights = F.softmax(attn_scores, dim=-1)
+    attn_weights = (
+        fixed_softmax(attn_scores, dim=-1)
+        if use_fixed_softmax
+        else F.softmax(attn_scores, dim=-1)
+    )
     if dropout is not None:
         attn_weights = dropout(attn_weights)
     return attn_weights @ v

@@ -54,6 +54,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
@@ -307,7 +308,7 @@ class CCAAttention(nn.Module):
             attn_scores = attn_scores.masked_fill(
                 causal_mask.unsqueeze(0).unsqueeze(0), float("-inf")
             )
-        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_weights = module_softmax(self, attn_scores, dim=-1)
         attn_weights = self.dropout(attn_weights)
         out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, L)
         return self.out_proj(out)
@@ -567,7 +568,7 @@ class CCGQAAttention(nn.Module):
             attn_scores = attn_scores.masked_fill(
                 causal_mask.unsqueeze(0).unsqueeze(0), float("-inf")
             )
-        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_weights = module_softmax(self, attn_scores, dim=-1)
         attn_weights = self.dropout(attn_weights)
         out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, Hq * dh)
         return self.out_proj(out)

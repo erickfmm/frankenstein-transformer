@@ -207,8 +207,8 @@ Examples:
 
 The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 `positional_encoding`/`positional_encoding_parameters`, `attention`, `moe`,
-`bitnet`, `mixture_of_depths`, `ssmax`, `ffn`, `classification_head`, `mhc`,
-and `residuals`. Flat `model.*` feature keys are no longer accepted.
+`bitnet`, `mixture_of_depths`, `ssmax`, `numerics`, `ffn`, `classification_head`,
+`mhc`, and `residuals`. Flat `model.*` feature keys are no longer accepted.
 
 #### model.dims
 
@@ -268,7 +268,7 @@ Per-mixer sub-objects: `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
 (`solver`, `steps`), `retnet` (`heads`). Optional rank fields accept `null`
 (= derive from `hidden_size` / `num_heads`).
 
-#### model.moe / model.bitnet / model.mixture_of_depths / model.ssmax
+#### model.moe / model.bitnet / model.mixture_of_depths / model.ssmax / model.numerics
 
 - `moe`: `enabled`, `num_experts`, `top_k`.
 - `bitnet`: `enabled`, `routers`, `conv`. When `enabled`, all primary + gate
@@ -278,6 +278,12 @@ Per-mixer sub-objects: `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
   the embedding Conv1d (requires `model.embedding.conv.enabled`).
 - `mixture_of_depths`: `enabled`, `capacity_ratio`, `router_aux_loss_weight`.
 - `ssmax`: `enabled`, `s_init` (Scalable Softmax, arXiv:2505.22842).
+- `numerics`: `fixed_softmax`, `fixed_cross_entropy` (default `false`).
+  Cancellation-free softmax/log-softmax and zero-sum-gradient hard-target
+  cross-entropy from arXiv:2610.31642 ("A Fix for Softmax and Cross-Entropy").
+  Forward values are mathematically identical to the standard operations; the
+  flags only change the backward-pass numerics past the precision cliff.
+  Example: `configs/examples/numerics_fixed.yaml`.
 
 #### model.ffn
 

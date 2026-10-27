@@ -37,6 +37,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk
 
@@ -166,7 +167,7 @@ class SparDAAttention(nn.Module):
                 scores = scores.masked_fill(
                     (~visible).view(1, 1, seq_len, end - start), float("-inf")
                 )
-            attn = F.softmax(scores, dim=-1)
+            attn = module_softmax(self, scores, dim=-1)
             attn = self.dropout(attn)
             out_blk = attn @ v_blk
             sel = (selected_blocks == b).any(dim=-1)

@@ -34,6 +34,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear
 from ...cache.hooks import cached_latent_attention
@@ -192,6 +193,7 @@ class GQLAAttention(nn.Module):
                 logical_layer_idx=logical_layer_idx or 0,
                 dropout=self.dropout,
                 causal=True,
+                use_fixed_softmax=self.use_fixed_softmax,
             )
             out = attended.transpose(1, 2).contiguous().view(bsz, seq_len, -1)
             return self.out_proj(out)
@@ -225,7 +227,7 @@ class GQLAAttention(nn.Module):
             attn_scores = attn_scores.masked_fill(
                 causal_mask.unsqueeze(0).unsqueeze(0), float("-inf")
             )
-        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_weights = module_softmax(self, attn_scores, dim=-1)
         attn_weights = self.dropout(attn_weights)
         out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, -1)
         return self.out_proj(out)

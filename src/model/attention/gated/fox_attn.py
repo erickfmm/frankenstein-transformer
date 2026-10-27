@@ -27,6 +27,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
@@ -192,7 +193,7 @@ class ForgettingAttention(nn.Module):
                 q_offset=0 if offset is None else int(offset),
                 kv_positions=kv_positions,
             )
-            attn = F.softmax(attn, dim=-1)
+            attn = module_softmax(self, attn, dim=-1)
             attn = self.dropout(attn)
             out = (attn @ V).permute(0, 2, 1, 3).reshape(bsz, seq_len, self.total_dim)
             return self.out_proj(out)
@@ -208,7 +209,7 @@ class ForgettingAttention(nn.Module):
 
         attn = (q @ k.transpose(-2, -1)) * self.scale + bias
         attn = apply_pe_to_scores(pe, self.pe_type, attn, q, self.use_pe)
-        attn = F.softmax(attn, dim=-1)
+        attn = module_softmax(self, attn, dim=-1)
         attn = self.dropout(attn)
 
         out = (attn @ v).permute(0, 2, 1, 3).reshape(bsz, seq_len, self.total_dim)

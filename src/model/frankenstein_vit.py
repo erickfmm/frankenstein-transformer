@@ -124,6 +124,7 @@ class FrankensteinViT(nn.Module):
     def __init__(self, config: Optional[FrankensteinModelConfig] = None) -> None:
         super().__init__()
         self.config = config or self.build_vit_config()
+        self.use_fixed_softmax = bool(getattr(self.config, "fixed_softmax", False))
         self.last_auxiliary_losses: Dict[str, Any] = {}
         self.last_mixture_of_depths_stats: Dict[str, Any] = {}
 

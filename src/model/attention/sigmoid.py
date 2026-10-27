@@ -139,6 +139,7 @@ class SigmoidAttention(nn.Module):
                 normalize=_sigmoid_l1,
                 dropout=self.dropout,
                 causal=True,
+                use_fixed_softmax=self.use_fixed_softmax,
             )
             return self.out_proj(out.transpose(1, 2).contiguous().view(bsz, seq_len, hidden))
 

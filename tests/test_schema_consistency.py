@@ -123,6 +123,8 @@ _DEFAULT_PAIRS = {
     "properties.model.properties.mixture_of_depths.properties.router_aux_loss_weight": "mixture_of_depths_router_aux_loss_weight",
     "properties.model.properties.ssmax.properties.enabled": "use_ssmax",
     "properties.model.properties.ssmax.properties.s_init": "ssmax_s_init",
+    "properties.model.properties.numerics.properties.fixed_softmax": "fixed_softmax",
+    "properties.model.properties.numerics.properties.fixed_cross_entropy": "fixed_cross_entropy",
     "properties.model.properties.ffn.properties.activation": "ffn_activation",
     "properties.model.properties.classification_head.properties.enabled": "classification_head",
     "properties.model.properties.classification_head.properties.pooling_mode": "encoder_pooling_mode",

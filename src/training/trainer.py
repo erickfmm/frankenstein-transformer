@@ -37,6 +37,7 @@ try:
     )
     from ..utils.param_categories import BLOCK_CATEGORIES, categorize_param
     from ..model.optimizer.factory import build_optimizer
+    from ..model.numerics import fixed_cross_entropy, fixed_softmax
 except ImportError:
     from utils.storage_manager import StorageManager
     from utils.gpu_temp_guard import (
@@ -47,6 +48,7 @@ except ImportError:
     )
     from utils.param_categories import BLOCK_CATEGORIES, categorize_param
     from model.optimizer.factory import build_optimizer
+    from model.numerics import fixed_cross_entropy, fixed_softmax
 
 
 # ==================== TRAINING CONFIGURATION ====================
@@ -1183,6 +1185,29 @@ class TitanTrainer:
             "Expected tensor, dict['logits'], or object.logits."
         )
     
+    def _use_fixed_cross_entropy(self) -> bool:
+        """Whether the fixed (zero-sum-gradient) cross-entropy is enabled.
+
+        Reads ``fixed_cross_entropy`` from the model config
+        (``model.numerics.fixed_cross_entropy`` in YAML), falling back to the
+        model's own ``config`` attribute. See arXiv:2610.31642 §2.
+        """
+        cfg = self.config if self.config is not None else getattr(self.model, "config", None)
+        return bool(getattr(cfg, "fixed_cross_entropy", False))
+
+    def _task_cross_entropy(self, logits, targets, **kwargs):
+        """Dispatch to the fixed hard-target CE or ``F.cross_entropy``.
+
+        The fixed formulation keeps the target gradient past the precision
+        cliff and guarantees a zero-sum gradient (arXiv:2610.31642 §2).
+        ``ignore_index`` and the default ``mean`` reduction match
+        ``F.cross_entropy`` semantics.
+        """
+        if self._use_fixed_cross_entropy():
+            ignore_index = kwargs.get("ignore_index", -100)
+            return fixed_cross_entropy(logits, targets, ignore_index=ignore_index)
+        return F.cross_entropy(logits, targets, **kwargs)
+
     def compute_mlm_loss(self, input_ids, attention_mask, labels):
         """Compute masked language modeling loss with shape safety checks.
 
@@ -1250,7 +1275,7 @@ class TitanTrainer:
 
         # Compute CE in float32 for numerical stability
         if valid_mask.sum().item() > 0:
-            loss = F.cross_entropy(logits[valid_mask].float(), mlm_labels[valid_mask])
+            loss = self._task_cross_entropy(logits[valid_mask].float(), mlm_labels[valid_mask])
         else:
             # Defensive fallback (should almost never happen after forced target above)
             loss = logits.new_zeros((), requires_grad=True)
@@ -1342,7 +1367,7 @@ class TitanTrainer:
 
         valid_mask = (flat_labels != -100)
         if valid_mask.sum().item() > 0:
-            loss = F.cross_entropy(flat_logits, flat_labels, ignore_index=-100)
+            loss = self._task_cross_entropy(flat_logits, flat_labels, ignore_index=-100)
         else:
             loss = logits.new_zeros((), requires_grad=True)
 
@@ -1438,11 +1463,11 @@ class TitanTrainer:
             target = mask_target[mask_bool]  # (M,) or (M, 16)
             if pred.dim() == 3:
                 # downsampled_3bit: (M, 16, 512) -> flatten
-                loss = F.cross_entropy(pred.reshape(-1, pred.size(-1)).float(),
-                                       target.reshape(-1).long())
+                loss = self._task_cross_entropy(pred.reshape(-1, pred.size(-1)).float(),
+                                                target.reshape(-1).long())
                 acc = (pred.argmax(-1) == target).float().mean()
             else:
-                loss = F.cross_entropy(pred.float(), target.long())
+                loss = self._task_cross_entropy(pred.float(), target.long())
                 acc = (pred.argmax(-1) == target).float().mean()
             accuracy = acc
 
@@ -1481,7 +1506,7 @@ class TitanTrainer:
                 "task=text_classification requires the encoder classification "
                 "head (Strategy A). Set num_labels > 0 in the model config."
             )
-        loss = F.cross_entropy(logits.float(), labels.long())
+        loss = self._task_cross_entropy(logits.float(), labels.long())
         accuracy = (logits.argmax(-1) == labels.long()).float().mean()
         aux = getattr(self.model, "last_auxiliary_losses", None)
         if aux:
@@ -1502,7 +1527,7 @@ class TitanTrainer:
         pixel_values = batch["pixel_values"]
         labels = batch["labels"]
         logits = self._forward_vision_logits(pixel_values, task="classification")
-        loss = F.cross_entropy(logits.float(), labels.long())
+        loss = self._task_cross_entropy(logits.float(), labels.long())
         accuracy = (logits.argmax(-1) == labels).float().mean()
         aux = getattr(self.model, "last_auxiliary_losses", None)
         if aux:
@@ -1528,10 +1553,14 @@ class TitanTrainer:
         logits = self._forward_vision_logits(pixel_values, task="segmentation")
         # logits: (B, num_seg_classes, H, W)
         num_seg_classes = logits.shape[1]
-        ce_loss = F.cross_entropy(logits.float(), seg_map.long())
+        ce_loss = self._task_cross_entropy(logits.float(), seg_map.long())
 
         # Dice loss (per-class, macro average).
-        probs = F.softmax(logits, dim=1)  # (B, C, H, W)
+        probs = (
+            fixed_softmax(logits, dim=1)
+            if self._use_fixed_cross_entropy()
+            else F.softmax(logits, dim=1)
+        )  # (B, C, H, W)
         target_onehot = F.one_hot(seg_map.long(), num_seg_classes)  # (B, H, W, C)
         target_onehot = target_onehot.permute(0, 3, 1, 2).float()  # (B, C, H, W)
         dims = (0, 2, 3)

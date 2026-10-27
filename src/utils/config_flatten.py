@@ -51,6 +51,7 @@ The hierarchical schema groups keys as:
       bitnet:            {enabled, routers, conv}
       mixture_of_depths: {enabled, capacity_ratio, router_aux_loss_weight}
       ssmax:             {enabled, s_init}
+      numerics:          {fixed_softmax, fixed_cross_entropy}
       ffn:               {hidden_size, activation, activation_config}
       classification_head: {enabled, num_labels, pooling_mode}
       mhc / residuals:   ...
@@ -195,6 +196,7 @@ def _is_nested_shape(model_data: Dict[str, Any]) -> bool:
         "bitnet",
         "mixture_of_depths",
         "ssmax",
+        "numerics",
         "ffn",
         "classification_head",
     ):
@@ -375,6 +377,7 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
         "bitnet",
         "mixture_of_depths",
         "ssmax",
+        "numerics",
         "ffn",
         "classification_head",
     }
@@ -473,6 +476,13 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
             out["use_ssmax"] = ssmax["enabled"]
         if "s_init" in ssmax:
             out["ssmax_s_init"] = ssmax["s_init"]
+
+    numerics = model_data.get("numerics")
+    if isinstance(numerics, dict):
+        if "fixed_softmax" in numerics:
+            out["fixed_softmax"] = numerics["fixed_softmax"]
+        if "fixed_cross_entropy" in numerics:
+            out["fixed_cross_entropy"] = numerics["fixed_cross_entropy"]
 
     ffn = model_data.get("ffn")
     if isinstance(ffn, dict):

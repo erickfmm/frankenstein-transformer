@@ -36,6 +36,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 import torch
+from ..numerics import module_softmax
 import torch.nn as nn
 import torch.utils.checkpoint
 
@@ -235,7 +236,7 @@ class FullAttentionResidual(ResidualBase):
                 # Per-stream attention: query is broadcast over streams.
                 # logits[i, b, s, m] = q · keys[i, b, s, m, :]
                 logits = torch.einsum("d,ibsmd->ibsm", q, keys)
-                attn = torch.softmax(logits, dim=0)
+                attn = module_softmax(self, logits, dim=0)
                 out = torch.einsum("ibsm,ibsmd->bsmd", attn, stacked)
             else:  # "joint"
                 # Joint attention: flatten the n-stream into the key dim.
@@ -249,13 +250,13 @@ class FullAttentionResidual(ResidualBase):
                 # Simpler: repeat q n times and dot product with the flat key.
                 # logits[i, b, s, m] = (q · keys[i, b, s, m, :])
                 logits = torch.einsum("d,ibsmd->ibsm", q, keys)
-                attn = torch.softmax(logits, dim=0)
+                attn = module_softmax(self, logits, dim=0)
                 out = torch.einsum("ibsm,ibsmd->bsmd", attn, stacked)
         else:
             # Standard (B, S, D) attention.
             # logits[i, b, s] = q · keys[i, b, s, :]
             logits = torch.einsum("d,ibsd->ibs", q, keys)
-            attn = torch.softmax(logits, dim=0)
+            attn = module_softmax(self, logits, dim=0)
             out = torch.einsum("ibs,ibsd->bsd", attn, stacked)
         return out
 

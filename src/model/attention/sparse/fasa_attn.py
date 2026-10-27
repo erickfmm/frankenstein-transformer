@@ -31,6 +31,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk, dense_attention_forward
 
@@ -253,7 +254,7 @@ class FASAAttention(nn.Module):
                 k_sel = k_head.unsqueeze(1).expand(bsz, seq_len, total, k_head.size(-1)).gather(2, idx_e)  # (B, S, n, d)
                 v_sel = v_head.unsqueeze(1).expand(bsz, seq_len, total, k_head.size(-1)).gather(2, idx_e)
                 scores = (q[:, h].unsqueeze(2) * k_sel).sum(dim=-1) / math.sqrt(self.head_dim)
-                attn = F.softmax(scores, dim=-1)
+                attn = module_softmax(self, scores, dim=-1)
                 out[:, h] = torch.sum(attn.unsqueeze(-1) * v_sel, dim=2)
 
             out = self.dropout(out)
@@ -282,7 +283,7 @@ class FASAAttention(nn.Module):
                 v_sel = v_head[top_idx[b]]
                 q_head = q[b, h].unsqueeze(1)
                 scores = (q_head * k_sel).sum(dim=-1) / math.sqrt(self.head_dim)
-                attn = F.softmax(scores, dim=-1)
+                attn = module_softmax(self, scores, dim=-1)
                 out[b, h] = torch.sum(attn.unsqueeze(-1) * v_sel, dim=1)
 
         out = self.dropout(out)

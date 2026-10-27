@@ -16,6 +16,7 @@ from typing import List, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .numerics import module_softmax
 
 from .config import FrankensteinModelConfig
 from .frankenstein_encoder import FrankensteinEncoder
@@ -102,6 +103,7 @@ class FrankensteinDecoder(nn.Module):
         """
         super().__init__()
         self.config = config or self.build_decoder_config()
+        self.use_fixed_softmax = bool(getattr(self.config, "fixed_softmax", False))
         self.last_auxiliary_losses = {}
         self.last_mixture_of_depths_stats = {}
 
@@ -156,8 +158,7 @@ class FrankensteinDecoder(nn.Module):
         )
         return output
 
-    @staticmethod
-    def _sample_next(logits, temperature: float, top_k: int, top_p: float, greedy: bool):
+    def _sample_next(self, logits, temperature: float, top_k: int, top_p: float, greedy: bool):
         """Sample one token from ``(B, vocab)`` logits.
 
         Order of operations: greedy argmax ⇒ temperature scaling ⇒ top-k
@@ -171,7 +172,7 @@ class FrankensteinDecoder(nn.Module):
             next_logits[next_logits < v[:, [-1]]] = float("-inf")
         if top_p < 1.0:
             sorted_logits, sorted_idx = torch.sort(next_logits, descending=True, dim=-1)
-            probs = F.softmax(sorted_logits, dim=-1)
+            probs = module_softmax(self, sorted_logits, dim=-1)
             cumulative = torch.cumsum(probs, dim=-1)
             # Remove tokens with cumulative probability above the threshold,
             # always keeping the first token above it.
@@ -179,7 +180,7 @@ class FrankensteinDecoder(nn.Module):
             sorted_logits = sorted_logits.masked_fill(remove, float("-inf"))
             next_logits = torch.full_like(next_logits, float("-inf"))
             next_logits = next_logits.scatter(-1, sorted_idx, sorted_logits)
-        probs = F.softmax(next_logits, dim=-1)
+        probs = module_softmax(self, next_logits, dim=-1)
         return torch.multinomial(probs, num_samples=1)
 
     @torch.inference_mode()

@@ -17,6 +17,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ..numerics import module_softmax
 
 from .common import BitLinear
 
@@ -126,7 +127,7 @@ class GroupedQueryAttention(nn.Module):
             )
             mask = causal_mask_from_positions(positions, kv_positions)
             attn_scores = attn_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
-            attn_weights = F.softmax(attn_scores, dim=-1)
+            attn_weights = module_softmax(self, attn_scores, dim=-1)
             attn_weights = self.dropout(attn_weights)
             out = (attn_weights @ V).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
             return self.out_proj(out)
@@ -147,7 +148,7 @@ class GroupedQueryAttention(nn.Module):
             attn_scores = attn_scores.masked_fill(
                 causal_mask.unsqueeze(0).unsqueeze(0), float("-inf")
             )
-        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_weights = module_softmax(self, attn_scores, dim=-1)
         attn_weights = self.dropout(attn_weights)
 
         out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)

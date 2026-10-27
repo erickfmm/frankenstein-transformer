@@ -25,6 +25,7 @@ try:
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..model.attention.common import BitLinear
     from ..utils.config_flatten import flatten_model_dict
+    from ..model.numerics import module_softmax
 except ImportError:
     from model.config import FrankensteinModelConfig
     from model.frankenstein_decoder import FrankensteinDecoder
@@ -36,6 +37,7 @@ except ImportError:
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from model.attention.common import BitLinear
     from utils.config_flatten import flatten_model_dict
+    from model.numerics import module_softmax
 
 logging.basicConfig(
     level=logging.INFO,
@@ -479,7 +481,7 @@ class FrankensteinInference:
         if return_logits:
             return outputs
         else:
-            return torch.softmax(outputs, dim=-1)
+            return module_softmax(self.model, outputs, dim=-1)
     
     def predict_masked(
         self,

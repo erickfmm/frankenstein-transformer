@@ -1,0 +1,60 @@
+# Fixed softmax + fixed cross-entropy preset (arXiv:2610.31642).
+# "A Fix for Softmax and Cross-Entropy" (Barron, Gnanapragasam & Tschannen,
+# Google DeepMind). Both flags preserve the mathematical semantics of the
+# standard operations while removing the two floating-point bugs:
+#   - Softmax Collapse: the argmax/target gradient rounding to zero past the
+#     precision cliff (~5.5 bf16 / 16.6 fp32 / 36.7 fp64), which breaks the
+#     zero-sum property of the gradient;
+#   - Softmax Cancellation (distillation only; not used by this preset).
+# Small decoder so the smoke test trains a real causal-LM step on CPU.
+model_class: frankenstein_text_decoder
+model:
+  dims:
+    vocab_size: 100
+    hidden_size: 64
+    num_layers: 2
+    num_loops: 1
+    num_heads: 4
+    layer_pattern:
+    - standard_attn
+    - gqa_attn
+    mode: decoder
+  norm:
+    type: rms_norm
+  embedding:
+    conv:
+      enabled: false
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  numerics:
+    fixed_softmax: true
+    fixed_cross_entropy: true
+  ffn:
+    hidden_size: 128
+    activation: gelu
+  positional_encoding: rope
+training:
+  task: causal_lm
+  num_epochs: 1
+  batch_size: 2
+  max_length: 64
+  max_samples: 1000
+  cache_dir: ./temp_data/numerics_fixed_cache
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-3
+      adamw-lr_norms: 1e-3
+      adamw-lr_attention: 1e-3
+      adamw-lr_other: 1e-3
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+  scheduler_total_steps: 100
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  max_nan_retries: 3
+  csv_log_path: training_metrics_numerics_fixed.csv

@@ -310,6 +310,14 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     add("trans_residuals_block_attn", {"residuals": {"type": "block_attn", "block_attn": {"num_blocks": 2, "init_query_zero": True, "use_rmsnorm_keys": True}}})
     add("trans_pos_rope", {"attention": {"titan": {"positional_encoding": "rope"}}})
     add("trans_ssmax", {"use_ssmax": True, "ssmax_s_init": 1.0})
+    # Fixed numerics (arXiv:2610.31642): cancellation-free softmax and
+    # zero-sum-gradient hard-target cross-entropy.
+    add("trans_fixed_softmax", {"fixed_softmax": True})
+    add("trans_fixed_ce", {"fixed_cross_entropy": True})
+    add("trans_fixed_both", {"fixed_softmax": True, "fixed_cross_entropy": True})
+    # SSMax rescales logits (larger margins) and BitNet perturbs weights: the
+    # interaction is exactly where the precision cliff matters.
+    add("trans_fixed_softmax_ssmax_bitnet", {"fixed_softmax": True, "use_ssmax": True, "ssmax_s_init": 1.0, "use_bitnet": True})
     add("trans_num_loops_2", {"dims": {"num_layers": 1, "num_loops": 2, "layer_pattern": ["standard_attn"]}})
     add("trans_ffn_relu", {"ffn_activation": "relu"})
     add("trans_ffn_swiglu", {"ffn_activation": "swiglu"})
@@ -342,6 +350,15 @@ def make_task_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     training = training.copy()
     training["task"] = "causal_lm"
     configs.append(("task_causal_lm_decoder", {"model_class": "frankenstein_text_decoder", "model": model, "training": training}))
+
+    # Decoder causal LM with fixed numerics: exercises the ignore_index=-100
+    # path of the fixed cross-entropy and the decoder softmax/sampling plumbing.
+    model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
+    model = _deep_update(model, {"dims": {"mode": "decoder", "layer_pattern": ["standard_attn", "titan_attn"]}})
+    model = _deep_update(model, {"fixed_softmax": True, "fixed_cross_entropy": True})
+    training = training.copy()
+    training["task"] = "causal_lm"
+    configs.append(("task_causal_lm_fixed_numerics", {"model_class": "frankenstein_text_decoder", "model": model, "training": training}))
     return configs
 
 
@@ -429,6 +446,24 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     image = dict(base_image, seg_head_type="pixel", num_seg_classes=5)
     configs.append(("vit_segmentation_pixel", {
         "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
+        "image": image, "dataset": base_dataset,
+        "training": _vit_training("segmentation"),
+    }))
+
+    # Fixed numerics (arXiv:2610.31642) on the two CE+softmax vision paths:
+    # classification CE and segmentation CE + Dice softmax.
+    fixed_vit = _deep_update(_vit_model(vocab_size), {
+        "fixed_softmax": True, "fixed_cross_entropy": True,
+    })
+    image = dict(base_image, num_classes=10)
+    configs.append(("vit_classification_fixed_numerics", {
+        "model_class": "frankenstein_vit", "model": fixed_vit,
+        "image": image, "dataset": base_dataset,
+        "training": _vit_training("classification"),
+    }))
+    image = dict(base_image, seg_head_type="pixel", num_seg_classes=5)
+    configs.append(("vit_segmentation_fixed_numerics", {
+        "model_class": "frankenstein_vit", "model": fixed_vit,
         "image": image, "dataset": base_dataset,
         "training": _vit_training("segmentation"),
     }))

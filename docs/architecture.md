@@ -112,7 +112,7 @@ flowchart LR
       M --> MN["_model/_norm.yaml"]
       M --> MA["_model/_attention_*.yaml"]
       M --> MO["_model/_moe.yaml · _bitnet.yaml · _mixture_of_depths.yaml"]
-      M --> MF["_model/_ffn.yaml · _ssmax.yaml · _mhc.yaml · _residuals.yaml"]
+      M --> MF["_model/_ffn.yaml · _ssmax.yaml · _numerics.yaml · _mhc.yaml · _residuals.yaml"]
       T["_training.yaml"]
       O["_optimizer.yaml"]
       TS["_tokenizer.yaml · _text_dataset.yaml"]
@@ -155,6 +155,7 @@ skipped, and `_ATTENTION_MIXER_RENAMES` maps each per-mixer leaf to its flat key
 | `model.bitnet.*` | `use_bitnet`, `bitnet_routers`, `use_bitnet_conv` |
 | `model.mixture_of_depths.*` | `use_mixture_of_depths`, `mixture_of_depths_*` |
 | `model.ssmax.*` | `use_ssmax`, `ssmax_s_init` |
+| `model.numerics.*` | `fixed_softmax`, `fixed_cross_entropy` |
 | `model.ffn.*` | `ffn_hidden_size`, `ffn_activation`, `ffn_activation_config` |
 | `model.classification_head.*` | `classification_head`, `num_labels`, `encoder_pooling_mode` |
 | `model.mhc.*` | `use_mhc`, `mhc_*` |
@@ -400,7 +401,26 @@ instead. `activation_config` keys: `raf_degrees`, `raf_version`, `raf_approx_fun
 | MoE | `moe.enabled` (**true**), `moe.num_experts` (8), `moe.top_k` (2) | Replaces dense FFN with top-k expert routing |
 | Mixture-of-Depths | `mixture_of_depths.enabled` (false), `capacity_ratio` (0.5), `router_aux_loss_weight` (0.0) | Top-`capacity_ratio` tokens are updated; skipped tokens bypass the block. **Mutually exclusive with mHC** |
 | SSMax | `ssmax.enabled` (false), `ssmax.s_init` (1.0) | Per-head learnable logit rescale `s·ln(n)` |
+| Fixed numerics | `numerics.fixed_softmax` (false), `numerics.fixed_cross_entropy` (false) | Cancellation-free softmax/log-softmax and zero-sum-gradient hard-target CE (arXiv:2610.31642) |
 | BitNet | `bitnet.enabled` (**true**), `bitnet.routers` (false), `bitnet.conv` (false) | Ternary `BitLinear` projections; routers/conv opt-in |
+
+**Fixed numerics (arXiv:2610.31642).** `numerics.fixed_softmax` swaps every
+explicit softmax/log-softmax (all attention mixers, MoE/MoD routers, AttnRes
+depth-wise softmax, KV-cache recompute paths and decoder sampling) for
+`src/model/numerics.py::fixed_softmax`, which excludes the argmax logit from
+the log-sum-exp and combines the margin with `softplus`. Forward values are
+mathematically identical; the backward pass keeps the argmax softmax Jacobian
+at its true magnitude `~e^{-m}` past the dtype's precision cliff (≈5.5 bf16 /
+16.6 fp32 / 36.7 fp64), where the standard implementation rounds it to zero
+(Softmax Collapse). `numerics.fixed_cross_entropy` swaps the hard-target task
+losses (mlm, causal_lm, classification, segmentation, text_classification,
+patch_prediction) for `fixed_cross_entropy`, whose target gradient equals
+minus the sum of the non-target gradients by construction, so the gradient
+sums to zero at any margin. Soft-target/distillation CE (Softmax Cancellation)
+is not used by this codebase and is therefore out of scope. The internal SSOG
+LSE kernels keep their own formulation. `HybridLayer` attaches the resolved
+flag as `mixer.use_fixed_softmax`; the residual factory does the same for
+AttnRes modules, mirroring the SSMax `getattr` pattern.
 
 ### 7.8 Residuals, mHC and Hyperloop (`model.residuals.*`, `model.mhc.*`)
 

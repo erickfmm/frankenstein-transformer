@@ -22,6 +22,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk
 
@@ -223,7 +224,7 @@ class SparseKAttention(nn.Module):
             q_pos = torch.arange(seq_len, device=x.device).view(1, 1, seq_len, 1)
             k_pos = top_idx.unsqueeze(2).expand_as(scores)
             scores = scores.masked_fill(k_pos > q_pos, float("-inf"))
-        attn = F.softmax(scores, dim=-1)
+        attn = module_softmax(self, scores, dim=-1)
         attn = self.dropout(attn)
 
         out = torch.matmul(attn, v_sel).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)

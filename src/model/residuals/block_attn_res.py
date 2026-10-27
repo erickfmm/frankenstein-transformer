@@ -46,6 +46,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 import torch
+from ..numerics import module_softmax
 import torch.nn as nn
 import torch.utils.checkpoint
 
@@ -268,15 +269,15 @@ class BlockAttentionResidual(ResidualBase):
         if self.n_streams > 1:
             if self.mhc_stream_mode == "independent":
                 logits = torch.einsum("d,ibsmd->ibsm", q, keys)
-                attn = torch.softmax(logits, dim=0)
+                attn = module_softmax(self, logits, dim=0)
                 out = torch.einsum("ibsm,ibsmd->bsmd", attn, stacked)
             else:  # "joint"
                 logits = torch.einsum("d,ibsmd->ibsm", q, keys)
-                attn = torch.softmax(logits, dim=0)
+                attn = module_softmax(self, logits, dim=0)
                 out = torch.einsum("ibsm,ibsmd->bsmd", attn, stacked)
         else:
             logits = torch.einsum("d,ibsd->ibs", q, keys)
-            attn = torch.softmax(logits, dim=0)
+            attn = module_softmax(self, logits, dim=0)
             out = torch.einsum("ibs,ibsd->bsd", attn, stacked)
         return out
 

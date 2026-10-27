@@ -24,6 +24,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk
 
@@ -226,7 +227,7 @@ class NSAAttention(nn.Module):
             c_len = comp_k.shape[2]
             causal_c = torch.triu(torch.ones(seq_len, c_len, device=x.device, dtype=torch.bool), diagonal=1)
             comp_scores = comp_scores.masked_fill(causal_c.unsqueeze(0).unsqueeze(0), float("-inf"))
-        comp_attn = F.softmax(comp_scores, dim=-1)
+        comp_attn = module_softmax(self, comp_scores, dim=-1)
         out_comp = torch.matmul(comp_attn, comp_v)
 
         block_importance = comp_attn.mean(dim=1).mean(dim=1)
@@ -245,14 +246,14 @@ class NSAAttention(nn.Module):
         v_sel = v.gather(2, sel_idx)
 
         sel_scores = torch.matmul(q, k_sel.transpose(-2, -1)) * self.scale
-        sel_attn = F.softmax(sel_scores, dim=-1)
+        sel_attn = module_softmax(self, sel_scores, dim=-1)
         out_sel = torch.matmul(sel_attn, v_sel)
 
         win_size = min(self.window_size, seq_len)
         k_win = k[:, :, -win_size:, :]
         v_win = v[:, :, -win_size:, :]
         win_scores = torch.matmul(q, k_win.transpose(-2, -1)) * self.scale
-        win_attn = F.softmax(win_scores, dim=-1)
+        win_attn = module_softmax(self, win_scores, dim=-1)
         out_win = torch.matmul(win_attn, v_win)
 
         gates = self.gate(q.mean(dim=2))

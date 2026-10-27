@@ -29,6 +29,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk, dense_attention_forward
 
@@ -217,7 +218,7 @@ class SpargeAttention(nn.Module):
         scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
         scores = scores.masked_fill(~full_mask, float("-inf"))
 
-        attn = F.softmax(scores, dim=-1)
+        attn = module_softmax(self, scores, dim=-1)
         attn = self.dropout(attn)
 
         attn_blocks = attn.view(bsz, self.num_heads, n_blocks, bs, n_blocks, bs)

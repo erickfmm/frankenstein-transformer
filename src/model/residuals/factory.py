@@ -93,6 +93,9 @@ def build_residual(config: FrankensteinModelConfig) -> ResidualBase:
         raise ValueError(f"Unhandled residual_type: {residual_type!r}")
 
     mod.set_streams(n_streams)
+    # Transversal fixed-numerics opt-in (arXiv:2610.31642): depth-wise attention
+    # residuals compute explicit softmax over layers.
+    mod.use_fixed_softmax = bool(getattr(config, "fixed_softmax", False))
     return mod
 
 

@@ -206,6 +206,17 @@ class FrankensteinModelConfig:
             Default: False.
         ssmax_s_init: Initial value for the per-head SSMax scalar ``s``.
             Only used when ``use_ssmax=True``. Default: 1.0.
+        fixed_softmax: Replace every explicit softmax/log-softmax in the model
+            with the cancellation-free formulation of arXiv:2610.31642
+            (exclude the argmax logit from the log-sum-exp; combine the margin
+            with ``softplus``). Forward values are mathematically identical;
+            the softmax Jacobian keeps its true magnitude past the precision
+            cliff (Softmax Collapse). Default: False.
+        fixed_cross_entropy: Replace the task cross-entropy losses (mlm,
+            causal_lm, classification, segmentation, text_classification,
+            patch_prediction) with the hard-target formulation of
+            arXiv:2610.31642 §2, whose gradient sums to zero by construction at
+            any logit margin. Default: False.
         bam_learn_mu: If True, the BAM location parameter ``theta_mu`` is
             learnable. Default False (mu=0) per the paper's ablation H.1.
         bam_theta_init: Initial value for BAM ``theta_alpha``/``theta_beta``.
@@ -474,6 +485,16 @@ class FrankensteinModelConfig:
     # ``ssmax_s_init``) rescales the attention logits before softmax.
     use_ssmax: bool = False
     ssmax_s_init: float = 1.0
+
+    # ---- Fixed numerics (arXiv:2610.31642) ----
+    # Barron, Gnanapragasam & Tschannen, "A Fix for Softmax and Cross-Entropy".
+    # ``fixed_softmax`` swaps every explicit softmax/log-softmax for the
+    # cancellation-free formulation (argmax excluded from the log-sum-exp,
+    # margin combined with ``softplus``); ``fixed_cross_entropy`` swaps the
+    # hard-target task losses for the zero-sum-gradient CE. See
+    # ``src/model/numerics.py``.
+    fixed_softmax: bool = False
+    fixed_cross_entropy: bool = False
 
     # ---- BAM: Bayesian Attention Mechanism (arXiv:2505.22842) ----
     # Generalized-Gaussian relative-position bias added to attention scores

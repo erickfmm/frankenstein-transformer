@@ -19,6 +19,7 @@ import torch.nn.functional as F
 
 from .config import FrankensteinModelConfig
 from .attention.common import BitLinear
+from .numerics import module_softmax
 from .norm import FlashNormBitLinear, FlashNormLinear, get_norm
 from .activation_function import (
     GLU_VARIANTS,
@@ -233,6 +234,11 @@ class HybridLayer(nn.Module):
             raise ValueError(
                 f"Unknown layer_type '{layer_type}'. Supported values: {supported_layers}"
             )
+
+        # Transversal fixed-numerics opt-in (arXiv:2610.31642): attached here so
+        # every mixer (and the KV-cache hooks that receive it) can dispatch its
+        # explicit softmax/log-softmax through ``numerics.module_softmax``.
+        self.mixer.use_fixed_softmax = bool(getattr(config, "fixed_softmax", False))
 
         self.norm2 = get_norm(config)
         is_glu = config.ffn_activation in GLU_VARIANTS
@@ -460,7 +466,7 @@ class HybridLayer(nn.Module):
 
         if self.use_moe:
             logits = self.router(x)
-            weights, indices = torch.topk(F.softmax(logits, dim=-1), self.top_k, dim=-1)
+            weights, indices = torch.topk(module_softmax(self, logits, dim=-1), self.top_k, dim=-1)
 
             batch_size, seq_len, dim = x.shape
             flat_x = x.view(-1, dim)
@@ -571,7 +577,7 @@ class HybridLayer(nn.Module):
         ffn_in = self.norm2(fpre)
         if self.use_moe:
             logits = self.router(ffn_in)
-            weights, indices = torch.topk(F.softmax(logits, dim=-1), self.top_k, dim=-1)
+            weights, indices = torch.topk(module_softmax(self, logits, dim=-1), self.top_k, dim=-1)
             batch_size, seq_len, dim = ffn_in.shape
             flat_x = ffn_in.view(-1, dim)
             out = torch.zeros_like(flat_x)

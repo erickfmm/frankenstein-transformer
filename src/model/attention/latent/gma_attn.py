@@ -75,6 +75,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_log_softmax, module_softmax
 
 from ..common import BitLinear
 
@@ -243,7 +244,7 @@ class GaussianMixtureAttention(nn.Module):
 
         # s_{i,k} = log pi_k - 0.5 * (d_r * log(2 pi) + sum_m log sigma^2_m
         #                            + sum_m (x-mu)^2_m / sigma^2_m)
-        log_pi = F.log_softmax(self.alpha, dim=-1)            # (H, K)
+        log_pi = module_log_softmax(self, self.alpha, dim=-1)            # (H, K)
         log_pi_exp = log_pi_exp = log_pi.unsqueeze(0).unsqueeze(0)  # (1, 1, H, K)
 
         const = -0.5 * (
@@ -264,7 +265,7 @@ class GaussianMixtureAttention(nn.Module):
             ``K`` sums to 1.
         """
         scores = self._log_density_scores(x)                  # (B, N, H, K)
-        return scores.softmax(dim=-1)
+        return module_softmax(self, scores, dim=-1)
 
     # ------------------------------------------------------------------
     # Forward

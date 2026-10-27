@@ -5,7 +5,8 @@ description: |-
   `base_model` is not set). Organized into hierarchical sub-objects: `dims` (core dimensions
   and layer pattern), `norm` (normalization), `embedding` (factorized embeddings and conv),
   `attention` (per-mixer configuration), `moe`, `bitnet`, `mixture_of_depths`, `ssmax`,
-  `ffn` (feed-forward), and `classification_head` — plus `mhc` and `residuals`.
+  `numerics` (fixed softmax / cross-entropy), `ffn` (feed-forward), and
+  `classification_head` — plus `mhc` and `residuals`.
 
   **Examples explained:**
   - Typical BERT-base style: `dims.hidden_size=768, dims.num_layers=12, dims.num_heads=12, ffn.hidden_size=3072` — ~110M params, good starting point for MLM pre-training.
@@ -17,8 +18,8 @@ description_es: |-
   cero (cuando `base_model` no está configurado). Organizado en sub-objetos jerárquicos: `dims`
   (dimensiones núcleo y patrón de capas), `norm` (normalización), `embedding` (embeddings
   factorizados y conv), `attention` (configuración por mixer), `moe`, `bitnet`,
-  `mixture_of_depths`, `ssmax`, `ffn` (feed-forward) y `classification_head` — además de
-  `mhc` y `residuals`.
+  `mixture_of_depths`, `ssmax`, `numerics` (softmax / cross-entropy corregidos), `ffn`
+  (feed-forward) y `classification_head` — además de `mhc` y `residuals`.
 
   **Ejemplos explicados:**
   - Estilo BERT-base típico: `dims.hidden_size=768, dims.num_layers=12, dims.num_heads=12, ffn.hidden_size=3072` — ~110M params, buen punto de partida para preentrenamiento MLM.
@@ -100,6 +101,8 @@ properties:
     $ref: "_model/_mixture_of_depths.yaml"
   ssmax:
     $ref: "_model/_ssmax.yaml"
+  numerics:
+    $ref: "_model/_numerics.yaml"
   ffn:
     $ref: "_model/_ffn.yaml"
   classification_head:

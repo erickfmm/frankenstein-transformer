@@ -26,6 +26,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
@@ -167,6 +168,7 @@ class GatedSoftmaxAttention(nn.Module):
                 normalize=None,
                 dropout=self.dropout,
                 causal=True,
+                use_fixed_softmax=self.use_fixed_softmax,
             )
             sdpa_out = attended.permute(0, 2, 1, 3).reshape(bsz, seq_len, self.total_dim)
             gate = torch.sigmoid(self.gate_proj(x))
@@ -179,7 +181,7 @@ class GatedSoftmaxAttention(nn.Module):
             causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1)
             attn = attn.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
         attn = apply_pe_to_scores(pe, self.pe_type, attn, q, self.use_pe)
-        attn = F.softmax(attn, dim=-1)
+        attn = module_softmax(self, attn, dim=-1)
         attn = self.dropout(attn)
 
         sdpa_out = (attn @ v).permute(0, 2, 1, 3).reshape(bsz, seq_len, self.total_dim)
