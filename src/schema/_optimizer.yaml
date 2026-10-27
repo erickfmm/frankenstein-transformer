@@ -37,6 +37,7 @@ properties:
       | `sophia` | Robust training | Hessian-aware with diagonal preconditioning |
       | `muon` | Stable training | Layer-wise momentum with orthogonalization |
       | `turbo_muon` | Faster muon | Accelerated with Nesterov-spectral |
+      | `af_muon` | AdamW-free tied-vocab models | Spectral matrices + capped-row LMO table + RMS vectors |
       | `radam` | Adaptive warmup | Rectified Adam, automatic warmup |
       | `adan` | Nesterov-accelerated | Adaptive with Nesterov, 3 buffers |
       | `adopt` | Momentum-based | Decoupled gradient/variance, optimal convergence |
@@ -72,6 +73,7 @@ properties:
       | `sophia` | Entrenamiento robusto | Consciente del Hessiano |
       | `muon` | Entrenamiento estable | Momentum por capa |
       | `turbo_muon` | Muon acelerado | Acelerado con Nesterov-espectral |
+      | `af_muon` | Modelos con vocabulario atado sin AdamW | Matrices espectrales + LMO por fila con tope + vectores RMS |
       | `radam` | Warmup adaptativo | Rectified Adam |
       | `adan` | Acelerado con Nesterov | Adaptativo con Nesterov |
       | `adopt` | Basado en momentum | Momentum adaptativo con convergencia óptima |
@@ -104,6 +106,7 @@ properties:
       - sophia
       - muon
       - turbo_muon
+      - af_muon
       - radam
       - adan
       - adopt
@@ -128,7 +131,7 @@ properties:
       with the optimizer class name. Format: `<optimizer>-<param_group>_<hyperparam>=value`.
 
       **Shared suffixes** (all optimizers):
-      - `lr_*`: Learning rate per group (embeddings, norms, attention, other)
+      - `lr_*`: Learning rate per group (embeddings, pos, attention, ffn, norms, head, mhc, router, residual, other)
       - `wd_*`: Weight decay per group
       - `betas_*`: Adam-style beta1/beta2 per group
       - `eps_*`: Epsilon per group
@@ -140,6 +143,7 @@ properties:
       - `prodigy`: `d_coef`
       - `sophia`: `rho`, `update_k`
       - `muon`/`turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
+      - `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
       - `cautious_adamw`: `cautious_clip`
       - `anon`: `gamma`
       - `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
@@ -155,13 +159,17 @@ properties:
       prefijo de la clase del optimizador. Formato: `<optimizador>-<grupo>_<hiperparam>=valor`.
 
       **Sufijos compartidos** (todos los optimizadores):
-      - `lr_*`: Learning rate por grupo (embeddings, norms, attention, other)
+      - `lr_*`: Learning rate por grupo (embeddings, pos, attention, ffn, norms, head, mhc, router, residual, other)
       - `wd_*`: Weight decay por grupo
       - `betas_*`: Beta1/beta2 estilo Adam por grupo
       - `eps_*`: Epsilon por grupo
 
-      **Grupos:** embeddings (embeddings de tokens), norms (capas de normalización),
-      attention (atención), other (resto: FFN, ruteo, etc.).
+      **Grupos:** `embeddings` (tabla de tokens), `pos` (encodings posicionales
+      aprendidos), `attention` (mixers y sus parámetros internos), `ffn` (FFN y
+      expertos MoE), `norms` (normalizaciones de bloque), `head` (heads de
+      tarea), `mhc` (mHC e Hyperloop), `router` (routers MoE/MoD), `residual`
+      (AttnRes) y `other` (resto). Coinciden con la taxonomía del estimador de
+      parámetros y de las columnas `grad_norm_<bloque>` del logging.
 
       **Sufijos específicos por optimizador** (ver `x_parameter_reference.by_optimizer`):
       - `sgd_momentum`: `momentum`, `nesterov`
@@ -170,6 +178,7 @@ properties:
       - `prodigy`: `d_coef`
       - `sophia`: `rho`, `update_k`
       - `muon`/`turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
+      - `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
       - `cautious_adamw`: `cautious_clip`
       - `anon`: `gamma`
       - `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
@@ -181,20 +190,44 @@ properties:
     x_parameter_reference:
       shared_per_group_suffixes:
         - lr_embeddings
-        - lr_norms
+        - lr_pos
         - lr_attention
+        - lr_ffn
+        - lr_norms
+        - lr_head
+        - lr_mhc
+        - lr_router
+        - lr_residual
         - lr_other
         - wd_embeddings
-        - wd_norms
+        - wd_pos
         - wd_attention
+        - wd_ffn
+        - wd_norms
+        - wd_head
+        - wd_mhc
+        - wd_router
+        - wd_residual
         - wd_other
         - betas_embeddings
-        - betas_norms
+        - betas_pos
         - betas_attention
+        - betas_ffn
+        - betas_norms
+        - betas_head
+        - betas_mhc
+        - betas_router
+        - betas_residual
         - betas_other
         - eps_embeddings
-        - eps_norms
+        - eps_pos
         - eps_attention
+        - eps_ffn
+        - eps_norms
+        - eps_head
+        - eps_mhc
+        - eps_router
+        - eps_residual
         - eps_other
       by_optimizer:
         sgd_momentum:
@@ -233,6 +266,10 @@ properties:
           prefix: "turbo_muon-"
           supports_shared_per_group_suffixes: true
           specific_global_suffixes: [momentum, nesterov, ns_steps, ns_eps]
+        af_muon:
+          prefix: "af_muon-"
+          supports_shared_per_group_suffixes: true
+          specific_global_suffixes: [momentum, nesterov, ns_steps, ns_eps, vector_lr, tied_cap, tied_scale, rho_hidden, rho_output, chunk_rows, bisection_steps, max_bracket_steps]
         radam:
           prefix: "radam-"
           supports_shared_per_group_suffixes: true

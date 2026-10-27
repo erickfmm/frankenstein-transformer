@@ -38,6 +38,7 @@ from .config import FrankensteinModelConfig
 from .hybrid_layer import HybridLayer
 from .hyperloop import HyperloopConnections
 from .attention.common import BitLinear
+from .optimizer.base import categorize_param_groups
 from .embeddings import build_pos_encoder, LearnedAbsolutePE, SinusoidalAbsolute
 from .norm import get_norm
 from .residuals import ResidualBase, build_residual
@@ -548,22 +549,13 @@ class FrankensteinViT(nn.Module):
     def configure_optimizers(self) -> List[Dict[str, Any]]:
         """Return named parameter groups for :func:`build_optimizer`.
 
-        Groups: ``embeddings`` (patch_embed, pos_embed, cls_token, mask_token),
-        ``norms``, ``attention``, ``other`` (FFN, head, upsampler).
+        Groups follow the canonical block taxonomy shared with the parameter
+        estimator and the per-block gradient-norm logs (``embeddings``,
+        ``pos``, ``attention``, ``ffn``, ``norms``, ``head``, ``mhc``,
+        ``router``, ``residual``, ``other``). Every group is returned even
+        when empty, preserving the previous behavior of this method.
         """
-        groups: Dict[str, List[torch.nn.Parameter]] = {
-            "embeddings": [], "norms": [], "attention": [], "other": [],
-        }
-        for name, param in self.named_parameters():
-            if not param.requires_grad:
-                continue
-            if any(k in name for k in
-                   ["patch_embed", "pos_encoder", "pos_embed", "cls_token", "mask_token"]):
-                groups["embeddings"].append(param)
-            elif "norm" in name or "final_norm" in name:
-                groups["norms"].append(param)
-            elif "layers" in name and "mixer" in name:
-                groups["attention"].append(param)
-            else:
-                groups["other"].append(param)
-        return [{"params": g, "name": k} for k, g in groups.items()]
+        groups = categorize_param_groups(
+            self.named_parameters(), drop_empty=False
+        )
+        return [{"params": params, "name": name} for name, params in groups.items()]

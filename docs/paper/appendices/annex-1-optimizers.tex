@@ -1094,6 +1094,65 @@ Turbo-Muon adds an \textbf{almost-orthogonal preconditioning} (AOL) step before 
 \item Retains orthogonalized update geometry at lower iteration cost.
 \end{itemize}
 
+\paragraph{AF-Muon (AdamW-Free Tied-Embedding Muon).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/optimizers/af-muon.pdf}}
+\caption{Step flow of AF-Muon: Muon's spectral update for hidden matrices, a support-aware finite-cap clipped-row LMO for the tied vocabulary table, and RMS-normalized updates for one-dimensional auxiliary parameters, all with a single first-moment buffer.}
+\label{fig:opt-af-muon}
+\end{figure}
+AF-Muon is an \textbf{AdamW-free extension of Muon} that removes the auxiliary AdamW fallback of the Hybrid Muon recipe by giving every parameter class its own norm-constrained geometry. Hidden matrices keep the spectral update with a Nesterov signal; the vocabulary table, which simultaneously receives sparse input-lookup and dense output-softmax gradients, is updated row by row with a \emph{support-aware finite-cap linear minimization oracle}; one-dimensional auxiliary tensors receive an RMS-normalized update. No parameter class carries second-moment state, so a single first-moment buffer per parameter replaces the AdamW state of the hybrid recipe, which the authors report as roughly 20\% less optimizer-state memory at matched training.
+
+For the tied table $W \in \mathbb{R}^{V \times d}$ with momentum row $b_i$, the oracle solves the row problem
+\begin{align}
+u_i &= \operatorname{sign}(b_i) \odot \min\left(c\,\mathbf{1},\ \tau_i\,|b_i|\right), \\
+\|u_i\|_2^2 &= \min\left(d,\ c^2\,\bigl|\operatorname{supp}(b_i)\bigr|\right),
+\end{align}
+where the per-row scale $\tau_i$ is obtained by bisection in FP32 over complete-row chunks. Rows whose support cannot fill the row-$\ell_2$ radius saturate every useful coordinate at the cap $c$, so sparse lookup rows are handled without inflating absent coordinates. The cap interpolates between two known endpoints: $c = 1$ recovers the SCION-style Sign update and $c \geq \sqrt{d}$ reduces to a row-RMS update. The tied step size is $\eta_{tie} = \eta_M (\rho_{out}/\rho_{hid})\, s / d$; the paper's main setting is $c = 3$ and $s = 0.5$ with $\rho_{out}/\rho_{hid} = 60$, and its diagnostics report the finite cap active on under 0.3\% of coordinates while affecting most rows.
+
+\begin{algorithm}[H]
+\caption{AF-Muon (AdamW-Free Tied-Embedding Muon)}
+\label{alg:af-muon}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta$, matrix LR $\eta_M$, vector LR $\eta_{vec}$, momentum $\mu$, matrix weight decay $\lambda_M$, tied scale $s$, cap $c$, radii $\rho_{out}, \rho_{hid}$, Newton-Schulz iters $K$
+\Ensure Updated parameters $\theta_T$
+\For{each parameter tensor $W$ with gradient $G_t$}
+    \If{$W$ is a hidden matrix in $\mathbb{R}^{m \times n}$}
+        \State $M_t \gets \mu M_{t-1} + (1-\mu) G_t$ \Comment{First moment}
+        \State $Z_t \gets (1-\mu) G_t + \mu M_t$ \Comment{Nesterov signal}
+        \State $O_t \gets \mathrm{NS}_K(Z_t)\sqrt{\max(1, m/n)}$ \Comment{Spectral update}
+        \State $W_t \gets (1 - \eta_M \lambda_M) W_{t-1} - \eta_M O_t$
+    \ElsIf{$W \in \mathbb{R}^{V \times d}$ is the tied vocabulary table}
+        \State $B_t \gets \mu B_{t-1} + G_t$ \Comment{Unnormalized first moment}
+        \State $\eta_{tie,t} \gets \eta_M (\rho_{out}/\rho_{hid}) s / d$
+        \For{each row $i = 1, \ldots, V$}
+            \State $u_i \gets L_c\bigl(\mathrm{row}_i(B_t)\bigr)$ \Comment{Capped-row LMO}
+        \EndFor
+        \State $W_t \gets W_{t-1} - \eta_{tie,t} U$
+    \Else
+        \State $B_t \gets \mu B_{t-1} + G_t$ \Comment{$1$D auxiliary tensor}
+        \State $O_t \gets B_t / \max(\mathrm{RMS}(B_t), \epsilon)$
+        \State $W_t \gets W_{t-1} - \eta_{vec} O_t$
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item Every parameter must be assigned an explicit role (matrix, tied table, or vector); an untied output head or an extra embedding table is not a tied-table block.
+\item The tied-table oracle requires a per-row bisection with complete-row chunking; the paper reports roughly 1\% median step-time overhead at matched training.
+\item The tied-table claim is established for tied-vocabulary models; frontier-scale pretraining and universal endpoint superiority are not claimed.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item AdamW-free: one first-moment buffer per parameter and no second-moment state, reported as roughly 20\% less optimizer-state memory than Hybrid Muon.
+\item The finite cap preserves within-row magnitudes while bounding coordinate concentration, and recovers Sign ($c=1$) and row-RMS ($c \geq \sqrt{d}$) as limit cases.
+\item Improves mean validation loss and perplexity over both Hybrid Muon and a SCION-style Sign endpoint across nine tied-token settings spanning text, image-token, protein, MoE, and encoder-decoder models.
+\end{itemize}
+
 \small
 \begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
 \toprule
@@ -1105,7 +1164,7 @@ Momentum redesign & Adan, AdEMAMix, MARS, Cautious AdamW & faster or safer first
 Large-batch and schedule simplification & LAMB, Schedule-Free AdamW & operational robustness at scale & Reduce brittleness from batch-size growth or schedule engineering. \\
 Memory-efficient & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & optimizer-state reduction & Most useful when VRAM is dominated by optimizer state rather than activations; APOLLO-family methods replace dense AdamW moments with projected or quantized structured scaling. \\
 Curvature-aware & Shampoo, SOAP, Sophia & better conditioning & Prefer when richer geometry is worth implementation and compute overhead. \\
-Geometry-oriented & Muon, Turbo-Muon & orthogonalized update structure & Specialized options for matrix geometry and representation shaping. \\
+Geometry-oriented & Muon, Turbo-Muon, AF-Muon & orthogonalized update structure & Specialized options for matrix geometry and representation shaping; AF-Muon assigns the tied vocabulary table a capped-row table geometry and one-dimensional parameters an RMS update, with no AdamW auxiliary state. \\
 \bottomrule
 \end{longtable}
 \normalsize

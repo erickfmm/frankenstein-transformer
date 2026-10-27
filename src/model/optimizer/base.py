@@ -11,13 +11,28 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Tuple
 
+from src.utils.param_categories import categorize_param
+
 GROUP_NAMES: Tuple[str, ...] = (
     "embeddings",
-    "norms",
+    "pos",
     "attention",
+    "ffn",
+    "norms",
+    "head",
+    "mhc",
+    "router",
+    "residual",
     "other",
 )
 """Canonical parameter group taxonomy used by all optimizers.
+
+The names mirror :data:`src.utils.param_categories.BLOCK_CATEGORIES` — the
+single taxonomy shared by the website parameter estimator, the per-block
+gradient-norm logs (``grad_norm_<block>``) and optimizer group routing. The
+only intentional difference is ``norm`` → ``norms`` (plural), kept for
+backward compatibility with existing ``<optimizer>-lr_norms`` keys and
+presets.
 
 Each group name corresponds to a distinct architectural component of the
 Frankenstein model. The factory routes per-group hyperparameters (lr, wd,
@@ -25,12 +40,67 @@ betas, eps) by matching these names against prefixed keys in the training
 configuration.
 
 Group semantics:
-    embeddings: Token and position embedding matrices.
-    norms: LayerNorm, DynamicTanh, or Derf normalization parameters.
-    attention: Attention projection weights (Q, K, V, O) and recurrent /
-        state-space / ODE mixer parameters (retnet, mamba, ode, titan, ...).
+    embeddings: Token / patch embedding lookup tables.
+    pos: Learned positional encodings, cls/mask tokens.
+    attention: Mixers and everything nested inside them (projection weights,
+        QK-norms, recurrent / state-space / ODE parameters such as retnet,
+        mamba or titan).
+    ffn: Feed-forward bodies and MoE experts.
+    norms: Standalone block normalization parameters (LayerNorm, DynamicTanh,
+        Derf, RMSNorm families).
+    head: Task / output heads (LM head, classification and segmentation
+        heads).
+    mhc: Manifold-constrained hyper-connections and Hyperloop parameters.
+    router: MoE and Mixture-of-Depths routers.
+    residual: AttnRes residual modules.
     other: All remaining parameters not assigned to a specific group.
 """
+
+BLOCK_TO_GROUP: Dict[str, str] = {
+    "embeddings": "embeddings",
+    "pos": "pos",
+    "attention": "attention",
+    "ffn": "ffn",
+    "norm": "norms",
+    "head": "head",
+    "mhc": "mhc",
+    "router": "router",
+    "residual": "residual",
+    "other": "other",
+}
+"""Maps :data:`BLOCK_CATEGORIES` entries to :data:`GROUP_NAMES` entries.
+
+``categorize_param`` returns ``norm`` while the optimizer-facing group name is
+the historical plural ``norms``; every other category maps to itself.
+"""
+
+DEFAULT_GROUP_LR: Dict[str, float] = {
+    "embeddings": 1e-6,
+    "pos": 2e-6,
+    "attention": 3e-6,
+    "ffn": 2e-6,
+    "norms": 5e-6,
+    "head": 2e-6,
+    "mhc": 3e-6,
+    "router": 2e-6,
+    "residual": 2e-6,
+    "other": 2e-6,
+}
+"""Default learning rate per group, used when no scoped override is given."""
+
+DEFAULT_GROUP_WD: Dict[str, float] = {
+    "embeddings": 0.01,
+    "pos": 0.01,
+    "attention": 0.01,
+    "ffn": 0.01,
+    "norms": 0.001,
+    "head": 0.01,
+    "mhc": 0.01,
+    "router": 0.01,
+    "residual": 0.01,
+    "other": 0.01,
+}
+"""Default weight decay per group, used when no scoped override is given."""
 
 
 def to_float(value: Any, default: float) -> float:
@@ -192,3 +262,43 @@ def with_named_groups(param_groups: List[Dict[str, Any]]) -> List[Dict[str, Any]
             copied["name"] = "other"
         named_groups.append(copied)
     return named_groups
+
+
+def categorize_param_groups(
+    named_parameters: Iterable[Tuple[str, Any]],
+    *,
+    drop_empty: bool = True,
+) -> Dict[str, List[Any]]:
+    """Group model parameters with the canonical block categorizer.
+
+    Uses :func:`src.utils.param_categories.categorize_param` — the same
+    taxonomy as the website parameter estimator and the ``grad_norm_<block>``
+    training logs — and maps every ``BLOCK_CATEGORIES`` entry onto its
+    :data:`GROUP_NAMES` counterpart (``norm`` → ``norms``). Parameters that
+    do not require gradients are skipped.
+
+    Args:
+        named_parameters: Iterable of ``(name, parameter)`` pairs, typically
+            ``model.named_parameters()``.
+        drop_empty: When ``True`` (default) groups without parameters are
+            omitted, so the result can be passed straight to
+            :func:`build_optimizer`. When ``False`` every :data:`GROUP_NAMES`
+            entry is present, possibly with an empty parameter list.
+
+    Returns:
+        A dictionary keyed by :data:`GROUP_NAMES` entries whose values are
+        lists of parameters.
+
+    Raises:
+        KeyError: If the categorizer returns a block that has no group
+            mapping, which would indicate a taxonomy drift between
+            ``param_categories.BLOCK_CATEGORIES`` and :data:`GROUP_NAMES`.
+    """
+    groups: Dict[str, List[Any]] = {name: [] for name in GROUP_NAMES}
+    for name, param in named_parameters:
+        if not param.requires_grad:
+            continue
+        groups[BLOCK_TO_GROUP[categorize_param(name)]].append(param)
+    if drop_empty:
+        return {name: params for name, params in groups.items() if params}
+    return groups

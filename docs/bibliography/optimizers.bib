@@ -281,6 +281,22 @@
 	keywords = {Artificial Intelligence (cs.{AI}), {FOS}: Computer and information sciences},
 }
 
+@misc{lagzian_afmuon_2026,
+	title = {{AF-Muon}: An {AdamW}-Free Muon Optimizer for Tied-Embedding Models},
+	rights = {{arXiv}.org perpetual, non-exclusive license},
+	url = {https://arxiv.org/abs/2610.01395},
+	doi = {10.48550/ARXIV.2610.01395},
+	shorttitle = {{AF-Muon}},
+	abstract = {Muon improves large-scale training by applying a spectral-norm steepest-descent update to matrix parameters, but practical models also contain parameter blocks that do not fit dense-matrix geometry. One important case is the tied vocabulary table, which appears in language models and other token generators and can receive multiple structurally different gradient sources, from sparse input lookups to dense output-classifier updates. In the reference recipe these blocks are handed to an auxiliary AdamW optimizer, which restores second-moment state and updates the aliased table as a generic tensor. We propose AF-Muon, an AdamW-free extension of Muon that keeps the Muon matrix update for hidden weight matrices while using a support-aware finite-cap linear minimization oracle for tied vocabulary tables and an RMS-normalized update for one-dimensional auxiliary parameters. AF-Muon therefore trains every parameter class with a single first-moment buffer and no second-moment state, saving around 20\% optimizer-state memory relative to Hybrid Muon in our benchmark. Across nine tied-token settings -- decoder-only language models from 124M to 1B parameters, a fully shared T5-style encoder-decoder, and ImageGPT-style image-token, protein, and sparse-MoE variants, spanning text, image, and protein-sequence data -- AF-Muon improves mean validation loss and perplexity over both Hybrid Muon and a SCION-style Sign endpoint.},
+	publisher = {{arXiv}},
+	author = {Lagzian, Arash and Halvachi, Paniz and Zhang, Junming and Lin, Zhouhan and Liu, Dianbo},
+	urldate = {2026-10-27},
+	date = {2026},
+	year = {2026},
+	note = {Version Number: 1},
+	keywords = {{FOS}: Computer and information sciences, Machine Learning (cs.{LG}), Optimization and Control (math.{OC})},
+}
+
 @misc{zhu2025apollosgdlikememoryadamwlevel,
       title={APOLLO: SGD-like Memory, AdamW-level Performance}, 
       author={Hanqing Zhu and Zhenyu Zhang and Wenyan Cong and Xi Liu and Sem Park and Vikas Chandra and Bo Long and David Z. Pan and Zhangyang Wang and Jinwon Lee},

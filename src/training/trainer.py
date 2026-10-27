@@ -36,6 +36,11 @@ try:
         RESUME_AUTO,
     )
     from ..utils.param_categories import BLOCK_CATEGORIES, categorize_param
+    from ..model.optimizer.base import (
+        DEFAULT_GROUP_LR,
+        DEFAULT_GROUP_WD,
+        categorize_param_groups,
+    )
     from ..model.optimizer.factory import build_optimizer
     from ..model.numerics import fixed_cross_entropy, fixed_softmax
 except ImportError:
@@ -992,76 +997,27 @@ class TitanTrainer:
             group['lr'] = max(group['lr'] * factor, 1e-9)  # Lower floor to allow more aggressive reduction
     
     def _setup_optimizer(self) -> optim.Optimizer:
-        """Setup optimizer with parameter groups for different components"""
-        # Separate parameters by component type
-        titan_attn_params = []
-        norm_params = []
-        embed_params = []
-        other_params = []
-        mhc_params = []
-        
-        for name, param in self.model.named_parameters():
-            if not param.requires_grad:
-                continue
-                
-            if 'mhc' in name.lower() or 'manifold' in name.lower():
-                mhc_params.append(param)
-            elif ('titan_attn' in name.lower() or 'attention' in name.lower()
-                    or 'ode' in name.lower() or 'retention' in name.lower()
-                    or 'retnet' in name.lower() or 'mamba' in name.lower()):
-                titan_attn_params.append(param)
-            elif 'norm' in name.lower() or 'layer_norm' in name.lower():
-                norm_params.append(param)
-            elif 'embed' in name.lower():
-                embed_params.append(param)
-            else:
-                other_params.append(param)
-        
+        """Setup optimizer with per-block parameter groups.
+
+        Groups come from the canonical block taxonomy shared with the
+        parameter estimator and the per-block gradient-norm logs, so every
+        block (embeddings, pos, attention, ffn, norms, head, mhc, router,
+        residual, other) can be tuned independently through
+        ``<optimizer>-lr_<group>`` / ``<optimizer>-wd_<group>``.
+        """
         param_groups = [
             {
-                'params': embed_params,
-                'lr': 1e-6,
-                'weight_decay': 0.01,
+                'params': params,
+                'lr': DEFAULT_GROUP_LR[name],
+                'weight_decay': DEFAULT_GROUP_WD[name],
                 'betas': (0.9, 0.95),
                 'eps': 1e-8,
-                'name': 'embeddings'
-            },
-            {
-                'params': mhc_params,
-                'lr': 3e-6,
-                'weight_decay': 0.01,
-                'betas': (0.9, 0.95),
-                'eps': 1e-8,
-                'name': 'other'
-            },
-            {
-                'params': norm_params,
-                'lr': 5e-6,
-                'weight_decay': 0.001,
-                'betas': (0.9, 0.95),
-                'eps': 1e-8,
-                'name': 'norms'
-            },
-            {
-                'params': titan_attn_params,
-                'lr': 3e-6,
-                'weight_decay': 0.01,
-                'betas': (0.9, 0.95),
-                'eps': 1e-8,
-                'name': 'attention'
-            },
-            {
-                'params': other_params,
-                'lr': 2e-6,
-                'weight_decay': 0.01,
-                'betas': (0.9, 0.95),
-                'eps': 1e-8,
-                'name': 'other'
+                'name': name,
             }
+            for name, params in categorize_param_groups(
+                self.model.named_parameters()
+            ).items()
         ]
-        
-        # Filter out empty groups
-        param_groups = [group for group in param_groups if group['params']]
         
         # Log parameter distribution
         for group in param_groups:

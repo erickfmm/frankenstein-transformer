@@ -1,0 +1,11 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  G["G = ∇f(W)"]
+  matrix["hidden matrix (m×n):<br/>M ← μM + (1−μ)G<br/>Z ← (1−μ)G + μM<br/>O ← NS_K(Z)·√max(1, m/n)"]
+  tied["tied table (V×d):<br/>B ← μB + G<br/>uᵢ ← sign(bᵢ)·min(c, τᵢ|bᵢ|)<br/>η_tie = η(ρ_out/ρ_hid)s/d"]
+  vec["1D auxiliary:<br/>B ← μB + G<br/>O ← B/max(RMS(B), ε)"]
+  upd["W ← W − η·O"]
+
+  G --> matrix --> upd
+  G --> tied --> upd
+  G --> vec --> upd

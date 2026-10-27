@@ -1094,6 +1094,65 @@ Turbo-Muon añade un paso de \textbf{precondicionamiento casi-ortogonal} (AOL) a
 \item Conserva la geometría de actualización ortogonalizada con menor costo de iteraciones.
 \end{itemize}
 
+\paragraph{AF-Muon (Muon sin AdamW para Vocabulario Atado).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/af-muon.pdf}}
+\caption{Flujo por paso de AF-Muon: actualización espectral de Muon para matrices ocultas, LMO por fila con tope finito y conciencia de soporte para la tabla de vocabulario atada, y actualizaciones normalizadas por RMS para parámetros auxiliares unidimensionales, todo con un único búfer de primer momento.}
+\label{fig:opt-af-muon}
+\end{figure}
+AF-Muon es una \textbf{extensión de Muon sin AdamW} que elimina el respaldo auxiliar de AdamW de la receta Hybrid Muon asignando a cada clase de parámetro su propia geometría con restricción de norma. Las matrices ocultas conservan la actualización espectral con señal de Nesterov; la tabla de vocabulario, que recibe simultáneamente gradientes dispersos de búsqueda en la entrada y gradientes densos del softmax de salida, se actualiza fila por fila con un \emph{oráculo de minimización lineal con tope finito y conciencia de soporte}; los tensores auxiliares unidimensionales reciben una actualización normalizada por RMS. Ninguna clase de parámetro mantiene estado de segundo momento, de modo que un único búfer de primer momento por parámetro reemplaza el estado de AdamW de la receta híbrida, lo que los autores reportan como aproximadamente un 20\% menos de memoria de estado del optimizador en entrenamiento equiparado.
+
+Para la tabla atada $W \in \mathbb{R}^{V \times d}$ con fila de momento $b_i$, el oráculo resuelve el problema por fila
+\begin{align}
+u_i &= \operatorname{sign}(b_i) \odot \min\left(c\,\mathbf{1},\ \tau_i\,|b_i|\right), \\
+\|u_i\|_2^2 &= \min\left(d,\ c^2\,\bigl|\operatorname{supp}(b_i)\bigr|\right),
+\end{align}
+donde la escala por fila $\tau_i$ se obtiene por bisección en FP32 sobre fragmentos de filas completas. Las filas cuyo soporte no puede llenar el radio $\ell_2$ de fila saturan cada coordenada útil en el tope $c$, de modo que las filas dispersas de búsqueda se manejan sin inflar las coordenadas ausentes. El tope interpola entre dos extremos conocidos: $c = 1$ recupera la actualización Sign estilo SCION y $c \geq \sqrt{d}$ se reduce a una actualización row-RMS. El tamaño de paso de la tabla es $\eta_{tie} = \eta_M (\rho_{out}/\rho_{hid})\, s / d$; la configuración principal del artículo es $c = 3$ y $s = 0.5$ con $\rho_{out}/\rho_{hid} = 60$, y sus diagnósticos reportan el tope finito activo en menos del 0.3\% de las coordenadas aunque afecta a la mayoría de las filas.
+
+\begin{algorithm}[H]
+\caption{AF-Muon (Muon sin AdamW para Vocabulario Atado)}
+\label{alg:af-muon}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta$, LR de matrices $\eta_M$, LR de vectores $\eta_{vec}$, momento $\mu$, weight decay de matrices $\lambda_M$, escala de tabla $s$, tope $c$, radios $\rho_{out}, \rho_{hid}$, iteraciones Newton-Schulz $K$
+\Ensure Parámetros actualizados $\theta_T$
+\For{cada tensor de parámetros $W$ con gradiente $G_t$}
+    \If{$W$ es una matriz oculta en $\mathbb{R}^{m \times n}$}
+        \State $M_t \gets \mu M_{t-1} + (1-\mu) G_t$ \Comment{Primer momento}
+        \State $Z_t \gets (1-\mu) G_t + \mu M_t$ \Comment{Señal de Nesterov}
+        \State $O_t \gets \mathrm{NS}_K(Z_t)\sqrt{\max(1, m/n)}$ \Comment{Actualización espectral}
+        \State $W_t \gets (1 - \eta_M \lambda_M) W_{t-1} - \eta_M O_t$
+    \ElsIf{$W \in \mathbb{R}^{V \times d}$ es la tabla de vocabulario atada}
+        \State $B_t \gets \mu B_{t-1} + G_t$ \Comment{Primer momento sin normalizar}
+        \State $\eta_{tie,t} \gets \eta_M (\rho_{out}/\rho_{hid}) s / d$
+        \For{cada fila $i = 1, \ldots, V$}
+            \State $u_i \gets L_c\bigl(\mathrm{fila}_i(B_t)\bigr)$ \Comment{LMO por fila con tope}
+        \EndFor
+        \State $W_t \gets W_{t-1} - \eta_{tie,t} U$
+    \Else
+        \State $B_t \gets \mu B_{t-1} + G_t$ \Comment{Tensor auxiliar 1D}
+        \State $O_t \gets B_t / \max(\mathrm{RMS}(B_t), \epsilon)$
+        \State $W_t \gets W_{t-1} - \eta_{vec} O_t$
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Cada parámetro debe recibir un rol explícito (matriz, tabla atada o vector); un head de salida no atado o una tabla de embeddings adicional no son bloques de tabla atada.
+\item El oráculo de la tabla requiere bisección por fila con fragmentación de filas completas; el artículo reporta aproximadamente un 1\% de sobrecarga mediana por paso en entrenamiento equiparado.
+\item La afirmación sobre la tabla atada se establece para modelos con vocabulario atado; no se reclama preentrenamiento a escala frontera ni superioridad universal de los extremos.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Sin AdamW: un búfer de primer momento por parámetro y sin estado de segundo momento, reportado como aproximadamente un 20\% menos de memoria de estado del optimizador que Hybrid Muon.
+\item El tope finito preserva las magnitudes intra-fila mientras acota la concentración de coordenadas, y recupera Sign ($c=1$) y row-RMS ($c \geq \sqrt{d}$) como casos límite.
+\item Mejora la pérdida de validación y la perplejidad medias frente a Hybrid Muon y a un extremo Sign estilo SCION en nueve configuraciones de vocabulario atado que abarcan texto, tokens de imagen, proteínas, MoE y modelos encoder-decoder.
+\end{itemize}
+
 \small
 \begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
 \toprule
@@ -1105,7 +1164,7 @@ Rediseño de momento & Adan, AdEMAMix, MARS, Cautious AdamW & adaptación de pri
 Simplificación de lotes grandes y programación & LAMB, Schedule-Free AdamW & robustez operacional a escala & Reducen la fragilidad debida al crecimiento del tamaño de lote o la ingeniería de programación. \\
 Eficiencia de memoria & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & reducción del estado del optimizador & Más útil cuando la VRAM está dominada por el estado del optimizador en lugar de las activaciones; los métodos de la familia APOLLO reemplazan los momentos densos de AdamW con escalado estructurado proyectado o cuantizado. \\
 Consciente de curvatura & Shampoo, SOAP, Sophia & mejor condicionamiento & Preferir cuando una geometría más rica justifica la sobrecarga de implementación y cómputo. \\
-Orientado a geometría & Muon, Turbo-Muon & estructura de actualización ortogonalizada & Opciones especializadas para geometría matricial y modelado de representaciones. \\
+Orientado a geometría & Muon, Turbo-Muon, AF-Muon & estructura de actualización ortogonalizada & Opciones especializadas para geometría matricial y modelado de representaciones; AF-Muon asigna a la tabla de vocabulario atada una geometría de tabla con tope por fila y a los parámetros unidimensionales una actualización RMS, sin estado auxiliar de AdamW. \\
 \bottomrule
 \end{longtable}
 \normalsize

@@ -17,6 +17,7 @@ from .adafactor import Adafactor
 from .adan import Adan
 from .ademamix import AdEMAMix
 from .adopt import ADOPT
+from .af_muon import AFMuon
 from .anon import Anon
 from .apollo import Apollo
 from .apollo_mini import ApolloMini
@@ -56,6 +57,7 @@ OPTIMIZER_REGISTRY = {
     "sophia": Sophia,
     "muon": Muon,
     "turbo_muon": TurboMuon,
+    "af_muon": AFMuon,
     "radam": RAdamOptimizer,
     "adan": Adan,
     "adopt": ADOPT,
@@ -98,6 +100,21 @@ OPTIMIZER_ALLOWED_KEYS = {
     "sophia": _COMMON_PER_GROUP_KEYS | {"rho", "update_k"},
     "muon": _COMMON_PER_GROUP_KEYS | {"momentum", "nesterov", "ns_steps", "ns_eps"},
     "turbo_muon": _COMMON_PER_GROUP_KEYS | {"momentum", "nesterov", "ns_steps", "ns_eps"},
+    "af_muon": _COMMON_PER_GROUP_KEYS
+    | {
+        "momentum",
+        "nesterov",
+        "ns_steps",
+        "ns_eps",
+        "vector_lr",
+        "tied_cap",
+        "tied_scale",
+        "rho_hidden",
+        "rho_output",
+        "chunk_rows",
+        "bisection_steps",
+        "max_bracket_steps",
+    },
     "radam": _COMMON_PER_GROUP_KEYS,
     "adan": _COMMON_PER_GROUP_KEYS,
     "adopt": _COMMON_PER_GROUP_KEYS,
@@ -253,6 +270,35 @@ def build_optimizer(
             nesterov=nesterov,
             ns_steps=ns_steps,
             ns_eps=ns_eps,
+        )
+
+    if optimizer_name == "af_muon":
+        momentum = to_float(scoped.get("momentum"), 0.95)
+        nesterov = bool(scoped.get("nesterov", True))
+        ns_steps = to_int(scoped.get("ns_steps"), 5)
+        ns_eps = to_float(scoped.get("ns_eps"), 1e-7)
+        vector_lr = to_float(scoped.get("vector_lr"), 3e-4)
+        tied_cap = to_float(scoped.get("tied_cap"), 3.0)
+        tied_scale = to_float(scoped.get("tied_scale"), 0.5)
+        rho_hidden = to_float(scoped.get("rho_hidden"), 50.0)
+        rho_output = to_float(scoped.get("rho_output"), 3000.0)
+        chunk_rows = to_int(scoped.get("chunk_rows"), 2048)
+        bisection_steps = to_int(scoped.get("bisection_steps"), 32)
+        max_bracket_steps = to_int(scoped.get("max_bracket_steps"), 128)
+        return optimizer_cls(
+            converted_groups,
+            momentum=momentum,
+            nesterov=nesterov,
+            ns_steps=ns_steps,
+            ns_eps=ns_eps,
+            vector_lr=vector_lr,
+            tied_cap=tied_cap,
+            tied_scale=tied_scale,
+            rho_hidden=rho_hidden,
+            rho_output=rho_output,
+            chunk_rows=chunk_rows,
+            bisection_steps=bisection_steps,
+            max_bracket_steps=max_bracket_steps,
         )
 
     if optimizer_name in {"apollo", "q_apollo"}:

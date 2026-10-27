@@ -3,6 +3,7 @@ from .adafactor import Adafactor
 from .adan import Adan
 from .ademamix import AdEMAMix
 from .adopt import ADOPT
+from .af_muon import AFMuon
 from .apollo import Apollo
 from .apollo_mini import ApolloMini
 from .cautious_adamw import CautiousAdamW
@@ -24,6 +25,7 @@ from .turbo_muon import TurboMuon
 
 __all__ = [
     "ADOPT",
+    "AFMuon",
     "Apollo",
     "ApolloMini",
     "Adafactor",

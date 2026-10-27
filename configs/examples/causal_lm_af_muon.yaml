@@ -1,0 +1,74 @@
+# AF-Muon preset: AdamW-free Muon for tied-vocabulary language models.
+# Reference: Lagzian et al. (2026), "AF-Muon: An AdamW-Free Muon Optimizer
+# for Tied-Embedding Models", arXiv:2610.01395.
+#
+# Role routing (see src/model/optimizer/af_muon.py):
+#   * hidden 2-D matrices (attention, ffn, head, other, ...) -> Muon spectral
+#     update with lr = <group> lr and decoupled weight decay;
+#   * the 2-D vocabulary table in the `embeddings` group -> capped-row LMO
+#     with effective lr = lr_embeddings * (rho_output / rho_hidden)
+#     * tied_scale / hidden_size;
+#   * every 1-D/auxiliary tensor -> RMS-normalized update with `vector_lr`
+#     (no weight decay).
+#
+# With hidden_size=768 the tied-table step is
+#   0.02 * (3000 / 50) * 0.5 / 768 ~= 7.8e-4.
+model_class: frankenstein_text_decoder
+model:
+  dims:
+    vocab_size: 50000
+    hidden_size: 768
+    num_layers: 12
+    num_loops: 1
+    num_heads: 12
+    layer_pattern:
+    - standard_attn
+    mode: decoder
+  norm:
+    type: layer_norm
+  embedding:
+    conv:
+      enabled: false
+  attention:
+    retnet:
+      heads: 12
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+    activation: gelu
+  positional_encoding: rope
+training:
+  task: causal_lm
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 512
+  max_samples: 20000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: ./temp_data/v2_dataset_cache
+  optimizer:
+    optimizer_class: af_muon
+    parameters:
+      af_muon-lr_embeddings: 0.02
+      af_muon-lr_attention: 0.02
+      af_muon-lr_ffn: 0.02
+      af_muon-lr_head: 0.02
+      af_muon-lr_other: 0.02
+      af_muon-wd_attention: 0.1
+      af_muon-wd_ffn: 0.1
+      af_muon-wd_head: 0.1
+      af_muon-wd_other: 0.1
+      af_muon-momentum: 0.95
+      af_muon-ns_steps: 5
+      af_muon-vector_lr: 3e-4
+      af_muon-tied_cap: 3.0
+      af_muon-tied_scale: 0.5
+      af_muon-rho_hidden: 50.0
+      af_muon-rho_output: 3000.0
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  gradient_log_interval: 10

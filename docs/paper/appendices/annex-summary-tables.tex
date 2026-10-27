@@ -112,7 +112,7 @@ Table~\ref{tab:all-optimizers} catalogs all 23 supported optimizers with their m
 \multicolumn{6}{r}{\textit{continued on next page}} \\
 \endfoot
 \bottomrule
-\caption{Complete optimizer catalog. $n$ = number of parameters, $d$ = tensor dimensionality, $r$ = low-rank dimension, $k$ = Newton--Schulz iteration count. State buffers lists the number of optimizer state tensors maintained per parameter group.}
+\caption{Complete optimizer catalog. $n$ = number of parameters, $d$ = tensor dimensionality, $V$ = vocabulary size, $r$ = low-rank dimension, $k$ = Newton--Schulz iteration count, $I$ = per-row bisection iteration count. State buffers lists the number of optimizer state tensors maintained per parameter group.}
 \label{tab:all-optimizers}
 \endlastfoot
 
@@ -149,6 +149,7 @@ SOAP & Second-order & $2d + 2$ ($m$, $v$) & $\mathcal{O}(n^{1+1/d})$ & lr, $\bet
 Sophia & Curvature-aware & 3 ($m$, $v$, $h$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd, $k$ & \citep{liu_sophia_2023} \\
 Muon & Orthogonality & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, NS steps $k$ & \citep{shen_convergence_2025} \\
 Turbo-Muon & Orthogonality & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, NS steps $k$ & \citep{boissin_turbo-muon_2025} \\
+AF-Muon & AdamW-free tied table & 1 ($m$) & $\mathcal{O}(n \cdot k + V d\, I)$ & lr, momentum, wd, cap $c$, table scale $s$, $\rho_{out}/\rho_{hid}$, NS steps $k$ & \citep{lagzian_afmuon_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Low-Rank Adaptive \& Tunable Adaptivity}} \\

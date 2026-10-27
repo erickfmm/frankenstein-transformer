@@ -61,6 +61,14 @@ UI_STRINGS = {
         "en": "Parameters controlling token embedding matrix optimization.",
         "es": "Parámetros que controlan la optimización de la matriz de embeddings de tokens.",
     },
+    "pos_group": {
+        "en": "Positional Encodings",
+        "es": "Encodings Posicionales",
+    },
+    "pos_caption": {
+        "en": "Parameters for learned positional encodings and cls/mask tokens.",
+        "es": "Parámetros para encodings posicionales aprendidos y tokens cls/mask.",
+    },
     "normalization_group": {
         "en": "Normalization Layers",
         "es": "Capas de Normalización",
@@ -77,13 +85,53 @@ UI_STRINGS = {
         "en": "Parameters for attention mechanism optimization (all attention variants).",
         "es": "Parámetros para la optimización de mecanismos de atención (todas las variantes).",
     },
+    "ffn_group": {
+        "en": "Feed-Forward and Experts",
+        "es": "Feed-Forward y Expertos",
+    },
+    "ffn_caption": {
+        "en": "Parameters for feed-forward bodies and MoE expert weights.",
+        "es": "Parámetros para los cuerpos feed-forward y los pesos de expertos MoE.",
+    },
+    "head_group": {
+        "en": "Task Heads",
+        "es": "Heads de Tarea",
+    },
+    "head_caption": {
+        "en": "Parameters for output heads (LM, classification, segmentation).",
+        "es": "Parámetros para los heads de salida (LM, clasificación, segmentación).",
+    },
+    "mhc_group": {
+        "en": "mHC and Hyperloop",
+        "es": "mHC e Hyperloop",
+    },
+    "mhc_caption": {
+        "en": "Parameters for manifold-constrained hyper-connections and Hyperloop.",
+        "es": "Parámetros para hyper-conexiones con variedad y Hyperloop.",
+    },
+    "router_group": {
+        "en": "Routers",
+        "es": "Routers",
+    },
+    "router_caption": {
+        "en": "Parameters for MoE and Mixture-of-Depths routers.",
+        "es": "Parámetros para routers MoE y de Mixture-of-Depths.",
+    },
+    "residual_group": {
+        "en": "Residual Modules",
+        "es": "Módulos Residuales",
+    },
+    "residual_caption": {
+        "en": "Parameters for AttnRes residual modules.",
+        "es": "Parámetros para los módulos residuales AttnRes.",
+    },
     "other_group": {
         "en": "Other Parameters",
         "es": "Otros Parámetros",
     },
     "other_caption": {
-        "en": "Parameters for remaining model components (FFN, routing, etc.).",
-        "es": "Parámetros para los componentes restantes del modelo (FFN, routing, etc.).",
+        "en": "Parameters for remaining model components not covered above.",
+        "es": "Parámetros para los componentes restantes del modelo.",
     },
 }
 
@@ -314,6 +362,7 @@ def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
         "sophia": "sophia",
         "muon": "muon",
         "turbo_muon": "turbo_muon",
+        "af_muon": "af_muon",
         "radam": "radam",
         "adan": "adan",
         "adopt": "adopt",
@@ -340,104 +389,59 @@ def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
         "eps_": "Epsilon prevents division by zero in adaptive optimizers. Small values ensure numerical stability.",
     }
     
-    with st.expander(get_ui_text("embeddings_group"), expanded=False):
-        st.caption(get_ui_text("embeddings_caption"))
-        lr_emb = st.number_input(
-            "Learning Rate",
-            value=1e-6,
-            min_value=0.0,
-            format="%.1e",
-            key=f"{prefix}-lr_embeddings",
-            help=f"{prefix}-lr_embeddings: {param_descriptions['lr_']}",
-        )
-        wd_emb = st.number_input(
-            "Weight Decay",
-            value=0.01,
-            min_value=0.0,
-            format="%.3f",
-            key=f"{prefix}-wd_embeddings",
-            help=f"{prefix}-wd_embeddings: {param_descriptions['wd_']}",
-        )
-        parameters[f"{prefix}-lr_embeddings"] = lr_emb
-        parameters[f"{prefix}-wd_embeddings"] = wd_emb
-    with st.expander(get_ui_text("normalization_group"), expanded=False):
-        st.caption(get_ui_text("normalization_caption"))
-        lr_norm = st.number_input(
-            "Learning Rate",
-            value=5e-6,
-            min_value=0.0,
-            format="%.1e",
-            key=f"{prefix}-lr_norms",
-            help=f"{prefix}-lr_norms: {param_descriptions['lr_']}",
-        )
-        wd_norm = st.number_input(
-            "Weight Decay",
-            value=0.001,
-            min_value=0.0,
-            format="%.4f",
-            key=f"{prefix}-wd_norms",
-            help=f"{prefix}-wd_norms: {param_descriptions['wd_']}",
-        )
-        parameters[f"{prefix}-lr_norms"] = lr_norm
-        parameters[f"{prefix}-wd_norms"] = wd_norm
-    
-    with st.expander(get_ui_text("attention_group"), expanded=False):
-        st.caption(get_ui_text("attention_caption"))
-        lr_attn = st.number_input(
-            "Learning Rate",
-            value=3e-6,
-            min_value=0.0,
-            format="%.1e",
-            key=f"{prefix}-lr_attention",
-            help=f"{prefix}-lr_attention: {param_descriptions['lr_']}",
-        )
-        wd_attn = st.number_input(
-            "Weight Decay",
-            value=0.01,
-            min_value=0.0,
-            format="%.3f",
-            key=f"{prefix}-wd_attention",
-            help=f"{prefix}-wd_attention: {param_descriptions['wd_']}",
-        )
-        parameters[f"{prefix}-lr_attention"] = lr_attn
-        parameters[f"{prefix}-wd_attention"] = wd_attn
-    
-    with st.expander(get_ui_text("other_group"), expanded=False):
-        st.caption(get_ui_text("other_caption"))
-        lr_other = st.number_input(
-            "Learning Rate",
-            value=2e-6,
-            min_value=0.0,
-            format="%.1e",
-            key=f"{prefix}-lr_other",
-            help=f"{prefix}-lr_other: {param_descriptions['lr_']}",
-        )
-        wd_other = st.number_input(
-            "Weight Decay",
-            value=0.01,
-            min_value=0.0,
-            format="%.3f",
-            key=f"{prefix}-wd_other",
-            help=f"{prefix}-wd_other: {param_descriptions['wd_']}",
-        )
-        betas_other = st.text_input(
-            "Betas",
-            value="[0.9, 0.95]",
-            key=f"{prefix}-betas_other",
-            help=f"{prefix}-betas_other: {param_descriptions['betas_']}",
-        )
-        eps_other = st.number_input(
-            "Epsilon",
-            value=1e-8,
-            min_value=0.0,
-            format="%.1e",
-            key=f"{prefix}-eps_other",
-            help=f"{prefix}-eps_other: {param_descriptions['eps_']}",
-        )
-        parameters[f"{prefix}-lr_other"] = lr_other
-        parameters[f"{prefix}-wd_other"] = wd_other
-        parameters[f"{prefix}-betas_other"] = betas_other
-        parameters[f"{prefix}-eps_other"] = eps_other
+    # (group, UI label key, UI caption key, default lr, default wd, decimals)
+    group_specs = [
+        ("embeddings", "embeddings_group", "embeddings_caption", 1e-6, 0.01, "%.1e", "%.3f"),
+        ("pos", "pos_group", "pos_caption", 2e-6, 0.01, "%.1e", "%.3f"),
+        ("attention", "attention_group", "attention_caption", 3e-6, 0.01, "%.1e", "%.3f"),
+        ("ffn", "ffn_group", "ffn_caption", 2e-6, 0.01, "%.1e", "%.3f"),
+        ("norms", "normalization_group", "normalization_caption", 5e-6, 0.001, "%.1e", "%.4f"),
+        ("head", "head_group", "head_caption", 2e-6, 0.01, "%.1e", "%.3f"),
+        ("mhc", "mhc_group", "mhc_caption", 3e-6, 0.01, "%.1e", "%.3f"),
+        ("router", "router_group", "router_caption", 2e-6, 0.01, "%.1e", "%.3f"),
+        ("residual", "residual_group", "residual_caption", 2e-6, 0.01, "%.1e", "%.3f"),
+        ("other", "other_group", "other_caption", 2e-6, 0.01, "%.1e", "%.3f"),
+    ]
+
+    for group, label_key, caption_key, lr_default, wd_default, lr_fmt, wd_fmt in group_specs:
+        with st.expander(get_ui_text(label_key), expanded=False):
+            st.caption(get_ui_text(caption_key))
+            lr_value = st.number_input(
+                "Learning Rate",
+                value=lr_default,
+                min_value=0.0,
+                format=lr_fmt,
+                key=f"{prefix}-lr_{group}",
+                help=f"{prefix}-lr_{group}: {param_descriptions['lr_']}",
+            )
+            wd_value = st.number_input(
+                "Weight Decay",
+                value=wd_default,
+                min_value=0.0,
+                format=wd_fmt,
+                key=f"{prefix}-wd_{group}",
+                help=f"{prefix}-wd_{group}: {param_descriptions['wd_']}",
+            )
+            parameters[f"{prefix}-lr_{group}"] = lr_value
+            parameters[f"{prefix}-wd_{group}"] = wd_value
+
+            if group == "other":
+                betas_other = st.text_input(
+                    "Betas",
+                    value="[0.9, 0.95]",
+                    key=f"{prefix}-betas_other",
+                    help=f"{prefix}-betas_other: {param_descriptions['betas_']}",
+                )
+                eps_other = st.number_input(
+                    "Epsilon",
+                    value=1e-8,
+                    min_value=0.0,
+                    format="%.1e",
+                    key=f"{prefix}-eps_other",
+                    help=f"{prefix}-eps_other: {param_descriptions['eps_']}",
+                )
+                parameters[f"{prefix}-betas_other"] = betas_other
+                parameters[f"{prefix}-eps_other"] = eps_other
 
     result["parameters"] = parameters
     return result

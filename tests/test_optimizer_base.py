@@ -3,6 +3,9 @@ import unittest
 
 try:
     from src.model.optimizer.base import (
+        BLOCK_TO_GROUP,
+        DEFAULT_GROUP_LR,
+        DEFAULT_GROUP_WD,
         to_float,
         to_int,
         to_betas,
@@ -10,8 +13,10 @@ try:
         ensure_no_unknown_parameters,
         parse_group_value,
         with_named_groups,
+        categorize_param_groups,
         GROUP_NAMES,
     )
+    from src.utils.param_categories import BLOCK_CATEGORIES
     _IMPORTS_OK = True
 except ImportError:
     _IMPORTS_OK = False
@@ -167,6 +172,101 @@ class GroupNamesTests(unittest.TestCase):
     def test_contains_expected_groups(self):
         for name in ("embeddings", "norms", "attention", "other"):
             self.assertIn(name, GROUP_NAMES)
+
+    def test_groups_cover_all_block_categories(self):
+        self.assertEqual(set(BLOCK_TO_GROUP), set(BLOCK_CATEGORIES))
+        self.assertEqual(
+            set(GROUP_NAMES),
+            {BLOCK_TO_GROUP[block] for block in BLOCK_CATEGORIES},
+        )
+
+    def test_defaults_cover_every_group(self):
+        self.assertEqual(set(DEFAULT_GROUP_LR), set(GROUP_NAMES))
+        self.assertEqual(set(DEFAULT_GROUP_WD), set(GROUP_NAMES))
+
+
+class _FakeParam:
+    """Minimal parameter stand-in for categorizer tests (no torch needed)."""
+
+    def __init__(self, requires_grad=True):
+        self.requires_grad = requires_grad
+
+
+@unittest.skipUnless(_IMPORTS_OK, "src.model.optimizer.base unavailable")
+class CategorizeParamGroupsTests(unittest.TestCase):
+    def _groups_for(self, names, **kwargs):
+        params = {name: _FakeParam() for name in names}
+        return categorize_param_groups(params.items(), **kwargs), params
+
+    def test_routes_each_block_to_its_group(self):
+        names = [
+            "backbone.emb.weight",
+            "backbone.emb.embedding.weight",
+            "backbone.pos_encoder.weight",
+            "backbone.cls_token",
+            "backbone.layers.0.mixer.q_proj.weight",
+            "backbone.layers.0.mixer.q_norm.weight",
+            "backbone.layers.0.ffn.0.weight",
+            "backbone.layers.0.experts.0.0.weight",
+            "backbone.layers.0.norm1.alpha",
+            "backbone.final_norm.weight",
+            "backbone.head.weight",
+            "backbone.layers.0.router.weight",
+            "backbone.layers.0.depth_router.weight",
+            "backbone.residual.gate",
+            "backbone.mhc_streams.0",
+            "backbone.layers.0.hyperloop_conn.weight",
+            "loose_parameter",
+        ]
+        groups, params = self._groups_for(names)
+        expected = {
+            "embeddings": [
+                "backbone.emb.weight",
+                "backbone.emb.embedding.weight",
+            ],
+            "pos": ["backbone.pos_encoder.weight", "backbone.cls_token"],
+            "attention": [
+                "backbone.layers.0.mixer.q_proj.weight",
+                "backbone.layers.0.mixer.q_norm.weight",
+            ],
+            "ffn": [
+                "backbone.layers.0.ffn.0.weight",
+                "backbone.layers.0.experts.0.0.weight",
+            ],
+            "norms": [
+                "backbone.layers.0.norm1.alpha",
+                "backbone.final_norm.weight",
+            ],
+            "head": ["backbone.head.weight"],
+            "router": [
+                "backbone.layers.0.router.weight",
+                "backbone.layers.0.depth_router.weight",
+            ],
+            "residual": ["backbone.residual.gate"],
+            "mhc": [
+                "backbone.mhc_streams.0",
+                "backbone.layers.0.hyperloop_conn.weight",
+            ],
+            "other": ["loose_parameter"],
+        }
+        for group, group_names in expected.items():
+            actual = [name for name, p in params.items() if p in groups[group]]
+            self.assertEqual(actual, group_names, group)
+        self.assertEqual(set(groups), set(expected))
+
+    def test_skips_frozen_params_and_drops_empty_groups(self):
+        params = {
+            "backbone.emb.weight": _FakeParam(requires_grad=False),
+            "backbone.layers.0.norm1.alpha": _FakeParam(),
+        }
+        groups = categorize_param_groups(params.items())
+        self.assertEqual(set(groups), {"norms"})
+
+    def test_keep_empty_groups_when_requested(self):
+        params = {"backbone.layers.0.norm1.alpha": _FakeParam()}
+        groups = categorize_param_groups(params.items(), drop_empty=False)
+        self.assertEqual(set(groups), set(GROUP_NAMES))
+        self.assertEqual(groups["embeddings"], [])
 
 
 if __name__ == "__main__":

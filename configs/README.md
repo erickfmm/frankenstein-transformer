@@ -138,6 +138,7 @@ training:
 - `sophia`
 - `muon`
 - `turbo_muon`
+- `af_muon`
 - `radam`
 - `adan`
 - `adopt`
@@ -148,17 +149,27 @@ training:
 - `schedulefree_adamw`
 - `shampoo`
 - `soap`
+- `anon`
+- `apollo`
+- `apollo_mini`
+- `q_apollo`
 
 `training.optimizer.parameters` must use the selected optimizer prefix. Example: when `optimizer_class: adamw`, all keys must start with `adamw-`.
 
 ### Optimizer Parameters Reference
 
-All optimizers support these shared per-group parameter suffixes (use with optimizer prefix, e.g. `adamw-lr_embeddings`):
+All optimizers support these shared per-group parameter suffixes (use with optimizer prefix, e.g. `adamw-lr_embeddings`). Groups match the canonical block taxonomy used by the parameter estimator and the `grad_norm_<block>` training logs:
 
-- `lr_embeddings`, `lr_norms`, `lr_attention`, `lr_other`
-- `wd_embeddings`, `wd_norms`, `wd_attention`, `wd_other`
-- `betas_embeddings`, `betas_norms`, `betas_attention`, `betas_other`
-- `eps_embeddings`, `eps_norms`, `eps_attention`, `eps_other`
+- `lr_embeddings`, `lr_pos`, `lr_attention`, `lr_ffn`, `lr_norms`, `lr_head`, `lr_mhc`, `lr_router`, `lr_residual`, `lr_other`
+- `wd_embeddings`, `wd_pos`, `wd_attention`, `wd_ffn`, `wd_norms`, `wd_head`, `wd_mhc`, `wd_router`, `wd_residual`, `wd_other`
+- `betas_embeddings`, `betas_pos`, `betas_attention`, `betas_ffn`, `betas_norms`, `betas_head`, `betas_mhc`, `betas_router`, `betas_residual`, `betas_other`
+- `eps_embeddings`, `eps_pos`, `eps_attention`, `eps_ffn`, `eps_norms`, `eps_head`, `eps_mhc`, `eps_router`, `eps_residual`, `eps_other`
+
+Block routing (`embeddings` = token/patch tables, `pos` = learned positional
+encodings and cls/mask tokens, `attention` = mixers and their internal norms,
+`ffn` = feed-forward bodies and MoE experts, `norms` = standalone block norms,
+`head` = task heads, `mhc` = mHC/Hyperloop, `router` = MoE/MoD routers,
+`residual` = AttnRes, `other` = everything else).
 
 Optimizer-specific global parameter suffixes (also prefixed):
 
@@ -171,6 +182,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `sophia`: `rho`, `update_k`
 - `muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
 - `turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
+- `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
 - `radam`: none
 - `adan`: none
 - `adopt`: none
@@ -181,12 +193,17 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `schedulefree_adamw`: none
 - `shampoo`: none
 - `soap`: none
+- `anon`: `gamma`
+- `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
+- `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
+- `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
 
 Examples:
 - `adafactor-beta2_decay: 0.8`
 - `galore_adamw-rank: 128`
 - `sophia-update_k: 10`
 - `muon-ns_steps: 5`
+- `af_muon-tied_cap: 3.0`
 
 ## Available Fields (Detailed)
 

@@ -619,11 +619,18 @@ into `config.json` (`"inference": {...}`); the HF export's
 | Auto-LR | `prodigy`, `schedulefree_adamw` | Remove LR tuning/scheduling |
 | Adaptive | `radam`, `adan`, `adopt`, `ademamix`, `mars_adamw`, `cautious_adamw`, `lamb` | Rectification, Nesterov, dual EMA, variance reduction, masking, layer-wise scaling |
 | Second-order | `sophia`, `shampoo`, `soap` | Diagonal Hessian / Kronecker / eigenbasis |
-| Orthogonalized | `muon`, `turbo_muon` | Momentum orthogonalization |
+| Orthogonalized | `muon`, `turbo_muon`, `af_muon` | Momentum orthogonalization; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer) |
 | Tunable | `anon` | `gamma` adaptivity |
 
-**Parameter groups:** `embeddings`, `norms`, `attention`, `other`. Mixer
-parameters (including ODE/RetNet/Mamba) route to `attention`.
+**Parameter groups:** `embeddings`, `pos`, `attention`, `ffn`, `norms`,
+`head`, `mhc`, `router`, `residual`, `other`. The taxonomy is the same one
+used by the parameter estimator and the `grad_norm_<block>` logs
+(`src/utils/param_categories.py`; `norm` maps to the historical plural
+`norms`). Mixer parameters — including nested QK-norms and ODE/RetNet/Mamba
+state — route to `attention`; MoE experts route to `ffn`, routers to
+`router`, and task heads to `head`. Grouping is shared by the trainer and
+`FrankensteinViT.configure_optimizers` through
+`src.model.optimizer.base.categorize_param_groups`.
 
 **Prefix contract:** `<optimizer_class>-<group>_<param>` for per-group keys
 (`adamw-lr_embeddings`, `muon-lr_attention`, …) and

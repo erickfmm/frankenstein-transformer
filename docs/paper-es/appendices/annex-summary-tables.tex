@@ -112,7 +112,7 @@ La Tabla~\ref{tab:all-optimizers} cataloga los 23 optimizadores soportados con s
 \multicolumn{6}{r}{\textit{continúa en la página siguiente}} \\
 \endfoot
 \bottomrule
-\caption{Catálogo completo de optimizadores. $n$ = número de parámetros, $d$ = dimensionalidad del tensor, $r$ = dimensión de rango bajo, $k$ = número de iteraciones de Newton--Schulz. Búferes de estado enumera el número de tensores de estado del optimizador mantenidos por grupo de parámetros.}
+\caption{Catálogo completo de optimizadores. $n$ = número de parámetros, $d$ = dimensionalidad del tensor, $V$ = tamaño del vocabulario, $r$ = dimensión de rango bajo, $k$ = número de iteraciones de Newton--Schulz, $I$ = número de iteraciones de bisección por fila. Búferes de estado enumera el número de tensores de estado del optimizador mantenidos por grupo de parámetros.}
 \label{tab:all-optimizers}
 \endlastfoot
 
@@ -149,6 +149,7 @@ SOAP & Segundo orden & $2d + 2$ ($m$, $v$) & $\mathcal{O}(n^{1+1/d})$ & lr, $\be
 Sophia & Consciente de curvatura & 3 ($m$, $v$, $h$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd, $k$ & \citep{liu_sophia_2023} \\
 Muon & Ortogonalidad & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, pasos NS $k$ & \citep{shen_convergence_2025} \\
 Turbo-Muon & Ortogonalidad & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, pasos NS $k$ & \citep{boissin_turbo-muon_2025} \\
+AF-Muon & Tabla atada sin AdamW & 1 ($m$) & $\mathcal{O}(n \cdot k + V d\, I)$ & lr, momentum, wd, tope $c$, escala de tabla $s$, $\rho_{out}/\rho_{hid}$, pasos NS $k$ & \citep{lagzian_afmuon_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Adaptativos de Bajo Rango y Adaptividad Ajustable}} \\
