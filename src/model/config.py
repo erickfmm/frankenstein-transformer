@@ -436,6 +436,15 @@ class FrankensteinModelConfig:
             Default: 1.
         asr_decoder_dropout: RNN-Transducer prediction-network dropout.
             Default: 0.1.
+        audio_spec_augment_enabled: Enable SpecAugment (arXiv:1904.08779)
+            time/frequency masking inside the frontend while training.
+            Default: False.
+        audio_spec_augment_freq_mask_width: Maximum width ``F`` of each
+            frequency mask (paper: 27). Default: 27.
+        audio_spec_augment_time_masks: Number ``m_T`` of time masks (paper:
+            10). Default: 10.
+        audio_spec_augment_time_mask_ratio: Maximum time-mask width as a
+            fraction ``p_S`` of the frame count (paper: 0.05). Default: 0.05.
         model_class: Model class recorded for deployment dispatch
             (``frankenstein_audio``, ``frankenstein_vit`` or a text class).
             ``None`` keeps the legacy mode/field heuristics. Default: None.
@@ -890,6 +899,13 @@ class FrankensteinModelConfig:
     asr_decoder_layers: int = 1
     # RNN-Transducer prediction-network dropout (only used when >1 layer).
     asr_decoder_dropout: float = 0.1
+    # SpecAugment (arXiv:1904.08779) time/frequency masking, applied inside the
+    # audio frontend after the log-mel/spectrogram computation and only while
+    # ``model.training``. Paper recipe: F=27, m_T=10, p_S=0.05.
+    audio_spec_augment_enabled: bool = False
+    audio_spec_augment_freq_mask_width: int = 27
+    audio_spec_augment_time_masks: int = 10
+    audio_spec_augment_time_mask_ratio: float = 0.05
 
     # ---- Recorded model class (deployment dispatch) ----
     # ``frankenstein_audio`` / ``frankenstein_vit`` / ``frankenstein_text_*``
@@ -1326,4 +1342,20 @@ class FrankensteinModelConfig:
             raise ValueError(
                 "asr_decoder_dropout must be in the range [0, 1), got "
                 f"{self.asr_decoder_dropout}"
+            )
+        # ---- Validate SpecAugment frontend masking (arXiv:1904.08779) ----
+        if int(self.audio_spec_augment_freq_mask_width) < 1:
+            raise ValueError(
+                "audio_spec_augment_freq_mask_width must be >= 1, got "
+                f"{self.audio_spec_augment_freq_mask_width}"
+            )
+        if int(self.audio_spec_augment_time_masks) < 1:
+            raise ValueError(
+                "audio_spec_augment_time_masks must be >= 1, got "
+                f"{self.audio_spec_augment_time_masks}"
+            )
+        if not 0.0 < float(self.audio_spec_augment_time_mask_ratio) <= 1.0:
+            raise ValueError(
+                "audio_spec_augment_time_mask_ratio must be in (0, 1], got "
+                f"{self.audio_spec_augment_time_mask_ratio}"
             )

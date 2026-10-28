@@ -111,3 +111,17 @@ def test_string_falls_back_to_empty_when_metadata_missing(captured):
     app.render_field("x", {"type": "string"})
     assert captured["text_input"]["value"] == ""
     assert "warning" in captured
+
+
+def test_integer_skips_null_default_and_uses_example(captured):
+    app.render_field(
+        "hidden_size", {"type": "integer", "default": None, "examples": [3072]}
+    )
+    assert captured["number_input"]["value"] == 3072
+    assert "warning" not in captured
+
+
+def test_integer_null_default_without_examples_uses_fallback(captured):
+    app.render_field("x", {"type": "integer", "default": None})
+    assert captured["number_input"]["value"] == 0
+    assert "warning" not in captured

@@ -184,8 +184,9 @@ class LoadedTrainingConfig:
     """Structured result of loading and validating a training YAML config.
 
     Attributes:
-        task: Training task identifier (``"mlm"``, ``"sbert"``, or
-            ``"causal_lm"``).
+        task: Training task identifier (``"mlm"``, ``"sbert"``,
+            ``"causal_lm"``, ``"asr"``, ``"audio_classification"`` or a vision
+            task).
         model_class: Model class name (``"frankenstein_text_encoder"``,
             ``"frankenstein_text_decoder"``, or ``"base_model"``).
         model_config: :class:`FrankensteinModelConfig` for custom models, or ``None``
@@ -462,10 +463,12 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     if task not in {
         "mlm", "sbert", "causal_lm", "patch_prediction",
         "classification", "segmentation", "text_classification",
+        "asr", "audio_classification",
     }:
         raise ValueError(
             "training.task is required and must be one of: mlm, sbert, causal_lm, "
-            "patch_prediction, classification, segmentation, text_classification"
+            "patch_prediction, classification, segmentation, text_classification, "
+            "asr, audio_classification"
         )
 
     model_config: Optional[FrankensteinModelConfig] = None
@@ -484,6 +487,21 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         audio_flat = flatten_audio_dict(audio_data)
         if audio_flat:
             model_data.update(audio_flat)
+        # ``training.asr.loss`` optionally overrides ``audio.asr_loss`` so a
+        # single training block selects the head the model builds.
+        asr_training = training_data.get("asr")
+        if asr_training is not None and not isinstance(asr_training, dict):
+            raise ValueError("training.asr must be an object when provided")
+        if isinstance(asr_training, dict):
+            asr_loss_override = asr_training.get("loss")
+            if asr_loss_override is not None:
+                asr_loss_override = str(asr_loss_override).strip().lower()
+                if asr_loss_override not in {"ctc", "transducer"}:
+                    raise ValueError(
+                        "training.asr.loss must be one of: ctc, transducer "
+                        f"(got {asr_loss_override!r})"
+                    )
+                model_data["asr_loss"] = asr_loss_override
         _validate_bitnet_flags(model_data)
         _validate_ffn_activation(model_data)
         model_config = FrankensteinModelConfig(**model_data)
@@ -538,10 +556,20 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
             f"(patch embedding and vision heads are only provided by the ViT class)"
         )
 
+    # Audio tasks require the frankenstein_audio model class (waveform
+    # frontend + ASR/classification heads are only provided by that class).
+    audio_tasks = {"asr", "audio_classification"}
+    if task in audio_tasks and model_class != "frankenstein_audio":
+        raise ValueError(
+            f"training.task={task} requires model_class=frankenstein_audio "
+            "(the waveform frontend and audio heads are only provided by that class)"
+        )
+
     optimizer_data = training_data.get("optimizer")
     if task in {
         "mlm", "causal_lm", "patch_prediction",
         "classification", "segmentation", "text_classification",
+        "asr", "audio_classification",
     }:
         if not isinstance(optimizer_data, dict):
             raise ValueError(

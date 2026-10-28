@@ -43,6 +43,12 @@ try:
     )
     from ..model.optimizer.factory import build_optimizer
     from ..model.numerics import fixed_cross_entropy, fixed_softmax
+    from .rnnt import (
+        character_error_rate,
+        ctc_greedy_decode,
+        greedy_rnnt_decode,
+        rnnt_loss,
+    )
 except ImportError:
     from utils.storage_manager import StorageManager
     from utils.gpu_temp_guard import (
@@ -54,6 +60,12 @@ except ImportError:
     from utils.param_categories import BLOCK_CATEGORIES, categorize_param
     from model.optimizer.factory import build_optimizer
     from model.numerics import fixed_cross_entropy, fixed_softmax
+    from training.rnnt import (
+        character_error_rate,
+        ctc_greedy_decode,
+        greedy_rnnt_decode,
+        rnnt_loss,
+    )
 
 
 # ==================== TRAINING CONFIGURATION ====================
@@ -1534,6 +1546,150 @@ class TitanTrainer:
                     loss = loss + v
         return loss, accuracy
 
+    # ---- Audio task loss methods (frankenstein_audio) ----
+
+    def _forward_audio_logits(self, waveform: torch.Tensor, task: str) -> torch.Tensor:
+        """Forward pass for the audio encoder.
+
+        Args:
+            waveform: Waveform tensor of shape ``(B, T)`` or ``(B, T, C)``.
+            task: Audio task name (``asr``, ``audio_classification``).
+
+        Returns:
+            Model output logits tensor (the RNN-T joint logits when the model
+            returns a dict, e.g. the transducer path).
+
+        Raises:
+            RuntimeError: If the model output carries no logits.
+        """
+        outputs = self.model(waveform, task=task)
+        if torch.is_tensor(outputs):
+            return outputs
+        if isinstance(outputs, dict):
+            for key in ("logits", "joint"):
+                logits = outputs.get(key)
+                if logits is not None:
+                    return logits
+        if hasattr(outputs, "logits"):
+            return outputs.logits
+        raise RuntimeError("Audio model forward did not return logits.")
+
+    def _add_audio_auxiliary_losses(self, loss: torch.Tensor) -> torch.Tensor:
+        """Add MoE/MoD auxiliary losses reported by the audio model.
+
+        Args:
+            loss: Task loss tensor.
+
+        Returns:
+            The loss with every finite, differentiable auxiliary term added.
+
+        Raises:
+            RuntimeError: If an auxiliary loss is non-finite.
+        """
+        auxiliary_losses = getattr(self.model, "last_auxiliary_losses", None)
+        if isinstance(auxiliary_losses, dict):
+            for aux_name, aux_loss in auxiliary_losses.items():
+                if torch.is_tensor(aux_loss) and aux_loss.requires_grad:
+                    if not torch.isfinite(aux_loss):
+                        raise RuntimeError(
+                            "Non-finite auxiliary loss detected for "
+                            f"{aux_name} during the audio forward pass"
+                        )
+                    loss = loss + aux_loss
+        return loss
+
+    def compute_asr_loss(
+        self,
+        waveform: torch.Tensor,
+        labels: torch.Tensor,
+        input_lengths: torch.Tensor,
+        target_lengths: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute the ASR loss (CTC or RNN-Transducer) and its CER proxy.
+
+        The head is selected by the model's ``asr_loss`` setting
+        (``audio.asr_loss`` / the ``training.asr.loss`` override):
+
+        * ``ctc``: ``F.ctc_loss`` over ``log_softmax`` frame logits
+          (Graves et al. 2006), decoded greedily for the CER.
+        * ``transducer``: the pure-torch RNN-T loss (Graves 2012,
+          arXiv:1211.3711) over the joint-network logits, decoded with the
+          greedy label-synchronous search.
+
+        Args:
+            waveform: Waveform batch ``(B, T)`` or ``(B, T, C)``.
+            labels: Target token ids ``(B, U)`` (right padded).
+            input_lengths: Input sample counts ``(B,)``.
+            target_lengths: Target lengths ``(B,)``.
+
+        Returns:
+            Tuple ``(loss, cer)`` where ``cer`` is the batch-mean character
+            error rate (0 is perfect) and plays the role of ``accuracy`` in
+            the trainer's ``(loss, accuracy)`` convention.
+
+        Raises:
+            ValueError: If the model was built with an unknown ASR head.
+        """
+        asr_loss = str(getattr(self.model, "asr_loss", "ctc")).lower()
+        out = self.model(waveform, task="asr", target_ids=labels)
+        out_lengths = self.model.output_lengths(input_lengths)
+        num_frames = (
+            int(out["encoder"].shape[1])
+            if isinstance(out, dict)
+            else int(out.shape[1])
+        )
+        out_lengths = out_lengths.clamp(min=1, max=num_frames)
+        target_lengths_list = target_lengths.detach().cpu()
+
+        if asr_loss == "ctc":
+            log_probs = F.log_softmax(out.float(), dim=-1).transpose(0, 1)
+            loss = F.ctc_loss(
+                log_probs,
+                labels.long(),
+                out_lengths,
+                target_lengths,
+                blank=0,
+                zero_infinity=True,
+            )
+            predictions = ctc_greedy_decode(out, out_lengths, blank=0)
+        elif asr_loss == "transducer":
+            joint = out["joint"]
+            loss = rnnt_loss(joint, labels.long(), out_lengths, target_lengths)
+            predictions = greedy_rnnt_decode(
+                out["encoder"], getattr(self.model, "transducer"), blank=0
+            )
+        else:  # pragma: no cover - config validation rejects this earlier
+            raise ValueError(f"Unknown ASR head: {asr_loss!r}")
+
+        with torch.no_grad():
+            targets = [
+                labels[index, : int(target_lengths_list[index])].tolist()
+                for index in range(labels.size(0))
+            ]
+            cer = character_error_rate(predictions, targets)
+            accuracy = torch.tensor(float(cer), device=loss.device)
+
+        loss = self._add_audio_auxiliary_losses(loss)
+        return loss, accuracy
+
+    def compute_audio_classification_loss(
+        self, waveform: torch.Tensor, labels: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute audio classification cross-entropy loss.
+
+        Args:
+            waveform: Waveform/signal batch ``(B, T)`` or ``(B, T, C)``.
+            labels: Class indices ``(B,)``.
+
+        Returns:
+            Tuple of ``(loss, accuracy)``.
+        """
+        logits = self._forward_audio_logits(waveform, task="audio_classification")
+        loss = self._task_cross_entropy(logits.float(), labels.long())
+        accuracy = (logits.argmax(-1) == labels.long()).float().mean()
+        loss = self._add_audio_auxiliary_losses(loss)
+        return loss, accuracy
+
     def train_epoch(self, dataloader: DataLoader, epoch: int) -> Tuple[float, bool]:
         """
         Train for one epoch with advanced monitoring.
@@ -1594,6 +1750,18 @@ class TitanTrainer:
                             loss, accuracy = self.compute_classification_loss(batch)
                         elif self.task == "segmentation":
                             loss, accuracy = self.compute_segmentation_loss(batch)
+                        elif self.task == "asr":
+                            loss, accuracy = self.compute_asr_loss(
+                                batch["waveform"],
+                                batch["labels"],
+                                batch["input_lengths"],
+                                batch["target_lengths"],
+                            )
+                        elif self.task == "audio_classification":
+                            loss, accuracy = self.compute_audio_classification_loss(
+                                batch["waveform"],
+                                batch["labels"],
+                            )
                         else:
                             loss, accuracy = self.compute_mlm_loss(
                                 batch['input_ids'],
@@ -1683,10 +1851,17 @@ class TitanTrainer:
                         step_time_ms = (time.perf_counter() - optimizer_window_start) * 1000.0
                         # Batch size / token counts are task-dependent: text
                         # batches carry ``input_ids``; vision batches carry
-                        # ``pixel_values`` with no token axis.
+                        # ``pixel_values`` with no token axis; audio batches
+                        # carry per-item sample counts in ``input_lengths``.
                         if "input_ids" in batch:
                             eff_batch = int(batch['input_ids'].shape[0])
                             token_count = eff_batch * int(batch['input_ids'].shape[1])
+                        elif "waveform" in batch:
+                            eff_batch = int(batch["waveform"].shape[0])
+                            if "input_lengths" in batch:
+                                token_count = int(batch["input_lengths"].sum().item())
+                            else:
+                                token_count = eff_batch * int(batch["waveform"].shape[1])
                         else:
                             pixel_values = batch.get("pixel_values")
                             eff_batch = int(pixel_values.shape[0]) if pixel_values is not None else 1

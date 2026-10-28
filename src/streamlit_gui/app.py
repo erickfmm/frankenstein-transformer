@@ -180,17 +180,23 @@ def _resolve_default(
     Precedence: ``default`` → ``examples[0]`` → ``minimum`` → ``fallback``.
     ``default`` is the authoritative runtime default (mirrors the dataclass);
     ``examples`` are illustrative only and must never silently override it.
+    Explicit ``null`` defaults/examples (nullable schema fields) are skipped so
+    ``st.number_input`` never receives ``None``.
     Emits a warning when the schema provides none of the first three so the
     missing metadata is surfaced to the developer.
     """
-    if "default" in field_schema:
+    if "default" in field_schema and field_schema["default"] is not None:
         return field_schema["default"]
-    examples = field_schema.get("examples", [])
-    if examples:
-        return examples[0]
+    for example in field_schema.get("examples", []):
+        if example is not None:
+            return example
     min_val = field_schema.get("minimum", None)
     if min_val is not None:
         return min_val
+    if "default" in field_schema:
+        # Nullable field with an explicit ``null`` default: the fallback is
+        # the only usable widget value.
+        return fallback
     st.warning(
         f"Schema field '{field_title}' has no 'default', 'examples', or "
         f"'minimum'; using fallback value {fallback!r}."
@@ -285,7 +291,17 @@ def render_field(
                 value="\n".join(map(str, default)),
                 key=field_key,
             )
-            return [line.strip() for line in array_input.split("\n") if line.strip()]
+            raw_items = [
+                line.strip() for line in array_input.split("\n") if line.strip()
+            ]
+            item_type = items_schema.get("type")
+            if item_type == "integer":
+                return [int(item) for item in raw_items]
+            if item_type == "number":
+                return [float(item) for item in raw_items]
+            if item_type == "boolean":
+                return [item.strip().lower() in {"1", "true", "yes", "on"} for item in raw_items]
+            return raw_items
     
     elif field_type == "object":
         return render_object(field_name, field_schema, parent_key, level + 1)
@@ -962,6 +978,40 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         training_config["use_amp"] = use_amp
         
         config["training"] = training_config
+
+    # Audio tasks render their own top-level blocks (`audio` + `audio_dataset`),
+    # mirroring the `model`/`tokenizer` generic-object rendering.
+    audio_tasks = {"asr", "audio_classification"}
+    selected_task = config.get("training", {}).get("task")
+    if selected_task in audio_tasks or "audio" in config:
+        with st.expander("Audio Configuration", expanded=True):
+            audio_schema = schema["properties"]["audio"]
+            st.write(f"**{get_field_title(audio_schema, 'Audio Configuration')}**")
+            audio_description = get_field_description(audio_schema)
+            if audio_description:
+                st.caption(audio_description)
+            config["audio"] = render_object("audio", audio_schema)
+        with st.expander("Audio Dataset Configuration", expanded=True):
+            audio_dataset_schema = schema["properties"]["audio_dataset"]
+            st.write(
+                f"**{get_field_title(audio_dataset_schema, 'Audio Dataset Configuration')}**"
+            )
+            audio_dataset_description = get_field_description(audio_dataset_schema)
+            if audio_dataset_description:
+                st.caption(audio_dataset_description)
+            config["audio_dataset"] = render_object(
+                "audio_dataset", audio_dataset_schema
+            )
+
+    # Audio tasks require the frankenstein_audio model class. Enforce it at
+    # config build time, next to the causal_lm guard below.
+    if selected_task in audio_tasks and "base_model" not in config:
+        config["model_class"] = "frankenstein_audio"
+        st.warning(
+            "Training task "
+            f"'{selected_task}' requires the audio model class. "
+            "'model_class' has been set to 'frankenstein_audio'."
+        )
 
     # Causal-LM requires the decoder model class. Enforce at config build time.
     if config.get("training", {}).get("task") == "causal_lm":

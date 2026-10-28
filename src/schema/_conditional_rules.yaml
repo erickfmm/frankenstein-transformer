@@ -216,6 +216,58 @@
     - model
     - image
     - vision_dataset
+# ---- Audio tasks (frankenstein_audio, Conformer/ASR) ----
+- if:
+    properties:
+      training:
+        properties:
+          task:
+            const: asr
+  then:
+    properties:
+      training:
+        required:
+        - optimizer
+      model_class:
+        const: frankenstein_audio
+      audio_dataset:
+        anyOf:
+        - required:
+          - dataset_name
+        - required:
+          - dataset_dir
+    required:
+    - model_class
+    - model
+    - audio
+    - audio_dataset
+- if:
+    properties:
+      training:
+        properties:
+          task:
+            const: audio_classification
+  then:
+    properties:
+      training:
+        required:
+        - optimizer
+      model_class:
+        const: frankenstein_audio
+      audio:
+        required:
+        - num_classes
+      audio_dataset:
+        anyOf:
+        - required:
+          - dataset_name
+        - required:
+          - dataset_dir
+    required:
+    - model_class
+    - model
+    - audio
+    - audio_dataset
 # ---- inference / KV-cache conditional rules (plan §11.1) ----
 # compression.method != none  =>  kv_cache.enabled == true
 # (the window >= protected_window cross-key comparison is enforced

@@ -39,15 +39,15 @@ properties:
       \ fine-tuning — contrastive learning on sentence pairs/triplets for\n  semantic embeddings. Requires `training.sbert` subsection.\n- `causal_lm`: Causal Language Modeling — autoregressive next-token\
       \ prediction (GPT-style pre-training).\n  Each token predicts the following token; cross-entropy loss is computed over all shifted positions\n  (no masking). Requires `model_class: frankenstein_text_decoder`\
       \ and `training.optimizer` configuration.\n- `text_classification`: Supervised sequence-level classification on tokenized text.\n  Uses the encoder's classification head (Strategy A); batches carry\n\
-      \  `input_ids`, `attention_mask` and integer class `labels`. Requires `training.optimizer` configuration.\n\n**Impact:** Defines the training objective. `mlm` is for language understanding;\n`sbert`\
-      \ is for semantic similarity and retrieval; `causal_lm` is for autoregressive text generation;\n`text_classification` is for labelled text classification."
+      \  `input_ids`, `attention_mask` and integer class `labels`. Requires `training.optimizer` configuration.\n- `asr`: Automatic speech recognition on raw audio (Conformer, arXiv:2005.08100).\n  Batches carry `waveform`, `labels` (character token ids), `input_lengths` and `target_lengths`;\n  the loss is CTC (`audio.asr_loss: ctc`) or RNN-Transducer (`audio.asr_loss: transducer`,\n  arXiv:1211.3711). Requires `model_class: frankenstein_audio`, the `audio:` and\n  `audio_dataset:` blocks, and `training.optimizer` configuration.\n- `audio_classification`: Supervised audio/signal classification (audio events, EEG, EMG, ...).\n  Uses the audio classification head over a pooled representation (`audio.pooling_mode`);\n  batches carry `waveform` and integer class `labels`. Requires `model_class: frankenstein_audio`,\n  the `audio:` and `audio_dataset:` blocks, and `training.optimizer` configuration.\n\n**Impact:** Defines the training objective. `mlm` is for language understanding;\n`sbert`\
+      \ is for semantic similarity and retrieval; `causal_lm` is for autoregressive text generation;\n`text_classification` is for labelled text classification; `asr` is for speech transcription;\n`audio_classification` is for audio/sensor tagging."
     description_es: "Tipo de tarea de entrenamiento.\n- `mlm`: Masked Language Modeling — los tokens se enmascaran y predicen (preentrenamiento estilo BERT).\n  Requiere configuración `training.optimizer`.\n\
       - `sbert`: Sentence-BERT fine-tuning — aprendizaje contrastivo en pares/tripletes para\n  embeddings semánticos. Requiere subsección `training.sbert`.\n- `causal_lm`: Causal Language Modeling — predicción\
       \ autorregresiva de siguiente token (preentrenamiento estilo GPT).\n  Cada token predice el siguiente; la pérdida de cross-entropy se calcula sobre todas las posiciones desplazadas\n  (sin enmascaramiento).\
       \ Requiere `model_class: frankenstein_text_decoder` y configuración `training.optimizer`.\n- `text_classification`: Clasificación supervisada a nivel de secuencia sobre texto tokenizado.\n  Usa la\
-      \ cabeza de clasificación del encoder (Estrategia A); los batches llevan `input_ids`,\n  `attention_mask` y `labels` enteros. Requiere configuración `training.optimizer`.\n\n**Impacto:** Define\
+      \ cabeza de clasificación del encoder (Estrategia A); los batches llevan `input_ids`,\n  `attention_mask` y `labels` enteros. Requiere configuración `training.optimizer`.\n- `asr`: Reconocimiento automático del habla sobre audio crudo (Conformer, arXiv:2005.08100).\n  Los batches llevan `waveform`, `labels` (ids de caracteres), `input_lengths` y `target_lengths`;\n  la pérdida es CTC (`audio.asr_loss: ctc`) o RNN-Transducer (`audio.asr_loss: transducer`,\n  arXiv:1211.3711). Requiere `model_class: frankenstein_audio`, los bloques `audio:` y\n  `audio_dataset:`, y configuración `training.optimizer`.\n- `audio_classification`: Clasificación supervisada de audio/señales (eventos de audio, EEG, EMG, ...).\n  Usa la cabeza de clasificación de audio sobre una representación agrupada (`audio.pooling_mode`);\n  los batches llevan `waveform` y `labels` enteros. Requiere `model_class: frankenstein_audio`,\n  los bloques `audio:` y `audio_dataset:`, y configuración `training.optimizer`.\n\n**Impacto:** Define\
       \ el objetivo de entrenamiento. `mlm` es para comprensión de lenguaje;\n`sbert` es para similitud semántica; `causal_lm` es para generación de texto autorregresiva;\n`text_classification` es para\
-      \ clasificación de texto etiquetado."
+      \ clasificación de texto etiquetado; `asr` es para transcripción de habla;\n`audio_classification` es para etiquetado de audio/sensores."
     enum:
     - mlm
     - sbert
@@ -56,6 +56,8 @@ properties:
     - classification
     - segmentation
     - text_classification
+    - asr
+    - audio_classification
     examples:
     - mlm
   supervisor:
@@ -1117,6 +1119,8 @@ properties:
     $ref: _optimizer.yaml
   sbert:
     $ref: _sbert.yaml
+  asr:
+    $ref: _audio_asr.yaml
   classification:
     $ref: _vision_classification.yaml
   segmentation:

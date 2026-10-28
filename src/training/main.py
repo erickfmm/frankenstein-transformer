@@ -29,6 +29,7 @@ try:
     from ..model.frankenstein_decoder import FrankensteinDecoder
     from ..model.frankenstein_encoder import FrankensteinEncoder
     from ..model.frankenstein_vit import FrankensteinViT
+    from ..model.frankenstein_audio import FrankensteinAudio
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
@@ -38,6 +39,7 @@ except ImportError:
     from model.frankenstein_decoder import FrankensteinDecoder
     from model.frankenstein_encoder import FrankensteinEncoder
     from model.frankenstein_vit import FrankensteinViT
+    from model.frankenstein_audio import FrankensteinAudio
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
 
@@ -706,6 +708,99 @@ def _run_vision_task(loaded, resolved_device, training_config, args):
     return 0
 
 
+# ==================== AUDIO TASK (frankenstein_audio) ====================
+def _run_audio_task(loaded, resolved_device, training_config, args, training_runtime):
+    """Run an audio task (``asr`` / ``audio_classification``).
+
+    Mirrors :func:`_run_vision_task`: builds the dataset first (so the ASR
+    character vocabulary can size the head), then the
+    :class:`FrankensteinAudio` model and a :class:`TitanTrainer`, and runs the
+    epoch loop.
+    """
+    from .audio_dataset import (
+        AudioDataset,
+        DummyAudioDataset,
+        audio_collate_fn,
+    )
+
+    logging.info("\n" + "=" * 60)
+    logging.info("Audio task: %s (model_class=%s)", loaded.task, loaded.model_class)
+    logging.info("=" * 60)
+
+    config = loaded.model_config
+    batch_size = training_runtime.get("batch_size", args.batch_size or 4)
+    num_epochs = int(training_runtime.get("num_epochs", 1))
+
+    dataset_name = str(
+        loaded.audio_dataset_config.get("dataset_name") or ""
+    ).strip()
+    dataset_dir = str(
+        loaded.audio_dataset_config.get("dataset_dir") or ""
+    ).strip()
+    if dataset_name or dataset_dir:
+        dataset = AudioDataset(
+            loaded.audio_dataset_config, loaded.audio_config, loaded.task
+        )
+    else:
+        logging.info(
+            "No dataset_name/dataset_dir — using DummyAudioDataset for smoke test"
+        )
+        dataset = DummyAudioDataset(
+            length=16,
+            audio_config=loaded.audio_config,
+            task=loaded.task,
+            num_classes=int(getattr(config, "num_classes", 2) or 2),
+            vocab_size=int(getattr(config, "vocab_size", 32) or 32),
+            max_frames=1600,
+        )
+
+    if loaded.task == "asr":
+        vocab_size = int(getattr(dataset, "vocab_size", 0) or 0)
+        if vocab_size > 0 and int(config.vocab_size) < vocab_size:
+            logging.info(
+                "Resizing the ASR vocabulary from %s to %s",
+                config.vocab_size,
+                vocab_size,
+            )
+            config.vocab_size = vocab_size
+
+    model = FrankensteinAudio(config)
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logging.info("Total Parameters: %.2fM", total_params / 1e6)
+    logging.info("Trainable Parameters: %.2fM", trainable_params / 1e6)
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=int(batch_size),
+        shuffle=True,
+        collate_fn=audio_collate_fn,
+    )
+
+    logging.info("Step 4: %s training", loaded.task.upper())
+    trainer = TitanTrainer(
+        model,
+        config,
+        training_config=training_config,
+        device=resolved_device,
+        task=loaded.task,
+    )
+
+    try:
+        for epoch in range(num_epochs):
+            logging.info("Epoch %d/%d", epoch + 1, num_epochs)
+            avg_loss, should_stop = trainer.train_epoch(dataloader, epoch)
+            logging.info("Epoch %d avg loss: %.4f", epoch + 1, avg_loss)
+            if should_stop:
+                break
+    finally:
+        trainer.close()
+
+    logging.info("Audio training complete.")
+    return 0
+
+
 # ==================== MAIN EXECUTION ====================
 def main(argv=None):
     """Main training pipeline for Frankenstein Transformer and base-model finetuning."""
@@ -849,6 +944,13 @@ def main(argv=None):
         and os.environ.get("FRANKENSTEIN_SUPERVISOR_CHILD") != "1"
     ):
         return _run_under_supervisor(args, training_config, resolved_device, config_path, loaded.task)
+
+    # Audio tasks (frankenstein_audio) have their own in-process runner
+    # (dataset-first ordering for the ASR character vocabulary).
+    if loaded.task in {"asr", "audio_classification"}:
+        return _run_audio_task(
+            loaded, resolved_device, training_config, args, training_runtime
+        )
 
     # All tasks (mlm / causal_lm / sbert / base_model / patch_prediction /
     # classification / segmentation) are delegated to the reusable non-CLI

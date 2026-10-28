@@ -1,0 +1,82 @@
+# Automatic speech recognition (CTC) with a Conformer-heavy encoder
+# (arXiv:2005.08100). Small model for the Chilean-jokes festival dataset
+# (astroza/chilean-jokes-festival-de-vina: `audio` @16 kHz + `text`).
+#
+# The character-level target vocabulary is built from the dataset transcripts
+# at runtime: `model.dims.vocab_size` is raised to the built vocabulary size
+# when it is smaller (the configured 128 is a safe upper bound here).
+model_class: frankenstein_audio
+model:
+  dims:
+    vocab_size: 128
+    hidden_size: 96
+    num_layers: 4
+    num_loops: 1
+    num_heads: 4
+    dropout: 0.1
+    layer_pattern:
+      - conformer_attn
+      - conformer_attn
+      - conformer_attn
+      - standard_attn
+    mode: encoder
+  norm:
+    type: layer_norm
+  embedding:
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  attention:
+    conformer:
+      kernel_size: 32
+      macaron: true
+      conv_norm: batch
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 384
+    activation: silu
+  positional_encoding: sinusoidal_absolute
+audio:
+  feature: logmel
+  sample_rate: 16000
+  n_mels: 80
+  window_ms: 25.0
+  stride_ms: 10.0
+  n_fft: 400
+  conv_channels: 32
+  asr_loss: ctc
+  asr_decoder_dim: 96
+  asr_decoder_layers: 1
+  asr_decoder_dropout: 0.1
+  # Filler: the ASR head ignores this, the classification head does not.
+  num_classes: 2
+  pooling_mode: gap
+  spec_augment:
+    enabled: true
+    freq_mask_width: 27
+    time_masks: 10
+    time_mask_ratio: 0.05
+audio_dataset:
+  dataset_name: astroza/chilean-jokes-festival-de-vina
+  split: test
+  audio_column: audio
+  text_column: text
+  max_duration_sec: 30.0
+  resample: true
+training:
+  task: asr
+  batch_size: 2
+  num_epochs: 1
+  dataloader_workers: 0
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 0.0005
+      adamw-lr_norms: 0.0005
+      adamw-lr_attention: 0.001
+      adamw-lr_other: 0.001
+      adamw-wd_other: 0.01

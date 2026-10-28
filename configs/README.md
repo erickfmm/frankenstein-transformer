@@ -387,6 +387,46 @@ Example: `configs/examples/mixer_conformer.yaml`.
 - Decoder mode pads the depth-wise conv causally; encoder mode uses symmetric padding.
 - `conformer_attn` is not KV-cacheable (depth-wise conv + macaron state); it always runs the legacy full-recompute path.
 
+### Audio presets (`frankenstein_audio`, tasks `asr` / `audio_classification`)
+
+`frankenstein_audio` (arXiv:2005.08100) replaces the token embedding with a
+waveform frontend and adds ASR / audio-classification heads. New presets:
+
+- `configs/examples/audio_asr_conformer.yaml` — CTC ASR, 4-layer
+  Conformer-heavy encoder, log-mel frontend + SpecAugment, Chilean-jokes HF
+  dataset (`astroza/chilean-jokes-festival-de-vina`, split `test`).
+- `configs/examples/audio_asr_transducer.yaml` — RNN-Transducer ASR
+  (arXiv:1211.3711), same encoder; `training.asr.loss: transducer` overrides
+  `audio.asr_loss`.
+- `configs/examples/audio_classification_conformer.yaml` — audio
+  classification with the synthetic dummy dataset (`dataset_name: ""`).
+- `configs/examples/audio_eeg_classification.yaml` — generic multichannel 1-D
+  signals: `audio.feature: raw`, `audio.in_channels: 8` (EEG-style).
+- `configs/examples/vit_conformer.yaml` — ViT with `conformer_attn` in
+  `layer_pattern`.
+
+Top-level blocks:
+
+- `audio.feature`: `logmel` (80-channel log-mel, paper recipe), `spectrogram`
+  (log-power STFT) or `raw` (multichannel 1-D signals; skips mel/STFT).
+- `audio.sample_rate` / `window_ms` / `stride_ms` / `n_fft` / `n_mels`:
+  frontend geometry (defaults 16 kHz, 25 ms, 10 ms, 400, 80).
+- `audio.in_channels` / `conv_channels`: raw-signal channels and convolutional
+  subsampling width (4× time reduction).
+- `audio.pooling_mode` / `num_classes`: classification head (`gap` or learned
+  `cls` token).
+- `audio.asr_loss`: `ctc` (default) or `transducer`; the transducer also reads
+  `asr_decoder_dim` / `asr_decoder_layers` / `asr_decoder_dropout`.
+- `audio.spec_augment`: `{enabled, freq_mask_width (27), time_masks (10),
+  time_mask_ratio (0.05)}`; applied inside the frontend only while the model is
+  in `train()` mode (arXiv:1904.08779).
+- `audio_dataset.dataset_name` / `dataset_dir` / `split` / `audio_column` /
+  `text_column` / `label_column` / `max_duration_sec` / `resample`. The ASR
+  character vocabulary is built from `text_column` at runtime; an empty
+  `dataset_name` selects the synthetic dummy dataset for smoke tests.
+- `training.asr.loss` (optional): `ctc` | `transducer`; overrides
+  `audio.asr_loss` and must match the built head.
+
 ### Manifold-Constrained Hyper-Connections (model.mhc)
 
 `model.mhc` configures mHC (arXiv:2512.24880), an opt-in replacement for the

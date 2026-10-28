@@ -198,6 +198,21 @@ class AudioFrontend(nn.Module):
         self.hidden_size = int(config.hidden_size)
         self.dropout_p = float(config.dropout)
 
+        # SpecAugment (arXiv:1904.08779) — masking is applied to the mel /
+        # spectrogram features while the module is in training mode.
+        self.spec_augment_enabled = bool(
+            getattr(config, "audio_spec_augment_enabled", False)
+        )
+        self.spec_freq_mask_width = int(
+            getattr(config, "audio_spec_augment_freq_mask_width", 27)
+        )
+        self.spec_time_masks = int(
+            getattr(config, "audio_spec_augment_time_masks", 10)
+        )
+        self.spec_time_mask_ratio = float(
+            getattr(config, "audio_spec_augment_time_mask_ratio", 0.05)
+        )
+
         for name, value in (
             ("audio_sample_rate", self.sample_rate),
             ("audio_n_mels", self.n_mels),
@@ -326,6 +341,44 @@ class AudioFrontend(nn.Module):
             power = self.mel_fb @ power
         return torch.log(power + 1e-6)
 
+    def _spec_augment(self, features: torch.Tensor) -> torch.Tensor:
+        """Mask frequency bands and time spans of the input features.
+
+        Implements SpecAugment (Park et al. 2019, arXiv:1904.08779, §2): one
+        frequency mask of random width up to ``freq_mask_width`` and
+        ``time_masks`` time masks of width up to
+        ``time_mask_ratio * num_frames`` are zero-filled independently per
+        utterance. Only called while ``self.training`` is true.
+
+        Args:
+            features: Log features of shape ``(B, n_mels | n_freqs, frames)``.
+
+        Returns:
+            A masked copy of ``features`` (same shape).
+        """
+        if features.dim() != 3:
+            return features
+        batch, num_bins, num_frames = features.shape
+        augmented = features.clone()
+        for index in range(batch):
+            if num_bins > 1:
+                width = int(
+                    torch.randint(0, self.spec_freq_mask_width + 1, (1,)).item()
+                )
+                width = min(width, num_bins)
+                if width > 0:
+                    start = int(torch.randint(0, num_bins - width + 1, (1,)).item())
+                    augmented[index, start : start + width, :] = 0.0
+            max_time_width = max(1, int(self.spec_time_mask_ratio * num_frames))
+            for _ in range(self.spec_time_masks):
+                width = int(torch.randint(0, max_time_width + 1, (1,)).item())
+                width = min(width, num_frames)
+                if width <= 0:
+                    continue
+                start = int(torch.randint(0, num_frames - width + 1, (1,)).item())
+                augmented[index, :, start : start + width] = 0.0
+        return augmented
+
     def _forward_raw(self, waveform: torch.Tensor) -> torch.Tensor:
         """Subsample a raw multichannel 1-D signal.
 
@@ -377,11 +430,17 @@ class AudioFrontend(nn.Module):
         Returns:
             Frame embeddings of shape ``(B, S, hidden_size)``.
         """
+        if isinstance(waveform, dict):
+            # Convenience: accept a collated batch dict from the trainer.
+            waveform = waveform.get("waveform", waveform.get("input_values"))
+
         if self.feature == "raw":
             return self._forward_raw(waveform)
 
         mono = self._to_mono(waveform)
         feats = self._features(mono)  # (B, F, frames)
+        if self.training and self.spec_augment_enabled:
+            feats = self._spec_augment(feats)
         feats = feats.unsqueeze(1)  # (B, 1, F, frames)
         x = self.subsample(feats)  # (B, C, F', S)
         batch, channels, freq, steps = x.shape

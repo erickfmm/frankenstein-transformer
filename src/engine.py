@@ -529,6 +529,19 @@ def _train_from_config_path(
     if task in vision_tasks:
         return _train_vision(loaded, resolved_device, training_config, batch_size, num_epochs, metrics_callback, dataset=dataset)
 
+    # Audio tasks (frankenstein_audio): ASR + audio/signal classification.
+    audio_tasks = {"asr", "audio_classification"}
+    if task in audio_tasks:
+        return _train_audio(
+            loaded,
+            resolved_device,
+            training_config,
+            batch_size,
+            num_epochs,
+            metrics_callback,
+            dataset=dataset,
+        )
+
     tok_cfg = loaded.tokenizer_config or {}
     tok_source = str(tok_cfg.get("source", "hf_repo") or "hf_repo").strip().lower()
 
@@ -1008,6 +1021,154 @@ def _train_vision(
         model=model,
         loaded=loaded,
         tokenizer=None,
+        final_epoch=int(num_epochs_eff),
+        best_loss=avg_loss,
+    )
+
+
+def _train_audio(
+    loaded: LoadedTrainingConfig,
+    resolved_device: str,
+    training_config: TrainingConfig,
+    batch_size: Optional[int],
+    num_epochs: Optional[int],
+    metrics_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    dataset: Any = None,
+) -> TrainResult:
+    """Run an audio task (``asr`` / ``audio_classification``).
+
+    Mirrors :func:`_train_vision`, with one ordering difference: the dataset is
+    built **before** the model so the character tokenizer can size the ASR
+    head. When ``dataset`` is provided it is used directly as the training
+    iterable (dict batches from an embedding host); otherwise the source is
+    resolved from ``audio_dataset`` or a smoke-test :class:`DummyAudioDataset`.
+
+    Args:
+        loaded: Validated :class:`LoadedTrainingConfig` with an audio task.
+        resolved_device: Resolved PyTorch device string.
+        training_config: :class:`TrainingConfig` for the trainer.
+        batch_size: Optional batch-size override (CLI / engine argument).
+        num_epochs: Optional epoch-count override.
+        metrics_callback: Optional per-step / per-epoch metrics callback.
+        dataset: Optional pre-built dataset or ``DataLoader``.
+
+    Returns:
+        A :class:`TrainResult` (``tokenizer`` is the character tokenizer for
+        ASR, otherwise ``None``).
+    """
+    from .training.audio_dataset import (
+        AudioDataset,
+        DummyAudioDataset,
+        audio_collate_fn,
+    )
+
+    logging.info("\n" + "=" * 60)
+    logging.info(
+        "Audio task: %s (model_class=%s)", loaded.task, loaded.model_class
+    )
+    logging.info("=" * 60)
+
+    config = loaded.model_config
+    if config is None:
+        raise ValueError("model config is required for audio tasks")
+
+    batch_size_eff = loaded.training_runtime.get("batch_size", batch_size or 4)
+    num_epochs_eff = loaded.training_runtime.get("num_epochs", num_epochs or 1)
+
+    # ---- Dataset first: the ASR head is sized from the character vocab ----
+    if dataset is None:
+        dataset_name = str(
+            loaded.audio_dataset_config.get("dataset_name") or ""
+        ).strip()
+        dataset_dir = str(
+            loaded.audio_dataset_config.get("dataset_dir") or ""
+        ).strip()
+        if dataset_name or dataset_dir:
+            dataset = AudioDataset(
+                loaded.audio_dataset_config, loaded.audio_config, loaded.task
+            )
+        else:
+            logging.info(
+                "No dataset_name/dataset_dir — using DummyAudioDataset for smoke test"
+            )
+            dataset = DummyAudioDataset(
+                length=16,
+                audio_config=loaded.audio_config,
+                task=loaded.task,
+                num_classes=int(getattr(config, "num_classes", 2) or 2),
+                vocab_size=int(getattr(config, "vocab_size", 32) or 32),
+                max_frames=1600,
+            )
+
+    if loaded.task == "asr":
+        vocab_size = int(getattr(dataset, "vocab_size", 0) or 0)
+        if vocab_size > 0 and int(config.vocab_size) < vocab_size:
+            logging.info(
+                "Resizing the ASR vocabulary from %s to the character "
+                "tokenizer vocabulary (%s)",
+                config.vocab_size,
+                vocab_size,
+            )
+            config.vocab_size = vocab_size
+        elif vocab_size > 0 and int(config.vocab_size) > vocab_size:
+            logging.warning(
+                "Configured vocab_size=%s exceeds the character tokenizer "
+                "vocabulary (%s); keeping the configured size (the extra ids "
+                "stay unused).",
+                config.vocab_size,
+                vocab_size,
+            )
+
+    model = build_model("frankenstein_audio", config)
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logging.info("Total Parameters: %.2fM", total_params / 1e6)
+    logging.info("Trainable Parameters: %.2fM", trainable_params / 1e6)
+
+    if (
+        dataset is not None
+        and not hasattr(dataset, "__getitem__")
+        and not hasattr(dataset, "__iter__")
+    ):
+        raise ValueError(
+            "Audio task: pre-built 'dataset' must be a torch Dataset or an "
+            "iterable DataLoader of dict batches."
+        )
+    if dataset is not None and hasattr(dataset, "dataset") and hasattr(dataset, "batch_size"):
+        dataloader = dataset
+    else:
+        dataloader = DataLoader(
+            dataset,
+            batch_size=int(batch_size_eff),
+            shuffle=True,
+            collate_fn=audio_collate_fn,
+        )
+
+    logging.info("Step 4: %s training", loaded.task.upper())
+    trainer = TitanTrainer(
+        model,
+        config,
+        training_config=training_config,
+        device=resolved_device,
+        task=loaded.task,
+        metrics_callback=metrics_callback,
+    )
+
+    avg_loss = 0.0
+    try:
+        for epoch in range(int(num_epochs_eff)):
+            avg_loss, should_stop = trainer.train_epoch(dataloader, epoch)
+            if should_stop:
+                break
+    finally:
+        trainer.close()
+
+    logging.info("Audio training complete.")
+    return TrainResult(
+        model=model,
+        loaded=loaded,
+        tokenizer=getattr(dataset, "tokenizer", None),
         final_epoch=int(num_epochs_eff),
         best_loss=avg_loss,
     )

@@ -1,0 +1,59 @@
+# Generic multichannel 1-D signal classification: `feature: raw` skips the
+# log-mel/STFT frontend and feeds 8 EEG-style channels through the same
+# convolutional subsampling. Empty `dataset_name` -> synthetic dummy data.
+model_class: frankenstein_audio
+model:
+  dims:
+    vocab_size: 64
+    hidden_size: 64
+    num_layers: 2
+    num_loops: 1
+    num_heads: 4
+    dropout: 0.1
+    layer_pattern:
+      - conformer_attn
+      - standard_attn
+    mode: encoder
+  norm:
+    type: layer_norm
+  embedding:
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  attention:
+    conformer:
+      kernel_size: 16
+      macaron: true
+      conv_norm: batch
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 256
+    activation: silu
+  positional_encoding: sinusoidal_absolute
+audio:
+  feature: raw
+  in_channels: 8
+  conv_channels: 16
+  num_classes: 3
+  pooling_mode: gap
+audio_dataset:
+  dataset_name: ""
+  split: train
+  audio_column: audio
+  label_column: label
+  max_duration_sec: 2.0
+  resample: true
+training:
+  task: audio_classification
+  batch_size: 4
+  num_epochs: 1
+  dataloader_workers: 0
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_other: 0.001
+      adamw-wd_other: 0.01

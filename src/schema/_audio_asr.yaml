@@ -1,0 +1,43 @@
+type: object
+title: ASR Training Override
+title_es: Anulación de Entrenamiento ASR
+description: |-
+  Optional ASR training overrides for `training.task: asr`. These values are
+  applied on top of the model-side `audio:` block before the model is built,
+  so they select the head that the trainer will use.
+
+  `loss` overrides `audio.asr_loss`: `ctc` builds the Connectionist Temporal
+  Classification projection, `transducer` builds the RNN-Transducer prediction
+  and joint networks (arXiv:1211.3711). The value must match the head the
+  checkpoint was trained with; leaving it unset keeps `audio.asr_loss`
+  (`ctc` by default).
+description_es: |-
+  Anulaciones opcionales de entrenamiento ASR para `training.task: asr`. Estos
+  valores se aplican sobre el bloque `audio:` del modelo antes de construir el
+  modelo, por lo que seleccionan la cabeza que usará el entrenador.
+
+  `loss` anula `audio.asr_loss`: `ctc` construye la proyección de
+  Connectionist Temporal Classification, `transducer` construye las redes de
+  predicción y conjunta del RNN-Transducer (arXiv:1211.3711). El valor debe
+  coincidir con la cabeza con la que se entrenó el checkpoint; si se omite se
+  conserva `audio.asr_loss` (`ctc` por defecto).
+additionalProperties: false
+properties:
+  loss:
+    type: string
+    title: ASR Loss
+    title_es: Pérdida ASR
+    description: |-
+      ASR objective. `ctc` = Connectionist Temporal Classification over the
+      encoder frames. `transducer` = RNN-Transducer with an LSTM prediction
+      network and a joint network. Overrides `audio.asr_loss`; it must match
+      the head that is built.
+    description_es: |-
+      Objetivo ASR. `ctc` = Connectionist Temporal Classification sobre las
+      tramas del encoder. `transducer` = RNN-Transducer con una red de
+      predicción LSTM y una red conjunta. Anula `audio.asr_loss`; debe coincidir
+      con la cabeza que se construye.
+    enum:
+      - ctc
+      - transducer
+    examples: [ctc, transducer]

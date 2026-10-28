@@ -123,11 +123,18 @@ def test_audio_blocks_validate(schema):
                 "asr_decoder_dim": 64,
                 "asr_decoder_layers": 1,
                 "asr_decoder_dropout": 0.0,
+                "spec_augment": {
+                    "enabled": True,
+                    "freq_mask_width": 13,
+                    "time_masks": 2,
+                    "time_mask_ratio": 0.05,
+                },
             }
         )
     )
     assert list(audio_validator.iter_errors({"feature": "mel"}))
     assert list(audio_validator.iter_errors({"unknown_key": 1}))
+    assert list(audio_validator.iter_errors({"spec_augment": {"bogus": 1}}))
 
     dataset_validator = Draft202012Validator(audio_dataset_schema)
     assert not list(
@@ -136,11 +143,11 @@ def test_audio_blocks_validate(schema):
                 "dataset_name": "astroza/chilean-jokes-festival-de-vina",
                 "audio_column": "audio",
                 "text_column": "text",
-                "spec_augment": {"enabled": True, "time_masks": 2},
             }
         )
     )
-    assert list(dataset_validator.iter_errors({"spec_augment": {"bogus": 1}}))
+    # SpecAugment moved to the model frontend (`audio.spec_augment`).
+    assert list(dataset_validator.iter_errors({"spec_augment": {"enabled": True}}))
 
 
 _DEFAULT_PAIRS = {
@@ -200,6 +207,11 @@ _DEFAULT_PAIRS = {
     "properties.audio.properties.asr_decoder_dim": "asr_decoder_dim",
     "properties.audio.properties.asr_decoder_layers": "asr_decoder_layers",
     "properties.audio.properties.asr_decoder_dropout": "asr_decoder_dropout",
+    # ---- SpecAugment moved to the model frontend (``audio.spec_augment``) ----
+    "properties.audio.properties.spec_augment.properties.enabled": "audio_spec_augment_enabled",
+    "properties.audio.properties.spec_augment.properties.freq_mask_width": "audio_spec_augment_freq_mask_width",
+    "properties.audio.properties.spec_augment.properties.time_masks": "audio_spec_augment_time_masks",
+    "properties.audio.properties.spec_augment.properties.time_mask_ratio": "audio_spec_augment_time_mask_ratio",
 }
 
 

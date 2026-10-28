@@ -251,3 +251,63 @@ properties:
       (solo activo cuando `asr_decoder_layers > 1`, como exige `nn.LSTM`).
     default: 0.1
     examples: [0.0, 0.1, 0.2]
+  spec_augment:
+    type: object
+    title: SpecAugment
+    title_es: SpecAugment
+    description: |-
+      SpecAugment time/frequency masking (arXiv:1904.08779) applied inside the
+      audio frontend after the log-mel/spectrogram computation, only while the
+      model is in training mode (`model.train()`), so evaluation and inference
+      see unmasked features. The Conformer recipe uses a frequency mask width
+      `F = 27`, `m_T = 10` time masks and a maximum time-mask ratio
+      `p_S = 0.05`.
+    description_es: |-
+      Enmascaramiento de tiempo/frecuencia SpecAugment (arXiv:1904.08779)
+      aplicado dentro del frontend de audio tras calcular el log-mel /
+      espectrograma, solo mientras el modelo está en modo entrenamiento
+      (`model.train()`), por lo que la evaluación e inferencia ven
+      características sin enmascarar. La receta de Conformer usa un ancho de
+      máscara de frecuencia `F = 27`, `m_T = 10` máscaras de tiempo y una
+      proporción máxima de máscara de tiempo `p_S = 0.05`.
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        title: Enabled
+        title_es: Habilitado
+        description: Enable SpecAugment masking during training.
+        description_es: Habilita el enmascaramiento SpecAugment durante el entrenamiento.
+        default: false
+      freq_mask_width:
+        type: integer
+        minimum: 1
+        title: Frequency Mask Width
+        title_es: Ancho de Máscara de Frecuencia
+        description: Maximum width `F` of each frequency mask (paper value 27).
+        description_es: Ancho máximo `F` de cada máscara de frecuencia (valor del paper 27).
+        default: 27
+        examples: [13, 27]
+      time_masks:
+        type: integer
+        minimum: 1
+        title: Time Masks
+        title_es: Máscaras de Tiempo
+        description: Number `m_T` of time masks (paper value 10).
+        description_es: Número `m_T` de máscaras de tiempo (valor del paper 10).
+        default: 10
+        examples: [2, 10]
+      time_mask_ratio:
+        type: number
+        exclusiveMinimum: 0
+        maximum: 1
+        title: Time Mask Ratio
+        title_es: Proporción de Máscara de Tiempo
+        description: |-
+          Maximum time-mask width as a fraction `p_S` of the frame count
+          (paper value 0.05).
+        description_es: |-
+          Ancho máximo de la máscara de tiempo como fracción `p_S` del número
+          de tramas (valor del paper 0.05).
+        default: 0.05
+        examples: [0.05, 0.1]

@@ -1,0 +1,65 @@
+# Audio classification with a Conformer-heavy encoder (arXiv:2005.08100).
+# An empty `dataset_name` selects the synthetic DummyAudioDataset, so this
+# preset is a CPU smoke test for the audio classification head.
+model_class: frankenstein_audio
+model:
+  dims:
+    vocab_size: 128
+    hidden_size: 96
+    num_layers: 2
+    num_loops: 1
+    num_heads: 4
+    dropout: 0.1
+    layer_pattern:
+      - conformer_attn
+      - conformer_attn
+    mode: encoder
+  norm:
+    type: layer_norm
+  embedding:
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  attention:
+    conformer:
+      kernel_size: 32
+      macaron: true
+      conv_norm: batch
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 384
+    activation: silu
+  positional_encoding: sinusoidal_absolute
+audio:
+  feature: logmel
+  sample_rate: 16000
+  n_mels: 64
+  conv_channels: 16
+  num_classes: 4
+  pooling_mode: gap
+  spec_augment:
+    enabled: true
+    freq_mask_width: 13
+    time_masks: 2
+    time_mask_ratio: 0.05
+audio_dataset:
+  dataset_name: ""
+  split: train
+  audio_column: audio
+  label_column: label
+  max_duration_sec: 2.0
+  resample: true
+training:
+  task: audio_classification
+  batch_size: 4
+  num_epochs: 1
+  dataloader_workers: 0
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_other: 0.001
+      adamw-wd_other: 0.01

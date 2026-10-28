@@ -298,6 +298,18 @@ def flatten_audio_dict(audio_data: Dict[str, Any]) -> Dict[str, Any]:
         if leaf in audio_data:
             out[flat_key] = audio_data[leaf]
 
+    # ``audio.spec_augment.*`` → ``audio_spec_augment_*``.
+    spec_augment = audio_data.get("spec_augment")
+    if isinstance(spec_augment, dict):
+        for leaf, flat_key in (
+            ("enabled", "audio_spec_augment_enabled"),
+            ("freq_mask_width", "audio_spec_augment_freq_mask_width"),
+            ("time_masks", "audio_spec_augment_time_masks"),
+            ("time_mask_ratio", "audio_spec_augment_time_mask_ratio"),
+        ):
+            if leaf in spec_augment:
+                out[flat_key] = spec_augment[leaf]
+
     # Task-head leaves keep their names (no collision with the model block).
     for leaf in (
         "num_classes",
