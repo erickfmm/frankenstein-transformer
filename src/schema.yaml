@@ -22,6 +22,10 @@ properties:
     $ref: "schema/_image.yaml"
   vision_dataset:
     $ref: "schema/_vision_dataset.yaml"
+  audio:
+    $ref: "schema/_audio.yaml"
+  audio_dataset:
+    $ref: "schema/_audio_dataset.yaml"
   text_dataset:
     $ref: "schema/_text_dataset.yaml"
   inference:

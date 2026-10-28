@@ -31,6 +31,7 @@ try:
     from .model.frankenstein_decoder import FrankensteinDecoder
     from .model.frankenstein_encoder import FrankensteinEncoder
     from .model.frankenstein_vit import FrankensteinViT
+    from .model.frankenstein_audio import FrankensteinAudio
     from .utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from .utils.hf_compat import load_auto_model, load_auto_tokenizer
 except ImportError:
@@ -42,6 +43,7 @@ except ImportError:
     from model.frankenstein_decoder import FrankensteinDecoder
     from model.frankenstein_encoder import FrankensteinEncoder
     from model.frankenstein_vit import FrankensteinViT
+    from model.frankenstein_audio import FrankensteinAudio
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from utils.hf_compat import load_auto_model, load_auto_tokenizer
 
@@ -202,7 +204,8 @@ def build_model(
 
     Args:
         model_class: ``"frankenstein_text_decoder"``, ``"frankenstein_vit"``,
-            or any other value (``"frankenstein_text_encoder"``) for the encoder.
+            ``"frankenstein_audio"`` or any other value
+            (``"frankenstein_text_encoder"``) for the encoder.
         config: :class:`FrankensteinModelConfig`.
         num_labels: Optional number of classes to enable the encoder's
             sequence-level classification head (DashAI Strategy A). Only
@@ -229,6 +232,8 @@ def build_model(
         model = FrankensteinDecoder(config)
     elif model_class == "frankenstein_vit":
         model = FrankensteinViT(config)
+    elif model_class == "frankenstein_audio":
+        model = FrankensteinAudio(config)
     else:
         model = FrankensteinEncoder(config)
 

@@ -8,6 +8,7 @@ overrides.
 
 import os
 from dataclasses import dataclass
+from dataclasses import field
 from dataclasses import fields
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
@@ -17,12 +18,22 @@ import yaml
 try:
     from .trainer import TrainingConfig
     from ..model.config import FrankensteinModelConfig
-    from ..utils.config_flatten import flatten_model_dict, flatten_image_dict, flatten_inference_dict
+    from ..utils.config_flatten import (
+        flatten_model_dict,
+        flatten_image_dict,
+        flatten_audio_dict,
+        flatten_inference_dict,
+    )
     from ..deploy.inference_config import InferenceConfig
 except ImportError:
     from training.trainer import TrainingConfig
     from model.config import FrankensteinModelConfig
-    from utils.config_flatten import flatten_model_dict, flatten_image_dict, flatten_inference_dict
+    from utils.config_flatten import (
+        flatten_model_dict,
+        flatten_image_dict,
+        flatten_audio_dict,
+        flatten_inference_dict,
+    )
     from deploy.inference_config import InferenceConfig
 
 
@@ -186,6 +197,15 @@ class LoadedTrainingConfig:
             and stability parameters.
         training_runtime: Dictionary of runtime-only keys from the YAML
             that are not part of :class:`TrainingConfig` fields.
+        image_config: The top-level ``image:`` block (empty when absent).
+        dataset_config: The top-level ``vision_dataset:`` block.
+        text_dataset_config: The top-level ``text_dataset:`` block.
+        audio_config: The top-level ``audio:`` block used by
+            ``frankenstein_audio`` (empty when absent).
+        audio_dataset_config: The top-level ``audio_dataset:`` block, holding
+            the audio data-source / column / SpecAugment settings (empty when
+            absent).
+        config_dict: The raw YAML document, kept for checkpoint round-trips.
     """
 
     task: str
@@ -198,6 +218,8 @@ class LoadedTrainingConfig:
     image_config: Dict[str, Any]
     dataset_config: Dict[str, Any]
     text_dataset_config: Dict[str, Any]
+    audio_config: Dict[str, Any] = field(default_factory=dict)
+    audio_dataset_config: Dict[str, Any] = field(default_factory=dict)
     config_dict: Optional[Dict[str, Any]] = None
 
 
@@ -404,11 +426,12 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         "frankenstein_text_encoder",
         "frankenstein_text_decoder",
         "frankenstein_vit",
+        "frankenstein_audio",
     }
     if model_class is not None and model_class not in valid_model_classes:
         raise ValueError(
             "model_class must be one of: frankenstein_text_encoder, "
-            "frankenstein_text_decoder, frankenstein_vit"
+            "frankenstein_text_decoder, frankenstein_vit, frankenstein_audio"
         )
 
     model_data = data.get("model", {}) or {}
@@ -425,6 +448,12 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     vision_dataset_data = data.get("vision_dataset", {}) or {}
     if not isinstance(vision_dataset_data, dict):
         raise ValueError("vision_dataset must be an object when provided")
+    audio_data = data.get("audio", {}) or {}
+    if not isinstance(audio_data, dict):
+        raise ValueError("audio must be an object when provided")
+    audio_dataset_data = data.get("audio_dataset", {}) or {}
+    if not isinstance(audio_dataset_data, dict):
+        raise ValueError("audio_dataset must be an object when provided")
     text_dataset_data = data.get("text_dataset", {}) or {}
     if not isinstance(text_dataset_data, dict):
         raise ValueError("text_dataset must be an object when provided")
@@ -450,11 +479,20 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         image_flat = flatten_image_dict(image_data)
         if image_flat:
             model_data.update(image_flat)
+        # Merge audio-specific config from the top-level ``audio:`` block
+        # (same sibling-of-``model:`` pattern as ``image:``).
+        audio_flat = flatten_audio_dict(audio_data)
+        if audio_flat:
+            model_data.update(audio_flat)
         _validate_bitnet_flags(model_data)
         _validate_ffn_activation(model_data)
         model_config = FrankensteinModelConfig(**model_data)
         if not model_class:
             model_class = "frankenstein_text_encoder"
+        # Record the resolved class so deployment dispatch does not have to
+        # guess from field presence (every config carries every modality's
+        # fields).
+        model_config.model_class = model_class
     else:
         # model/model_class are intentionally ignored when base_model is set.
         model_class = model_class or "base_model"
@@ -549,6 +587,8 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         image_config=image_data,
         dataset_config=vision_dataset_data,
         text_dataset_config=text_dataset_data,
+        audio_config=audio_data,
+        audio_dataset_config=audio_dataset_data,
         config_dict=data,
     )
 

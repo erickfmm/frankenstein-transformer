@@ -1,0 +1,178 @@
+type: object
+title: Audio Dataset Configuration
+title_es: Configuración de Dataset de Audio
+description: |-
+  Audio dataset configuration for speech and audio-signal tasks. Specifies
+  the data source (HuggingFace dataset or local directory), the waveform /
+  transcript / label column mappings, duration clipping, resampling and
+  SpecAugment (arXiv:1904.08779) augmentation.
+
+  Required when `model_class: frankenstein_audio` is trained on a task that
+  consumes data. For text/NLP use `text_dataset`; for images use
+  `vision_dataset`.
+description_es: |-
+  Configuración de dataset de audio para tareas de habla y señales de audio.
+  Especifica la fuente de datos (dataset de HuggingFace o directorio local),
+  el mapeo de columnas de forma de onda / transcripción / etiqueta, el
+  recorte por duración, el remuestreo y la aumentación SpecAugment
+  (arXiv:1904.08779).
+
+  Obligatorio cuando `model_class: frankenstein_audio` se entrena en una
+  tarea que consume datos. Para texto/NLP usa `text_dataset`; para imágenes
+  usa `vision_dataset`.
+additionalProperties: false
+properties:
+  dataset_name:
+    type:
+      - string
+      - "null"
+    title: Dataset Name
+    title_es: Nombre de Dataset
+    description: |-
+      HuggingFace dataset identifier (e.g.
+      `astroza/chilean-jokes-festival-de-vina`). Omit it to use a synthetic
+      dummy dataset for smoke tests.
+    description_es: |-
+      Identificador de dataset de HuggingFace (p. ej.
+      `astroza/chilean-jokes-festival-de-vina`). Omítelo para usar un dataset
+      sintético de prueba.
+  dataset_dir:
+    type:
+      - string
+      - "null"
+    title: Dataset Directory
+    title_es: Directorio de Dataset
+    description: |-
+      Local directory containing audio files plus transcripts or labels.
+      Alternative to `dataset_name`.
+    description_es: |-
+      Directorio local que contiene archivos de audio junto con
+      transcripciones o etiquetas. Alternativa a `dataset_name`.
+  split:
+    type: string
+    title: Split
+    title_es: Partición
+    description: Dataset split to load (HuggingFace split name, e.g. `train`).
+    description_es: Partición del dataset a cargar (nombre de split de HuggingFace, p. ej. `train`).
+    default: train
+    examples: [train, validation, test]
+  audio_column:
+    type: string
+    title: Audio Column
+    title_es: Columna de Audio
+    description: |-
+      Column name holding the waveform in a HuggingFace dataset. Values may
+      be decoded audio objects, file paths or already-sampled arrays.
+    description_es: |-
+      Nombre de la columna que contiene la forma de onda en un dataset de
+      HuggingFace. Los valores pueden ser objetos de audio decodificados, rutas
+      de archivo o arreglos ya muestreados.
+    default: audio
+    examples: [audio, waveform, signal]
+  text_column:
+    type: string
+    title: Text Column
+    title_es: Columna de Texto
+    description: |-
+      Column name holding the transcript for ASR tasks (`task: asr`). The
+      character/word tokenizer and the target ids are built from this column.
+    description_es: |-
+      Nombre de la columna que contiene la transcripción para tareas ASR
+      (`task: asr`). El tokenizador de caracteres/palabras y los ids objetivo
+      se construyen a partir de esta columna.
+    default: text
+    examples: [text, sentence, transcription]
+  label_column:
+    type:
+      - string
+      - "null"
+    title: Label Column
+    title_es: Columna de Etiqueta
+    description: |-
+      Column name holding the integer class label for audio classification
+      (`task: audio_classification`). Unused by ASR tasks.
+    description_es: |-
+      Nombre de la columna que contiene la etiqueta de clase entera para
+      clasificación de audio (`task: audio_classification`). No se usa en
+      tareas ASR.
+  max_duration_sec:
+    type: number
+    exclusiveMinimum: 0
+    title: Maximum Duration (s)
+    title_es: Duración Máxima (s)
+    description: |-
+      Clip (and pad) every waveform to at most this many seconds. The
+      Conformer recipe uses full utterances; 30 s covers the example dataset.
+    description_es: |-
+      Recorta (y rellena) cada forma de onda a como máximo esta cantidad de
+      segundos. La receta de Conformer usa enunciados completos; 30 s cubre el
+      dataset de ejemplo.
+    default: 30.0
+    examples: [10.0, 30.0, 60.0]
+  resample:
+    type: boolean
+    title: Resample
+    title_es: Remuestrear
+    description: |-
+      If true, resample every waveform to the model's
+      `audio.sample_rate` before the frontend.
+    description_es: |-
+      Si es verdadero, remuestrea cada forma de onda a la
+      `audio.sample_rate` del modelo antes del frontend.
+    default: true
+  spec_augment:
+    type: object
+    title: SpecAugment
+    title_es: SpecAugment
+    description: |-
+      SpecAugment time/frequency masking (arXiv:1904.08779) applied to the
+      input features during training. The Conformer recipe uses two frequency
+      masks of width `F = 27`, `m_T = 10` time masks and a maximum time-mask
+      ratio `p_S = 0.05`.
+    description_es: |-
+      Enmascaramiento de tiempo/frecuencia SpecAugment (arXiv:1904.08779)
+      aplicado a las características de entrada durante el entrenamiento. La
+      receta de Conformer usa dos máscaras de frecuencia de ancho `F = 27`,
+      `m_T = 10` máscaras de tiempo y una proporción máxima de máscara de
+      tiempo `p_S = 0.05`.
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        title: Enabled
+        title_es: Habilitado
+        description: Enable SpecAugment masking during training.
+        description_es: Habilita el enmascaramiento SpecAugment durante el entrenamiento.
+        default: false
+      freq_mask_width:
+        type: integer
+        minimum: 1
+        title: Frequency Mask Width
+        title_es: Ancho de Máscara de Frecuencia
+        description: Maximum width `F` of each frequency mask (paper value 27).
+        description_es: Ancho máximo `F` de cada máscara de frecuencia (valor del paper 27).
+        default: 27
+        examples: [13, 27]
+      time_masks:
+        type: integer
+        minimum: 1
+        title: Time Masks
+        title_es: Máscaras de Tiempo
+        description: Number `m_T` of time masks (paper value 10).
+        description_es: Número `m_T` de máscaras de tiempo (valor del paper 10).
+        default: 10
+        examples: [2, 10]
+      time_mask_ratio:
+        type: number
+        exclusiveMinimum: 0
+        maximum: 1
+        title: Time Mask Ratio
+        title_es: Proporción de Máscara de Tiempo
+        description: |-
+          Maximum time-mask width as a fraction `p_S` of the frame count
+          (paper value 0.05).
+        description_es: |-
+          Ancho máximo de la máscara de tiempo como fracción `p_S` del número
+          de tramas (valor del paper 0.05).
+        default: 0.05
+        examples: [0.05, 0.1]

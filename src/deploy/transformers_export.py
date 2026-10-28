@@ -346,6 +346,16 @@ def _build_compatibility_report(
             "Use MLM/decoder checkpoints."
         )
 
+    model_class = str(yaml_data.get("model_class") or "").strip().lower()
+    if model_class == "frankenstein_audio":
+        issues.append(
+            "Audio models (`frankenstein_audio`) are not currently exportable to "
+            "AutoModelForMaskedLM/AutoModelForCausalLM wrappers: the waveform frontend and the "
+            "ASR/audio-classification heads have no Transformers equivalent. "
+            "ASR/audio Transformers export is future work — use the native "
+            "checkpoint or the deployment pipeline instead."
+        )
+
     model_layers = list(model_config.get("layer_pattern") or [])
     unknown_layers = sorted(set(model_layers) - set(schema_layer_types))
     if unknown_layers:
@@ -506,6 +516,14 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
         raise ValueError("Unable to infer model config from YAML `model` section or checkpoint `config`")
 
     model_class = str(yaml_data.get("model_class") or "frankenstein_text_encoder").strip().lower()
+    if model_class == "frankenstein_audio":
+        raise ValueError(
+            "frankenstein_audio is not currently exportable to "
+            "AutoModelForMaskedLM/AutoModelForCausalLM wrappers: the waveform "
+            "frontend and the ASR/audio-classification heads have no "
+            "Transformers equivalent. ASR/audio Transformers export is future "
+            "work — use the native checkpoint or the deployment pipeline."
+        )
     if model_class == "frankenstein_text_decoder":
         model_config["mode"] = "decoder"
 

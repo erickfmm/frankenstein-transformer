@@ -1,0 +1,253 @@
+type: object
+title: Audio Configuration
+title_es: Configuración de Audio
+description: |-
+  Audio-specific configuration for the `frankenstein_audio` model class
+  (Conformer, arXiv:2005.08100). Defines the waveform frontend (`logmel`,
+  `spectrogram` or raw 1-D signals), the sample rate and frame geometry, the
+  convolutional subsampling stack, the classification pooling strategy and
+  the ASR head (CTC or RNN-Transducer, arXiv:1211.3711).
+
+  Required when `model_class: frankenstein_audio`.
+
+  `feature: logmel` computes 80-channel log-mel filterbanks with a 25 ms
+  window and a 10 ms stride (the Conformer recipe). `feature: spectrogram`
+  uses the log-power STFT instead. `feature: raw` bypasses the mel/STFT
+  frontend entirely and feeds generic multichannel 1-D signals through the
+  same conv subsampling, supporting biomedical and sensor time series (EEG,
+  EMG, accelerometer, ...) for classification; set `in_channels` to the
+  number of signal channels.
+description_es: |-
+  Configuración específica de audio para el modelo `frankenstein_audio`
+  (Conformer, arXiv:2005.08100). Define el frontend de forma de onda
+  (`logmel`, `spectrogram` o señales 1-D crudas), la tasa de muestreo y la
+  geometría de tramas, la pila de submuestreo convolucional, la estrategia de
+  pooling de clasificación y la cabeza ASR (CTC o RNN-Transducer,
+  arXiv:1211.3711).
+
+  Obligatorio cuando `model_class: frankenstein_audio`.
+
+  `feature: logmel` calcula filtros log-mel de 80 canales con ventana de
+  25 ms y salto de 10 ms (la receta de Conformer). `feature: spectrogram` usa
+  en su lugar el STFT de potencia logarítmica. `feature: raw` omite el
+  frontend mel/STFT y alimenta señales 1-D multicanal genéricas a través del
+  mismo submuestreo convolucional, soportando series temporales biomédicas y
+  de sensores (EEG, EMG, acelerómetro, ...) para clasificación; ajusta
+  `in_channels` al número de canales de la señal.
+additionalProperties: false
+properties:
+  sample_rate:
+    type: integer
+    minimum: 1
+    title: Sample Rate
+    title_es: Tasa de Muestreo
+    description: |-
+      Audio sample rate in Hz used by the mel/STFT frontend. The Conformer
+      recipe uses 16 kHz.
+    description_es: |-
+      Tasa de muestreo de audio en Hz usada por el frontend mel/STFT. La
+      receta de Conformer usa 16 kHz.
+    default: 16000
+    examples: [8000, 16000, 22050]
+  n_mels:
+    type: integer
+    minimum: 1
+    title: Mel Channels
+    title_es: Canales Mel
+    description: |-
+      Number of mel filterbank channels (`feature: logmel`). The Conformer
+      paper uses 80.
+    description_es: |-
+      Número de canales del banco de filtros mel (`feature: logmel`). El
+      paper de Conformer usa 80.
+    default: 80
+    examples: [40, 80, 128]
+  window_ms:
+    type: number
+    exclusiveMinimum: 0
+    title: Window (ms)
+    title_es: Ventana (ms)
+    description: |-
+      Analysis window length in milliseconds for the short-time Fourier
+      transform. The Conformer paper uses 25 ms.
+    description_es: |-
+      Longitud de la ventana de análisis en milisegundos para la transformada
+      de Fourier de corto tiempo. El paper de Conformer usa 25 ms.
+    default: 25.0
+    examples: [20.0, 25.0, 32.0]
+  stride_ms:
+    type: number
+    exclusiveMinimum: 0
+    title: Stride (ms)
+    title_es: Salto (ms)
+    description: |-
+      Frame stride in milliseconds (hop length). The Conformer paper uses
+      10 ms, which the two stride-2 convolutions reduce to 40 ms frames.
+    description_es: |-
+      Salto entre tramas en milisegundos (hop length). El paper de Conformer
+      usa 10 ms, que las dos convoluciones de stride 2 reducen a tramas de
+      40 ms.
+    default: 10.0
+    examples: [10.0, 12.5, 20.0]
+  n_fft:
+    type: integer
+    minimum: 1
+    title: FFT Size
+    title_es: Tamaño de FFT
+    description: |-
+      FFT size of the short-time Fourier transform. Must be at least the
+      window length in samples (`window_ms * sample_rate / 1000`). The
+      Conformer recipe uses 400 for a 25 ms window at 16 kHz.
+    description_es: |-
+      Tamaño de la FFT de la transformada de Fourier de corto tiempo. Debe
+      ser al menos la longitud de la ventana en muestras
+      (`window_ms * sample_rate / 1000`). La receta de Conformer usa 400 para
+      una ventana de 25 ms a 16 kHz.
+    default: 400
+    examples: [256, 400, 512]
+  feature:
+    type: string
+    title: Input Feature
+    title_es: Característica de Entrada
+    description: |-
+      Frontend feature type. `logmel` = 80-channel log-mel filterbanks (the
+      Conformer recipe). `spectrogram` = log-power STFT frames. `raw` =
+      generic multichannel 1-D signals (EEG, EMG, accelerometer, ...) fed
+      directly to the convolutional subsampling; use it for biomedical and
+      sensor time series classification.
+    description_es: |-
+      Tipo de característica del frontend. `logmel` = filtros log-mel de 80
+      canales (la receta de Conformer). `spectrogram` = tramas STFT de
+      potencia logarítmica. `raw` = señales 1-D multicanal genéricas (EEG,
+      EMG, acelerómetro, ...) alimentadas directamente al submuestreo
+      convolucional; úsalo para clasificación de series temporales biomédicas
+      y de sensores.
+    enum:
+      - logmel
+      - spectrogram
+      - raw
+    default: logmel
+    examples: [logmel, spectrogram, raw]
+  in_channels:
+    type: integer
+    minimum: 1
+    title: Input Channels
+    title_es: Canales de Entrada
+    description: |-
+      Number of input channels for `feature: raw` (1 for a mono waveform,
+      N for N-channel physiological or sensor signals). Ignored by the
+      `logmel`/`spectrogram` frontends, which mix the input to mono.
+    description_es: |-
+      Número de canales de entrada para `feature: raw` (1 para una forma de
+      onda mono, N para señales fisiológicas o de sensores de N canales).
+      Ignorado por los frontends `logmel`/`spectrogram`, que mezclan la
+      entrada a mono.
+    default: 1
+    examples: [1, 4, 19]
+  conv_channels:
+    type: integer
+    minimum: 1
+    title: Convolution Channels
+    title_es: Canales de Convolución
+    description: |-
+      Number of channels of the convolutional subsampling stack
+      (two stride-2 convolutions, kernel 3, padding 1). The stack reduces the
+      frame rate by 4× (10 ms → 40 ms for the Conformer recipe).
+    description_es: |-
+      Número de canales de la pila de submuestreo convolucional (dos
+      convoluciones de stride 2, kernel 3, padding 1). La pila reduce la tasa
+      de tramas en 4× (10 ms → 40 ms para la receta de Conformer).
+    default: 32
+    examples: [16, 32, 64]
+  num_classes:
+    type: integer
+    minimum: 1
+    title: Number of Classes
+    title_es: Número de Clases
+    description: |-
+      Number of classes for audio classification (`task:
+      audio_classification`). No implicit task default is applied by the
+      schema beyond the documented `2`.
+    description_es: |-
+      Número de clases para clasificación de audio (`task:
+      audio_classification`). El esquema no aplica más valor por defecto que
+      el `2` documentado.
+    default: 2
+    examples: [2, 10, 35]
+  pooling_mode:
+    type: string
+    title: Pooling Mode
+    title_es: Modo de Pooling
+    description: |-
+      Pooling strategy for audio classification. `gap` (Global Average
+      Pooling) averages the encoder frames; `cls` prepends a learnable [CLS]
+      token and reads its output. The token is only added for the pooled
+      classification path, so ASR frame alignment is unaffected.
+    description_es: |-
+      Estrategia de pooling para clasificación de audio. `gap` (Global
+      Average Pooling) promedia las tramas del encoder; `cls` antepone un
+      token [CLS] aprendible y lee su salida. El token solo se añade en la ruta
+      de clasificación con pooling, por lo que la alineación de tramas ASR no
+      se ve afectada.
+    enum:
+      - gap
+      - cls
+    default: gap
+  asr_loss:
+    type: string
+    title: ASR Loss
+    title_es: Pérdida ASR
+    description: |-
+      Automatic speech recognition head. `ctc` = Connectionist Temporal
+      Classification projection over the encoder frames. `transducer` =
+      RNN-Transducer (arXiv:1211.3711) with an LSTM prediction network and a
+      joint network returning per-frame/per-label logits.
+    description_es: |-
+      Cabeza de reconocimiento automático del habla. `ctc` = proyección de
+      Connectionist Temporal Classification sobre las tramas del encoder.
+      `transducer` = RNN-Transducer (arXiv:1211.3711) con una red de
+      predicción LSTM y una red conjunta que devuelve logits por
+      trama/etiqueta.
+    enum:
+      - ctc
+      - transducer
+    default: ctc
+    examples: [ctc, transducer]
+  asr_decoder_dim:
+    type: integer
+    minimum: 1
+    title: ASR Decoder Dimension
+    title_es: Dimensión del Decoder ASR
+    description: |-
+      Hidden size of the RNN-Transducer prediction network (`asr_loss:
+      transducer`). The Conformer paper uses 320 (S), 640 (M/L).
+    description_es: |-
+      Tamaño oculto de la red de predicción del RNN-Transducer (`asr_loss:
+      transducer`). El paper de Conformer usa 320 (S) y 640 (M/L).
+    default: 320
+    examples: [320, 640]
+  asr_decoder_layers:
+    type: integer
+    minimum: 1
+    title: ASR Decoder Layers
+    title_es: Capas del Decoder ASR
+    description: |-
+      Number of LSTM layers in the RNN-Transducer prediction network.
+    description_es: |-
+      Número de capas LSTM de la red de predicción del RNN-Transducer.
+    default: 1
+    examples: [1, 2]
+  asr_decoder_dropout:
+    type: number
+    minimum: 0
+    exclusiveMaximum: 1
+    title: ASR Decoder Dropout
+    title_es: Dropout del Decoder ASR
+    description: |-
+      Dropout applied inside the RNN-Transducer prediction network (only
+      active when `asr_decoder_layers > 1`, as required by `nn.LSTM`).
+    description_es: |-
+      Dropout aplicado dentro de la red de predicción del RNN-Transducer
+      (solo activo cuando `asr_decoder_layers > 1`, como exige `nn.LSTM`).
+    default: 0.1
+    examples: [0.0, 0.1, 0.2]

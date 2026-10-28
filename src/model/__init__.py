@@ -3,6 +3,7 @@ from .hybrid_layer import HybridLayer
 from .frankenstein_encoder import FrankensteinEncoder
 from .frankenstein_decoder import FrankensteinDecoder
 from .frankenstein_vit import FrankensteinViT
+from .frankenstein_audio import FrankensteinAudio
 from .residuals import (
     BlockAttentionResidual,
     FullAttentionResidual,
@@ -18,6 +19,7 @@ __all__ = [
     "FrankensteinEncoder",
     "FrankensteinDecoder",
     "FrankensteinViT",
+    "FrankensteinAudio",
     "ResidualBase",
     "StandardResidual",
     "NoResidual",

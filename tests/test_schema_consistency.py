@@ -96,6 +96,53 @@ def test_sbert_optimizer_enum_resolves_to_canonical(schema):
     assert sbert == canonical
 
 
+def test_model_class_enum_documents_every_class(schema):
+    model_class = _at(schema, "properties.model_class")
+    enum = list(model_class["enum"])
+    assert enum == model_class["examples"]
+    for value in enum:
+        assert f"`{value}`" in model_class["description"], value
+        assert f"`{value}`" in model_class["description_es"], value
+
+
+def test_audio_blocks_validate(schema):
+    audio_schema = _at(schema, "properties.audio")
+    audio_dataset_schema = _at(schema, "properties.audio_dataset")
+
+    audio_validator = Draft202012Validator(audio_schema)
+    assert not list(audio_validator.iter_errors({}))
+    assert not list(
+        audio_validator.iter_errors(
+            {
+                "feature": "raw",
+                "in_channels": 4,
+                "conv_channels": 16,
+                "num_classes": 5,
+                "pooling_mode": "cls",
+                "asr_loss": "transducer",
+                "asr_decoder_dim": 64,
+                "asr_decoder_layers": 1,
+                "asr_decoder_dropout": 0.0,
+            }
+        )
+    )
+    assert list(audio_validator.iter_errors({"feature": "mel"}))
+    assert list(audio_validator.iter_errors({"unknown_key": 1}))
+
+    dataset_validator = Draft202012Validator(audio_dataset_schema)
+    assert not list(
+        dataset_validator.iter_errors(
+            {
+                "dataset_name": "astroza/chilean-jokes-festival-de-vina",
+                "audio_column": "audio",
+                "text_column": "text",
+                "spec_augment": {"enabled": True, "time_masks": 2},
+            }
+        )
+    )
+    assert list(dataset_validator.iter_errors({"spec_augment": {"bogus": 1}}))
+
+
 _DEFAULT_PAIRS = {
     "properties.model.properties.dims.properties.vocab_size": "vocab_size",
     "properties.model.properties.dims.properties.hidden_size": "hidden_size",
@@ -136,6 +183,23 @@ _DEFAULT_PAIRS = {
     "properties.model.properties.attention.properties.conformer.properties.kernel_size": "conformer_kernel_size",
     "properties.model.properties.attention.properties.conformer.properties.macaron": "conformer_macaron",
     "properties.model.properties.attention.properties.conformer.properties.conv_norm": "conformer_conv_norm",
+    # ---- Audio frontend + ASR head (top-level ``audio:`` block) ----
+    # NOTE: ``audio.num_classes`` and ``audio.pooling_mode`` are deliberately
+    # absent: they map onto the shared ``num_classes`` / ``pooling_mode``
+    # fields whose dataclass defaults are the ViT ones (1000 / "cls"), while
+    # the audio block documents audio-task defaults (2 / "gap").
+    "properties.audio.properties.sample_rate": "audio_sample_rate",
+    "properties.audio.properties.n_mels": "audio_n_mels",
+    "properties.audio.properties.window_ms": "audio_window_ms",
+    "properties.audio.properties.stride_ms": "audio_stride_ms",
+    "properties.audio.properties.n_fft": "audio_n_fft",
+    "properties.audio.properties.feature": "audio_feature",
+    "properties.audio.properties.in_channels": "audio_in_channels",
+    "properties.audio.properties.conv_channels": "audio_conv_channels",
+    "properties.audio.properties.asr_loss": "asr_loss",
+    "properties.audio.properties.asr_decoder_dim": "asr_decoder_dim",
+    "properties.audio.properties.asr_decoder_layers": "asr_decoder_layers",
+    "properties.audio.properties.asr_decoder_dropout": "asr_decoder_dropout",
 }
 
 

@@ -86,17 +86,34 @@ class ModelDeployer:
 
     @staticmethod
     def _build_model(config: FrankensteinModelConfig) -> "FrankensteinEncoder":
-        """Instantiate the model variant for the configured ``mode``.
+        """Instantiate the model variant recorded in the config.
+
+        Dispatch order: autoregressive decoder (``mode == "decoder"``),
+        the recorded ``config.model_class`` (``frankenstein_audio`` /
+        ``frankenstein_vit``), then the legacy ViT field heuristic, and
+        finally the plain :class:`FrankensteinEncoder`.
+
+        ``config.model_class`` is the primary discriminator because every
+        :class:`FrankensteinModelConfig` instance carries all modality
+        fields (``audio_feature``, ``patch_size``, ...) — ``hasattr`` alone
+        cannot tell an audio config from a text one.
 
         Args:
             config: Model configuration.
 
         Returns:
-            A ``FrankensteinDecoder`` when ``mode == "decoder"``, else a
-            plain :class:`FrankensteinEncoder`.
+            A ``FrankensteinDecoder``, ``FrankensteinViT``,
+            ``FrankensteinAudio`` or plain :class:`FrankensteinEncoder`.
         """
         if getattr(config, "mode", "encoder") == "decoder":
             return FrankensteinDecoder(config)
+        recorded = str(getattr(config, "model_class", None) or "").strip().lower()
+        if hasattr(config, "audio_feature") and recorded == "frankenstein_audio":
+            from ..model.frankenstein_audio import FrankensteinAudio
+            return FrankensteinAudio(config)
+        if recorded == "frankenstein_vit":
+            from ..model.frankenstein_vit import FrankensteinViT
+            return FrankensteinViT(config)
         # Vision Transformer: detect via patch_size > 0 and in_channels present.
         if hasattr(config, "patch_size") and getattr(config, "pos_embedding_type", "") in ("learned_1d", "none"):
             from ..model.frankenstein_vit import FrankensteinViT
@@ -125,11 +142,8 @@ class ModelDeployer:
                     setattr(self.config, key, value)
             logger.info("Loaded config from checkpoint")
         
-        # Initialize model (decoder when configured)
-        if isinstance(self.config.mode, str) and self.config.mode == "decoder":
-            self.model = FrankensteinDecoder(self.config)
-        else:
-            self.model = FrankensteinEncoder(self.config)
+        # Initialize model from the recorded class / configured mode.
+        self.model = self._build_model(self.config)
         self.model.to(self.device)
         
         # Load state dict. Decoder/Mini wrap a backbone; checkpoints may store
@@ -291,11 +305,8 @@ class ModelDeployer:
             # Create config object
             config = FrankensteinModelConfig(**flatten_model_dict(config_dict))
             
-            # Initialize model (decoder when configured)
-            if isinstance(config.mode, str) and config.mode == "decoder":
-                model = FrankensteinDecoder(config)
-            else:
-                model = FrankensteinEncoder(config)
+            # Initialize model from the recorded class / configured mode.
+            model = self._build_model(config)
             model.to(self.device)
             
             # Load weights
@@ -316,8 +327,14 @@ class ModelDeployer:
             logger.info("Testing forward pass...")
             model.eval()
             with torch.no_grad():
-                test_input = torch.randint(0, config.vocab_size, (2, 64), device=self.device)
-                output = model(test_input)
+                if str(getattr(config, "model_class", "") or "").lower() == "frankenstein_audio":
+                    test_input = torch.randn(
+                        2, int(config.audio_sample_rate), device=self.device
+                    )
+                    output = model(test_input, task="audio_classification")
+                else:
+                    test_input = torch.randint(0, config.vocab_size, (2, 64), device=self.device)
+                    output = model(test_input)
                 logger.info(f"Output shape: {output.shape}")
             
             logger.info("✅ Validation successful")

@@ -263,6 +263,56 @@ def flatten_image_dict(image_data: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def flatten_audio_dict(audio_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Flatten the top-level ``audio:`` block into flat config kwargs.
+
+    This mirrors :func:`flatten_image_dict`: the ``audio:`` block is a
+    top-level YAML key (sibling of ``model:``) whose fields flatten into the
+    same :class:`~src.model.config.FrankensteinModelConfig` dataclass, so the
+    audio frontend knobs are prefixed with ``audio_`` while the task-head
+    knobs keep their (already unique) names.
+
+    Args:
+        audio_data: The ``audio:`` mapping from a YAML config.
+
+    Returns:
+        A flat dictionary of audio config kwargs. Empty if ``audio_data`` is
+        not a dict.
+    """
+    if not isinstance(audio_data, dict):
+        return {}
+
+    out: Dict[str, Any] = {}
+
+    # ``audio.*`` → ``audio_*`` leaf renames.
+    for leaf, flat_key in (
+        ("sample_rate", "audio_sample_rate"),
+        ("n_mels", "audio_n_mels"),
+        ("window_ms", "audio_window_ms"),
+        ("stride_ms", "audio_stride_ms"),
+        ("n_fft", "audio_n_fft"),
+        ("feature", "audio_feature"),
+        ("in_channels", "audio_in_channels"),
+        ("conv_channels", "audio_conv_channels"),
+    ):
+        if leaf in audio_data:
+            out[flat_key] = audio_data[leaf]
+
+    # Task-head leaves keep their names (no collision with the model block).
+    for leaf in (
+        "num_classes",
+        "pooling_mode",
+        "asr_loss",
+        "asr_decoder_dim",
+        "asr_decoder_layers",
+        "asr_decoder_dropout",
+    ):
+        if leaf in audio_data:
+            out[leaf] = audio_data[leaf]
+
+    return out
+
+
 def _flatten_attention(attn: Dict[str, Any], out: Dict[str, Any]) -> None:
     """Flatten the ``model.attention`` sub-tree into flat keys in ``out``."""
     for mixer, spec in attn.items():

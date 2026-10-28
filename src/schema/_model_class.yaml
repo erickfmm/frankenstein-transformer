@@ -6,24 +6,30 @@ description: |-
   - `frankenstein_text_encoder`: mixed-architecture text encoder with various attention mechanisms (standard, sigmoid, retentive, state-space, sparse, and gated mixers), MoE (Mixture of Experts), and advanced features. Optimized for bidirectional encoder-style training with masked language modeling (MLM).
   - `frankenstein_text_decoder`: autoregressive causal text decoder for LLM-style next-token generation. **Automatically forces `mode: decoder`** at runtime. Enables causal masking for text generation tasks.
   - `frankenstein_vit`: Vision Transformer (arXiv:2010.11929). Splits images into fixed-size patches, linearly embeds each patch, adds positional embeddings, and processes the resulting sequence through the mixed-attention HybridLayer stack. Supports three tasks: `patch_prediction` (masked patch prediction / autosupervised pre-training), `classification` (image classification), and `segmentation` (per-pixel or EoMT-style image segmentation, arXiv:2503.19108). **Requires the `image:` top-level block** for patch/image/task-specific configuration and the `vision_dataset:` block for data loading. Automatically forces `mode: encoder` at runtime.
+  - `frankenstein_audio`: Conformer-ready audio/signal encoder (arXiv:2005.08100). Replaces the token embedding with a waveform frontend (log-mel filterbanks, log-power spectrogram or raw multichannel 1-D signals) followed by convolutional subsampling, then processes the frames through the mixed-attention HybridLayer stack. Supports `asr` (CTC projection or RNN-Transducer, arXiv:1211.3711) and `audio_classification` heads; `feature: raw` also covers generic multichannel signals such as EEG, EMG and accelerometer traces for classification. **Requires the `audio:` top-level block** for frontend/head configuration and the `audio_dataset:` block for data loading. Automatically forces `mode: encoder` at runtime.
 
   **Examples explained:**
   - `frankenstein_text_encoder`: Use when you need a full-featured text encoder with mixed attention mechanisms, MoE, and advanced normalization. Best for MLM pre-training with large datasets where architectural flexibility matters. Supports all mixer types in `layer_pattern`.
   - `frankenstein_text_decoder`: Use for autoregressive text generation tasks (GPT-style). The system forces `mode=decoder` automatically. Supports causal attention where each token only attends to previous tokens.
+  - `frankenstein_audio`: Use for speech recognition or audio/sensor classification. Pair `layer_pattern: [conformer_attn]` with `audio.feature: logmel` for the paper's recipe, or `audio.feature: raw` to classify multichannel 1-D signals directly.
 description_es: |-
   Variante de arquitectura del modelo a instanciar. Determina qué clase de implementación se usa.
   - `frankenstein_text_encoder`: encoder de texto de arquitectura mixta con varios mecanismos de atención (estándar, sigmoide, retentiva, espacio de estados, dispersa y con compuertas), MoE (Mixture of Experts) y características avanzadas. Optimizado para entrenamiento bidireccional estilo encoder con masked language modeling (MLM).
   - `frankenstein_text_decoder`: decoder de texto causal autorregresivo para generación de siguiente token estilo LLM. **Fuerza automáticamente `mode: decoder`** en tiempo de ejecución. Habilita enmascaramiento causal para tareas de generación de texto.
   - `frankenstein_vit`: Vision Transformer (arXiv:2010.11929). Divide imágenes en parches de tamaño fijo, embebe cada parche linealmente, añade embeddings posicionales y procesa la secuencia resultante a través del stack de HybridLayers con atención mixta. Soporta tres tareas: `patch_prediction` (predicción de parches enmascarados / preentrenamiento autosupervisado), `classification` (clasificación de imágenes), y `segmentation` (segmentación por-pixel o estilo EoMT, arXiv:2503.19108). **Requiere el bloque top-level `image:`** para configuración de parches/imagen/tarea y el bloque `vision_dataset:` para carga de datos. Fuerza automáticamente `mode: encoder` en tiempo de ejecución.
+  - `frankenstein_audio`: encoder de audio/señales listo para Conformer (arXiv:2005.08100). Reemplaza el embedding de tokens por un frontend de forma de onda (filtros log-mel, espectrograma de potencia logarítmica o señales 1-D multicanal crudas) seguido de submuestreo convolucional, y luego procesa las tramas a través del stack de HybridLayers con atención mixta. Soporta cabezas `asr` (proyección CTC o RNN-Transducer, arXiv:1211.3711) y `audio_classification`; `feature: raw` también cubre señales multicanal genéricas como EEG, EMG y trazas de acelerómetro para clasificación. **Requiere el bloque top-level `audio:`** para configuración del frontend/cabeza y el bloque `audio_dataset:` para carga de datos. Fuerza automáticamente `mode: encoder` en tiempo de ejecución.
 
   **Ejemplos explicados:**
   - `frankenstein_text_encoder`: Usar cuando se necesita un encoder de texto completo con mecanismos de atención mixtos, MoE y normalización avanzada. Ideal para preentrenamiento MLM con datasets grandes donde importa la flexibilidad arquitectónica. Soporta todos los tipos de mixer en `layer_pattern`.
   - `frankenstein_text_decoder`: Usar para tareas de generación de texto autorregresivas (tipo GPT). El sistema fuerza `mode=decoder` automáticamente. Soporta atención causal donde cada token solo atiende a tokens previos.
+  - `frankenstein_audio`: Usar para reconocimiento de habla o clasificación de audio/señales. Combina `layer_pattern: [conformer_attn]` con `audio.feature: logmel` para la receta del paper, o `audio.feature: raw` para clasificar señales 1-D multicanal directamente.
 enum:
   - frankenstein_text_encoder
   - frankenstein_text_decoder
   - frankenstein_vit
+  - frankenstein_audio
 examples:
   - frankenstein_text_encoder
   - frankenstein_text_decoder
   - frankenstein_vit
+  - frankenstein_audio

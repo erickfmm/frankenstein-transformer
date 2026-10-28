@@ -415,6 +415,30 @@ class FrankensteinModelConfig:
         engram_kernel_size: ShortConv kernel width for Engram layers.
             Default: 4.
         engram_seed: RNG seed for Engram hash multipliers. Default: 42.
+        audio_feature: Input feature frontend for ``frankenstein_audio``:
+            ``"logmel"`` (log-mel filterbanks), ``"spectrogram"`` (log-power
+            STFT) or ``"raw"`` (generic multichannel 1-D signals such as EEG,
+            EMG or accelerometer traces). Default: ``"logmel"``.
+        audio_sample_rate: Frontend sample rate in Hz. Default: 16000.
+        audio_n_mels: Number of mel filterbank channels. Default: 80.
+        audio_window_ms: Analysis window length in milliseconds. Default: 25.
+        audio_stride_ms: Frame stride in milliseconds. Default: 10.
+        audio_n_fft: FFT size. Must be >= the window length in samples.
+            Default: 400.
+        audio_in_channels: Input channels for ``feature: raw``. Default: 1.
+        audio_conv_channels: Channels of the convolutional subsampling stack.
+            Default: 32.
+        asr_loss: ASR output head: ``"ctc"`` or ``"transducer"``.
+            Default: ``"ctc"``.
+        asr_decoder_dim: RNN-Transducer prediction-network hidden size.
+            Default: 320.
+        asr_decoder_layers: RNN-Transducer prediction-network LSTM layers.
+            Default: 1.
+        asr_decoder_dropout: RNN-Transducer prediction-network dropout.
+            Default: 0.1.
+        model_class: Model class recorded for deployment dispatch
+            (``frankenstein_audio``, ``frankenstein_vit`` or a text class).
+            ``None`` keeps the legacy mode/field heuristics. Default: None.
 
     Raises:
         ValueError: If ``positional_encoding`` is not one of
@@ -838,6 +862,44 @@ class FrankensteinModelConfig:
     # ``classification_head=True``. Mirrors the ViT ``pooling_mode``.
     encoder_pooling_mode: str = "cls"
 
+    # ---- Audio (frankenstein_audio, arXiv:2005.08100) ----
+    # Input feature frontend: ``"logmel"`` (80-channel log-mel filterbanks,
+    # Conformer recipe), ``"spectrogram"`` (log-power STFT) or ``"raw"``
+    # (generic multichannel 1-D signals: EEG, EMG, accelerometer, ...).
+    audio_feature: str = "logmel"
+    # Sample rate in Hz used by the mel/STFT frontend.
+    audio_sample_rate: int = 16000
+    # Number of mel filterbank channels (logmel path).
+    audio_n_mels: int = 80
+    # Analysis window length in milliseconds (25 ms in the Conformer paper).
+    audio_window_ms: float = 25.0
+    # Frame stride in milliseconds (10 ms in the Conformer paper).
+    audio_stride_ms: float = 10.0
+    # FFT size for the STFT / mel filterbank.
+    audio_n_fft: int = 400
+    # Number of input channels for ``feature: raw`` (1 = mono waveform).
+    audio_in_channels: int = 1
+    # Channels of the conv-subsampling stack (10 ms → 40 ms frames).
+    audio_conv_channels: int = 32
+    # ASR output head: ``"ctc"`` (CTC projection over frames) or
+    # ``"transducer"`` (RNN-Transducer with a prediction + joint network).
+    asr_loss: str = "ctc"
+    # RNN-Transducer prediction-network hidden size (paper: 320/640/640).
+    asr_decoder_dim: int = 320
+    # RNN-Transducer prediction-network LSTM layers.
+    asr_decoder_layers: int = 1
+    # RNN-Transducer prediction-network dropout (only used when >1 layer).
+    asr_decoder_dropout: float = 0.1
+
+    # ---- Recorded model class (deployment dispatch) ----
+    # ``frankenstein_audio`` / ``frankenstein_vit`` / ``frankenstein_text_*``
+    # as resolved from the YAML ``model_class``. Every dataclass instance
+    # carries the modality-specific fields (``audio_feature``,
+    # ``patch_size``, ...), so deployment dispatch uses this recorded value
+    # instead of guessing from field presence. ``None`` (e.g. a bare
+    # ``FrankensteinModelConfig()``) keeps the legacy mode/field heuristics.
+    model_class: Optional[str] = None
+
     def __post_init__(self):
         """Validate and derive dependent configuration fields after dataclass init.
 
@@ -1212,4 +1274,56 @@ class FrankensteinModelConfig:
             raise ValueError(
                 f"encoder_pooling_mode must be 'cls' or 'gap', "
                 f"got {self.encoder_pooling_mode}"
+            )
+
+        # ---- Validate audio frontend + ASR head fields ----
+        _VALID_AUDIO_FEATURES = {"logmel", "spectrogram", "raw"}
+        self.audio_feature = str(self.audio_feature).lower()
+        if self.audio_feature not in _VALID_AUDIO_FEATURES:
+            raise ValueError(
+                f"audio_feature must be one of {sorted(_VALID_AUDIO_FEATURES)}, "
+                f"got {self.audio_feature!r}"
+            )
+        for name in (
+            "audio_sample_rate",
+            "audio_n_mels",
+            "audio_n_fft",
+            "audio_in_channels",
+            "audio_conv_channels",
+        ):
+            value = int(getattr(self, name))
+            if value < 1:
+                raise ValueError(f"{name} must be >= 1, got {value}")
+        for name in ("audio_window_ms", "audio_stride_ms"):
+            value = float(getattr(self, name))
+            if value <= 0.0:
+                raise ValueError(f"{name} must be > 0, got {value}")
+        window_samples = int(
+            round(float(self.audio_window_ms) * int(self.audio_sample_rate) / 1000.0)
+        )
+        if int(self.audio_n_fft) < max(1, window_samples):
+            raise ValueError(
+                f"audio_n_fft ({self.audio_n_fft}) must be >= the window length "
+                f"in samples ({max(1, window_samples)} samples for "
+                f"{self.audio_window_ms} ms at {self.audio_sample_rate} Hz)"
+            )
+        _VALID_ASR_LOSSES = {"ctc", "transducer"}
+        self.asr_loss = str(self.asr_loss).lower()
+        if self.asr_loss not in _VALID_ASR_LOSSES:
+            raise ValueError(
+                f"asr_loss must be one of {sorted(_VALID_ASR_LOSSES)}, "
+                f"got {self.asr_loss!r}"
+            )
+        if int(self.asr_decoder_dim) < 1:
+            raise ValueError(
+                f"asr_decoder_dim must be >= 1, got {self.asr_decoder_dim}"
+            )
+        if int(self.asr_decoder_layers) < 1:
+            raise ValueError(
+                f"asr_decoder_layers must be >= 1, got {self.asr_decoder_layers}"
+            )
+        if not 0.0 <= float(self.asr_decoder_dropout) < 1.0:
+            raise ValueError(
+                "asr_decoder_dropout must be in the range [0, 1), got "
+                f"{self.asr_decoder_dropout}"
             )

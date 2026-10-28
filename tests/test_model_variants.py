@@ -9,6 +9,7 @@ if TORCH_AVAILABLE:
     from src.model.config import FrankensteinModelConfig
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
+    from src.model.frankenstein_audio import FrankensteinAudio
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -351,6 +352,52 @@ class FrankensteinEncoderTests(unittest.TestCase):
                 ffn_hidden_size=96,
                 ffn_activation="gelu",
             )
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class FrankensteinAudioTests(unittest.TestCase):
+    """The audio model forces encoder mode and returns task-shaped logits."""
+
+    def _small_audio(self, **kw):
+        cfg = FrankensteinAudio.build_audio_config(
+            vocab_size=100,
+            hidden_size=48,
+            num_layers=2,
+            num_heads=4,
+            num_loops=1,
+            use_bitnet=False,
+            dropout=0.0,
+            audio_n_mels=32,
+            audio_conv_channels=8,
+            num_classes=4,
+            ffn_hidden_size=96,
+            **kw,
+        )
+        return FrankensteinAudio(cfg)
+
+    def test_mode_forced_to_encoder(self):
+        cfg = FrankensteinAudio.build_audio_config(
+            vocab_size=100,
+            hidden_size=48,
+            num_heads=4,
+            num_layers=2,
+            audio_n_mels=32,
+            audio_conv_channels=8,
+        )
+        cfg.mode = "decoder"  # override to test that the audio model enforces mode
+        model = FrankensteinAudio(cfg)
+        self.assertEqual(model.config.mode, "encoder")
+
+    def test_audio_classification_forward(self):
+        model = self._small_audio()
+        out = model(torch.randn(2, 1600), task="audio_classification")
+        self.assertEqual(tuple(out.shape), (2, 4))
+
+    def test_ctc_asr_forward(self):
+        model = self._small_audio()
+        out = model(torch.randn(2, 1600), task="asr")
+        self.assertEqual(out.shape[0], 2)
+        self.assertEqual(out.shape[-1], 100)
 
 
 if __name__ == "__main__":

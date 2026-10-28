@@ -44,6 +44,8 @@ _HEAD_MODULES: Final[frozenset[str]] = frozenset(
         "patch_pred_head",
         "seg_head",
         "seg_upsampler",
+        "audio_classification_head",
+        "transducer",
     }
 )
 
@@ -66,8 +68,8 @@ def categorize_param(name: str) -> str:
     # the top level.
     top = parts[1] if parts[0] == "backbone" and len(parts) > 1 else parts[0]
 
-    # Embedding / patch embedding.
-    if top in ("emb", "patch_embed"):
+    # Embedding / patch embedding / audio frontend (waveform → frames).
+    if top in ("emb", "patch_embed", "frontend"):
         return "embeddings"
 
     # Positional encodings, plus the ViT cls/mask tokens that the estimator
