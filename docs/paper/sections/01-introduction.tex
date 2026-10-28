@@ -11,7 +11,7 @@ The practical consequence is a fragmented ecosystem. Comparing sequence mixers o
 We propose \textbf{Frankenstein Transformer} (\url{https://github.com/erickfmm/frankenstein-transformer}), a configuration-driven toolkit that treats architecture, optimizer, and training choices as a single validated document. The project provides:
 
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Schema-first design}: a strict YAML contract supporting forty-three sequence mixers across eight families and twenty-four optimizer families, enforced before training begins.
+    \item \textbf{Schema-first design}: a strict YAML contract supporting forty-five sequence mixers across nine families and twenty-four optimizer families, enforced before training begins.
     \item \textbf{Architecture-agnostic training}: one pipeline for dense baselines, recurrent and retentive blocks, sparse patterns, gated mechanisms, latent compression, conditional memory, fast-weight attention, and geometric-field attention, with encoder and decoder modes \citep{zhu2026mixtureofdepthsattention,cheng2026conditionalmemoryscalablelookup,xie_mhc_2025,zhang_falcon_2026,pisoni_ssog_2026}.
     \item \textbf{Optimizer routing}: prefixed hyperparameter groups that control embeddings, normalization layers, attention blocks, and remaining parameters independently for each optimizer family \citep{zhu2025apollosgdlikememoryadamwlevel}.
     \item \textbf{End-to-end workflows}: training (including sentence-embedding objectives), deployment and export (quantized, standard, HuggingFace Transformers, and BitNet GGUF formats), inference, and a schema-driven web builder inspired by SBERT-style workflows \citep{reimers_sentence-bert_2019}.

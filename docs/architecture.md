@@ -43,9 +43,9 @@ flowchart TD
     Y["YAML config<br/>configs/*.yaml"] --> V{"Schema validation<br/>src/schema.yaml<br/>+ _conditional_rules.yaml"}
     V -- invalid --> E["Fail fast<br/>field-level error"]
     V -- valid --> L["load_training_config()<br/>src/training/config_loader.py"]
-    L --> F["flatten_model_dict()<br/>flatten_image_dict()<br/>src/utils/config_flatten.py"]
+    L --> F["flatten_model_dict()<br/>flatten_image_dict()<br/>flatten_audio_dict()<br/>src/utils/config_flatten.py"]
     F --> C["FrankensteinModelConfig<br/>src/model/config.py (flat dataclass)"]
-    C --> B["engine.build_model()<br/>Encoder | Decoder | ViT"]
+    C --> B["engine.build_model()<br/>Encoder | Decoder | ViT | Audio"]
     B --> T["TitanTrainer<br/>src/training/trainer.py"]
     T --> K["Checkpoints + metrics + telemetry"]
     K --> D["deploy --format<br/>standard | quantized"]
@@ -64,7 +64,7 @@ The YAML file is the single source of truth for model/training settings.
 |---|---|
 | `src/cli.py` | `frankenstein-transformer` entrypoint: `train`, `deploy`, `infer`, `web-server` |
 | `src/schema.yaml` | JSON-Schema entrypoint; `$ref`s every module |
-| `src/schema/**` | Schema modules (model, training, optimizer, datasets, vision) |
+| `src/schema/**` | Schema modules (model, training, optimizer, datasets, vision, audio) |
 | `src/training/config_loader.py` | Schema resolution + cross-field validation + `LoadedTrainingConfig` |
 | `src/utils/config_flatten.py` | Nested YAML → flat `FrankensteinModelConfig` kwargs |
 | `src/model/config.py` | `FrankensteinModelConfig` flat dataclass (single coupling point) |
@@ -72,6 +72,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/frankenstein_encoder.py` | Encoder backbone (bidirectional; owns shared PE, mHC, AttnRes) |
 | `src/model/frankenstein_decoder.py` | Causal decoder (forces `mode=decoder`) |
 | `src/model/frankenstein_vit.py` | Vision Transformer (forces `mode=encoder`) |
+| `src/model/frankenstein_audio.py` | Audio model class: log-mel/spectrogram/raw frontend, conv subsampling, ASR and classification heads (forces `mode=encoder`) |
 | `src/model/mhc.py`, `src/model/hyperloop.py` | Manifold-constrained hyper-connections and loop-level variants |
 | `src/model/residuals/**` | Residual strategies + factory |
 | `src/model/attention/**` | 45 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
@@ -84,6 +85,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/training/main.py`, `trainer.py` | Task dispatch and training loop |
 | `src/training/streaming_mlm_dataset.py` | Streaming MLM dataset |
 | `src/training/vision_dataset.py` | Vision dataset |
+| `src/training/audio_dataset.py` | Audio dataset (HF `datasets` decode + char tokenizer, `DummyAudioDataset`, SpecAugment) |
 | `src/sbert/**` | SBERT training/inference |
 | `src/deploy/**` | Quantization, deployment, HF export, GGUF export, inference |
 | `src/streamlit_gui/app.py` | Schema-driven YAML builder |
@@ -173,11 +175,13 @@ flowchart TD
       ENC["FrankensteinEncoder<br/>bidirectional"]
       DEC["FrankensteinDecoder<br/>causal"]
       VIT["FrankensteinViT<br/>patches → tokens"]
+      AUD["FrankensteinAudio<br/>waveform → frames"]
     end
 
     ENC --> LOOP
     DEC --> LOOP
     VIT --> LOOP
+    AUD --> LOOP
 
     subgraph LOOP["Looped stack: num_layers × num_loops"]
       HL["HybridLayer × num_layers"]
@@ -218,6 +222,8 @@ flowchart LR
     PP["patch_prediction"] --> VIT["frankenstein_vit"]
     IC["classification"] --> VIT
     SEG["segmentation"] --> VIT
+    ASR["asr"] --> AUD["frankenstein_audio"]
+    ACL["audio_classification"] --> AUD
 ```
 
 | `model_class` | Mode | Allowed tasks | Notes |
@@ -225,6 +231,7 @@ flowchart LR
 | `frankenstein_text_encoder` | `encoder` or `decoder` | `mlm`, `sbert`, `text_classification` | Full mixer set, MoE, advanced norms |
 | `frankenstein_text_decoder` | **forced `decoder`** | `causal_lm` | Causal masking; required by `training.task: causal_lm` |
 | `frankenstein_vit` | **forced `encoder`** | `patch_prediction`, `classification`, `segmentation` | Requires `image:` block (+ `vision_dataset:` for data); patch embedding and vision heads |
+| `frankenstein_audio` | **forced `encoder`** | `asr`, `audio_classification` | Requires `audio:` block (+ `audio_dataset:` for data); log-mel/spectrogram/raw frontend, conv subsampling, CTC/RNN-T/classification heads |
 
 Cross-field rules enforced in `config_loader.py` and
 `src/schema/_conditional_rules.yaml`:
@@ -234,6 +241,7 @@ Cross-field rules enforced in `config_loader.py` and
 - `layer_pattern` length equals `num_layers`.
 - `task: causal_lm` ⇒ `model_class: frankenstein_text_decoder`.
 - Vision tasks ⇒ `model_class: frankenstein_vit`.
+- Audio tasks (`asr`, `audio_classification`) ⇒ `model_class: frankenstein_audio`, with a required `audio:` block and `audio_dataset:` data (for `asr`, one with a `text_column`).
 - `text_classification` ⇒ encoder.
 - `base_model` requires `training` and (for MLM/causal LM) `tokenizer.name_or_path`.
 - `mlm` requires `training.optimizer`; `sbert` requires `training.sbert`.
@@ -280,7 +288,7 @@ Cross-field rules enforced in `config_loader.py` and
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-45 enum values in 8 families. `config subkey` is the optional
+45 enum values in 9 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -605,6 +613,51 @@ into `config.json` (`"inference": {...}`); the HF export's
 `FrankensteinForCausalLM` now accepts `past_key_values`/`use_cache`/
 `cache_position` (blocker B7).
 
+### 7.14 Audio (`audio.*`, `audio_dataset.*`)
+
+`frankenstein_audio` turns waveforms into frames and runs the same
+`HybridLayer` stack as the text encoder. It forces `mode: encoder`
+(bidirectional, symmetric convolution padding) and is required by
+`training.task: asr | audio_classification`; see Annexes 17–18 of
+[`docs/paper/`](paper/) for the theory. ASR head knobs live under `audio.*`
+(the `asr_*` prefix), not in a `training.asr` block.
+
+| `audio.*` field | Default | Notes |
+|---|---:|---|
+| `feature` | `logmel` | `logmel`, `spectrogram`, or `raw` (multichannel 1-D signals such as EEG/EMG) |
+| `sample_rate` | 16000 | Turns `window_ms`/`stride_ms` into samples |
+| `n_mels` | 80 | Mel bins (`logmel` only) |
+| `window_ms` / `stride_ms` | 25 / 10 | Hann window and hop |
+| `n_fft` | 400 | STFT size; must cover the window (`25 ms × 16 kHz`) |
+| `in_channels` | 1 | Channel count of the input map (`raw` sets it to the sensor count) |
+| `conv_channels` | 32 | Channels of the two stride-2 `Conv2d(3×3)` subsampling stages (fixed 4× reduction) |
+| `pooling_mode` | `gap` | `gap` or `cls`; used by `audio_classification` |
+| `num_classes` | 2 | Classification head width |
+| `asr_loss` | `ctc` | `ctc` or `transducer` (RNN-T) |
+| `asr_decoder_dim` | 320 | RNN-T prediction-network width (paper: 320/640/640 for S/M/L) |
+| `asr_decoder_layers` | 1 | LSTM predictor depth (kept shallow for the O(T·U) lattice) |
+| `asr_decoder_dropout` | 0.1 | Predictor dropout |
+
+| `audio_dataset.*` field | Default | Notes |
+|---|---|---|
+| `dataset_name` / `dataset_dir` | `null` | HuggingFace dataset id, or a local audio directory; both omitted ⇒ `DummyAudioDataset` |
+| `split` | `train` | Dataset split |
+| `audio_column` | `audio` | Audio column; decoded to arrays |
+| `text_column` | `text` | Transcript column (required by `asr`) |
+| `label_column` | `null` | Label column (`audio_classification`) |
+| `max_duration_sec` | 30.0 | Clips longer than this are skipped/truncated |
+| `resample` | `true` | Resample decoded audio to `audio.sample_rate` |
+| `spec_augment.enabled` | `false` | Frequency/time masking (no time warping) |
+| `spec_augment.freq_mask_width` | 27 | Paper value `F` |
+| `spec_augment.time_masks` | 10 | Paper value `m_T` |
+| `spec_augment.time_mask_ratio` | 0.05 | Paper value `p_S` |
+
+`torchaudio` is an optional `audio` extra: the frontend uses
+`torchaudio.transforms` when importable and otherwise a pure-PyTorch
+`torch.stft` + mel filterbank fallback, so CPU CI stays torchaudio-free.
+The HuggingFace and GGUF exports reject audio artifacts explicitly;
+`standard`/`quantized` work.
+
 ## 8. Training runtime
 
 ### 8.1 Optimizers (23)
@@ -676,7 +729,7 @@ generation/KV-cache flags (CLI > YAML `inference:` > schema default).
 
 | Subcommand | Key flags | Behaviour |
 |---|---|---|
-| `train` | `--config`, `--config-name`, `--device`, `--list-configs` | Validates and trains (MLM, SBERT, causal LM, vision, classification) |
+| `train` | `--config`, `--config-name`, `--device`, `--list-configs` | Validates and trains (MLM, SBERT, causal LM, vision, text classification, ASR, audio classification) |
 | `deploy` | `--checkpoint`, `--output`, `--format`, `--yaml`, `--config`, `--validate`, `--check`, `--device` | `standard`/`quantized` artifacts; `transformers`/`gguf` exports. `--config` is a JSON model config for `standard`/`quantized` only. |
 | `infer` | `--model`, `--task {mlm,sbert,causal_lm}`, `--mode`, `--config`, `--device`, `--batch-size`, `--fp16`, `--benchmark`, `--benchmark-generation`, `--text`, `--input`, `--output`, `--sentence1`, `--sentence2`, `--query`, `--corpus-file`, `--sentences-file`, `--input-file`, `--output-file`, `--top-k`, `--n-clusters`, `--prompt`, `--max-new-tokens`, `--temperature`, `--top-p`, `--greedy`, `--kv-cache/--no-kv-cache`, `--kv-quant`, `--kv-group-size`, `--kv-protected-window`, `--kv-compress`, `--kv-num-sinks`, `--kv-window` | MLM, SBERT or autoregressive generation (with optional KV cache) |
 | `web-server` | `--server-port`, `--server-address`, `--server-headless`, `--development-mode` | Streamlit schema-driven YAML builder |
@@ -696,6 +749,7 @@ generation/cache flag defaults to `None` (no override).
 | HF text dataset | `src/training/text_dataset_builder.py` | `mlm`, `text_classification` |
 | SBERT datasets | `training.sbert` (`paired_similarity`, `triplets`, `qa`) | `sbert` |
 | Vision dataset | `src/training/vision_dataset.py` | `patch_prediction`, `classification`, `segmentation` |
+| Audio dataset | `src/training/audio_dataset.py` (HF `datasets` decode or `DummyAudioDataset`) | `asr`, `audio_classification` |
 
 ## 10. Deployment and export
 
@@ -709,7 +763,8 @@ generation/cache flag defaults to `None` (no override).
 | `gguf` | GGUF file (BitNet), `--check` supported | yes |
 
 `infer` runs MLM/SBERT inference against a deployed artifact. The HuggingFace
-export is compatibility-checked against the YAML before writing anything.
+export is compatibility-checked against the YAML before writing anything; SBERT
+and audio artifacts are rejected explicitly (no upstream mapping).
 
 ## 11. Extending the software
 
@@ -744,7 +799,11 @@ last. Every step below ends with the gates in §12.
    `_ATTENTION_MIXER_RENAMES` in `src/utils/config_flatten.py`, and add flat
    fields to `FrankensteinModelConfig` (`src/model/config.py`).
 6. Add `configs/examples/<family>_<mixer>_adamw.yaml`.
-7. Test: `tests/test_schema_attention_layers.py`,
+7. If the mixer has an incremental branch, add a `CacheSpec` to
+   `src/model/cache/capabilities.py` and list it in `IMPLEMENTED_MIXERS`;
+   otherwise register `supported=False` (as `conformer_attn` does) and rely
+   on the legacy full-recompute path.
+8. Test: `tests/test_schema_attention_layers.py`,
    `tests/test_attention_refactor.py`, plus the family test
    (`test_gated_attention.py`, `test_sparse_attention.py`,
    `test_latent_attention.py`, `test_attention_modules.py`).
@@ -828,10 +887,13 @@ last. Every step below ends with the gates in §12.
    `src/deploy/{deploy,inference,transformers_export}.py`, and the CLI model
    choices in `src/cli.py`.
 5. Add the preset + `configs/examples/` entry and tests
-   (`tests/test_model_variants.py`, `tests/test_frankenstein_vit.py` for the
-   current example).
-6. The Streamlit builder reads the schema, so no GUI change is needed beyond
-   field metadata.
+   (`tests/test_model_variants.py`; `test_frankenstein_vit.py` and
+   `test_frankenstein_audio.py` are the current examples).
+6. Add the modality block (`image:` / `audio:`) to `src/schema.yaml`, the
+   flattener entry (`flatten_image_dict` / `flatten_audio_dict`) and the
+   `LoadedTrainingConfig` side channel.
+7. The Streamlit builder reads the schema, so no GUI change is needed beyond
+   field metadata; a new top-level block also needs its `render_object` titles.
 
 ### 11.8 Add a config field
 
@@ -871,6 +933,9 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 | `tests/test_activation_functions.py` | Every activation value |
 | `tests/test_residuals.py` | Residual strategies |
 | `tests/test_frankenstein_vit.py`, `test_vision_*` | Vision path |
+| `tests/test_conformer_attention.py` | Conformer mixer: shapes, causality, formula parity, PE on/off, Macaron on/off, BitNet, conv norms |
+| `tests/test_frankenstein_audio.py` | Audio model class: per-task forwards, forced mode, pooling, `logmel`/`spectrogram`/`raw` frontends |
+| `tests/test_audio_dataset.py`, `test_asr_losses.py`, `test_audio_classification.py` | Audio datasets, SpecAugment, CTC/RNN-T losses, greedy decode + CER |
 
 ## 13. Decisions
 
@@ -885,7 +950,7 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 | D7 | Develop and test on CPU | Reproducible, CI-parity, no GPU required; CUDA is only for real runs |
 | D8 | Every preset/example is schema-smoke-tested | A broken YAML cannot reach `main` |
 | D9 | Optimizer prefixes are enumerated and cross-checked | Prevents typo'd hyperparameters from being ignored |
-| D10 | Model classes force their mode (`decoder`, `vit`) | Causal and vision paths cannot be configured inconsistently |
+| D10 | Model classes force their mode (`decoder` for the text decoder, `encoder` for ViT and audio) | Causal, vision and audio paths cannot be configured inconsistently |
 | D11 | The paper is the source of truth for theory; `docs/architecture.md` is the single canonical implementation spec | `docs/specs/` had drifted from the code and duplicated both the paper and this content |
 | D12 | `AGENTS.md` points to code/tests instead of restating the spec | Avoids the same drift in the agent contract |
 
@@ -908,8 +973,10 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
   (token tail), `nsa_attn`/`msa_attn`/`sparda_attn`/`sparge_attn` (their
   block-selection statistics are chunk-level, not row-local), `mtla_attn`
   (dynamic hyper-network merge schedule; named risk R1), `sparsek_attn`
-  (eviction-policy work, F4), and any PaPE-configured layer (D10 —
-  content-dependent q/k augmentation, caching exactness unproven).
+  (eviction-policy work, F4), `conformer_attn` (the depthwise-convolution
+  state and BatchNorm running statistics are not carried), and any
+  PaPE-configured layer (D10 — content-dependent q/k augmentation, caching
+  exactness unproven).
 - **KV cache + AttnRes**: `residual_type: full_attn|block_attn` disables
   caching for that forward with a warning (incremental buffer mode pending).
 - **MoD + KV cache**: prefill is forced dense when caching (D8); ragged
@@ -918,6 +985,13 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 - **KV quantization** v1 implements `none`/`int8`/`int4_kivi` only; the
   future codecs/policies listed in `src/model/cache/{quant,compress}` are
   interface-ready but raise a configuration error if requested.
+- **Audio**: `torchaudio` is optional (pure-PyTorch log-mel fallback);
+  SpecAugment covers frequency/time masking but not time warping. `raw` mode
+  treats a multichannel signal as a `C × T` map, so the two stride-2 stages
+  also halve the channel axis (keep `C ≥ 4`), and it is intended for
+  clip-level classification: CTC/RNN-T need a token target. HuggingFace and
+  GGUF exports reject audio artifacts; there is no incremental encoder cache
+  for ASR.
 - The paper sources (`docs/paper*/`) still use the historical
   `FrankensteinTransformer` name; the code and this spec are authoritative.
 

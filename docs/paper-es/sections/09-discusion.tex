@@ -11,7 +11,7 @@ La decisión de imponer \texttt{additionalProperties: false} en todos los nivele
 
 \subsection{Cobertura Arquitectónica y Vacíos}
 
-Las cuarenta y tres arquitecturas de mezclador implementadas abarcan las principales direcciones de investigación en modelado de secuencias, pero ciertos vacíos permanecen. El sistema carece de arquitecturas híbridas recientes como Griffin \citep{soares_griffin_2024} y Jamba \citep{gu_jamba_2024}, que combinan compuertas con modelos de espacio de estados. El enrutamiento MoE (Mezcla de Expertos) está implementado para capas FFN pero no para el cómputo de atención, donde trabajos recientes han mostrado beneficios \citep{lewis_moe_2021}.
+Las cuarenta y cinco arquitecturas de mezclador implementadas abarcan las principales direcciones de investigación en modelado de secuencias, pero ciertos vacíos permanecen. El sistema carece de arquitecturas híbridas recientes como Griffin \citep{soares_griffin_2024} y Jamba \citep{gu_jamba_2024}, que combinan compuertas con modelos de espacio de estados. El enrutamiento MoE (Mezcla de Expertos) está implementado para capas FFN pero no para el cómputo de atención, donde trabajos recientes han mostrado beneficios \citep{lewis_moe_2021}.
 
 La cobertura de atención dispersa es amplia. Los dos métodos en tiempo de inferencia (FASA, SpargeAttn) conservan su carácter sin entrenamiento en el sentido de que su regla de dispersidad nunca se aprende; en cambio, la implementación entrena la capa como atención estándar densa sobre las mismas proyecciones y activa la ruta de selección/poda dispersa solo en evaluación, de modo que ambos mixers pueden entrenarse desde cero y su comportamiento disperso es exactamente el descrito en los artículos originales.
 

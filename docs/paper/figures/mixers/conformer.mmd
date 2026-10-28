@@ -1,0 +1,32 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart LR
+  x["x<br/>[B,n,H]"]
+  f1["½·FFN₁<br/>x̃ = x + ½FFN₁(x)"]
+  a1["MHSA<br/>rel. sinusoidal PE<br/>x′ = x̃ + MHSA(·)"]
+  cl["LN"]
+  c1["pointwise Conv1d<br/>d → 2d"]
+  c2["GLU<br/>2d → d"]
+  c3["depthwise Conv1d<br/>k = 32<br/>(causal in decoder)"]
+  c4["BatchNorm1d"]
+  c5["Swish"]
+  c6["pointwise Conv1d<br/>d → d"]
+  a2["x″ = x′ + Conv(LN(x′))"]
+  f2["FFN₂<br/>full step, shared FFN"]
+  ln["final LayerNorm"]
+  o["y<br/>[B,n,H]"]
+  note["repo integration:<br/>HybridLayer FFN = FFN₂"]
+
+  x -- "pre-norm" --> f1
+  f1 -- "residual" --> a1
+  a1 -- "LN" --> cl
+  cl -- "pointwise" --> c1
+  c1 -- "GLU" --> c2
+  c2 -- "depthwise" --> c3
+  c3 -- "BN" --> c4
+  c4 -- "Swish" --> c5
+  c5 -- "pointwise" --> c6
+  c6 -- "dropout" --> a2
+  a2 -- "FFN₂" --> f2
+  f2 -- "residual" --> ln
+  ln -- "output" --> o
+  f2 -. "deviation" .-> note

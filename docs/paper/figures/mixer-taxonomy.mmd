@@ -1,6 +1,6 @@
 %%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
 flowchart TD
-  root["Sequence Mixer Registry (43 variants)"]
+  root["Sequence Mixer Registry (45 variants)"]
 
   d["Dense (3)"] --> d1["standard_attn"] --> d2["sigmoid_attn"] --> d3["gqa_attn"]
 
@@ -18,6 +18,8 @@ flowchart TD
 
   x["Geometric (1)"] --> x1["ssog_attn"]
 
+  c["Convolution-augmented (1)"] --> c1["conformer_attn"]
+
   root --> d
   root --> r
   root --> s
@@ -26,6 +28,7 @@ flowchart TD
   root --> m
   root --> f
   root --> x
+  root --> c
 
   classDef category fill:#e6eef7,stroke:#7f9bbf,font-weight:bold
-  class d,r,s,g,l,m,f,x category
+  class d,r,s,g,l,m,f,x,c category

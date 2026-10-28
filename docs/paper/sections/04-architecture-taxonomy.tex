@@ -4,7 +4,7 @@
 \subsection{Attention and Sequence-Mixer Families}
 \label{sec:attention-families}
 
-The system implements forty-four sequence mixers organized into eight functional categories that reflect how each method balances expressivity, computational cost, and memory.
+The system implements forty-five sequence mixers organized into nine functional categories that reflect how each method balances expressivity, computational cost, and memory.
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Dense baselines} (3): standard softmax attention, sigmoid attention, and Grouped-Query Attention (GQA) provide full global routing at quadratic cost.
     \item \textbf{Recurrent and retentive} (5): RetNet, Mamba, ODE-style blocks, and Titans maintain state for constant-time inference through recurrence, selective state spaces, continuous depth, or test-time memory.
@@ -14,12 +14,13 @@ The system implements forty-four sequence mixers organized into eight functional
     \item \textbf{Conditional memory} (1): Engram provides test-time read/write memory through learned lookups.
     \item \textbf{Fast-weight attention} (6): Falcon-1/2/3 and Falcon-1A/2A/3A treat the recurrent state transition as an online continual-learning rule \citep{zhang_falcon_2026}.
     \item \textbf{Geometric field} (1): SSOG applies a structured geometric prior over the attention matrix \citep{pisoni_ssog_2026}.
+    \item \textbf{Convolution-augmented} (1): the Conformer block \citep{Gulati2020} fuses multi-head self-attention with a depthwise-convolution module between two Macaron feed-forward layers, giving every layer a local branch alongside the global receptive field (Appendix~\ref{sec:annex-17}).
 \end{enumerate}
 
 \begin{figure}[t]
 \centering
 \fitfigure{\includegraphics{figures/mixer-taxonomy.pdf}}
-\caption{Taxonomy of the forty-three sequence mixers across eight functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; conditional memory adds test-time read/write lookups; fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors.}
+\caption{Taxonomy of the forty-five sequence mixers across nine functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; conditional memory adds test-time read/write lookups; fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 

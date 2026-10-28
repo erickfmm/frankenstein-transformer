@@ -4,7 +4,7 @@
 \subsection{Familias de Atención y Mezcladores de Secuencia}
 \label{sec:attention-families}
 
-El sistema implementa cuarenta y cuatro mezcladores de secuencia organizados en ocho categorías funcionales que reflejan cómo cada método equilibra expresividad, costo computacional y memoria.
+El sistema implementa cuarenta y cinco mezcladores de secuencia organizados en nueve categorías funcionales que reflejan cómo cada método equilibra expresividad, costo computacional y memoria.
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Líneas base densas} (3): atención softmax estándar, atención sigmoide y Grouped-Query Attention (GQA) ofrecen enrutamiento global completo a costo cuadrático.
     \item \textbf{Recurrentes y retentivas} (5): RetNet, Mamba, bloques tipo ODE y Titans mantienen estado para inferencia en tiempo constante mediante recurrencia, espacios de estados selectivos, profundidad continua o memoria en tiempo de prueba.
@@ -14,12 +14,13 @@ El sistema implementa cuarenta y cuatro mezcladores de secuencia organizados en 
     \item \textbf{Memoria condicional} (1): Engram proporciona memoria de lectura/escritura en tiempo de prueba mediante búsquedas aprendidas.
     \item \textbf{Atención de peso rápido} (6): Falcon-1/2/3 y Falcon-1A/2A/3A tratan la transición de estado recurrente como una regla de aprendizaje continuo en línea \citep{zhang_falcon_2026}.
     \item \textbf{Campo geométrico} (1): SSOG aplica un prior geométrico estructurado sobre la matriz de atención \citep{pisoni_ssog_2026}.
+    \item \textbf{Aumentados con convolución} (1): el bloque Conformer \citep{Gulati2020} fusiona atención multi-cabeza con un módulo de convolución depthwise entre dos capas feed-forward Macaron, aportando a cada capa una rama local junto al campo receptivo global (Anexo~\ref{sec:annex-17}).
 \end{enumerate}
 
 \begin{figure}[t]
 \centering
 \fitfigure{\includegraphics{../paper/figures/mixer-taxonomy.pdf}}
-\caption{Taxonomía de los cuarenta y tres mezcladores de secuencia en ocho categorías funcionales. Las líneas base densas ofrecen enrutamiento global completo a costo cuadrático; los métodos recurrentes comprimen el estado para inferencia en tiempo constante; las variantes dispersas restringen el patrón de atención; los mecanismos con compuerta modulan retención y olvido; los métodos latentes comprimen las representaciones clave--valor; la memoria condicional añade búsquedas de lectura/escritura en tiempo de prueba; los métodos de peso rápido formulan la transición de estado como una regla de aprendizaje en línea; los métodos geométricos codifican priors estructurados.}
+\caption{Taxonomía de los cuarenta y cinco mezcladores de secuencia en nueve categorías funcionales. Las líneas base densas ofrecen enrutamiento global completo a costo cuadrático; los métodos recurrentes comprimen el estado para inferencia en tiempo constante; las variantes dispersas restringen el patrón de atención; los mecanismos con compuerta modulan retención y olvido; los métodos latentes comprimen las representaciones clave--valor; la memoria condicional añade búsquedas de lectura/escritura en tiempo de prueba; los métodos de peso rápido formulan la transición de estado como una regla de aprendizaje en línea; los métodos geométricos codifican priors estructurados.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 

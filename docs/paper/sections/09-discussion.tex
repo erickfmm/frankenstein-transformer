@@ -11,7 +11,7 @@ The decision to enforce \texttt{additionalProperties: false} at all schema level
 
 \subsection{Architectural Coverage and Gaps}
 
-The forty-three implemented mixers span the major research directions in sequence modeling, but certain gaps remain. The system lacks recent hybrid architectures such as Griffin \citep{soares_griffin_2024} and Jamba \citep{gu_jamba_2024}, which combine gating with state-space models. MoE routing is implemented for FFN layers but not for attention computation, where recent work has shown benefits \citep{lewis_moe_2021}.
+The forty-five implemented mixers span the major research directions in sequence modeling, but certain gaps remain. The system lacks recent hybrid architectures such as Griffin \citep{soares_griffin_2024} and Jamba \citep{gu_jamba_2024}, which combine gating with state-space models. MoE routing is implemented for FFN layers but not for attention computation, where recent work has shown benefits \citep{lewis_moe_2021}.
 
 The sparse attention coverage is broad. The two inference-time methods (FASA, SpargeAttn) keep their training-free character in the sense that their sparsification rule is never learned; instead, the implementation trains the layer as standard dense attention over the same projections and activates the sparse selection/pruning path only at evaluation, so both mixers can be trained from scratch and their sparse behaviour is exactly the one described in the original papers.
 

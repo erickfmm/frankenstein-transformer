@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 43 mezcladores de secuencia en ocho familias, 23 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 45 mezcladores de secuencia en nueve familias, 23 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -25,11 +25,12 @@ La Tabla~\ref{tab:all-mixers} enumera cada mezclador de secuencia soportado por 
 \label{tab:all-mixers}
 \endlastfoot
 
-\multicolumn{6}{c}{\textbf{Denso (3)}} \\
+\multicolumn{6}{c}{\textbf{Densos y aumentados con convolución (4)}} \\
 \midrule
 standard\_attn & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Contexto global completo; cuello de botella KV en secuencias largas & \citep{vaswani_attention_2017} \\
 sigmoid\_attn & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Compuerta elemento a elemento; reemplazo eficiente en hardware para softmax & \citep{ramapuram_theory_2024} \\
 gqa & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Compresión KV ajustable; reducción de caché $G\times$ mediante cabezas compartidas & \citep{ainslie_gqa_2023} \\
+conformer\_attn & Aumentado conv. & $\mathcal{O}(n^2 d + n K d)$ & $\mathcal{O}(n)$ (recómputo completo) & FFN Macaron alrededor de MHSA sinusoidal relativa y un módulo conv depthwise ($K=32$); contexto local y global en un solo bloque & \citep{Gulati2020} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Recurrente (5)}} \\
@@ -323,7 +324,7 @@ La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y opt
 \multicolumn{3}{r}{\textit{continúa en la página siguiente}} \\
 \endfoot
 \bottomrule
-\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada. Las primeras 12 filas son codificaciones posicionales (Anexo~12); las últimas dos son optimizaciones estructurales de embedding.}
+\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada. Las primeras 12 filas son codificaciones posicionales (Anexo~12); las últimas tres son optimizaciones estructurales de embedding, incluido el frontend de entrada de audio.}
 \label{tab:all-embeddings}
 \endlastfoot
 \multicolumn{3}{c}{\textbf{Codificaciones Posicionales (12)}} \\
@@ -341,10 +342,11 @@ Sinusoidal Rotatoria & Frecuencias sinusoidales como matriz de rotación en Q/K 
 Absoluta Aprendida & Matriz de parámetros aprendible añadida a embeddings & \citep{vaswani_attention_2017} \\
 None & Módulo nulo; ninguna información posicional inyectada & --- \\
 \midrule
-\multicolumn{3}{c}{\textbf{Optimizaciones Estructurales de Embedding (2)}} \\
+\multicolumn{3}{c}{\textbf{Optimizaciones Estructurales de Embedding (3)}} \\
 \midrule
 Embeddings Factorizados & Descompone la matriz de embedding $V \times H$ en factores $V \times R$ y $R \times H$; reduce parámetros de $\mathcal{O}(VH)$ a $\mathcal{O}(V R + R H)$; controlado por \texttt{factorized\_embedding\_dim} & (interno) \\
 Convolución de Embedding & Conv1d depthwise aplicada sobre el flujo de embeddings antes del primer bloque transformer; proporciona filtrado ligero de contexto local; controlado por \texttt{embedding\_conv\_kernel} & (interno) \\
+Frontend de audio & Tramas log-mel/espectrograma/raw a través de dos etapas Conv2d con stride 2 y una proyección lineal (reducción de tramas $4\times$); lado de entrada de \texttt{frankenstein\_audio}; controlado por el bloque \texttt{audio.*} (Anexo~\ref{sec:annex-18}) & \citep{Gulati2020} \\
 \bottomrule
 \end{longtable}
 \normalsize
