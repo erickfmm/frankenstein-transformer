@@ -1,5 +1,5 @@
-%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":24,"wrappingWidth":240}}}%%
-flowchart LR
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":24,"useMaxWidth":false,"wrappingWidth":240}}}%%
+flowchart TD
   subgraph dense["Dense attention: full pairwise interactions, O(n²) cost"]
     standard["Standard<br/>softmax(QK<sup>T</sup>/√d)V"]
     sigmoid["Sigmoid<br/>σ(QK<sup>T</sup>)V"]

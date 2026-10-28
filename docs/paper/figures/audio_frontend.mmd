@@ -1,5 +1,5 @@
-%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":20,"rankSpacing":26}}}%%
-flowchart LR
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":20,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
   wav["waveform<br/>[B, T·sample_rate]"]
   raw["feature: raw<br/>[B, C, T]<br/>EEG / EMG / sensors"]
   fr["frame + Hann window<br/>25 ms / 10 ms"]
