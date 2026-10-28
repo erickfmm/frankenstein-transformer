@@ -3,7 +3,7 @@
 ``CACHE_SPECS`` is the single declarative source consumed by
 :class:`~src.model.hybrid_layer.HybridLayer` at runtime and by
 ``config_loader`` for static validation. One entry per schema
-``layer_pattern`` enum value (44 total: 43 mixer classes + the ``mamba``
+``layer_pattern`` enum value (45 total: 44 mixer classes + the ``mamba``
 linear placeholder).
 
 Rules (see the KV-cache integration plan, §5.4):
@@ -103,7 +103,7 @@ IMPLEMENTED_MIXERS = frozenset(
 )
 
 
-#: mixer_key -> CacheSpec. One entry per schema enum value (44).
+#: mixer_key -> CacheSpec. One entry per schema enum value (45).
 CACHE_SPECS: Dict[str, CacheSpec] = {
     # ---- Dense / softmax family (plan §6.2) ----
     "standard_attn": CacheSpec(
@@ -407,6 +407,13 @@ CACHE_SPECS: Dict[str, CacheSpec] = {
         notes="SSOG (pisoni.ai blog + GitHub; no arXiv): bidirectional "
         "vision-grid mixer with no causal formulation in the source — no "
         "cache can be defined. Never cached; runs uncached.",
+    ),
+    "conformer_attn": CacheSpec(
+        supported=False,
+        notes="Conformer (arXiv:2005.08100); the depth-wise convolution "
+        "module and the macaron FFN₁ need a causal-conv tail and an "
+        "activation-state snapshot that this repo does not model. Never "
+        "cached; runs uncached (legacy path, D5).",
     ),
 }
 

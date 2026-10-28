@@ -1,0 +1,76 @@
+# Conformer mixer (arXiv:2005.08100): macaron FFN₁ + MHSA + convolution
+# module per layer, alternating with standard attention. Small text encoder
+# (MLM) smoke preset.
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 32000
+    hidden_size: 256
+    num_layers: 2
+    num_loops: 1
+    num_heads: 4
+    num_kv_heads: 2
+    dropout: 0.1
+    layer_pattern:
+    - conformer_attn
+    - standard_attn
+    mode: encoder
+  norm:
+    type: layer_norm
+  embedding:
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  attention:
+    conformer:
+      kernel_size: 32
+      macaron: true
+      conv_norm: batch
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 1024
+    activation: silu
+  positional_encoding: rope
+training:
+  task: mlm
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 512
+  mlm_probability: 0.15
+  max_samples: 1000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: ./temp_data/mixer_conformer_cache
+  use_amp: false
+  gradient_accumulation_steps: 4
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-5
+      adamw-lr_norms: 5e-5
+      adamw-lr_attention: 3e-4
+      adamw-lr_other: 2e-4
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-eps_attention: 1e-8
+      adamw-eps_other: 1e-8
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  grad_clip_max_norm: 5.0
+  max_nan_retries: 3
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_mixer_conformer.csv
+  telemetry_log_interval: 5

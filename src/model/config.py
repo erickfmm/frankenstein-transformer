@@ -550,6 +550,7 @@ class FrankensteinModelConfig:
     falcon2a_attn_use_pe: bool = False
     falcon3a_attn_use_pe: bool = False
     ssog_attn_use_pe: bool = True
+    conformer_attn_use_pe: bool = True
 
     use_moe: bool = True
     use_mixture_of_depths: bool = False
@@ -703,6 +704,16 @@ class FrankensteinModelConfig:
     swa_window_size: int = 256
     # Leading sink tokens s every query always attends to. Paper: s = 4.
     swa_num_sinks: int = 4
+
+    # ---- Conformer (arXiv:2005.08100) ----
+    # Depth-wise convolution kernel size k of the convolution module (paper
+    # best: 32). Decoder mode always pads causally (left-only).
+    conformer_kernel_size: int = 32
+    # Enable the macaron half-step FFN₁ branch (arXiv:1906.02762).
+    conformer_macaron: bool = True
+    # Normalization after the depth-wise convolution: "batch" (paper
+    # default, BatchNorm1d), "group" (GroupNorm) or "layer" (LayerNorm).
+    conformer_conv_norm: str = "batch"
 
     # ---- CCA / CCGQA (arXiv:2510.04476) ----
     cca_latent_rank: Optional[int] = None
@@ -948,6 +959,19 @@ class FrankensteinModelConfig:
                 "swa_num_sinks must be smaller than swa_window_size, got "
                 f"num_sinks={self.swa_num_sinks}, "
                 f"window_size={self.swa_window_size}"
+            )
+
+        # ---- Validate Conformer convolution module (arXiv:2005.08100) ----
+        if int(self.conformer_kernel_size) < 1:
+            raise ValueError(
+                f"conformer_kernel_size must be >= 1, got {self.conformer_kernel_size}"
+            )
+        _VALID_CONFORMER_CONV_NORMS = {"batch", "group", "layer"}
+        if str(self.conformer_conv_norm).lower() not in _VALID_CONFORMER_CONV_NORMS:
+            raise ValueError(
+                "conformer_conv_norm must be one of "
+                f"{sorted(_VALID_CONFORMER_CONV_NORMS)}, got "
+                f"{self.conformer_conv_norm!r}"
             )
 
         _VALID_POSITIONAL_ENCODINGS = {

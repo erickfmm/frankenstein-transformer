@@ -319,6 +319,7 @@ properties:
           msa_attn: { type: boolean, title: "msa_attn", description: "Model-wide PE for `msa_attn` layers.", default: true }
           sparda_attn: { type: boolean, title: "sparda_attn", description: "Model-wide PE for `sparda_attn` layers.", default: true }
           gma_attn: { type: boolean, title: "gma_attn", description: "Model-wide PE for `gma_attn` layers.", default: true }
+          conformer_attn: { type: boolean, title: "conformer_attn", description: "Model-wide PE for `conformer_attn` layers.", default: true }
           longformer_attn: { type: boolean, title: "longformer_attn", description: "Model-wide PE for `longformer_attn` layers.", default: true }
           swa_attn: { type: boolean, title: "swa_attn", description: "Model-wide PE for `swa_attn` layers.", default: true }
           bigbird_attn: { type: boolean, title: "bigbird_attn", description: "Model-wide PE for `bigbird_attn` layers.", default: true }

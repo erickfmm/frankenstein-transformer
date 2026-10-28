@@ -28,6 +28,7 @@ from .activation_function import (
 )
 from .mhc import ManifoldHyperConnections
 from .attention.engram import EngramLayer
+from .attention.conformer import ConformerAttention
 from .attention.grouped_query_attention import GroupedQueryAttention
 from .attention.gated import (
     DeltaNetAttention,
@@ -223,6 +224,7 @@ class HybridLayer(nn.Module):
             "sparda_attn": SparDAAttention,
             "gma_attn": GaussianMixtureAttention,
             "ssog_attn": SSOGAttention,
+            "conformer_attn": ConformerAttention,
         }
 
         if layer_type == "mamba":

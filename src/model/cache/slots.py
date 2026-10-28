@@ -1,7 +1,7 @@
 """Typed per-layer cache slots.
 
 Every slot stores the state of one logical layer (identity key:
-``logical_layer_idx``) across decode steps. Six slot kinds cover the 44
+``logical_layer_idx``) across decode steps. Six slot kinds cover the 45
 dispatchable layer types (see ``capabilities.py``):
 
 * :class:`KVSlot` — post-RoPE K/V (+ per-token ``extras`` metadata) for

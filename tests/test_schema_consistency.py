@@ -133,6 +133,9 @@ _DEFAULT_PAIRS = {
     "properties.model.properties.attention.properties.retnet.properties.heads": "retention_heads",
     "properties.model.properties.attention.properties.swa.properties.window_size": "swa_window_size",
     "properties.model.properties.attention.properties.swa.properties.num_sinks": "swa_num_sinks",
+    "properties.model.properties.attention.properties.conformer.properties.kernel_size": "conformer_kernel_size",
+    "properties.model.properties.attention.properties.conformer.properties.macaron": "conformer_macaron",
+    "properties.model.properties.attention.properties.conformer.properties.conv_norm": "conformer_conv_norm",
 }
 
 

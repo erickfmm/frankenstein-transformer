@@ -83,6 +83,8 @@ properties:
         $ref: "_model/_attention_engram.yaml#/properties/engram"
       gma:
         $ref: "_model/_attention_gma.yaml#/properties/gma"
+      conformer:
+        $ref: "_model/_attention_conformer.yaml#/properties/conformer"
       ssog:
         $ref: "_model/_attention_ssog.yaml#/properties/ssog"
       swa:

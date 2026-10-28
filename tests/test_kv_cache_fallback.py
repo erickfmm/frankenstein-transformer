@@ -1,4 +1,4 @@
-"""Cache fallback tests over all 44 layer types (plan §13, T4 + T12).
+"""Cache fallback tests over all 45 layer types (plan §13, T4 + T12).
 
 With ``kv_cache.enabled=true``: no exception for any enum value; mixers
 without an implemented incremental branch produce identical logits with
@@ -25,7 +25,7 @@ EVAL_ONLY = {"fasa_attn", "sparge_attn"}
 
 
 def _schema_enum():
-    """Read the layer_pattern enum straight from the schema (44 values)."""
+    """Read the layer_pattern enum straight from the schema (45 values)."""
     with open("src/schema/_model/_dims.yaml") as handle:
         dims = yaml.safe_load(handle)
     return list(dims["properties"]["layer_pattern"]["items"]["enum"])
@@ -59,13 +59,14 @@ def _build(pattern, pe="rope", **extra):
 class RegistryConsistencyTests(unittest.TestCase):
     def test_capacity_spec_covers_every_enum_value(self):
         enum = _schema_enum()
-        self.assertEqual(len(enum), 44)
+        self.assertEqual(len(enum), 45)
         self.assertEqual(set(CACHE_SPECS), set(enum))
         # All implemented mixers must exist in the schema enum.
         self.assertTrue(IMPLEMENTED_MIXERS.issubset(set(enum)))
 
     def test_never_cached_mixers(self):
         self.assertFalse(is_cacheable("ssog_attn"))
+        self.assertFalse(is_cacheable("conformer_attn"))
         self.assertFalse(is_cacheable("mamba"))
         self.assertFalse(is_cacheable("not_a_mixer"))
 

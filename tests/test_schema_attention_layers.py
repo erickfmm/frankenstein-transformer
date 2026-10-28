@@ -54,6 +54,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "ccgqa_attn",
             "gma_attn",
             "ssog_attn",
+            "conformer_attn",
             "falcon1_attn",
             "falcon2_attn",
             "falcon3_attn",
@@ -112,6 +113,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "sigma_floor", "grid_h", "grid_w",
             },
             "swa": {"window_size", "num_sinks"},
+            "conformer": {"kernel_size", "macaron", "conv_norm"},
             "falcon": {
                 "chunk_size", "qk_norm", "beta_mode", "lambda_mode",
                 "beta", "lambda", "window", "short_conv", "conv_kernel",
@@ -134,7 +136,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             )
 
     def test_cache_specs_match_layer_pattern_enum(self):
-        """T12: CACHE_SPECS covers exactly the layer_pattern enum (44)."""
+        """T12: CACHE_SPECS covers exactly the layer_pattern enum (45)."""
         from src.model.cache.capabilities import CACHE_SPECS
 
         schema_path = pathlib.Path(__file__).parent.parent / "src" / "schema.yaml"
@@ -144,7 +146,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "layer_pattern"
             ]["items"]["enum"]
         )
-        self.assertEqual(len(enum_values), 44)
+        self.assertEqual(len(enum_values), 45)
         self.assertEqual(set(CACHE_SPECS), enum_values)
 
     def test_inference_schema_is_referenced(self):

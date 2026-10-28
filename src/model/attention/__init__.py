@@ -14,6 +14,7 @@ from .sparse import (
     SparDAAttention,
     SlidingWindowAttention,
 )
+from .conformer import ConformerAttention
 from .grouped_query_attention import GroupedQueryAttention
 from .standard import StandardAttention
 from .ssog import SSOGAttention
@@ -51,6 +52,7 @@ from ..embeddings import HoPE, RoPE
 
 __all__ = [
     "EngramLayer",
+    "ConformerAttention",
     "GroupedQueryAttention",
     "TitanAttention",
     "StandardAttention",

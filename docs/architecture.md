@@ -19,7 +19,7 @@ dispatches to factories and registries.
 
 | Dimension | Count | Defined in |
 |---|---:|---|
-| `model.dims.layer_pattern` values | **44** (43 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
+| `model.dims.layer_pattern` values | **45** (44 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
 | Optimizer families | **23** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
@@ -32,7 +32,7 @@ dispatches to factories and registries.
 | Deployment formats | **4** | `src/cli.py` (`deploy --format`) |
 
 > The schema enums are the executable contract for code. README badges say
-> "43 mixers / 11 positional encodings" because they exclude the placeholder
+> "44 mixers / 11 positional encodings" because they exclude the placeholder
 > `mamba` layer and the `none` encoding. The mathematical definitions stay in
 > the paper; this document tracks what is actually wired up.
 
@@ -74,7 +74,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/frankenstein_vit.py` | Vision Transformer (forces `mode=encoder`) |
 | `src/model/mhc.py`, `src/model/hyperloop.py` | Manifold-constrained hyper-connections and loop-level variants |
 | `src/model/residuals/**` | Residual strategies + factory |
-| `src/model/attention/**` | 44 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
+| `src/model/attention/**` | 45 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
 | `src/model/embeddings/**` | 12 positional encodings + factorized embedding + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
@@ -185,7 +185,7 @@ flowchart TD
 
     subgraph HYBRID["HybridLayer internals"]
       N1["norm1 = get_norm()"]
-      MX["mixer registry<br/>(44 names)"]
+      MX["mixer registry<br/>(45 names)"]
       FF["FFN / GatedFFN / MoE"]
       N2["norm2 = get_norm()<br/>or FlashNormLinear fusion"]
       MOD["Mixture-of-Depths router"]
@@ -280,7 +280,7 @@ Cross-field rules enforced in `config_loader.py` and
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-44 enum values in 8 families. `config subkey` is the optional
+45 enum values in 8 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -329,6 +329,7 @@ Cross-field rules enforced in `config_loader.py` and
 | `ccgqa_attn` | Latent + GQA + conv | `ccgqa.*` | yes |
 | `gma_attn` | Latent (Gaussian mixture) | `gma.*` | yes |
 | `ssog_attn` | Geometric field | `ssog.*` | yes (encoder, grid input) |
+| `conformer_attn` | Convolution-augmented | `conformer.*` | yes |
 
 Inference-sparse mixers: `HybridLayer.TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}`
 run standard dense attention in `train()` mode (via `mixer.dense_forward`, sharing
@@ -542,7 +543,7 @@ logical roles). Per-layer storage is typed:
 | `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
 
 **Capability registry (D5).** `src/model/cache/capabilities.py` holds one
-`CacheSpec` per `layer_pattern` enum value (44). A layer caches only when
+`CacheSpec` per `layer_pattern` enum value (45). A layer caches only when
 the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
 (incremental branch implemented + parity-tested). Everything else receives
 `cache=None` and runs the legacy path — **inference never fails because of

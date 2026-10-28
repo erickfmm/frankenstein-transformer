@@ -152,6 +152,11 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
         "window_size": "swa_window_size",
         "num_sinks": "swa_num_sinks",
     },
+    "conformer": {
+        "kernel_size": "conformer_kernel_size",
+        "macaron": "conformer_macaron",
+        "conv_norm": "conformer_conv_norm",
+    },
     "falcon": {
         "chunk_size": "falcon_chunk_size",
         "qk_norm": "falcon_qk_norm",

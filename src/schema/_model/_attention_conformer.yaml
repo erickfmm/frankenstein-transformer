@@ -1,0 +1,80 @@
+type: object
+additionalProperties: false
+properties:
+  conformer:
+    type: object
+    additionalProperties: false
+    title: "Conformer Attention"
+    title_es: "Atención Conformer"
+    description: |-
+      Hyperparameters for `conformer_attn` (Conformer block, arXiv:2005.08100).
+      The mixer owns the macaron FFN₁, multi-head self-attention and the
+      convolution module with internal pre-norm residuals; the shared
+      `HybridLayer` norm + FFN supplies FFN₂ and the outer residual. Only
+      applies when `conformer_attn` appears in `layer_pattern`.
+    description_es: |-
+      Hiperparámetros para `conformer_attn` (bloque Conformer,
+      arXiv:2005.08100). El mixer contiene la FFN₁ macaron, la
+      auto-atención multi-cabeza y el módulo de convolución con residuales
+      pre-norm internos; la norm + FFN compartidas de `HybridLayer` aportan
+      la FFN₂ y el residual externo. Solo aplica cuando `conformer_attn`
+      aparece en `layer_pattern`.
+    properties:
+      kernel_size:
+        type: integer
+        minimum: 1
+        title: "Conformer Conv Kernel Size"
+        title_es: "Tamaño de Kernel Convolucional Conformer"
+        description: |-
+          Kernel size `k` of the depth-wise convolution in the `conformer_attn`
+          convolution module (arXiv:2005.08100, Sec. 2.2). The paper's sweep
+          over {3, 7, 17, 32, 65} finds 32 best (Table 7). Odd values give
+          perfectly symmetric padding in encoder mode; in decoder mode the
+          padding is always causal (left-only), independent of parity. Must be
+          at least 1.
+        description_es: |-
+          Tamaño de kernel `k` de la convolución depth-wise del módulo de
+          convolución de `conformer_attn` (arXiv:2005.08100, Sec. 2.2). El
+          barrido del paper sobre {3, 7, 17, 32, 65} encuentra 32 como el mejor
+          (Tabla 7). Valores impares dan padding perfectamente simétrico en
+          modo encoder; en modo decoder el padding es siempre causal (solo a
+          la izquierda), independientemente de la paridad. Debe ser al menos 1.
+        default: 32
+        examples: [3, 7, 17, 32, 65]
+      macaron:
+        type: boolean
+        title: "Conformer Macaron FFN"
+        title_es: "FFN Macaron Conformer"
+        description: |-
+          Enable the macaron half-step FFN₁ branch inside `conformer_attn`
+          (arXiv:1906.02762). When False the mixer reduces to MHSA +
+          convolution module. The paper's ablation shows removing the
+          macaron FFN pair costs roughly 0.2/0.5 WER (Table 3). Default: True.
+        description_es: |-
+          Habilita la rama FFN₁ macaron de medio paso dentro de
+          `conformer_attn` (arXiv:1906.02762). Con False el mixer se reduce a
+          MHSA + módulo de convolución. La ablación del paper muestra que
+          eliminar el par FFN macaron cuesta aproximadamente 0.2/0.5 WER
+          (Tabla 3). Por defecto: True.
+        default: true
+        examples: [true]
+      conv_norm:
+        type: string
+        enum: [batch, group, layer]
+        title: "Conformer Conv Normalization"
+        title_es: "Normalización Convolucional Conformer"
+        description: |-
+          Normalization applied after the depth-wise convolution in
+          `conformer_attn` (paper default: BatchNorm1d). `batch` uses
+          `nn.BatchNorm1d` with eps=1e-5 and momentum=0.1; `group` uses
+          `nn.GroupNorm` with at most 8 groups that divide `hidden_size`;
+          `layer` uses `nn.LayerNorm` over the feature axis. Default: `batch`.
+        description_es: |-
+          Normalización aplicada tras la convolución depth-wise en
+          `conformer_attn` (por defecto del paper: BatchNorm1d). `batch` usa
+          `nn.BatchNorm1d` con eps=1e-5 y momentum=0.1; `group` usa
+          `nn.GroupNorm` con como máximo 8 grupos que dividan `hidden_size`;
+          `layer` usa `nn.LayerNorm` sobre el eje de características. Por
+          defecto: `batch`.
+        default: batch
+        examples: [batch, group, layer]
