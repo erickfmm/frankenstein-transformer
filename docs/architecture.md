@@ -620,7 +620,9 @@ into `config.json` (`"inference": {...}`); the HF export's
 (bidirectional, symmetric convolution padding) and is required by
 `training.task: asr | audio_classification`; see Annexes 17–18 of
 [`docs/paper/`](paper/) for the theory. ASR head knobs live under `audio.*`
-(the `asr_*` prefix), not in a `training.asr` block.
+(the `asr_*` prefix); an optional `training.asr.loss` block overrides
+`audio.asr_loss` for presets that only want to switch the loss (the value
+must still match the head built from the model block).
 
 | `audio.*` field | Default | Notes |
 |---|---:|---|
@@ -637,20 +639,20 @@ into `config.json` (`"inference": {...}`); the HF export's
 | `asr_decoder_dim` | 320 | RNN-T prediction-network width (paper: 320/640/640 for S/M/L) |
 | `asr_decoder_layers` | 1 | LSTM predictor depth (kept shallow for the O(T·U) lattice) |
 | `asr_decoder_dropout` | 0.1 | Predictor dropout |
-
-| `audio_dataset.*` field | Default | Notes |
-|---|---|---|
-| `dataset_name` / `dataset_dir` | `null` | HuggingFace dataset id, or a local audio directory; both omitted ⇒ `DummyAudioDataset` |
-| `split` | `train` | Dataset split |
-| `audio_column` | `audio` | Audio column; decoded to arrays |
-| `text_column` | `text` | Transcript column (required by `asr`) |
-| `label_column` | `null` | Label column (`audio_classification`) |
-| `max_duration_sec` | 30.0 | Clips longer than this are skipped/truncated |
-| `resample` | `true` | Resample decoded audio to `audio.sample_rate` |
-| `spec_augment.enabled` | `false` | Frequency/time masking (no time warping) |
+| `spec_augment.enabled` | `false` | Frequency/time masking (no time warping); applied in the frontend, training only |
 | `spec_augment.freq_mask_width` | 27 | Paper value `F` |
 | `spec_augment.time_masks` | 10 | Paper value `m_T` |
 | `spec_augment.time_mask_ratio` | 0.05 | Paper value `p_S` |
+
+| `audio_dataset.*` field | Default | Notes |
+|---|---|---|
+| `dataset_name` / `dataset_dir` | `""` | HuggingFace dataset id, or a local audio directory; both empty ⇒ `DummyAudioDataset` |
+| `split` | `train` | Dataset split |
+| `audio_column` | `audio` | Audio column; decoded to arrays |
+| `text_column` | `text` | Transcript column (required by `asr`) |
+| `label_column` | `""` | Label column (`audio_classification`; required there) |
+| `max_duration_sec` | 30.0 | Clips longer than this are skipped/truncated |
+| `resample` | `true` | Resample decoded audio to `audio.sample_rate` |
 
 `torchaudio` is an optional `audio` extra: the frontend uses
 `torchaudio.transforms` when importable and otherwise a pure-PyTorch
@@ -935,7 +937,7 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 | `tests/test_frankenstein_vit.py`, `test_vision_*` | Vision path |
 | `tests/test_conformer_attention.py` | Conformer mixer: shapes, causality, formula parity, PE on/off, Macaron on/off, BitNet, conv norms |
 | `tests/test_frankenstein_audio.py` | Audio model class: per-task forwards, forced mode, pooling, `logmel`/`spectrogram`/`raw` frontends |
-| `tests/test_audio_dataset.py`, `test_asr_losses.py`, `test_audio_classification.py` | Audio datasets, SpecAugment, CTC/RNN-T losses, greedy decode + CER |
+| `tests/test_audio_dataset.py`, `test_asr_losses.py`, `test_audio_loss.py`, `test_audio_training.py`, `test_audio_param_categories.py` | Audio datasets, SpecAugment, CTC/RNN-T losses, greedy decode + CER, trainer/engine smoke, estimator categories |
 
 ## 13. Decisions
 
