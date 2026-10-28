@@ -471,24 +471,42 @@ def write_yaml(config: dict, path: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Subprocess runner
 # ---------------------------------------------------------------------------
-GRADIENT_EXPLOSION_MARKERS = [
-    "nan",
-    "inf",
-    "gradient",
-    "exploded",
-    "overflow",
-    "underflow",
-    "loss became nan",
-    "loss is nan",
-    "non-finite",
-    "RuntimeError",
-    "Loss is inf",
+# Unambiguous numerical-failure signals. Matching is word-bounded and applied
+# to non-indented lines only, so benign logging ("INFO", "Gradient
+# Accumulation:") and indented traceback source lines ("    x = float('inf')")
+# never turn an arbitrary crash into a tolerated ``GRAD_EXPLODED``. A bare
+# ``RuntimeError`` is intentionally *not* a marker: only a message that names
+# nan/inf/non-finite/exploding gradients is tolerated.
+GRADIENT_EXPLOSION_PATTERNS = [
+    r"\bnan\b",
+    r"\binf\b",
+    r"\binfinity\b",
+    r"non[- ]?finite",
+    r"loss (?:is|became|went) (?:nan|inf)",
+    r"(?:exploding|exploded) gradients?",
+    r"gradient (?:explosion|exploded|overflow|underflow)",
+    r"numerical (?:overflow|underflow)",
 ]
+
+_GRADIENT_EXPLOSION_RE = re.compile(
+    "|".join(GRADIENT_EXPLOSION_PATTERNS), re.IGNORECASE
+)
 
 
 def looks_like_gradient_explosion(stdout: str, stderr: str) -> bool:
-    text = f"{stdout}\n{stderr}".lower()
-    return any(marker in text for marker in [m.lower() for m in GRADIENT_EXPLOSION_MARKERS])
+    """Return whether the process failed on a numerical (NaN/Inf) issue.
+
+    Only non-indented lines are inspected (traceback source and caret lines
+    are indented), and every pattern is word-bounded. This keeps real failures
+    (shape mismatches, missing keys, ...) classified as ``FAILED`` while the
+    trainer's explicit NaN/Inf and exploding-gradient messages stay tolerated.
+    """
+    for line in f"{stdout}\n{stderr}".splitlines():
+        if not line or line[:1].isspace():
+            continue
+        if _GRADIENT_EXPLOSION_RE.search(line):
+            return True
+    return False
 
 
 def run_training(

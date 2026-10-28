@@ -103,7 +103,7 @@ default del schema. Solo tienen efecto cuando `--gpu-temp-guard` está activo.
 ## Filosofía de los resultados
 
 - `OK`: el entrenamiento terminó sin error.
-- `GRAD_EXPLODED`: el proceso falló con NaN/inf/gradiente. **Esto es tolerado y esperado** para algunas combinaciones; se registra pero no detiene la ejecución.
+- `GRAD_EXPLODED`: el proceso falló con una señal numérica inequívoca (NaN/Inf, pérdida no finita o gradientes explotados). **Esto es tolerado y esperado** para algunas combinaciones; se registra pero no detiene la ejecución. La detección es por palabra completa y solo sobre líneas no indentadas, así que un `RuntimeError` cualquiera (p. ej. un desajuste de formas) o los banners `INFO` / `Gradient Accumulation` ya **no** se confunden con una explosión de gradiente.
 - `FAILED` / `TIMEOUT`: fallo inesperado. El script termina con exit code != 0 si hay alguno.
 
 ## Arhivos
