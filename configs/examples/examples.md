@@ -104,6 +104,7 @@ cli_main([
 | [BERTIN (2107.07253)](https://arxiv.org/abs/2107.07253) | Spanish RoBERTa model family | Spanish-first continual pretraining and embedding adaptation | `es_mlm_bertin_lion`, `es_sbert_bertin_cls` |
 | [MarIA / Spanish LM family (2308.02976)](https://arxiv.org/abs/2308.02976) | Spanish-focused model and adaptation insights | Strong Spanish-domain fit for both MLM and SBERT | `es_mlm_maria_roberta_adafactor`, `es_sbert_maria_max` |
 | [ModernBERT (2412.13663)](https://arxiv.org/abs/2412.13663) | Modernized BERT encoder stack | Good high-quality base for continual Spanish adaptation | `es_mlm_modernbert_galore_adamw`, `es_sbert_modernbert_mean` |
+| [Conformer (2005.08100)](https://arxiv.org/abs/2005.08100) | Convolution-augmented Transformer (macaron FFN + MHSA + conv module) | Adds local, relative-offset context to global attention at equal width; strong for speech and long noisy Spanish text | `es_arch_conformer_adamw`, `mixer_conformer`, `vit_conformer`, `audio_asr_conformer`, `audio_classification_conformer` |
 
 ## P40 Practical Tuning Guide
 ### Batch/Sequence/Accumulation Heuristics
@@ -153,6 +154,7 @@ cli_main([
 | `es_arch_sparse_longformer_adamw.yaml` | mlm | custom `frankenstein` sparse | `adamw` | `layer_norm` | `[sparse_transformer_attn, longformer_attn]` | medium-high | `p40_safe` |
 | `es_arch_bigbird_sparsek_lamb.yaml` | mlm | custom `frankenstein` sparse | `lamb` | `layer_norm` | `[bigbird_attn, sparsek_attn]` | medium-high | `p40_safe` |
 | `es_arch_nsa_retnet_radam.yaml` | mlm | custom `frankenstein` sparse+retnet | `radam` | `dynamic_tanh` | `[nsa_attn, retnet_attn]` | medium | `p40_safe` |
+| `es_arch_conformer_adamw.yaml` | mlm | custom `frankenstein` convolution-augmented | `adamw` | `layer_norm` | `[conformer_attn, standard_attn]` ×4 | medium | `p40_safe` |
 | `es_sbert_beto_mean.yaml` | sbert | `dccuchile/bert-base-spanish-wwm-cased` | n/a (SBERT trainer) | n/a | sentence pooling `mean` | medium | `p40_safe` |
 | `es_sbert_bertin_cls.yaml` | sbert | `bertin-project/bertin-roberta-base-spanish` | n/a (SBERT trainer) | n/a | sentence pooling `cls` | medium | `p40_safe` |
 | `es_sbert_maria_max.yaml` | sbert | `PlanTL-GOB-ES/roberta-base-bne` | n/a (SBERT trainer) | n/a | sentence pooling `max` | medium | `p40_safe` |
@@ -165,6 +167,13 @@ cli_main([
 - `decoder_llama_like.yaml`
 - `decoder_retnet_mamba_like.yaml`
 - `decoder_gated_mixed_adamw.yaml`  ← GLA/DeltaNet/HGRN2 causal decoder
+
+### Convolution-augmented presets (Conformer)
+- `es_arch_conformer_adamw.yaml` — alternating Conformer/standard MLM encoder (paper kernel 32)
+- `mixer_conformer.yaml` — minimal two-layer Conformer smoke preset
+- `vit_conformer.yaml` — Conformer inside the Vision Transformer
+- `audio_asr_conformer.yaml` / `audio_asr_transducer.yaml` — Conformer ASR (CTC / RNN-T)
+- `audio_classification_conformer.yaml` / `audio_eeg_classification.yaml` — Conformer audio and raw-signal classification
 
 ### Gated attention presets
 - `es_arch_gla_deltanet_lion.yaml` — GLA + DeltaNet

@@ -378,7 +378,10 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
 `conformer_attn` (arXiv:2005.08100) owns the macaron FFN₁, multi-head
 self-attention and the convolution module with internal pre-norm residuals;
 the shared `HybridLayer` norm + FFN plays FFN₂ and the outer residual.
-Example: `configs/examples/mixer_conformer.yaml`.
+Examples: `configs/examples/es_arch_conformer_adamw.yaml` (8-layer Spanish
+MLM preset), `configs/examples/mixer_conformer.yaml` (minimal smoke preset),
+`vit_conformer.yaml` (ViT), `audio_asr_conformer.yaml` and
+`audio_classification_conformer.yaml` (speech/audio).
 
 - `model.attention.conformer.kernel_size`: depth-wise conv kernel `k` for `conformer_attn` (default 32; paper best of {3, 7, 17, 32, 65}).
 - `model.attention.conformer.macaron`: enable the macaron FFN₁ branch (default true).
