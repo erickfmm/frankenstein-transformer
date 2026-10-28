@@ -52,10 +52,14 @@ def test_block_categories_match_estimator_breakdown():
 @pytest.mark.parametrize(
     ("name", "expected"),
     [
-        # Embeddings / patch embedding (encoder, decoder ``backbone.``, ViT).
+        # Embeddings / patch embedding (encoder, decoder ``backbone.``, ViT)
+        # and the audio waveform frontend (conv subsampling + projection).
         ("emb.weight", "embeddings"),
         ("backbone.emb.weight", "embeddings"),
         ("patch_embed.proj.weight", "embeddings"),
+        ("frontend.subsample.0.weight", "embeddings"),
+        ("frontend.proj.bias", "embeddings"),
+        ("backbone.frontend.subsample.2.weight", "embeddings"),
         # Positional encodings and the ViT cls/mask tokens.
         ("pos_encoder.pos_embed", "pos"),
         ("backbone.pos_encoder.bam.theta_alpha", "pos"),
@@ -65,6 +69,9 @@ def test_block_categories_match_estimator_breakdown():
         # Attention mixers, including their internal norms.
         ("layers.0.mixer.q_proj.weight", "attention"),
         ("backbone.layers.2.mixer.retn.norm.weight", "attention"),
+        ("layers.0.mixer.conv.depthwise.weight", "attention"),
+        ("backbone.layers.1.mixer.ff_in.weight", "attention"),
+        ("backbone.layers.1.mixer.norm_ffn1.weight", "attention"),
         # Standalone block norms.
         ("layers.0.norm1.weight", "norm"),
         ("layers.0.norm2.weight", "norm"),
@@ -90,6 +97,14 @@ def test_block_categories_match_estimator_breakdown():
         ("patch_pred_head.weight", "head"),
         ("seg_head.weight", "head"),
         ("seg_upsampler.0.weight", "head"),
+        # Audio heads: classification, CTC/vocabulary projection is ``head``
+        # and the RNN-Transducer (prediction LSTM + joint network) is a head too.
+        ("audio_classification_head.weight", "head"),
+        ("backbone.audio_classification_head.bias", "head"),
+        ("transducer.embed.weight", "head"),
+        ("transducer.rnn.weight_ih_l0", "head"),
+        ("transducer.joint_in.weight", "head"),
+        ("transducer.joint_out.bias", "head"),
         # Unknown parameters fall back to the catch-all.
         ("some_unknown.weight", "other"),
     ],

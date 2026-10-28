@@ -69,7 +69,10 @@ def categorize_param(name: str) -> str:
     top = parts[1] if parts[0] == "backbone" and len(parts) > 1 else parts[0]
 
     # Embedding / patch embedding / audio frontend (waveform → frames).
-    if top in ("emb", "patch_embed", "frontend"):
+    # ``frontend`` is the ``frankenstein_audio`` waveform frontend (mel /
+    # spectrogram / raw conv subsampling + projection); the other aliases keep
+    # the taxonomy stable for equivalent module names.
+    if top in ("emb", "patch_embed", "frontend", "audio_frontend", "subsampler"):
         return "embeddings"
 
     # Positional encodings, plus the ViT cls/mask tokens that the estimator

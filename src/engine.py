@@ -986,7 +986,11 @@ def _train_vision(
                 prediction_target=config.prediction_target,
             )
 
-    if dataset is not None and not hasattr(dataset, "__iter__"):
+    if (
+        dataset is not None
+        and not hasattr(dataset, "__iter__")
+        and not hasattr(dataset, "__getitem__")
+    ):
         raise ValueError(
             "Vision task: pre-built 'dataset' must be an iterable "
             "(torch DataLoader) of dict batches."

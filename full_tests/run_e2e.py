@@ -13,7 +13,12 @@ SentencePiece tokenizer, exercising:
 * major transversal toggles (BitNet, MoE, MoD, mHC, embeddings, residuals/AttnRes, etc.),
 * encoder/MLM and decoder/causal-LM tasks,
 * vision tasks (frankenstein_vit: patch_prediction, classification, segmentation),
-* deploy, inference, transformers and BitNet-GGUF export smoke tests.
+* audio tasks (frankenstein_audio: asr with CTC and RNN-Transducer,
+  audio_classification, and `feature: raw` EEG-style signals) using
+  `DummyAudioDataset` only (no network access),
+* deploy, inference, transformers and BitNet-GGUF export smoke tests (audio
+  checkpoints support `standard`/`quantized` deploy; Transformers export must
+  be rejected with the documented message).
 
 It is intentionally NOT collected by ``pytest tests/`` (it lives in ``full_tests/``
 at the repository root) and is meant to be left running for several hours.
@@ -48,6 +53,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
+
 # Make the helpers importable whether this file is run as a script or module.
 _FULL_TESTS_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _FULL_TESTS_DIR.parent
@@ -70,6 +77,10 @@ ATTENTIONS = [
     "msa_attn", "sparda_attn", "kda_attn", "gma_attn", "ssog_attn",
     "falcon1_attn", "falcon2_attn", "falcon3_attn", "falcon1a_attn",
     "falcon2a_attn", "falcon3a_attn",
+    # Convolution-augmented attention (arXiv:2005.08100): macaron FFN₁ + MHSA
+    # + convolution module. Trains densely in both encoder and decoder modes
+    # (causal padding in the decoder), so it belongs in the pair sweep too.
+    "conformer_attn",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).
@@ -112,6 +123,31 @@ def _deep_update(base: dict, updates: dict) -> dict:
         else:
             out[key] = value
     return out
+
+
+def _load_example_config(name: str, **overrides: Any) -> dict:
+    """Load ``configs/examples/<name>.yaml`` and apply deep overrides.
+
+    Some features (the Conformer ViT, the audio model class/tasks) are already
+    described by schema-validated example presets. Reusing them here keeps the
+    harness honest about the shipped examples; only the data source and the
+    step budget are overridden so each case stays a fast offline CPU smoke
+    test. Any overrides are written into the run's ``config.yaml``, which is
+    the harness' standard temporary-config mechanism.
+
+    Args:
+        name: Example file stem (without ``.yaml``).
+        **overrides: Recursive overrides merged into the loaded config.
+
+    Returns:
+        The example config as a dict, with ``overrides`` applied.
+    """
+    path = _PROJECT_ROOT / "configs" / "examples" / f"{name}.yaml"
+    with path.open("r", encoding="utf-8") as handle:
+        config = yaml.safe_load(handle)
+    if overrides:
+        config = _deep_update(config, overrides)
+    return config
 
 
 def _base_config(vocab_size: int, num_layers: int, num_loops: int) -> Tuple[dict, dict]:
@@ -351,6 +387,18 @@ def make_task_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     training["task"] = "causal_lm"
     configs.append(("task_causal_lm_decoder", {"model_class": "frankenstein_text_decoder", "model": model, "training": training}))
 
+    # Decoder causal LM with the Conformer mixer: the convolution module must
+    # switch to causal (left) padding in ``mode: decoder`` so training is
+    # streaming-safe.
+    model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
+    model = _deep_update(model, {
+        "dims": {"mode": "decoder", "layer_pattern": ["conformer_attn", "standard_attn"]},
+        "attention": {"conformer": {"kernel_size": 8, "macaron": True, "conv_norm": "batch"}},
+    })
+    training = training.copy()
+    training["task"] = "causal_lm"
+    configs.append(("task_causal_lm_conformer", {"model_class": "frankenstein_text_decoder", "model": model, "training": training}))
+
     # Decoder causal LM with fixed numerics: exercises the ignore_index=-100
     # path of the fixed cross-entropy and the decoder softmax/sampling plumbing.
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
@@ -503,6 +551,14 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         "training": _vit_training("segmentation"),
     }))
 
+    # Conformer mixer inside the ViT: the patch raster is treated as the
+    # sequence axis for the convolution module. Uses the canonical example
+    # preset (`configs/examples/vit_conformer.yaml`), shrunk to a tiny batch.
+    configs.append(("vit_conformer", _load_example_config(
+        "vit_conformer",
+        training={"batch_size": 4, "num_epochs": 1, "dataloader_workers": 0},
+    )))
+
     return configs
 
 
@@ -534,6 +590,55 @@ def make_vision_pe_configs(vocab_size: int) -> List[Tuple[str, dict]]:
                 "training": _vit_training(task),
             }))
     return configs
+
+
+def make_audio_configs(vocab_size: int) -> List[Tuple[str, dict]]:
+    """Build ``frankenstein_audio`` cases for ASR, classification and raw EEG.
+
+    All four cases reuse the canonical example presets
+    (``configs/examples/audio_*.yaml``) with two offline/tiny overrides:
+
+    * ``audio_dataset.dataset_name``/``dataset_dir`` are cleared, so the
+      engine falls back to :class:`DummyAudioDataset` (synthetic waves and
+      transcripts) and never touches the network;
+    * the training block is reduced to a single optimizer step
+      (``batch_size=16`` over 16 dummy examples, ``gradient_accumulation_steps=1``,
+      ``num_epochs=1``). The accumulation override is required: with the
+      examples' default of 4 no step completes in a one-batch epoch and no
+      checkpoint is written for the deploy smoke.
+
+    Args:
+        vocab_size: Unused (the audio presets carry their own ``vocab_size``);
+            accepted so every config maker has the same signature.
+
+    Returns:
+        List of ``(combo_id, config_dict)`` tuples.
+    """
+    del vocab_size  # audio presets define their own vocabulary size
+
+    offline_dataset = {"dataset_name": "", "dataset_dir": ""}
+    tiny_training = {
+        "batch_size": 16,
+        "num_epochs": 1,
+        "dataloader_workers": 0,
+        "gradient_accumulation_steps": 1,
+    }
+
+    def audio_case(combo_id: str, example: str, **overrides: Any) -> Tuple[str, dict]:
+        config = _load_example_config(
+            example,
+            audio_dataset=offline_dataset,
+            training=tiny_training,
+            **overrides,
+        )
+        return combo_id, config
+
+    return [
+        audio_case("audio_asr_ctc", "audio_asr_conformer"),
+        audio_case("audio_asr_transducer", "audio_asr_transducer"),
+        audio_case("audio_classification", "audio_classification_conformer"),
+        audio_case("audio_eeg_classification", "audio_eeg_classification"),
+    ]
 
 
 def make_tokenizer_configs(vocab_size: int) -> List[Tuple[str, dict]]:
@@ -590,7 +695,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--category",
-        choices=["all", "attn", "opt", "norm", "pe", "transversal", "task", "batch_size", "vision", "vision_pe", "tokenizer", "deploy"],
+        choices=["all", "attn", "opt", "norm", "pe", "transversal", "task", "batch_size", "vision", "vision_pe", "audio", "tokenizer", "deploy"],
         default="all",
         help="Which sweep to run (default: all).",
     )
@@ -735,6 +840,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         combos.extend(make_vision_configs(args.vocab_size))
     if args.category in {"all", "vision_pe"}:
         combos.extend(make_vision_pe_configs(args.vocab_size))
+    if args.category in {"all", "audio"}:
+        combos.extend(make_audio_configs(args.vocab_size))
     if args.category in {"all", "tokenizer"}:
         combos.extend(make_tokenizer_configs(args.vocab_size))
 
@@ -796,8 +903,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         if result.status == "OK" and successful_training is None:
             successful_training = result
 
-    # Deploy / infer / export smoke tests, using the first successful training run.
-    if not args.skip_deploy and successful_training is not None:
+    # Deploy / infer / export smoke tests, using the first successful training
+    # run. Audio checkpoints follow the dedicated path below: the text `infer`
+    # CLI does not apply to them and Transformers export must be rejected.
+    if (
+        not args.skip_deploy
+        and successful_training is not None
+        and not successful_training.combo_id.startswith("audio_")
+    ):
         checkpoint_path = Path(successful_training.checkpoint_path) if successful_training.checkpoint_path else None
         if checkpoint_path and checkpoint_path.exists():
             base_id = successful_training.combo_id
@@ -834,6 +947,83 @@ def main(argv: Optional[List[str]] = None) -> int:
                 results.append(helpers.run_transformers_export(checkpoint_path, yaml_path, export_dir, f"{base_id}_export", runner, env_extra))
                 write_results_incremental()
                 logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
+
+    # Audio deploy smoke: `standard`/`quantized` must load the audio checkpoint
+    # and run the validation forward pass. There is no text-style `infer` for
+    # audio, no GGUF export, and the Transformers exporter must reject audio
+    # models with the documented message.
+    if not args.skip_deploy and args.category in {"all", "audio"}:
+        audio_result = next(
+            (
+                result
+                for result in results
+                if result.combo_id.startswith("audio_")
+                and result.status == "OK"
+                and result.checkpoint_path
+                and Path(result.checkpoint_path).exists()
+            ),
+            None,
+        )
+        if audio_result is None:
+            logging.warning(
+                "No successful audio training run with a checkpoint; skipping the audio deploy smoke"
+            )
+        else:
+            audio_checkpoint = Path(audio_result.checkpoint_path)
+            audio_id = audio_result.combo_id
+            for fmt in ("standard", "quantized"):
+                audio_deploy_dir = helpers.TMP_DIR / "deploy" / f"{audio_id}_{fmt}"
+                logging.info(
+                    "Running audio deploy (%s) %s -> %s", fmt, audio_id, audio_deploy_dir
+                )
+                results.append(helpers.run_deploy(
+                    audio_checkpoint,
+                    audio_deploy_dir,
+                    f"{audio_id}_deploy_{fmt}",
+                    runner,
+                    env_extra,
+                    fmt=fmt,
+                    device=args.device,
+                ))
+                write_results_incremental()
+                logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
+
+            audio_yaml_path = helpers.RUNS_DIR / audio_id / "config.yaml"
+            if audio_yaml_path.exists():
+                export_dir = helpers.TMP_DIR / "transformers-export" / f"{audio_id}_rejected"
+                logging.info(
+                    "Running transformers-export (expected rejection) %s -> %s",
+                    audio_id,
+                    export_dir,
+                )
+                export_result = helpers.run_transformers_export(
+                    audio_checkpoint,
+                    audio_yaml_path,
+                    export_dir,
+                    f"{audio_id}_export_expected_reject",
+                    runner,
+                    env_extra,
+                )
+                combined = f"{export_result.stdout}\n{export_result.stderr}".lower()
+                rejected_as_documented = (
+                    export_result.status == "FAILED"
+                    and "frankenstein_audio" in combined
+                    and "not currently exportable" in combined
+                )
+                if rejected_as_documented:
+                    export_result.status = "OK"
+                    export_result.notes = (
+                        "audio transformers export rejected with the documented message"
+                    )
+                else:
+                    export_result.status = "FAILED"
+                    export_result.notes = (
+                        "audio transformers export was not rejected as documented "
+                        f"(returncode={export_result.returncode})"
+                    )
+                results.append(export_result)
+                write_results_incremental()
+                logging.info("%s -> %s (%.1fs) %s", export_result.combo_id, export_result.status, export_result.duration_sec, export_result.notes)
 
     # Dedicated BitNet+standard_attn training + bitnet-gguf export, if not already covered.
     if not args.skip_deploy and (args.category in {"all", "transversal"}):

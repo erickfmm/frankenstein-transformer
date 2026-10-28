@@ -13,8 +13,9 @@ Esta carpeta contiene un harness independiente que entrena modelos **reales pero
 - **Todas las codificaciones posicionales** a nivel de modelo (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape`, `pape_efficient`, `pape_ri`, `sinusoidal_absolute`, `sinusoidal_rotary`, `learned_absolute`, `none`) — una config cada una sobre un patrón base fijo `[standard_attn, titan_attn]` (sin cross product).
 - **Todas las `pos_embedding_type` del ViT** (`learned_1d`, `none`, `learned_absolute`, `sinusoidal_absolute`, `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`, `nope`, `alibi`, `bam`) a través de las 3 tareas de visión (classification, patch_prediction, segmentation) — 39 configs, sin cross product con mixers.
 - **Transversales**: BitNet (incluido routers/conv), embeddings factorizados/conv, MoE, MoD, mHC, residuos/AttnRes (`standard`/`none`/`full_attn`/`block_attn`), RoPE vs HoPE, SSMax (`use_ssmax`), SSOG campo fijo (`lookat: false`) y SSOG+BitNet, loops duplicados, activaciones de FFN, etc.
-- **Tareas**: `mlm`/encoder y `causal_lm`/decoder; visión (`classification`, `patch_prediction`, `segmentation`) — cada tarea de visión tiene además una variante `ssog_attn` (`cls_token: false` + `pooling_mode: gap`; la rejilla 2×2 se deriva de la imagen).
-- **Deploy / infer / export a HuggingFace Transformers / export GGUF BitNet** (smoke tests sobre el primer entrenamiento exitoso, vía `deploy --format transformers|gguf`).
+- **Tareas**: `mlm`/encoder y `causal_lm`/decoder; visión (`classification`, `patch_prediction`, `segmentation`) — cada tarea de visión tiene además una variante `ssog_attn` (`cls_token: false` + `pooling_mode: gap`; la rejilla 2×2 se deriva de la imagen). El mezclador `conformer_attn` (Conformer, arXiv:2005.08100) se barre en el encoder (pares, singles) y en el decoder (`causal_lm`, padding causal de la convolución) y dentro del ViT (`configs/examples/vit_conformer.yaml`).
+- **Audio**: `frankenstein_audio` con `conformer_attn` en `audio_asr_ctc`, `audio_asr_transducer` (RNN-T), `audio_classification` y `audio_eeg_classification` (`feature: raw`, 8 canales). Los presets ASR apuntan al dataset de HuggingFace `astroza/chilean-jokes-festival-de-vina`; el harness limpia `audio_dataset.dataset_name`/`dataset_dir` en el YAML temporal de cada run para forzar `DummyAudioDataset` (sin red) y deja 1 paso de optimización.
+- **Deploy / infer / export a HuggingFace Transformers / export GGUF BitNet** (smoke tests sobre el primer entrenamiento exitoso, vía `deploy --format transformers|gguf`). Los checkpoints de audio se prueban aparte: `deploy --format standard|quantized` deben cargar y validar; `transformers` debe fallar con el mensaje documentado (`frankenstein_audio` no exportable). No hay GGUF para audio.
 
 ## Cómo ejecutar
 
@@ -52,6 +53,13 @@ Solo las `pos_embedding_type` del ViT (3 tareas × 12 PEs):
 
 ```bash
 uv run --extra cu118 --extra train python full_tests/run_e2e.py --category vision_pe
+```
+
+Solo las tareas de audio (`asr` CTC + RNN-T, clasificación, EEG `raw`) y su
+smoke de deploy:
+
+```bash
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --category audio
 ```
 
 ### Selección de dispositivo

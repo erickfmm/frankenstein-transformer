@@ -128,15 +128,20 @@ def build_mel_filterbank(
     """
     n_freqs = n_fft // 2 + 1
     high = float(sample_rate) / 2.0 if f_max is None else float(f_max)
+    # The filterbank is built with pure tensor ops (no ``float(tensor)``
+    # round-trips) so the module can also be instantiated on the ``meta``
+    # device, as the parameter-count ground truth does for every preset.
     all_freqs = torch.linspace(0.0, float(sample_rate) / 2.0, n_freqs)
     m_pts = torch.linspace(_hz_to_mel(f_min), _hz_to_mel(high), n_mels + 2)
-    f_pts = torch.tensor([_mel_to_hz(float(m)) for m in m_pts], dtype=torch.float32)
+    # Inverse HTK mel scale: 700 * (10 ** (m / 2595) - 1); evaluate in float64
+    # and cast back, matching the original per-point ``_mel_to_hz`` values.
+    f_pts = torch.pow(10.0, m_pts.double() / 2595.0).sub(1.0).mul(700.0).float()
     f_diff = f_pts[1:] - f_pts[:-1]
     slopes = f_pts.unsqueeze(0) - all_freqs.unsqueeze(1)
     down_slopes = -slopes[:, :-2] / f_diff[:-1]
     up_slopes = slopes[:, 2:] / f_diff[1:]
     fb = torch.clamp(torch.minimum(down_slopes, up_slopes), min=0.0)
-    return fb.transpose(0, 1).contiguous()  # (n_mels, n_freqs)
+    return fb.transpose(0, 1).to(torch.float32).contiguous()  # (n_mels, n_freqs)
 
 
 class AudioFrontend(nn.Module):
