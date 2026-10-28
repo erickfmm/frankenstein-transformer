@@ -425,7 +425,10 @@ at its true magnitude `~e^{-m}` past the dtype's precision cliff (≈5.5 bf16 /
 losses (mlm, causal_lm, classification, segmentation, text_classification,
 patch_prediction) for `fixed_cross_entropy`, whose target gradient equals
 minus the sum of the non-target gradients by construction, so the gradient
-sums to zero at any margin. Soft-target/distillation CE (Softmax Cancellation)
+sums to zero at any margin. The helper takes a `class_dim` argument (`-1` for
+token/patch heads `(..., vocab_size)`, `1` for dense per-pixel heads
+`(B, C, H, W)`); the trainer forwards it so segmentation CE matches
+`F.cross_entropy`'s class axis. Soft-target/distillation CE (Softmax Cancellation)
 is not used by this codebase and is therefore out of scope. The internal SSOG
 LSE kernels keep their own formulation. `HybridLayer` attaches the resolved
 flag as `mixer.use_fixed_softmax`; the residual factory does the same for

@@ -178,6 +178,7 @@ def fixed_cross_entropy(
     targets: torch.Tensor,
     reduction: str = "mean",
     ignore_index: int = -100,
+    class_dim: int = -1,
 ) -> torch.Tensor:
     """Hard-target cross-entropy with a zero-sum gradient by construction.
 
@@ -200,6 +201,10 @@ def fixed_cross_entropy(
             are excluded from the loss.
         reduction: ``"mean"``, ``"sum"`` or ``"none"``.
         ignore_index: Target value excluded from the loss.
+        class_dim: Dimension holding the class logits. Defaults to the last
+            dimension (``(..., vocab_size)``). Dense per-pixel heads keep the
+            class axis at index 1 (``(B, C, H, W)``); pass ``class_dim=1`` for
+            those, matching ``torch.nn.functional.cross_entropy``.
 
     Returns:
         Scalar loss for ``"mean"``/``"sum"``, or a tensor shaped like
@@ -207,6 +212,8 @@ def fixed_cross_entropy(
     """
     if reduction not in ("mean", "sum", "none"):
         raise ValueError(f"Unsupported reduction '{reduction}'")
+    if class_dim != -1:
+        logits = logits.movedim(class_dim, -1)
 
     vocab_size = logits.size(-1)
     flat_logits = logits.reshape(-1, vocab_size)

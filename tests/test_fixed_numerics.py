@@ -140,6 +140,23 @@ class ForwardParityTests(unittest.TestCase):
         fixed_cross_entropy(logits, targets).backward()
         self.assertEqual(int((logits.grad[5:] != 0).sum()), 0)
 
+    def test_fixed_cross_entropy_class_dim(self):
+        """Dense per-pixel heads keep the class axis at index 1."""
+        torch.manual_seed(4)
+        logits = torch.randn(2, 5, 3, 4) * 1.5  # (B, C, H, W)
+        targets = torch.randint(0, 5, (2, 3, 4))
+        torch.testing.assert_close(
+            fixed_cross_entropy(logits, targets, class_dim=1),
+            F.cross_entropy(logits, targets),
+            rtol=1e-5,
+            atol=1e-6,
+        )
+        # The zero-sum property holds per pixel along the class axis.
+        logits = logits.clone().requires_grad_(True)
+        fixed_cross_entropy(logits, targets, class_dim=1).backward()
+        per_pixel = logits.grad.sum(dim=1)
+        self.assertTrue(torch.allclose(per_pixel, torch.zeros_like(per_pixel), atol=1e-6))
+
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class SoftmaxCollapseTests(unittest.TestCase):

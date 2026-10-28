@@ -1163,17 +1163,26 @@ class TitanTrainer:
         cfg = self.config if self.config is not None else getattr(self.model, "config", None)
         return bool(getattr(cfg, "fixed_cross_entropy", False))
 
-    def _task_cross_entropy(self, logits, targets, **kwargs):
+    def _task_cross_entropy(self, logits, targets, class_dim: int = -1, **kwargs):
         """Dispatch to the fixed hard-target CE or ``F.cross_entropy``.
 
         The fixed formulation keeps the target gradient past the precision
         cliff and guarantees a zero-sum gradient (arXiv:2610.31642 §2).
         ``ignore_index`` and the default ``mean`` reduction match
         ``F.cross_entropy`` semantics.
+
+        ``class_dim`` selects the class-logit axis: the default ``-1`` covers
+        token/patch heads ``(..., vocab_size)``, while dense per-pixel heads
+        ``(B, C, H, W)`` pass ``class_dim=1`` (``F.cross_entropy`` also treats
+        axis 1 as the class axis for inputs with more than two dimensions).
         """
         if self._use_fixed_cross_entropy():
             ignore_index = kwargs.get("ignore_index", -100)
-            return fixed_cross_entropy(logits, targets, ignore_index=ignore_index)
+            return fixed_cross_entropy(
+                logits, targets, ignore_index=ignore_index, class_dim=class_dim
+            )
+        if logits.dim() > 2 and class_dim != 1:
+            logits = logits.movedim(class_dim, 1)
         return F.cross_entropy(logits, targets, **kwargs)
 
     def compute_mlm_loss(self, input_ids, attention_mask, labels):
@@ -1519,9 +1528,11 @@ class TitanTrainer:
         pixel_values = batch["pixel_values"]
         seg_map = batch["segmentation_map"]  # (B, H, W) long
         logits = self._forward_vision_logits(pixel_values, task="segmentation")
-        # logits: (B, num_seg_classes, H, W)
+        # logits: (B, num_seg_classes, H, W) — the class axis is dim 1.
         num_seg_classes = logits.shape[1]
-        ce_loss = self._task_cross_entropy(logits.float(), seg_map.long())
+        ce_loss = self._task_cross_entropy(
+            logits.float(), seg_map.long(), class_dim=1
+        )
 
         # Dice loss (per-class, macro average).
         probs = (

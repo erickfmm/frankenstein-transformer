@@ -57,6 +57,30 @@ class TestSegmentationLoss:
         assert 0.0 <= acc.item() <= 1.0
         loss.backward()
 
+    def test_loss_fixed_numerics(self):
+        """The fixed CE must handle (B, C, H, W) logits (class dim 1)."""
+        cfg = FrankensteinViT.build_vit_config(
+            hidden_size=64, num_layers=2, num_heads=4, patch_size=8,
+            image_height=32, image_width=32, num_seg_classes=5,
+        )
+        cfg.fixed_cross_entropy = True
+        cfg.fixed_softmax = True
+        model = FrankensteinViT(cfg)
+        trainer = _make_trainer(model, "segmentation")
+        ds = DummyImageDataset(task="segmentation", num_samples=4, image_height=32, image_width=32, num_seg_classes=5)
+        batch = next(iter(DataLoader(ds, batch_size=4)))
+        loss, acc = trainer.compute_segmentation_loss(batch)
+        assert loss.dim() == 0
+        assert torch.isfinite(loss)
+        assert loss.item() > 0
+        assert 0.0 <= acc.item() <= 1.0
+        loss.backward()
+        assert all(
+            torch.isfinite(p.grad).all()
+            for p in model.parameters()
+            if p.grad is not None
+        )
+
 
 @pytest.mark.skipif(not TORCH_AVAILABLE, reason="torch not available")
 class TestPatchPredictionLoss:
