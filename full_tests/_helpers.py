@@ -657,7 +657,17 @@ def copy_tokenizer_to_deploy_dir(deploy_dir: Path, vocab_size: int, run_dir: Opt
     2. The legacy toy SentencePiece model (SPM path).
     """
     if run_dir is not None:
-        for tok_dir in [run_dir / "trained_tokenizer"] + sorted(run_dir.glob("checkpoints/*/")):
+        # ``trained_tokenizer/`` holds artifacts from the
+        # ``tokenizer.source=train_from_dataset`` path; ``checkpoints/*/`` the
+        # legacy SPM copies; ``checkpoints/*/tokenizer/`` the HF tokenizer the
+        # engine saves next to checkpoints built with an ``hf_repo`` tokenizer
+        # (``text_dataset`` real-data runs).
+        tokenizer_dirs = (
+            [run_dir / "trained_tokenizer"]
+            + sorted(run_dir.glob("checkpoints/*/"))
+            + sorted(run_dir.glob("checkpoints/*/tokenizer/"))
+        )
+        for tok_dir in tokenizer_dirs:
             if (tok_dir / "tokenizer.json").exists():
                 for tok_file in sorted(tok_dir.glob("tokenizer*")):
                     if tok_file.is_file():

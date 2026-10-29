@@ -16,6 +16,13 @@ SentencePiece tokenizer, exercising:
 * audio tasks (frankenstein_audio: asr with CTC and RNN-Transducer,
   audio_classification, and `feature: raw` EEG-style signals) using
   `DummyAudioDataset` only (no network access),
+* real-data combos (`--category realdata`): every task family trained against
+  small HuggingFace Hub datasets — MLM/causal-LM on Spanish poetry, text
+  classification, SBERT triplets, ViT segmentation/classification/patch
+  prediction, and audio ASR/classification. These combos download from the
+  Hub (models + corpora), so run them with a larger per-combo timeout
+  (e.g. `--timeout 1800`) because first-time downloads can exceed the
+  default,
 * deploy, inference, transformers and BitNet-GGUF export smoke tests (audio
   checkpoints support `standard`/`quantized` deploy; Transformers export must
   be rejected with the documented message).
@@ -30,6 +37,11 @@ Run from the repo root with the uv project env:
 To run only a subset:
 
     uv run --extra cu118 --extra train python full_tests/run_e2e.py --category optimizers --limit 3
+
+To run only the real-data (HuggingFace Hub) combos — downloads the base model,
+tokenizers and corpora on first use, so allow a generous per-combo timeout:
+
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --category realdata --timeout 1800
 
 To run on a specific device (default is cpu):
 
@@ -106,6 +118,20 @@ OPTIMIZERS = [
 ]
 
 NORMS = ["layer_norm", "dynamic_tanh", "derf", "rms_norm", "prms_norm", "flash_norm"]
+
+
+# ---------------------------------------------------------------------------
+# Real-data combos (HuggingFace Hub datasets)
+# ---------------------------------------------------------------------------
+# NLP tasks driven by a ``text_dataset`` block require an explicit HF
+# tokenizer source (the engine falls back to the legacy toy SPM otherwise),
+# and the tokenizer's vocab size is injected into ``model.dims.vocab_size``
+# automatically — the configured dims.vocab_size stays a harmless placeholder.
+REALDATA_TEXT_TOKENIZER = "dccuchile/bert-base-spanish-wwm-cased"
+
+# SBERT training hard-requires a top-level ``base_model`` (``_train_sbert`` in
+# ``src/engine.py``); BETO matches the shipped ``es_sbert_*`` examples.
+REALDATA_SBERT_BASE_MODEL = "dccuchile/bert-base-spanish-wwm-cased"
 
 
 # ---------------------------------------------------------------------------
@@ -477,7 +503,7 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     image = dict(base_image, num_classes=10)
     configs.append(("vit_classification", {
         "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
-        "image": image, "dataset": base_dataset,
+        "image": image, "vision_dataset": base_dataset,
         "training": _vit_training("classification"),
     }))
 
@@ -486,7 +512,7 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
                  prediction_target="mean_color_3bit")
     configs.append(("vit_patch_prediction", {
         "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
-        "image": image, "dataset": base_dataset,
+        "image": image, "vision_dataset": base_dataset,
         "training": _vit_training("patch_prediction"),
     }))
 
@@ -494,7 +520,7 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     image = dict(base_image, seg_head_type="pixel", num_seg_classes=5)
     configs.append(("vit_segmentation_pixel", {
         "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
-        "image": image, "dataset": base_dataset,
+        "image": image, "vision_dataset": base_dataset,
         "training": _vit_training("segmentation"),
     }))
 
@@ -506,13 +532,13 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     image = dict(base_image, num_classes=10)
     configs.append(("vit_classification_fixed_numerics", {
         "model_class": "frankenstein_vit", "model": fixed_vit,
-        "image": image, "dataset": base_dataset,
+        "image": image, "vision_dataset": base_dataset,
         "training": _vit_training("classification"),
     }))
     image = dict(base_image, seg_head_type="pixel", num_seg_classes=5)
     configs.append(("vit_segmentation_fixed_numerics", {
         "model_class": "frankenstein_vit", "model": fixed_vit,
-        "image": image, "dataset": base_dataset,
+        "image": image, "vision_dataset": base_dataset,
         "training": _vit_training("segmentation"),
     }))
 
@@ -532,7 +558,7 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     image = dict(ssog_image, num_classes=10)
     configs.append(("vit_classification_ssog", {
         "model_class": "frankenstein_vit", "model": ssog_model,
-        "image": image, "dataset": base_dataset,
+        "image": image, "vision_dataset": base_dataset,
         "training": _vit_training("classification"),
     }))
 
@@ -540,14 +566,14 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
                  prediction_target="mean_color_3bit")
     configs.append(("vit_patch_prediction_ssog", {
         "model_class": "frankenstein_vit", "model": ssog_model,
-        "image": image, "dataset": base_dataset,
+        "image": image, "vision_dataset": base_dataset,
         "training": _vit_training("patch_prediction"),
     }))
 
     image = dict(ssog_image, seg_head_type="pixel", num_seg_classes=5)
     configs.append(("vit_segmentation_pixel_ssog", {
         "model_class": "frankenstein_vit", "model": ssog_model,
-        "image": image, "dataset": base_dataset,
+        "image": image, "vision_dataset": base_dataset,
         "training": _vit_training("segmentation"),
     }))
 
@@ -586,7 +612,7 @@ def make_vision_pe_configs(vocab_size: int) -> List[Tuple[str, dict]]:
             image = dict(base_image, pos_embedding_type=pe, **image_extras)
             configs.append((f"vit_pe_{task}_{pe}", {
                 "model_class": "frankenstein_vit", "model": _vit_model(vocab_size),
-                "image": image, "dataset": base_dataset,
+                "image": image, "vision_dataset": base_dataset,
                 "training": _vit_training(task),
             }))
     return configs
@@ -687,6 +713,231 @@ def make_tokenizer_configs(vocab_size: int) -> List[Tuple[str, dict]]:
 
 
 # ---------------------------------------------------------------------------
+# Real-data combos (HuggingFace Hub datasets)
+# ---------------------------------------------------------------------------
+def make_real_dataset_configs(vocab_size: int) -> List[Tuple[str, dict]]:
+    """Build one real-data combo per task family, against HF Hub datasets.
+
+    Every combo exercises the *actual* dataset field of its task:
+
+    * ``text_dataset.dataset_name`` — MLM, causal LM and text classification.
+      The text column of ``adleme94/borges`` is ``poem`` (not ``text``), and
+      ``C-L-V/mini_corpus_sentiment_es`` carries string labels
+      (``negativo``/``neutral``/``positivo`` → 3 classes via
+      ``model.classification_head``).
+    * ``vision_dataset.dataset_name`` — the teeth X-ray repo stores the
+      segmentation mask in the ``label`` column (an Image), so
+      ``segmentation_column: label`` is required; the breast-cancer repo is a
+      2-class ClassLabel and also feeds the patch-prediction combo.
+    * ``audio_dataset.dataset_name`` — ``astroza/chilean-jokes...`` only has a
+      ``test`` split; ``danielquillanroxas/EMOTION_VOICES`` has 7 emotion
+      classes (``audio.num_classes: 7``).
+    * ``training.sbert.dataset_name`` — Spanish QQP triplets; SBERT training
+      hard-requires a top-level ``base_model``.
+
+    All combos are tiny (1 epoch, small batches, ``max_samples`` caps) but
+    they download from the HuggingFace Hub — use a generous ``--timeout``.
+
+    Args:
+        vocab_size: Toy vocab size used only for the harness' tokenizer copy;
+            the engine injects the real tokenizer vocab into the NLP models.
+
+    Returns:
+        List of ``(combo_id, config_dict)`` tuples.
+    """
+    configs: List[Tuple[str, dict]] = []
+
+    hf_tokenizer = {"source": "hf_repo", "name_or_path": REALDATA_TEXT_TOKENIZER}
+
+    # --- MLM on Spanish poetry (Borges) -----------------------------------
+    model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
+    model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
+    training = _deep_update(training, {"task": "mlm", "batch_size": 2, "max_length": 64})
+    configs.append(("realdata_mlm_borges", {
+        "model_class": "frankenstein_text_encoder",
+        "model": model,
+        "tokenizer": hf_tokenizer,
+        "text_dataset": {
+            "dataset_name": "adleme94/borges",
+            "split": "train",
+            "text_column": "poem",
+            "max_samples": 32,
+        },
+        "training": training,
+    }))
+
+    # --- Autoregressive causal LM on the same corpus -----------------------
+    model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
+    model = _deep_update(model, {
+        "dims": {"mode": "decoder", "layer_pattern": ["standard_attn", "titan_attn"]},
+    })
+    training = _deep_update(training, {"task": "causal_lm", "batch_size": 2, "max_length": 64})
+    configs.append(("realdata_causal_lm_borges", {
+        "model_class": "frankenstein_text_decoder",
+        "model": model,
+        "tokenizer": hf_tokenizer,
+        "text_dataset": {
+            "dataset_name": "adleme94/borges",
+            "split": "train",
+            "text_column": "poem",
+            "max_samples": 32,
+        },
+        "training": training,
+    }))
+
+    # --- Supervised text classification (3 string labels) ------------------
+    model, training = _base_config(vocab_size, num_layers=1, num_loops=1)
+    model = _deep_update(model, {
+        "dims": {"layer_pattern": ["standard_attn"]},
+        "classification_head": {"enabled": True, "num_labels": 3, "pooling_mode": "cls"},
+    })
+    training = _deep_update(training, {"task": "text_classification", "batch_size": 2, "max_length": 64})
+    configs.append(("realdata_text_classification_mini_corpus", {
+        "model_class": "frankenstein_text_encoder",
+        "model": model,
+        "tokenizer": hf_tokenizer,
+        "text_dataset": {
+            "dataset_name": "C-L-V/mini_corpus_sentiment_es",
+            "split": "train",
+            "text_column": "text",
+            "label_column": "label",
+            "use_labels": True,
+            "max_samples": 50,
+        },
+        "training": training,
+    }))
+
+    # --- ViT segmentation: teeth panoramic X-rays --------------------------
+    # The mask lives in the ``label`` column (an Image), not the default
+    # ``segmentation_map`` — override segmentation_column. Binary masks.
+    configs.append(("realdata_vit_segmentation_teeth", {
+        "model_class": "frankenstein_vit",
+        "model": _vit_model(vocab_size),
+        "image": {
+            "image_size": {"height": 64, "width": 64},
+            "patch_size": 16, "in_channels": 3, "pos_embedding_type": "learned_1d",
+            "cls_token": True, "pooling_mode": "cls",
+            "seg_head_type": "pixel", "num_seg_classes": 2,
+        },
+        "vision_dataset": {
+            "dataset_name": "SerdarHelli/SegmentationOfTeethPanoramicXRayImages",
+            "split": "train",
+            "image_column": "image",
+            "segmentation_column": "label",
+        },
+        "training": _vit_training("segmentation"),
+    }))
+
+    # --- ViT classification: breast cancer ultrasound (2 classes) ----------
+    configs.append(("realdata_vit_classification_breastcancer", {
+        "model_class": "frankenstein_vit",
+        "model": _vit_model(vocab_size),
+        "image": {
+            "image_size": {"height": 64, "width": 64},
+            "patch_size": 16, "in_channels": 3, "pos_embedding_type": "learned_1d",
+            "cls_token": True, "pooling_mode": "cls",
+            "num_classes": 2,
+        },
+        "vision_dataset": {
+            "dataset_name": "as-cle-bert/breastcanc-ultrasound-class",
+            "split": "train",
+            "image_column": "image",
+            "label_column": "label",
+        },
+        "training": _vit_training("classification"),
+    }))
+
+    # --- ViT patch prediction: autosupervised on the same corpus -----------
+    configs.append(("realdata_vit_patch_prediction_breastcancer", {
+        "model_class": "frankenstein_vit",
+        "model": _vit_model(vocab_size),
+        "image": {
+            "image_size": {"height": 64, "width": 64},
+            "patch_size": 16, "in_channels": 3, "pos_embedding_type": "learned_1d",
+            "cls_token": True, "pooling_mode": "cls",
+            "mask_ratio": 0.5, "mask_token_strategy": "bert",
+            "prediction_target": "mean_color_3bit",
+        },
+        "vision_dataset": {
+            "dataset_name": "as-cle-bert/breastcanc-ultrasound-class",
+            "split": "train",
+            "image_column": "image",
+        },
+        "training": _vit_training("patch_prediction"),
+    }))
+
+    # --- Audio ASR: Chilean jokes (only a `test` split exists) -------------
+    tiny_training = {
+        "batch_size": 4,
+        "num_epochs": 1,
+        "dataloader_workers": 0,
+        "gradient_accumulation_steps": 1,
+    }
+    configs.append(("realdata_audio_asr_vina", _load_example_config(
+        "audio_asr_conformer",
+        audio_dataset={
+            "dataset_name": "astroza/chilean-jokes-festival-de-vina",
+            "split": "test",
+            "audio_column": "audio",
+            "text_column": "text",
+            "max_duration_sec": 10.0,
+            "resample": True,
+        },
+        training=tiny_training,
+    )))
+
+    # --- Audio classification: 7 emotion classes ---------------------------
+    configs.append(("realdata_audio_classification_emotion_voices", _load_example_config(
+        "audio_classification_conformer",
+        audio={"num_classes": 7},
+        audio_dataset={
+            "dataset_name": "danielquillanroxas/EMOTION_VOICES",
+            "split": "train",
+            "audio_column": "audio",
+            "label_column": "label",
+            "max_duration_sec": 10.0,
+            "resample": True,
+        },
+        training=tiny_training,
+    )))
+
+    # --- SBERT triplets (requires a top-level base_model) ------------------
+    # The dataset's NEGs column is a stringified list; the trainer parses it
+    # via ast.literal_eval (see tests/test_sbert_triplets_stringified_*).
+    configs.append(("realdata_sbert_qqp_triplets_es", {
+        "base_model": REALDATA_SBERT_BASE_MODEL,
+        # Ignored by the loader when base_model is set; present only so the
+        # harness' run_training helper finds dims.vocab_size for its toy-SPM
+        # copy.
+        "model": {"dims": {"vocab_size": vocab_size}},
+        "training": {
+            "task": "sbert",
+            "sbert": {
+                "dataset_name": "erickfmm/embedding-data__QQP_triplets__translated_to_spanish",
+                "dataset_type": "triplets",
+                "columns": {
+                    "query": "Q_traducida",
+                    "positive": "POS_traducida",
+                    "negatives": "NEGs_traducidas",
+                },
+                "output_dir": "./output/sbert_qqp_triplets_es",
+                "batch_size": 16,
+                "num_epochs": 1,
+                "learning_rate": 2.0e-5,
+                "max_train_samples": 64,
+                "max_eval_samples": 16,
+                "max_length": 128,
+                "pooling_mode": "mean",
+                "use_amp": False,
+                "trust_remote_code": False,
+            },
+        },
+    }))
+
+    return configs
+
+
+# ---------------------------------------------------------------------------
 # CLI / main
 # ---------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
@@ -695,7 +946,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--category",
-        choices=["all", "attn", "opt", "norm", "pe", "transversal", "task", "batch_size", "vision", "vision_pe", "audio", "tokenizer", "deploy"],
+        choices=["all", "attn", "opt", "norm", "pe", "transversal", "task", "batch_size", "vision", "vision_pe", "audio", "tokenizer", "realdata", "deploy"],
         default="all",
         help="Which sweep to run (default: all).",
     )
@@ -844,6 +1095,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         combos.extend(make_audio_configs(args.vocab_size))
     if args.category in {"all", "tokenizer"}:
         combos.extend(make_tokenizer_configs(args.vocab_size))
+    if args.category in {"all", "realdata"}:
+        combos.extend(make_real_dataset_configs(args.vocab_size))
+        if args.timeout <= 600:
+            logging.warning(
+                "realdata combos download models/corpora from the HuggingFace "
+                "Hub; consider --timeout 1800 (current: %ds)", args.timeout,
+            )
 
     if args.limit is not None:
         combos = combos[: args.limit]
@@ -906,10 +1164,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Deploy / infer / export smoke tests, using the first successful training
     # run. Audio checkpoints follow the dedicated path below: the text `infer`
     # CLI does not apply to them and Transformers export must be rejected.
+    def _is_audio_combo(combo_id: str) -> bool:
+        return combo_id.startswith("audio_") or combo_id.startswith("realdata_audio_")
+
     if (
         not args.skip_deploy
         and successful_training is not None
-        and not successful_training.combo_id.startswith("audio_")
+        and not _is_audio_combo(successful_training.combo_id)
     ):
         checkpoint_path = Path(successful_training.checkpoint_path) if successful_training.checkpoint_path else None
         if checkpoint_path and checkpoint_path.exists():
@@ -952,12 +1213,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     # and run the validation forward pass. There is no text-style `infer` for
     # audio, no GGUF export, and the Transformers exporter must reject audio
     # models with the documented message.
-    if not args.skip_deploy and args.category in {"all", "audio"}:
+    if not args.skip_deploy and args.category in {"all", "audio", "realdata"}:
         audio_result = next(
             (
                 result
                 for result in results
-                if result.combo_id.startswith("audio_")
+                if _is_audio_combo(result.combo_id)
                 and result.status == "OK"
                 and result.checkpoint_path
                 and Path(result.checkpoint_path).exists()

@@ -7,6 +7,7 @@ training. Supports paired-similarity, triplets, and QA dataset formats
 with balanced resampling and score standardization.
 """
 
+import ast
 import os
 import json
 import csv
@@ -79,6 +80,34 @@ DEFAULT_SBERT_COLUMNS = {
         "answer": "Answer",
     },
 }
+
+
+def _coerce_negatives_list(value: Any) -> Optional[List[Any]]:
+    """Coerce a triplets ``negatives`` cell into a real list.
+
+    ``datasets`` exported from CSV/parquet often carry the negatives column as
+    a stringified Python literal (e.g. ``"['a', 'b']"``) instead of a true
+    ``Sequence[string]`` feature. Parse those back into real lists so such
+    datasets stay usable; a value that is already a list is returned as-is.
+
+    Args:
+        value: Raw cell value from the dataset row.
+
+    Returns:
+        The negatives as a list, or ``None`` when the value cannot be
+        interpreted as one (the caller skips such rows).
+    """
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                parsed = ast.literal_eval(text)
+            except (ValueError, SyntaxError):
+                return None
+            return parsed if isinstance(parsed, list) else None
+    return None
 
 
 def _extract_primary_score(score: Any) -> Optional[float]:
@@ -1218,8 +1247,8 @@ class SBERTTrainer:
         negatives_column = self.dataset_columns["negatives"]
 
         for item in dataset:
-            negatives = item[negatives_column]
-            if not isinstance(negatives, list):
+            negatives = _coerce_negatives_list(item[negatives_column])
+            if negatives is None:
                 skipped_rows += 1
                 continue
 
