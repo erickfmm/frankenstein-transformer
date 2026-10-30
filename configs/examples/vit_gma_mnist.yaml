@@ -48,6 +48,7 @@ vision_dataset:
     width: 28
 training:
   task: classification
+  seed: 42
   batch_size: 128
   num_epochs: 10
   dataloader_workers: 4

@@ -29,6 +29,7 @@ model:
     activation: silu
 training:
   task: mlm
+  seed: 42
   batch_size: 1
   dataloader_workers: 2
   max_length: 4096

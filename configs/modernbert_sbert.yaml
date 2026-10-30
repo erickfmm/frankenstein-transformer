@@ -1,6 +1,7 @@
 base_model: BSC-LT/MrBERT-es
 training:
   task: sbert
+  seed: 42
   switch_on_thermal: true
   gpu_temp_guard_enabled: true
   gpu_temp_resume_threshold_c: 75

@@ -23,6 +23,11 @@ from typing import Any, Dict, Iterator, List, Optional
 import torch
 from torch.utils.data import DataLoader, IterableDataset
 
+try:
+    from ..utils.reproducibility import make_generator, seed_worker
+except ImportError:  # pragma: no cover - direct ``training.*`` imports
+    from utils.reproducibility import make_generator, seed_worker
+
 logger = logging.getLogger(__name__)
 
 PAD_LABEL = -100
@@ -401,6 +406,9 @@ def build_text_dataloader_from_config(
     else:
         dataset = _MapTextDataset(source, text_col, label_col, cfg.max_samples)
 
+    seed = int(
+        getattr(getattr(loaded, "training_config", None), "seed", 42)
+    )
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -409,6 +417,8 @@ def build_text_dataloader_from_config(
         num_workers=0,
         pin_memory=resolved_device.startswith("cuda"),
         drop_last=not is_streaming and len(dataset) >= batch_size * 2,
+        generator=make_generator(seed) if not is_streaming else None,
+        worker_init_fn=seed_worker,
     )
     logger.info(
         "text_dataset: %s (split=%s, text=%s, task=%s, streaming=%s)",

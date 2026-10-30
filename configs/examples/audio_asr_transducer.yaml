@@ -62,6 +62,7 @@ audio_dataset:
   resample: true
 training:
   task: asr
+  seed: 42
   asr:
     loss: transducer
   batch_size: 2

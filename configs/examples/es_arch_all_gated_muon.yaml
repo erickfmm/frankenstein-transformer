@@ -30,6 +30,7 @@ model:
   positional_encoding: rope
 training:
   task: mlm
+  seed: 42
   num_epochs: 4
   batch_size: 2
   dataloader_workers: 2

@@ -40,6 +40,7 @@ text_dataset:
   max_samples: 10000
 training:
   task: mlm
+  seed: 42
   num_epochs: 1
   batch_size: 8
   max_length: 128

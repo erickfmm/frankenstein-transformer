@@ -37,6 +37,7 @@ vision_dataset:
     width: 224
 training:
   task: classification
+  seed: 42
   batch_size: 512
   num_epochs: 90
   optimizer:

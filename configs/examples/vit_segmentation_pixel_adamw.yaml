@@ -35,6 +35,7 @@ vision_dataset:
     width: 32
 training:
   task: segmentation
+  seed: 42
   batch_size: 4
   num_epochs: 1
   optimizer:

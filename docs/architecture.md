@@ -706,11 +706,25 @@ NaN retries, CSV/NVML telemetry, the GPU thermal guard (`gpu_temp_*`), and
 optional GaLore settings. The guard pauses at `gpu_temp_pause_threshold_c`
 (default 90 °C) and resumes at `gpu_temp_resume_threshold_c` (80 °C).
 
+**Reproducibility.** `training.seed` (int, default `42`) seeds the Python,
+NumPy, PyTorch and CUDA RNGs, model weight initialization (the entrypoints
+seed before constructing the model), every `shuffle=True` DataLoader through a
+dedicated `torch.Generator`, DataLoader workers, the held-out split
+permutation, and the SBERT dataset shuffle. It also exports `PYTHONHASHSEED`
+for the thermal-supervisor child re-launch. CUDA runs set
+`cudnn.deterministic=true` / `cudnn.benchmark=false` (throughput may drop,
+but repeated runs on the same hardware/software stack are reproducible);
+`torch.use_deterministic_algorithms` is intentionally not enabled because
+several CUDA kernels raise on it. Implemented in
+`src/utils/reproducibility.py` (`set_global_seed`, `make_generator`,
+`seed_worker`) and applied by `engine._train_from_config_path`,
+`training/main.py::main` and the SBERT entrypoint.
+
 **Held-out test split.** `training.test_percentage` (float, 0–100, default 0)
 reserves a deterministic fraction of the task dataset before training (seeded
-permutation, so the same config always holds out the same examples) and
-evaluates the final weights on it after the last epoch. The trainer's
-`evaluate()` reuses the training objective through `no_grad`, and
+permutation driven by `training.seed`, so the same config always holds out the
+same examples) and evaluates the final weights on it after the last epoch. The
+trainer's `evaluate()` reuses the training objective through `no_grad`, and
 `src/training/test_split.py` writes `test_metrics.json` next to the CSV log
 (`task`, `metric`, `test_percentage`, `num_train_samples`, `num_test_samples`,
 `test_loss`, `test_accuracy`, `num_batches`). It covers MLM, causal LM, text

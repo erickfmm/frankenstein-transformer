@@ -24,6 +24,7 @@ model:
     activation: gelu
 training:
   task: mlm
+  seed: 42
   num_epochs: 1
   batch_size: 2
   max_length: 64

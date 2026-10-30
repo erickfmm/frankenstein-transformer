@@ -124,9 +124,15 @@ class TrainingConfig:
         galore_scale: Scaling factor for GaLore projected gradients.
         galore_max_dim: Maximum dimension for GaLore projection.
         use_amp: Whether to use automatic mixed precision (FP16/BF16).
+        seed: Seed for the whole training run (RNGs, weight init, DataLoader
+            shuffles/workers, held-out split, SBERT dataset shuffle). The
+            training entrypoints apply it before model construction.
     """
     # Supervisor / runtime control
     supervisor: str = "auto"  # "auto" (legacy CLI subprocess) | "off" (run in-process)
+
+    # Reproducibility (``training.seed``)
+    seed: int = 42
 
     # CSV Logging
     csv_log_path: str = "training_metrics.csv"
@@ -1080,6 +1086,11 @@ class TitanTrainer:
     def _log_setup(self):
         """Log training setup information"""
         logging.info(f"🎯 Training on device: {self.device}")
+        logging.info(
+            "🎲 Seed: %s (deterministic cuDNN: %s)",
+            int(self.training_config.seed),
+            bool(torch.backends.cudnn.deterministic),
+        )
         
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
@@ -1087,8 +1098,11 @@ class TitanTrainer:
             logging.info(f"🔥 GPU: {gpu_name}")
             logging.info(f"💾 GPU Memory: {gpu_memory:.2f}GB")
             
-            # Enable optimizations for P40
-            torch.backends.cudnn.benchmark = True
+            # Enable throughput optimizations for P40 only when determinism is
+            # not requested; `cudnn.benchmark=True` silently breaks
+            # reproducibility by autotuning algorithm selection.
+            if not torch.backends.cudnn.deterministic:
+                torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.allow_tf32 = True
         
         # Model-specific logging

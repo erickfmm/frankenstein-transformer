@@ -5,6 +5,7 @@ tokenizer:
   trust_remote_code: false
 training:
   task: mlm
+  seed: 42
   num_epochs: 5
   batch_size: 4
   dataloader_workers: 2

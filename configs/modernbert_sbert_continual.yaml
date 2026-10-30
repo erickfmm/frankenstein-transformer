@@ -1,6 +1,7 @@
 base_model: erickfmm/mrbert-es-sbert-ft
 training:
   task: sbert
+  seed: 42
   gpu_temp_guard_enabled: false
   switch_on_thermal: false
   telemetry_log_interval: 1

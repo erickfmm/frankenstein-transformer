@@ -69,6 +69,7 @@ audio_dataset:
   resample: true
 training:
   task: asr
+  seed: 42
   batch_size: 2
   num_epochs: 1
   dataloader_workers: 0

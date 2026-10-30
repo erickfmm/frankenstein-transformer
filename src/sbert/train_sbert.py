@@ -47,6 +47,7 @@ try:
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..utils.gpu_temp_guard import GPUTemperatureGuard
     from ..utils.param_categories import BLOCK_CATEGORIES, categorize_param
+    from ..utils.reproducibility import set_global_seed
 except ImportError:
     from model.config import FrankensteinModelConfig
     from model.frankenstein_encoder import FrankensteinEncoder
@@ -54,6 +55,7 @@ except ImportError:
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from utils.gpu_temp_guard import GPUTemperatureGuard
     from utils.param_categories import BLOCK_CATEGORIES, categorize_param
+    from utils.reproducibility import set_global_seed
 
 # Setup logging
 logging.basicConfig(
@@ -380,6 +382,7 @@ class SBERTTrainer:
         learning_rate: float = 2e-5,
         use_amp: bool = True,
         device: str = "auto",
+        seed: int = 42,
         gpu_temp_guard_enabled: bool = True,
         switch_on_thermal: bool = False,
         gpu_temp_pause_threshold_c: float = 90.0,
@@ -415,6 +418,8 @@ class SBERTTrainer:
             learning_rate: Base learning rate.
             use_amp: Whether to use automatic mixed precision.
             device: Device string for training.
+            seed: Seed for the dataset shuffle and every stochastic source
+                (``training.seed``).
             gpu_temp_guard_enabled: Whether GPU thermal guard is active.
             switch_on_thermal: Whether GPU→CPU thermal switching is enabled.
             gpu_temp_pause_threshold_c: Pause threshold in Celsius.
@@ -449,6 +454,7 @@ class SBERTTrainer:
         self.learning_rate = learning_rate
         self.use_amp = use_amp
         self.device = resolve_torch_device(device)
+        self.seed = int(seed)
         self._switch_on_thermal = bool(switch_on_thermal)
         self._last_guard_temp_c: Optional[float] = None
         self._checkpoint_request_pending = False
@@ -1020,7 +1026,7 @@ class SBERTTrainer:
             logger.info(f"After resampling: {len(dataset)} samples")
         
         # Shuffle and split
-        dataset = dataset.shuffle(seed=42)
+        dataset = dataset.shuffle(seed=self.seed)
         
         if max_train_samples:
             split_point = max_train_samples
@@ -1656,6 +1662,7 @@ def main(argv=None):
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
     parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--seed", type=int, default=42, help="Seed for the dataset shuffle and RNGs")
     parser.add_argument("--warmup_steps", type=int, default=1000)
     parser.add_argument("--evaluation_steps", type=int, default=5000)
     parser.add_argument(
@@ -1780,6 +1787,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     resolved_device = resolve_torch_device(args.device)
     logger.info(f"SBERT train device requested='{args.device}', resolved='{resolved_device}'")
+    set_global_seed(args.seed)
+    logger.info(f"SBERT reproducibility seed: {args.seed}")
     gpu_temp_guard_enabled = True if args.gpu_temp_guard is None else bool(args.gpu_temp_guard)
     switch_on_thermal_enabled = False if args.switch_on_thermal is None else bool(args.switch_on_thermal)
     if not resolved_device.startswith("cuda"):
@@ -1880,6 +1889,7 @@ def main(argv=None):
         learning_rate=args.learning_rate,
         use_amp=not args.no_amp,
         device=resolved_device,
+        seed=args.seed,
         gpu_temp_guard_enabled=gpu_temp_guard_enabled,
         switch_on_thermal=switch_on_thermal_enabled,
         gpu_temp_pause_threshold_c=args.gpu_temp_pause_threshold_c,

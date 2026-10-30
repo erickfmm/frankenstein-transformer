@@ -7,8 +7,8 @@ out part after the last epoch. The metrics are written next to the run's CSV
 log as ``test_metrics.json`` so downstream tooling (the ``full_tests`` harness,
 CI, or an embedding host) can report them without re-running inference.
 
-The split is deterministic for a fixed seed and dataset length: the same
-configuration always reserves the same examples, independently of the
+The split is deterministic for a fixed ``training.seed`` and dataset length:
+the same configuration always reserves the same examples, independently of the
 DataLoader shuffle order. ``test_percentage=0`` disables the feature and
 returns the original loader untouched.
 """
@@ -19,6 +19,11 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+try:
+    from ..utils.reproducibility import make_generator, seed_worker
+except ImportError:  # pragma: no cover - direct ``training.*`` imports
+    from utils.reproducibility import make_generator, seed_worker
 
 #: File written by :func:`evaluate_and_write` next to the run's CSV log.
 TEST_METRICS_FILENAME = "test_metrics.json"
@@ -155,6 +160,8 @@ def maybe_split_dataloader(
             pin_memory=bool(getattr(dataloader, "pin_memory", False)),
             drop_last=drop_last,
             collate_fn=getattr(dataloader, "collate_fn", None),
+            generator=make_generator(seed) if shuffle else None,
+            worker_init_fn=seed_worker,
         )
 
     logging.info(

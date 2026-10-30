@@ -32,6 +32,7 @@ try:
     from ..model.frankenstein_vit import FrankensteinViT
     from ..model.frankenstein_audio import FrankensteinAudio
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+    from ..utils.reproducibility import set_global_seed, make_generator, seed_worker
 except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
@@ -43,6 +44,7 @@ except ImportError:
     from model.frankenstein_vit import FrankensteinViT
     from model.frankenstein_audio import FrankensteinAudio
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+    from utils.reproducibility import set_global_seed, make_generator, seed_worker
 
 
 def _load_base_model_and_tokenizer(
@@ -205,6 +207,7 @@ def _build_dataloader(
     resolved_device: str,
     cli_batch_size: Optional[int],
     task: str = "mlm",
+    seed: int = 42,
 ) -> Tuple[DataLoader, StreamingMLMDataset, Dict[str, Any], int]:
     """Build the streaming MLM/CLM dataset and DataLoader.
 
@@ -217,6 +220,8 @@ def _build_dataloader(
             so cached sequences are stored unmasked (``labels == input_ids``)
             for autoregressive next-token loss. Any other value keeps the
             default BERT-style MLM masking. Default: ``"mlm"``.
+        seed: ``training.seed`` for the shuffle generator and worker seeding.
+            Default: ``42``.
 
     Returns:
         Tuple of ``(dataloader, dataset, stats, batch_size)``.
@@ -292,6 +297,8 @@ def _build_dataloader(
         num_workers=dataloader_workers,
         pin_memory=resolved_device.startswith("cuda"),
         drop_last=True,
+        generator=make_generator(seed),
+        worker_init_fn=seed_worker,
     )
 
     logging.info("Dataset size: %s examples", len(dataset))
@@ -493,6 +500,7 @@ def _build_sbert_supervisor_child_argv(
     argv.extend(["--pooling_mode", str(sbert_cfg.get("pooling_mode", "mean"))])
     argv.extend(["--resample_std", str(float(sbert_cfg.get("resample_std", 0.3)))])
     argv.extend(["--device", str(resolved_device)])
+    argv.extend(["--seed", str(int(training_config.seed))])
     argv.append("--no-gpu-temp-guard")
     argv.append("--resume_from_checkpoint")
     gradient_accumulation_steps = sbert_cfg.get("gradient_accumulation_steps")
@@ -653,6 +661,7 @@ def _run_vision_task(loaded, resolved_device, training_config, args):
     logging.info("=" * 60)
 
     config = loaded.model_config
+    training_runtime = loaded.training_runtime
     model = FrankensteinViT(config)
 
     # Vision tasks reuse the top-level training.batch_size / training.num_epochs
@@ -688,7 +697,13 @@ def _run_vision_task(loaded, resolved_device, training_config, args):
             prediction_target=config.prediction_target,
         )
 
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        generator=make_generator(training_config.seed),
+        worker_init_fn=seed_worker,
+    )
 
     logging.info("Step 4: %s training", loaded.task.upper())
     trainer = TitanTrainer(
@@ -778,9 +793,13 @@ def _run_audio_task(loaded, resolved_device, training_config, args, training_run
         batch_size=int(batch_size),
         shuffle=True,
         collate_fn=audio_collate_fn,
+        generator=make_generator(training_config.seed),
+        worker_init_fn=seed_worker,
     )
 
-    test_split = maybe_split_dataloader(dataloader, training_runtime)
+    test_split = maybe_split_dataloader(
+        dataloader, training_runtime, seed=training_config.seed
+    )
     dataloader = test_split.train_loader
 
     logging.info("Step 4: %s training", loaded.task.upper())
@@ -936,6 +955,9 @@ def main(argv=None):
     loaded = load_training_config(config_path)
     training_config = loaded.training_config
     training_runtime = loaded.training_runtime
+    # Reproducibility: seed before model construction, dataset shuffling and
+    # the supervisor child re-launch (the child inherits PYTHONHASHSEED).
+    set_global_seed(training_config.seed)
     _apply_gpu_temp_guard_overrides(training_config, args, resolved_device)
     logging.info("Using config: %s", config_path)
     logging.info("Training task: %s", loaded.task)

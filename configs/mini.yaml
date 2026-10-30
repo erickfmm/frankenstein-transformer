@@ -25,6 +25,7 @@ model:
     activation: gelu
 training:
   task: mlm
+  seed: 42
   batch_size: 64
   dataloader_workers: 2
   max_length: 512

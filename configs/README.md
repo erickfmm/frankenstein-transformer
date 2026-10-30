@@ -495,6 +495,8 @@ model_class: frankenstein_text_decoder
 ### training (TrainingConfig + runtime)
 - `task`: `mlm` or `sbert` (required).
   - `sbert` task requires `base_model`.
+- `seed`: reproducibility seed (default `42`). Initializes Python/NumPy/PyTorch/CUDA RNGs, model weight init, DataLoader shuffle generators and workers, the held-out test split and the SBERT dataset shuffle; enables deterministic cuDNN.
+- `test_percentage`: percentage of the task dataset held out before training and evaluated after the last epoch (`0` disables; written to `test_metrics.json`).
 - `batch_size`: dataloader batch size.
 - `dataloader_workers`: dataloader workers.
 - `max_length`: max sequence length.

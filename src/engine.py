@@ -35,6 +35,7 @@ try:
     from .model.frankenstein_audio import FrankensteinAudio
     from .utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from .utils.hf_compat import load_auto_model, load_auto_tokenizer
+    from .utils.reproducibility import set_global_seed, make_generator, seed_worker
 except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
@@ -48,6 +49,7 @@ except ImportError:
     from model.frankenstein_audio import FrankensteinAudio
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from utils.hf_compat import load_auto_model, load_auto_tokenizer
+    from utils.reproducibility import set_global_seed, make_generator, seed_worker
 
 
 __all__ = [
@@ -292,6 +294,7 @@ def build_dataloader(
     resolved_device: str,
     cli_batch_size: Optional[int],
     task: str = "mlm",
+    seed: int = 42,
 ) -> Tuple[DataLoader, StreamingMLMDataset, Dict[str, Any], int]:
     """Build the streaming MLM/CLM dataset and DataLoader.
 
@@ -304,6 +307,8 @@ def build_dataloader(
             so cached sequences are stored unmasked (``labels == input_ids``)
             for autoregressive next-token loss. Any other value keeps the
             default BERT-style MLM masking.
+        seed: ``training.seed`` used for the shuffle generator and worker
+            seeding. Default: ``42``.
 
     Returns:
         Tuple of ``(dataloader, dataset, stats, batch_size)``.
@@ -379,6 +384,8 @@ def build_dataloader(
         num_workers=dataloader_workers,
         pin_memory=resolved_device.startswith("cuda"),
         drop_last=True,
+        generator=make_generator(seed),
+        worker_init_fn=seed_worker,
     )
 
     logging.info("Dataset size: %s examples", len(dataset))
@@ -514,6 +521,10 @@ def _train_from_config_path(
     if config_path_hint:
         os.chdir(config_path_hint)
 
+    # Reproducibility: seed before anything stochastic happens below (model
+    # weight initialization, DataLoader shuffles, held-out split).
+    set_global_seed(training_config.seed)
+
     resolved_device = resolve_torch_device(device)
     if batch_size is not None:
         training_runtime["batch_size"] = batch_size
@@ -630,13 +641,16 @@ def _train_from_config_path(
             resolved_device=resolved_device,
             cli_batch_size=batch_size,
             task=task,
+            seed=training_config.seed,
         )
 
     logging.info("\n" + "=" * 60)
     logging.info("Step 4: %s training (%s)", task.upper(), model_descriptor)
     logging.info("=" * 60)
 
-    test_split = maybe_split_dataloader(dataloader, training_runtime)
+    test_split = maybe_split_dataloader(
+        dataloader, training_runtime, seed=training_config.seed
+    )
     dataloader = test_split.train_loader
 
     trainer = TitanTrainer(
@@ -1005,9 +1019,17 @@ def _train_vision(
         # Already a DataLoader — use it as-is.
         dataloader = dataset
     else:
-        dataloader = DataLoader(dataset, batch_size=batch_size_eff, shuffle=True)
+        dataloader = DataLoader(
+            dataset,
+            batch_size=batch_size_eff,
+            shuffle=True,
+            generator=make_generator(training_config.seed),
+            worker_init_fn=seed_worker,
+        )
 
-    test_split = maybe_split_dataloader(dataloader, loaded.training_runtime)
+    test_split = maybe_split_dataloader(
+        dataloader, loaded.training_runtime, seed=training_config.seed
+    )
     dataloader = test_split.train_loader
 
     logging.info("Step 4: %s training", loaded.task.upper())
@@ -1160,9 +1182,13 @@ def _train_audio(
             batch_size=int(batch_size_eff),
             shuffle=True,
             collate_fn=audio_collate_fn,
+            generator=make_generator(training_config.seed),
+            worker_init_fn=seed_worker,
         )
 
-    test_split = maybe_split_dataloader(dataloader, loaded.training_runtime)
+    test_split = maybe_split_dataloader(
+        dataloader, loaded.training_runtime, seed=training_config.seed
+    )
     dataloader = test_split.train_loader
 
     logging.info("Step 4: %s training", loaded.task.upper())
@@ -1259,6 +1285,8 @@ def _train_sbert(
         str(float(sbert_cfg.get("resample_std", 0.3))),
         "--device",
         resolved_device,
+        "--seed",
+        str(int(training_config.seed)),
     ]
     gradient_accumulation_steps = sbert_cfg.get("gradient_accumulation_steps")
     if gradient_accumulation_steps is not None:

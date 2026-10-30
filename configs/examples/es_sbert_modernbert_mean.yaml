@@ -1,6 +1,7 @@
 base_model: answerdotai/ModernBERT-base
 training:
   task: sbert
+  seed: 42
   sbert:
     dataset_name: "erickfmm/agentlans__multilingual-sentences__paired_10_sts"
     dataset_type: paired_similarity

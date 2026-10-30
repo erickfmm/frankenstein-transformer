@@ -25,6 +25,7 @@ model:
   positional_encoding: hope
 training:
   task: mlm
+  seed: 42
   batch_size: 4
   dataloader_workers: 2
   max_length: 512

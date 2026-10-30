@@ -72,6 +72,26 @@ properties:
     - off
     examples:
     - auto
+  seed:
+    type: integer
+    default: 42
+    minimum: 0
+    title: Reproducibility Seed
+    title_es: Semilla de Reproducibilidad
+    description: 'Seed for the whole training run. It initializes the Python, NumPy, PyTorch and CUDA random generators, model weight initialization, every DataLoader shuffle generator and worker, the held-out test-split permutation (`test_percentage`) and the SBERT dataset shuffle. CUDA runs also enable deterministic cuDNN (`cudnn.deterministic=true`, `cudnn.benchmark=false`), which can cost some throughput but makes repeated runs on the same hardware and software stack reproducible.
+
+
+      **Impact:** The same configuration, seed and data produce the same weight initialization, batch order and held-out split. Change it to explore a different random trajectory; keep it fixed to reproduce or debug a run.
+
+      '
+    description_es: 'Semilla de toda la ejecución de entrenamiento. Inicializa los generadores aleatorios de Python, NumPy, PyTorch y CUDA, la inicialización de pesos del modelo, el generador y los workers de mezcla de cada DataLoader, la permutación del conjunto de test reservado (`test_percentage`) y la mezcla del dataset de SBERT. Las ejecuciones en CUDA activan además cuDNN determinista (`cudnn.deterministic=true`, `cudnn.benchmark=false`), lo que puede costar algo de rendimiento pero hace reproducibles las ejecuciones repetidas con el mismo hardware y software.
+
+
+      **Impacto:** La misma configuración, semilla y datos producen la misma inicialización de pesos, orden de lotes y partición reservada. Cámbiala para explorar una trayectoria aleatoria distinta; mantenla fija para reproducir o depurar una ejecución.
+
+      '
+    examples:
+    - 42
   num_epochs:
     type: integer
     title: Training Epochs
@@ -267,7 +287,7 @@ properties:
     description: 'Percentage of the task dataset held out from training and used
       for the end-of-training evaluation (``0`` disables the split).
 
-      The partition is deterministic (fixed seed): the same configuration always
+      The partition is deterministic (seeded by `training.seed`): the same configuration always
       reserves the same examples, whatever the DataLoader shuffle order. Training
       sees only the complementary part; after the last epoch the final weights
       are evaluated on the held-out part with the task objective and the result
@@ -289,7 +309,7 @@ properties:
       entrenamiento y usado para la evaluación al finalizar (``0`` desactiva
       la partición).
 
-      La partición es determinista (semilla fija): la misma configuración siempre
+      La partición es determinista (sembrada por `training.seed`): la misma configuración siempre
       reserva los mismos ejemplos, sea cual sea el orden de mezcla del DataLoader.
       El entrenamiento ve solo la parte complementaria; tras la última época se
       evalúan los pesos finales sobre la parte reservada con el objetivo de la

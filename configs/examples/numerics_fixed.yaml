@@ -37,6 +37,7 @@ model:
   positional_encoding: rope
 training:
   task: causal_lm
+  seed: 42
   num_epochs: 1
   batch_size: 2
   max_length: 64

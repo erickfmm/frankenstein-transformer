@@ -43,6 +43,7 @@ model:
     enabled: false
 training:
   task: mlm
+  seed: 42
   num_epochs: 4
   batch_size: 4
   dataloader_workers: 2

@@ -268,7 +268,7 @@ luego los guardas de desbordamiento usan \texttt{inf\_post\_clip\_threshold} y l
 
 \subsection{Partición de Test Reservada y Evaluación al Final del Entrenamiento}
 
-\texttt{training.test\_percentage} reserva una fracción determinista del dataset de la tarea antes del primer paso del optimizador. Con $n$ ejemplos, porcentaje reservado $\rho=\texttt{test\_percentage}/100$ y una permutación $\pi$ sorteada una sola vez con semilla fija, la partición es
+\texttt{training.test\_percentage} reserva una fracción determinista del dataset de la tarea antes del primer paso del optimizador. Con $n$ ejemplos, porcentaje reservado $\rho=\texttt{test\_percentage}/100$ y una permutación $\pi$ sorteada una sola vez con la semilla de la ejecución \texttt{training.seed}, la partición es
 \[
 n_{\text{test}}=\operatorname{clip}\!\left(\operatorname{round}(\rho n),\,1,\,n-1\right),\qquad
 \mathcal{D}_{\text{train}}=\{x_{\pi(i)}\}_{i=n_{\text{test}}+1}^{n},\qquad
