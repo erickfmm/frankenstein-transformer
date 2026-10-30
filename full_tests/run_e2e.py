@@ -87,6 +87,47 @@ only the main thread appends to the shared result artifacts, so with
 Keep ``--workers 1`` when sharing a single GPU (VRAM/thermal-guard contention)
 or on a cold HuggingFace cache with ``--realonall`` (do one sequential run
 first to populate it).
+
+Per-sweep defaults (what every flag falls back to when it is not passed)
+------------------------------------------------------------------------
+Every combo trains a single epoch, so
+``steps = floor(floor(rows / batch_size) / gradient_accumulation_steps)``.
+
+| sweep | batch | sample cap | accum | optimizer steps |
+|---|---|---|---|---|
+| text sweeps (attn, opt, norm, pe, transversal, task) | 1 | 28 toy windows / 32 real Borges | 1 | 28 (32 with `--realonall`) |
+| `batch_size_1` / `batch_size_2` | 1 / 2 | same as above | 1 | 32 / 16 (offline 28 / 14) |
+| `tokenizer_train_*` | 1 | `text_dataset.max_samples: 200` | 1 | 200 |
+| vision + vision_pe (`DummyImageDataset`) | 2 | 64 (hardcoded in `main.py`) | 4 | 8 |
+| audio (`DummyAudioDataset`) | 16 | 16 (hardcoded in `main.py`) | 1 | 1 |
+| realdata mlm / causal_lm | 2 | `text_dataset.max_samples: 32` | 1 | 16 |
+| realdata text_classification | 2 | `text_dataset.max_samples: 50` | 1 | 25 |
+| realdata vit (3 combos) | 2 | full HF split (no cap key) | 4 | split / 8 |
+| realdata audio (2 combos) | 4 | full HF split (no cap key) | 1 | split / 4 |
+| realdata sbert | `sbert.batch_size: 16` | `sbert.max_train_samples: 64` | — | 4 |
+
+Timeouts default to 600 s for training and 300 s for deploy, inference-eval,
+transformers-export and bitnet-gguf.
+
+Global knobs (``full_tests`` only — no schema changes):
+
+* ``--timeout N`` sets the budget for *every* subprocess; ``0`` disables all
+  timeouts (wait forever).
+* ``--max-samples N`` caps the samples per combo; ``0`` means all samples (the
+  cap key is dropped, so each loader uses its uncapped default). It is written
+  to ``training.max_samples`` (streaming toy corpus),
+  ``text_dataset.max_samples`` (real/data-dir corpora) or
+  ``sbert.max_train_samples`` (SBERT). Vision and audio combos expose no
+  sample-cap key in the schema — the synthetic datasets are hardcoded and the
+  real splits are consumed whole — so the flag leaves them untouched.
+* ``--max-epochs N`` (``>= 1``) overrides ``training.num_epochs``, the active
+  task sub-block (``classification``/``patch_prediction``/``segmentation``/
+  ``asr``/``sbert``) and ``sbert.num_epochs``.
+* ``--batch-size N`` overrides ``training.batch_size`` (and ``sbert.batch_size``
+  for the SBERT combo). Note that changing it also changes the step count.
+
+When none of these flags is passed the harness writes exactly the same YAML it
+has always written.
 """
 from __future__ import annotations
 
@@ -395,6 +436,115 @@ def apply_realonall(combo_id: str, config: dict, real_text_dir: Optional[Path]) 
         logging.debug("realonall: %s -> audio data (%s)", combo_id, task)
         return config
 
+    return config
+
+
+def apply_global_overrides(
+    combo_id: str,
+    config: dict,
+    *,
+    max_samples: Optional[int] = None,
+    max_epochs: Optional[int] = None,
+    batch_size: Optional[int] = None,
+) -> dict:
+    """Apply the harness-wide ``--max-samples``/``--max-epochs``/``--batch-size``.
+
+    ``batch_size``, ``num_epochs`` and ``max_samples`` are training *runtime*
+    keys (not :class:`TrainingConfig` fields), so every task runner reads them
+    from the saved YAML. Writing them here therefore needs no schema or source
+    change. ``None`` means "leave this knob alone", which is how the harness
+    preserves the per-sweep defaults documented in the module docstring.
+
+    ``max_samples=0`` means "all samples": the cap key is removed (or set to
+    ``null`` for SBERT), so each loader falls back to its uncapped default.
+    Vision and audio combos expose no sample-cap key — the synthetic datasets
+    are hardcoded (64 / 16 images/utterances) and the real HuggingFace splits
+    are consumed whole — so ``max_samples`` is ignored for them.
+
+    Args:
+        combo_id: Combo identifier (used for log messages only).
+        config: The combo's YAML config dict.
+        max_samples: Optional sample cap; ``0`` removes the cap.
+        max_epochs: Optional epoch count (``>= 1``).
+        batch_size: Optional batch size (``>= 1``).
+
+    Returns:
+        A new config dict with the requested overrides applied.
+    """
+    training = dict(config.get("training") or {})
+    config = dict(config)
+    task = str(training.get("task") or "mlm").strip().lower()
+    model_class = str(config.get("model_class") or "").strip().lower()
+    is_sbert = task == "sbert" or bool(config.get("base_model"))
+    changed: List[str] = []
+
+    # ``num_epochs``/``batch_size`` also live inside the task sub-blocks
+    # (vision's classification/patch_prediction/segmentation, audio's asr,
+    # and sbert). Mirror the override into every block that declares them.
+    def mirror(key: str, value: Any) -> None:
+        for block_name, block in list(training.items()):
+            if not isinstance(block, dict):
+                continue
+            if key in block:
+                updated = dict(block)
+                updated[key] = value
+                training[block_name] = updated
+
+    if max_epochs is not None:
+        training["num_epochs"] = int(max_epochs)
+        mirror("num_epochs", int(max_epochs))
+        changed.append(f"num_epochs={max_epochs}")
+
+    if batch_size is not None:
+        training["batch_size"] = int(batch_size)
+        mirror("batch_size", int(batch_size))
+        if is_sbert:
+            sbert = dict(training.get("sbert") or {})
+            sbert["batch_size"] = int(batch_size)
+            training["sbert"] = sbert
+        changed.append(f"batch_size={batch_size}")
+
+    if max_samples is not None:
+        samples = int(max_samples)
+        text_dataset = config.get("text_dataset")
+        if is_sbert:
+            sbert = dict(training.get("sbert") or {})
+            # ``null`` is the schema's "all samples" value for SBERT.
+            sbert["max_train_samples"] = None if samples == 0 else samples
+            training["sbert"] = sbert
+            changed.append(
+                "sbert.max_train_samples="
+                + ("all" if samples == 0 else str(samples))
+            )
+        elif model_class in TEXT_MODEL_CLASSES and isinstance(text_dataset, dict) and text_dataset:
+            text_dataset = dict(text_dataset)
+            if samples == 0:
+                # Schema minimum is 1: omitting the key means "all samples".
+                text_dataset.pop("max_samples", None)
+            else:
+                text_dataset["max_samples"] = samples
+            config["text_dataset"] = text_dataset
+            changed.append(
+                "text_dataset.max_samples=" + ("all" if samples == 0 else str(samples))
+            )
+        elif model_class in TEXT_MODEL_CLASSES:
+            # Toy/streaming corpus: the cap is training.max_samples. Its schema
+            # default (20M) effectively means "all".
+            if samples == 0:
+                training.pop("max_samples", None)
+            else:
+                training["max_samples"] = samples
+            changed.append("max_samples=" + ("all" if samples == 0 else str(samples)))
+        else:
+            logging.info(
+                "max-samples: %s (%s) has no sample-cap key; left untouched",
+                combo_id,
+                model_class or task,
+            )
+
+    config["training"] = training
+    if changed:
+        logging.debug("Global overrides for %s: %s", combo_id, ", ".join(changed))
     return config
 
 
@@ -1246,7 +1396,45 @@ def build_parser() -> argparse.ArgumentParser:
         "--timeout",
         type=int,
         default=600,
-        help="Per-combo training timeout in seconds (default: 600).",
+        help=(
+            "Per-subprocess timeout in seconds for training, deploy, "
+            "inference-eval, transformers-export and bitnet-gguf "
+            "(default: 600). Use 0 to disable the timeout (wait forever)."
+        ),
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Cap the number of samples per combo. 0 means all samples (remove "
+            "the cap). Applied to the streaming toy corpus, real/data-dir text "
+            "corpora and SBERT; vision/audio combos have no sample-cap key. "
+            "Default: keep each sweep's current value."
+        ),
+    )
+    parser.add_argument(
+        "--max-epochs",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Override training.num_epochs (>= 1) for every combo, including "
+            "the task sub-block and sbert.num_epochs. "
+            "Default: keep each sweep's current value (1)."
+        ),
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Override training.batch_size (and sbert.batch_size) for every "
+            "combo. Default: keep each sweep's current value (1 for the text "
+            "sweeps, 2 for vision/realdata text, 16/4 for audio, 16 for SBERT)."
+        ),
     )
     parser.add_argument(
         "--workers",
@@ -1350,6 +1538,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers must be >= 1")
+    if args.timeout < 0:
+        parser.error("--timeout must be >= 0 (0 disables the timeout)")
+    if args.max_samples is not None and args.max_samples < 0:
+        parser.error("--max-samples must be >= 0 (0 means all samples)")
+    if args.max_epochs is not None and args.max_epochs < 1:
+        parser.error("--max-epochs must be >= 1")
+    if args.batch_size is not None and args.batch_size < 1:
+        parser.error("--batch-size must be >= 1")
+
+    # 0 (or any non-positive value) disables the timeout for ``subprocess.run``,
+    # which expects ``None`` to wait forever.
+    timeout_secs: Optional[int] = args.timeout if args.timeout > 0 else None
 
     log_level = {
         "none": logging.CRITICAL + 10,
@@ -1397,6 +1597,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         logging.info("Python:    %s", " ".join(python_runner))
     logging.info("Real data: %s", "enabled (--realonall)" if args.realonall else "disabled")
     logging.info("Workers:   %d", args.workers)
+    logging.info(
+        "Timeout:   %s",
+        "no limit" if timeout_secs is None else f"{timeout_secs}s",
+    )
+    logging.info(
+        "Overrides: max_samples=%s max_epochs=%s batch_size=%s",
+        "per-sweep"
+        if args.max_samples is None
+        else ("all" if args.max_samples == 0 else args.max_samples),
+        "per-sweep" if args.max_epochs is None else args.max_epochs,
+        "per-sweep" if args.batch_size is None else args.batch_size,
+    )
     logging.info("=" * 60)
 
     combos: List[Tuple[str, dict]] = []
@@ -1428,7 +1640,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         combos.extend(make_tokenizer_configs(args.vocab_size))
     if args.category in {"all", "realdata"}:
         combos.extend(make_real_dataset_configs(args.vocab_size))
-        if args.timeout <= 600:
+        if 0 < args.timeout <= 600:
             logging.warning(
                 "realdata combos download models/corpora from the HuggingFace "
                 "Hub; consider --timeout 1800 (current: %ds)", args.timeout,
@@ -1445,12 +1657,33 @@ def main(argv: Optional[List[str]] = None) -> int:
             (combo_id, apply_realonall(combo_id, config, real_text_dir))
             for combo_id, config in combos
         ]
-        if args.timeout <= 600:
+        if 0 < args.timeout <= 600:
             logging.warning(
                 "--realonall downloads models/corpora from the HuggingFace Hub "
                 "on first use; consider --timeout 1800 (current: %ds)",
                 args.timeout,
             )
+
+    # Global overrides run after ``apply_realonall`` so the CLI flags win over
+    # the real-data bindings (e.g. --max-samples beats the Borges 32-row cap).
+    if (
+        args.max_samples is not None
+        or args.max_epochs is not None
+        or args.batch_size is not None
+    ):
+        combos = [
+            (
+                combo_id,
+                apply_global_overrides(
+                    combo_id,
+                    config,
+                    max_samples=args.max_samples,
+                    max_epochs=args.max_epochs,
+                    batch_size=args.batch_size,
+                ),
+            )
+            for combo_id, config in combos
+        ]
 
     if args.limit is not None:
         combos = combos[: args.limit]
@@ -1505,7 +1738,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     train_kwargs = dict(
         runner=runner,
         env_extra=env_extra,
-        timeout=args.timeout,
+        timeout=timeout_secs,
         device=args.device,
         gpu_temp_guard=args.gpu_temp_guard,
         gpu_temp_pause_threshold_c=args.gpu_temp_pause_threshold_c,
@@ -1668,6 +1901,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 runner,
                 env_extra,
                 fmt=fmt,
+                timeout=timeout_secs,
                 device=args.device,
             )
             emit(deploy_result, [])
@@ -1698,6 +1932,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 task=task,
                 deploy_format=fmt,
                 samples=args.infer_samples,
+                timeout=timeout_secs,
                 device=args.device,
             )
             emit(eval_result, rows)
@@ -1722,6 +1957,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 f"{combo_id}_export",
                 runner,
                 env_extra,
+                timeout=timeout_secs,
             )
             if is_audio:
                 combined = f"{export_result.stdout}\n{export_result.stderr}".lower()
@@ -1840,6 +2076,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 f"{bitnet_id}_gguf",
                 runner,
                 env_extra,
+                timeout=timeout_secs,
             ))
             write_results_incremental()
             logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)

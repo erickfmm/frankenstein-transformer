@@ -596,7 +596,7 @@ def run_training(
     runner: List[str],
     env_extra: dict,
     batch_size: int = 1,
-    timeout: int = 600,
+    timeout: Optional[int] = 600,
     device: str = "cpu",
     gpu_temp_guard: bool = False,
     gpu_temp_pause_threshold_c: Optional[float] = None,
@@ -646,7 +646,11 @@ def run_training(
         "--device", device,
     ]
 
-    logging.info("[%s] Starting training (timeout=%ds)", combo_id, timeout)
+    logging.info(
+        "[%s] Starting training (timeout=%s)",
+        combo_id,
+        "none" if timeout is None else f"{timeout}s",
+    )
     start = time.time()
     try:
         proc = subprocess.run(
@@ -770,7 +774,7 @@ def run_deploy(
     runner: List[str],
     env_extra: dict,
     fmt: str = "standard",
-    timeout: int = 300,
+    timeout: Optional[int] = 300,
     device: str = "cpu",
 ) -> RunResult:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -854,7 +858,7 @@ def run_infer(
     runner: List[str],
     env_extra: dict,
     text: str = "el rápido zorro salta",
-    timeout: int = 120,
+    timeout: Optional[int] = 120,
     device: str = "cpu",
 ) -> RunResult:
     env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
@@ -929,7 +933,7 @@ def run_transformers_export(
     combo_id: str,
     runner: List[str],
     env_extra: dict,
-    timeout: int = 300,
+    timeout: Optional[int] = 300,
 ) -> RunResult:
     output_dir.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
@@ -991,7 +995,7 @@ def run_bitnet_gguf(
     combo_id: str,
     runner: List[str],
     env_extra: dict,
-    timeout: int = 300,
+    timeout: Optional[int] = 300,
 ) -> RunResult:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
@@ -1077,7 +1081,7 @@ def run_inference_eval(
     task: str,
     deploy_format: str,
     samples: int = 4,
-    timeout: int = 300,
+    timeout: Optional[int] = 300,
     device: str = "cpu",
 ) -> Tuple["RunResult", List[dict]]:
     """Compare a deployed artifact's predictions against real sample targets.
@@ -1098,7 +1102,7 @@ def run_inference_eval(
         task: Training task name.
         deploy_format: ``standard`` or ``quantized``.
         samples: Number of real samples to compare per artifact.
-        timeout: Subprocess timeout in seconds.
+        timeout: Subprocess timeout in seconds (``None`` waits forever).
         device: Torch device (``cpu``/``cuda``/``mps``/``auto``).
 
     Returns:
