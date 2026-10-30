@@ -242,6 +242,12 @@ def build_optimizer(
         clip_threshold = to_float(scoped.get("clip_threshold"), 1.0)
         eps1 = to_float(scoped.get("eps1"), 1e-30)
         eps2 = to_float(scoped.get("eps2"), 1e-3)
+        # Adafactor keeps a (eps1, eps2) tuple per group, unlike the scalar
+        # eps used by Adam-style families.  Overwrite the group-level float
+        # injected by _build_param_groups_for_optimizer so step() can unpack
+        # it; eps1/eps2 are the documented adafactor-specific suffixes.
+        for group in converted_groups:
+            group["eps"] = (eps1, eps2)
         return optimizer_cls(converted_groups, beta2_decay=beta2_decay, clip_threshold=clip_threshold, eps=(eps1, eps2))
 
     if optimizer_name == "galore_adamw":

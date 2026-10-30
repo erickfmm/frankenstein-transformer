@@ -131,6 +131,28 @@ class BuildOptimizerAdafactorTests(unittest.TestCase):
         opt = build_optimizer("adafactor", _param_groups(), {})
         self.assertIsNotNone(opt)
 
+    def test_step_runs_matrix_and_vector(self):
+        matrix = nn.Parameter(torch.randn(4, 4))
+        vector = nn.Parameter(torch.randn(4))
+        groups = [{"params": [matrix, vector], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("adafactor", groups, {})
+        (matrix.square().mean() + vector.square().mean()).backward()
+        opt.step()
+        self.assertFalse(torch.isnan(matrix).any())
+        self.assertFalse(torch.isnan(vector).any())
+
+    def test_default_group_eps_is_tuple(self):
+        opt = build_optimizer("adafactor", _param_groups(), {})
+        self.assertEqual(opt.param_groups[0]["eps"], (1e-30, 1e-3))
+
+    def test_eps_suffixes_reach_groups_as_tuple(self):
+        opt = build_optimizer(
+            "adafactor",
+            _param_groups(),
+            {"adafactor-eps1": 1e-25, "adafactor-eps2": 1e-2},
+        )
+        self.assertEqual(opt.param_groups[0]["eps"], (1e-25, 1e-2))
+
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class BuildOptimizerApolloTests(unittest.TestCase):
