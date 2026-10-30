@@ -74,6 +74,19 @@ To enable the GPU thermal guard during training (with optional thresholds):
 To resume from existing tmp/results directory (skip cleanup):
 
     uv run --extra cu118 --extra train python full_tests/run_e2e.py --resume
+
+To run the training and deploy combos with N parallel workers (default is 1,
+i.e. fully sequential):
+
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --workers 4
+
+Each worker still launches the training/deploy CLIs as isolated subprocesses in
+its own ``tmp/runs/<combo_id>`` (or ``tmp/deploy/<combo_id>_<fmt>``) directory;
+only the main thread appends to the shared result artifacts, so with
+``--workers > 1`` rows are recorded in completion order rather than combo order.
+Keep ``--workers 1`` when sharing a single GPU (VRAM/thermal-guard contention)
+or on a cold HuggingFace cache with ``--realonall`` (do one sequential run
+first to populate it).
 """
 from __future__ import annotations
 
@@ -83,9 +96,10 @@ import json
 import logging
 import shutil
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -1235,6 +1249,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Per-combo training timeout in seconds (default: 600).",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "Number of parallel worker threads for the training and deploy "
+            "combos (default: 1 = sequential)."
+        ),
+    )
+    parser.add_argument(
         "--skip-attn-pairs",
         action="store_true",
         help="Skip the expensive attention-pair sweep.",
@@ -1323,7 +1346,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.workers < 1:
+        parser.error("--workers must be >= 1")
 
     log_level = {
         "none": logging.CRITICAL + 10,
@@ -1370,6 +1396,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if python_runner:
         logging.info("Python:    %s", " ".join(python_runner))
     logging.info("Real data: %s", "enabled (--realonall)" if args.realonall else "disabled")
+    logging.info("Workers:   %d", args.workers)
     logging.info("=" * 60)
 
     combos: List[Tuple[str, dict]] = []
@@ -1432,6 +1459,36 @@ def main(argv: Optional[List[str]] = None) -> int:
     logging.debug("Category=%s limit=%s skip_attn_pairs=%s skip_singles=%s skip_deploy=%s",
                   args.category, args.limit, args.skip_attn_pairs, args.skip_singles, args.skip_deploy)
 
+    if args.workers > 1:
+        if args.device == "cuda":
+            logging.warning(
+                "%d parallel workers share one CUDA device; concurrent training "
+                "subprocesses may OOM (each one also runs its own thermal guard).",
+                args.workers,
+            )
+        if args.realonall:
+            logging.warning(
+                "%d parallel workers download HuggingFace Hub datasets "
+                "concurrently; populate a cold cache with one sequential run "
+                "(--workers 1) first to avoid `datasets` cache races.",
+                args.workers,
+            )
+
+    # ``run_training`` calls ``ensure_toy_tokenizer`` per combo (audio presets
+    # carry their own vocab size). Pre-train every distinct tokenizer here so
+    # parallel workers never race while writing the shared SPM model file.
+    vocab_sizes = set()
+    for _, combo_config in combos:
+        try:
+            vocab_sizes.add(int(combo_config["model"]["dims"]["vocab_size"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    for vocab_size in sorted(vocab_sizes):
+        try:
+            helpers.ensure_toy_tokenizer(vocab_size)
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("Could not pre-build the tokenizer for vocab_size=%d: %s", vocab_size, exc)
+
     results: List[helpers.RunResult] = []
     param_metrics: Dict[str, Dict[str, Any]] = {}
     if args.resume and helpers.RESULTS_PARAM_METRICS_PATH.exists():
@@ -1482,22 +1539,68 @@ def main(argv: Optional[List[str]] = None) -> int:
         inference_rows.extend(rows)
         helpers.write_inference_csv(inference_rows)
 
-    for idx, (combo_id, config) in enumerate(combos, start=1):
-        logging.info("[%d/%d] Running %s", idx, len(combos), combo_id)
-        result = helpers.run_training(
+    def run_training_combo(combo_id: str, config: dict) -> helpers.RunResult:
+        """Run one training combo (blocking; safe to call from a worker thread)."""
+        return helpers.run_training(
             config=config,
             combo_id=combo_id,
             batch_size=config["training"].get("batch_size", 1),
             **train_kwargs,
         )
+
+    def handle_training_result(combo_id: str, result: helpers.RunResult) -> None:
+        """Persist one finished training combo (main thread only)."""
         # Copy the metrics CSV into results/ and record parameter counts.
         if result.status in ("OK", "GRAD_EXPLODED"):
             record_metrics(combo_id, result)
         results.append(result)
-        logging.info("[%d/%d] %s -> %s (%.1fs) %s", idx, len(combos), combo_id, result.status, result.duration_sec, result.notes)
-
         # Write results incrementally after each combo
         write_results_incremental()
+
+    if args.workers == 1:
+        for idx, (combo_id, config) in enumerate(combos, start=1):
+            logging.info("[%d/%d] Running %s", idx, len(combos), combo_id)
+            result = run_training_combo(combo_id, config)
+            handle_training_result(combo_id, result)
+            logging.info("[%d/%d] %s -> %s (%.1fs) %s", idx, len(combos), combo_id, result.status, result.duration_sec, result.notes)
+    elif combos:
+        logging.info(
+            "Running %d training combos with %d parallel workers", len(combos), args.workers
+        )
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = {
+                pool.submit(run_training_combo, combo_id, config): (idx, combo_id)
+                for idx, (combo_id, config) in enumerate(combos, start=1)
+            }
+            completed = 0
+            for future in as_completed(futures):
+                idx, combo_id = futures[future]
+                try:
+                    result = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    logging.exception("Training worker for %s crashed", combo_id)
+                    result = helpers.RunResult(
+                        category="training",
+                        combo_id=combo_id,
+                        status="FAILED",
+                        duration_sec=0.0,
+                        stdout="",
+                        stderr=str(exc),
+                        returncode=-2,
+                        notes=f"worker exception: {exc}",
+                    )
+                handle_training_result(combo_id, result)
+                completed += 1
+                logging.info(
+                    "[%d/%d] %s (combo %d) -> %s (%.1fs) %s",
+                    completed,
+                    len(combos),
+                    combo_id,
+                    idx,
+                    result.status,
+                    result.duration_sec,
+                    result.notes,
+                )
 
     # ------------------------------------------------------------------
     # Deploy / infer / export battery, for every successful training.
@@ -1518,7 +1621,35 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not args.skip_deploy:
         logging.info("Deploying and evaluating %d successful checkpoints", len(deployable))
 
-    for training_result in (deployable if not args.skip_deploy else []):
+    def deploy_one_checkpoint(
+        training_result: helpers.RunResult,
+        on_result: Optional[Callable[[helpers.RunResult, List[dict]], None]] = None,
+    ) -> Tuple[List[helpers.RunResult], List[dict]]:
+        """Deploy/evaluate/export one checkpoint (safe to call from a worker thread).
+
+        Every artifact path is keyed by ``combo_id`` (``tmp/deploy/<combo>_<fmt>``,
+        ``tmp/inference_eval/<combo>_<fmt>.json``, ``tmp/transformers-export/<combo>``),
+        so independent checkpoints never touch the same files. When ``on_result``
+        is provided it is invoked after every finished step (sequential runs use
+        it to flush the shared result artifacts immediately); otherwise the
+        produced results/rows are returned for the caller to merge.
+
+        Args:
+            training_result: A successful training ``RunResult`` with a checkpoint.
+            on_result: Optional callback receiving each ``(result, rows)`` pair.
+
+        Returns:
+            ``(produced_results, inference_rows)`` for this checkpoint.
+        """
+        produced: List[helpers.RunResult] = []
+        rows_out: List[dict] = []
+
+        def emit(result: helpers.RunResult, rows: List[dict]) -> None:
+            produced.append(result)
+            rows_out.extend(rows)
+            if on_result is not None:
+                on_result(result, rows)
+
         combo_id = training_result.combo_id
         checkpoint_path = Path(training_result.checkpoint_path)
         model_class, task = _combo_meta(combo_id)
@@ -1539,8 +1670,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 fmt=fmt,
                 device=args.device,
             )
-            results.append(deploy_result)
-            write_results_incremental()
+            emit(deploy_result, [])
             logging.info(
                 "%s -> %s (%.1fs) %s",
                 deploy_result.combo_id,
@@ -1570,9 +1700,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 samples=args.infer_samples,
                 device=args.device,
             )
-            results.append(eval_result)
-            record_inference(rows)
-            write_results_incremental()
+            emit(eval_result, rows)
             logging.info(
                 "%s -> %s (%.1fs) %s",
                 eval_result.combo_id,
@@ -1613,8 +1741,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                         "audio transformers export was not rejected as documented "
                         f"(returncode={export_result.returncode})"
                     )
-            results.append(export_result)
-            write_results_incremental()
+            emit(export_result, [])
             logging.info(
                 "%s -> %s (%.1fs) %s",
                 export_result.combo_id,
@@ -1622,6 +1749,58 @@ def main(argv: Optional[List[str]] = None) -> int:
                 export_result.duration_sec,
                 export_result.notes,
             )
+
+        return produced, rows_out
+
+    def flush_deploy_result(result: helpers.RunResult, rows: List[dict]) -> None:
+        """Persist one deploy/eval/export step (main thread only)."""
+        results.append(result)
+        record_inference(rows)
+        write_results_incremental()
+
+    deploy_targets = deployable if not args.skip_deploy else []
+    if args.workers == 1 or not deploy_targets:
+        for training_result in deploy_targets:
+            deploy_one_checkpoint(training_result, on_result=flush_deploy_result)
+    else:
+        logging.info(
+            "Deploying %d checkpoints with %d parallel workers",
+            len(deploy_targets),
+            args.workers,
+        )
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = {
+                pool.submit(deploy_one_checkpoint, training_result): training_result
+                for training_result in deploy_targets
+            }
+            for future in as_completed(futures):
+                training_result = futures[future]
+                try:
+                    produced, rows = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    logging.exception(
+                        "Deploy worker for %s crashed", training_result.combo_id
+                    )
+                    produced = [
+                        helpers.RunResult(
+                            category="deploy",
+                            combo_id=f"{training_result.combo_id}_deploy",
+                            status="FAILED",
+                            duration_sec=0.0,
+                            stdout="",
+                            stderr=str(exc),
+                            returncode=-2,
+                            notes=f"deploy worker exception: {exc}",
+                            checkpoint_path=training_result.checkpoint_path,
+                        )
+                    ]
+                    rows = []
+                results.extend(produced)
+                record_inference(rows)
+                write_results_incremental()
+                logging.info(
+                    "Deployed %s -> %d new results", training_result.combo_id, len(produced)
+                )
 
     # Dedicated BitNet+standard_attn training + bitnet-gguf export, if not already covered.
     if not args.skip_deploy and (args.category in {"all", "transversal"}):
