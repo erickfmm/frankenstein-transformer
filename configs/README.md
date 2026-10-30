@@ -139,6 +139,7 @@ training:
 - `muon`
 - `turbo_muon`
 - `af_muon`
+- `ada_muon`
 - `radam`
 - `adan`
 - `adopt`
@@ -183,6 +184,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
 - `turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
 - `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
+- `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
 - `radam`: none
 - `adan`: none
 - `adopt`: none
@@ -204,6 +206,7 @@ Examples:
 - `sophia-update_k: 10`
 - `muon-ns_steps: 5`
 - `af_muon-tied_cap: 3.0`
+- `ada_muon-ns_steps: 5`
 
 ## Available Fields (Detailed)
 

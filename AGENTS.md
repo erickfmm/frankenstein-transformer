@@ -55,7 +55,7 @@
 4. **Normalization**: enum `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`. `prms_norm` uses `norm.partial_ratio`; `flash_norm` composes with `norm.flashnorm_partial_ratio`.
 5. **`fasa_attn` / `sparge_attn` are inference-sparse** (`HybridLayer.TRAINING_FREE_LAYERS`). In `train()` mode `HybridLayer` runs standard dense attention over the mixer's own projections (`mixer.dense_forward`); the sparse heuristic activates in `eval()` only. They are valid in training presets.
 6. **Forced modes**: `frankenstein_text_decoder` → `mode: decoder`; `frankenstein_vit` → `mode: encoder`. `training.task: causal_lm` requires the decoder; vision tasks require the ViT.
-7. **Optimizer keys are prefixed**: `<optimizer>-<group>_<param>` or `<optimizer>-<param>`. Groups: `embeddings`, `norms`, `attention`, `other`. A new family needs an enum value, a `by_optimizer` prefix, and a matching `if/then` rule.
+7. **Optimizer keys are prefixed**: `<optimizer>-<group>_<param>` or `<optimizer>-<param>`. Groups: `embeddings`, `pos`, `attention`, `ffn`, `norms`, `head`, `mhc`, `router`, `residual`, `other`. A new family needs an enum value, a `by_optimizer` prefix, and a matching `if/then` rule.
 8. **`training.task` is required**, one of `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`. No legacy top-level optimizer keys.
 9. **All presets are smoke-tested** (`configs/*.yaml` + `configs/examples/*.yaml`). A new mixer/optimizer needs an example YAML.
 10. **The activation enum is the source of truth** (43 values). GLU variants (`swiglu`/`geglu`/`reglu`) are handled by `GatedFFN`, not `get_activation()`.

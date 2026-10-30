@@ -26,7 +26,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo"}
+        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -441,6 +441,83 @@ class BuildOptimizerAFMuonTests(unittest.TestCase):
         groups, *_ = self._role_groups()
         with self.assertRaises(ValueError):
             build_optimizer("af_muon", groups, {"af_muon-tied_cap": 0.5})
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerAdaMuonTests(unittest.TestCase):
+    """AdaMuon defaults, paper invariants and per-group routing."""
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("ada_muon", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("ada_muon", groups, {})
+        loss = p.square().mean()
+        loss.backward()
+        opt.step()
+
+    def test_defaults_match_paper(self):
+        opt = build_optimizer("ada_muon", _param_groups(), {})
+        self.assertAlmostEqual(opt.defaults["momentum"], 0.95)
+        self.assertEqual(opt.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-7)
+
+    def test_step_skips_vector_params(self):
+        p = nn.Parameter(torch.randn(8))
+        groups = [{"params": [p], "lr": 1e-3, "name": "norms"}]
+        opt = build_optimizer("ada_muon", groups, {})
+        before = p.detach().clone()
+        p.square().mean().backward()
+        opt.step()
+        self.assertTrue(torch.equal(p.detach(), before))
+
+    def test_update_norm_matches_rms_alignment(self):
+        """Lemma 2: ||gamma * O_hat||_F = 0.2 * sqrt(mn)."""
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "other"}]
+        opt = build_optimizer("ada_muon", groups, {})
+        before = p.detach().clone()
+        p.square().mean().backward()
+        opt.step()
+        delta_norm = (p.detach() - before).norm().item()
+        expected = 1e-3 * 0.2 * math.sqrt(4 * 4)
+        self.assertAlmostEqual(delta_norm, expected, places=6)
+
+    def test_per_group_lr_routes_new_blocks(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "mhc"}]
+        opt = build_optimizer("ada_muon", groups, {"ada_muon-lr_mhc": 2e-4})
+        self.assertAlmostEqual(opt.param_groups[0]["lr"], 2e-4)
+
+        router = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [router], "lr": 1e-3, "name": "router"}]
+        opt = build_optimizer("ada_muon", groups, {"ada_muon-lr_router": 3e-4})
+        self.assertAlmostEqual(opt.param_groups[0]["lr"], 3e-4)
+
+    def test_string_coercion_and_invalid_fallback(self):
+        opt = build_optimizer(
+            "ada_muon",
+            _param_groups(),
+            {"ada_muon-momentum": "0.9", "ada_muon-ns_steps": "4"},
+        )
+        self.assertAlmostEqual(opt.defaults["momentum"], 0.9)
+        self.assertEqual(opt.defaults["ns_steps"], 4)
+
+        opt_bad = build_optimizer(
+            "ada_muon",
+            _param_groups(),
+            {"ada_muon-momentum": "bad", "ada_muon-ns_steps": "bad"},
+        )
+        self.assertAlmostEqual(opt_bad.defaults["momentum"], 0.95)
+        self.assertEqual(opt_bad.defaults["ns_steps"], 5)
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("ada_muon", _param_groups(), {"ada_muon-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 45 mezcladores de secuencia en nueve familias, 23 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 45 mezcladores de secuencia en nueve familias, 25 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -97,7 +97,7 @@ ssog\_attn & Campo geométrico & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\ma
 
 \subsection{Resumen de Optimizadores}
 
-La Tabla~\ref{tab:all-optimizers} cataloga los 23 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
+La Tabla~\ref{tab:all-optimizers} cataloga los 25 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -151,6 +151,7 @@ Sophia & Consciente de curvatura & 3 ($m$, $v$, $h$) & $\mathcal{O}(n)$ & lr, $\
 Muon & Ortogonalidad & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, pasos NS $k$ & \citep{shen_convergence_2025} \\
 Turbo-Muon & Ortogonalidad & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, pasos NS $k$ & \citep{boissin_turbo-muon_2025} \\
 AF-Muon & Tabla atada sin AdamW & 1 ($m$) & $\mathcal{O}(n \cdot k + V d\, I)$ & lr, momentum, wd, tope $c$, escala de tabla $s$, $\rho_{out}/\rho_{hid}$, pasos NS $k$ & \citep{lagzian_afmuon_2026} \\
+AdaMuon & Ortogonalidad + adaptativo & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, eps, wd, pasos NS $k$ & \citep{si_adamuon_2025} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Adaptativos de Bajo Rango y Adaptividad Ajustable}} \\

@@ -1,0 +1,116 @@
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 50000
+    hidden_size: 768
+    num_layers: 12
+    num_loops: 1
+    num_heads: 12
+    layer_pattern:
+    - retnet
+    - titan_attn
+    - mamba
+    - ode
+  norm:
+    type: layer_norm
+  embedding:
+    conv:
+      enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+  attention:
+    ode:
+      solver: rk4
+      steps: 2
+    retnet:
+      heads: 12
+training:
+  task: mlm
+  num_epochs: 4
+  batch_size: 2
+  dataloader_workers: 2
+  max_length: 256
+  mlm_probability: 0.15
+  max_samples: 6000000
+  dataset_batch_size: 15000
+  num_workers: 6
+  cache_dir: ./temp_data/v2_dataset_cache
+  local_parquet_dir: /home/erickfmm/.cache/huggingface/hub/datasets--erickfmm--red_pajama_es_hq_35/snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/train/
+  prefer_local_cache: true
+  stream_local_parquet: true
+  join_temp_data_context_window: 0
+  join_temp_data_min_remainder_tokens: 128
+  gradient_accumulation_steps: 12
+  optimizer:
+    optimizer_class: ada_muon
+    parameters:
+      ada_muon-lr_embeddings: 1e-6
+      ada_muon-lr_pos: 2e-6
+      ada_muon-lr_attention: 3e-6
+      ada_muon-lr_ffn: 2e-6
+      ada_muon-lr_norms: 5e-6
+      ada_muon-lr_head: 2e-6
+      ada_muon-lr_mhc: 3e-6
+      ada_muon-lr_router: 2e-6
+      ada_muon-lr_residual: 2e-6
+      ada_muon-lr_other: 2e-6
+      ada_muon-wd_embeddings: 0.01
+      ada_muon-wd_pos: 0.01
+      ada_muon-wd_attention: 0.01
+      ada_muon-wd_ffn: 0.01
+      ada_muon-wd_norms: 0.001
+      ada_muon-wd_head: 0.01
+      ada_muon-wd_mhc: 0.01
+      ada_muon-wd_router: 0.01
+      ada_muon-wd_residual: 0.01
+      ada_muon-wd_other: 0.01
+      ada_muon-betas_embeddings:
+      - 0.9
+      - 0.95
+      ada_muon-betas_pos:
+      - 0.9
+      - 0.95
+      ada_muon-betas_attention:
+      - 0.9
+      - 0.95
+      ada_muon-betas_ffn:
+      - 0.9
+      - 0.95
+      ada_muon-betas_norms:
+      - 0.9
+      - 0.95
+      ada_muon-betas_head:
+      - 0.9
+      - 0.95
+      ada_muon-betas_mhc:
+      - 0.9
+      - 0.95
+      ada_muon-betas_router:
+      - 0.9
+      - 0.95
+      ada_muon-betas_residual:
+      - 0.9
+      - 0.95
+      ada_muon-betas_other:
+      - 0.9
+      - 0.95
+      ada_muon-eps_embeddings: 1e-8
+      ada_muon-eps_pos: 1e-8
+      ada_muon-eps_attention: 1e-8
+      ada_muon-eps_ffn: 1e-8
+      ada_muon-eps_norms: 1e-8
+      ada_muon-eps_head: 1e-8
+      ada_muon-eps_mhc: 1e-8
+      ada_muon-eps_router: 1e-8
+      ada_muon-eps_residual: 1e-8
+      ada_muon-eps_other: 1e-8
+      ada_muon-momentum: 0.95
+      ada_muon-ns_steps: 5
+      ada_muon-ns_eps: 1e-7
+  scheduler_total_steps: 12000
+  max_nan_retries: 4
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_es_arch_hybrid_ada_muon.csv
+  telemetry_log_interval: 5

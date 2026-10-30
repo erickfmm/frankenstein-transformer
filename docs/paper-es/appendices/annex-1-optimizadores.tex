@@ -1153,6 +1153,54 @@ donde la escala por fila $\tau_i$ se obtiene por bisección en FP32 sobre fragme
 \item Mejora la pérdida de validación y la perplejidad medias frente a Hybrid Muon y a un extremo Sign estilo SCION en nueve configuraciones de vocabulario atado que abarcan texto, tokens de imagen, proteínas, MoE y modelos encoder-decoder.
 \end{itemize}
 
+\paragraph{AdaMuon (Muon Adaptativo).}
+AdaMuon es una \textbf{extensión adaptativa de Muon} que conserva la actualización espectral (polar) y añade normalización de varianza por coordenada. Muon ortogonaliza la matriz de momentum en una actualización puramente direccional, lo que elimina el escalado anisotrópico pero asigna la misma magnitud a todas las coordenadas; AdaMuon aborda el desajuste resultante entre coordenadas ruidosas e informativas siguiendo la varianza por elemento de la dirección \emph{ortogonalizada}, en lugar de la del gradiente crudo o la del momentum. Como el factor polar es globalmente invariante a escala, la transformación de signo aplicada antes de la ortogonalización preserva la dirección de la actualización mientras estabiliza sus magnitudes por elemento; el artículo demuestra que $\operatorname{sign}$ es la única aplicación elemental que es libre de escala, consistente con el signo, impar y acotada (Teorema~1). La estimación de segundo momento ve así una señal estable, y su versión normalizada por varianza se reescala a un RMS de $0.2$, igualando la escala empírica de actualización de Adam para reutilizar sin ajuste los schedules de tasa de aprendizaje existentes.
+
+Para un peso $W_t \in \mathbb{R}^{n \times m}$, búfer de momentum $M_t$, momentum $\beta$, pasos de Newton--Schulz $T$ y constante pequeña $\varepsilon$:
+\begin{align}
+M_t &= \beta M_{t-1} + G_t, \\
+O_t &= \operatorname{NewtonSchulz}\bigl(\operatorname{sign}(M_t), T\bigr), \\
+V_t &= \beta V_{t-1} + (1-\beta)\, O_t \odot O_t, \\
+\widehat{O}_t &= O_t \oslash \bigl(\sqrt{V_t} + \varepsilon \mathbf{1}\bigr), \\
+\gamma_t &= \frac{0.2\sqrt{mn}}{\|\widehat{O}_t\|_F}, \\
+W_{t+1} &= W_t - \eta\bigl(\gamma_t \widehat{O}_t + \lambda W_t\bigr).
+\end{align}
+El mapa de Newton--Schulz usa $X_0 = \operatorname{sign}(M_t)/\|\operatorname{sign}(M_t)\|_F$ y la iteración cúbica $X_k = aX_{k-1} + b(X_{k-1}X_{k-1}^{\mathsf T})X_{k-1} + c(X_{k-1}X_{k-1}^{\mathsf T})^2X_{k-1}$ con $(a,b,c) = (3.4445, -4.7750, 2.0315)$ y $T = 5$. No se aplica corrección de sesgo a ninguno de los momentos: un factor constante en $V_t$ se cancela exactamente con $\gamma_t \propto \sqrt{c}$, y un factor constante en $M_t$ se elimina con el mapa polar, $\operatorname{polar}(cM) = \operatorname{polar}(M)$.
+
+\begin{algorithm}[H]
+\caption{AdaMuon (Muon Adaptativo)}
+\label{alg:ada-muon}
+\begin{algorithmic}[1]
+\Require Pesos iniciales $W_0 \in \mathbb{R}^{n \times m}$, tasa de aprendizaje $\eta$, weight decay $\lambda$, momentum $\beta$, pasos de Newton--Schulz $T$, constante pequeña $\varepsilon$
+\Ensure Pesos actualizados $W_T$
+\State $M_0 \gets \mathbf{0}$, $V_0 \gets \mathbf{0}$
+\For{cada iteración $t = 1, 2, \ldots$}
+    \State $G_t \gets \nabla_{W_t}\mathcal{L}(W_t)$
+    \State $M_t \gets \beta M_{t-1} + G_t$
+    \State $O_t \gets \operatorname{NewtonSchulz}(\operatorname{sign}(M_t), T)$
+    \State $V_t \gets \beta V_{t-1} + (1-\beta)\, O_t \odot O_t$
+    \State $\widehat{O}_t \gets O_t \oslash (\sqrt{V_t} + \varepsilon\mathbf{1})$
+    \State $\gamma_t \gets 0.2\sqrt{mn}/\|\widehat{O}_t\|_F$
+    \State $W_{t+1} \gets W_t - \eta(\gamma_t \widehat{O}_t + \lambda W_t)$
+\EndFor
+\Return $W_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Un búfer de segundo momento adicional por parámetro matricial (dos búferes frente al único búfer de primer momento de Muon), más trabajo por paso de EMA elemental, raíz cuadrada y normalización sobre la actualización.
+\item La actualización está definida para parámetros bidimensionales; los parámetros unidimensionales (sesgos, escalas de normalización) requieren un optimizador auxiliar en la receta del artículo.
+\item El objetivo RMS ($0.2$) es una constante fija y no una cantidad aprendida, por lo que el método asume escalas de actualización tipo Adam al reutilizar schedules existentes.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Sin hiperparámetros nuevos: la EMA de segundo momento reutiliza el coeficiente de momentum $\beta$ de Muon, y el artículo reporta baja sensibilidad para $\beta \in [0.8, 0.99]$.
+\item La transformación de signo hace que la estimación de varianza sea lo bastante estable para normalizar, y la alineación RMS cancela cualquier sesgo constante en $V_t$, por lo que no se necesita corrección de sesgo para ninguno de los dos momentos.
+\item La alineación RMS iguala la escala de actualización de Adam, lo que permite reutilizar directamente los schedules de tasa de aprendizaje; los autores reportan hasta aproximadamente un 40\% de ganancia en eficiencia de entrenamiento frente a AdamW y mejoras consistentes frente a Muon en GPT-2 (125M--1.5B) y Qwen2.5 (1.5B, 7B).
+\end{itemize}
+
 \small
 \begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
 \toprule
@@ -1164,7 +1212,7 @@ Rediseño de momento & Adan, AdEMAMix, MARS, Cautious AdamW & adaptación de pri
 Simplificación de lotes grandes y programación & LAMB, Schedule-Free AdamW & robustez operacional a escala & Reducen la fragilidad debida al crecimiento del tamaño de lote o la ingeniería de programación. \\
 Eficiencia de memoria & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & reducción del estado del optimizador & Más útil cuando la VRAM está dominada por el estado del optimizador en lugar de las activaciones; los métodos de la familia APOLLO reemplazan los momentos densos de AdamW con escalado estructurado proyectado o cuantizado. \\
 Consciente de curvatura & Shampoo, SOAP, Sophia & mejor condicionamiento & Preferir cuando una geometría más rica justifica la sobrecarga de implementación y cómputo. \\
-Orientado a geometría & Muon, Turbo-Muon, AF-Muon & estructura de actualización ortogonalizada & Opciones especializadas para geometría matricial y modelado de representaciones; AF-Muon asigna a la tabla de vocabulario atada una geometría de tabla con tope por fila y a los parámetros unidimensionales una actualización RMS, sin estado auxiliar de AdamW. \\
+Orientado a geometría & Muon, Turbo-Muon, AF-Muon, AdaMuon & estructura de actualización ortogonalizada & Opciones especializadas para geometría matricial y modelado de representaciones; AdaMuon añade un segundo momento por elemento sobre la dirección ortogonalizada con actualizaciones alineadas por RMS; AF-Muon asigna a la tabla de vocabulario atada una geometría de tabla con tope por fila y a los parámetros unidimensionales una actualización RMS, sin estado auxiliar de AdamW. \\
 \bottomrule
 \end{longtable}
 \normalsize

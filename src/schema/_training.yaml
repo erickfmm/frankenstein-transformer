@@ -1271,6 +1271,20 @@ allOf:
       optimizer:
         properties:
           optimizer_class:
+            const: ada_muon
+  then:
+    properties:
+      optimizer:
+        properties:
+          parameters:
+            additionalProperties: false
+            patternProperties:
+              ^ada_muon-: { type: [number, boolean, array, string] }
+- if:
+    properties:
+      optimizer:
+        properties:
+          optimizer_class:
             const: radam
   then:
     properties:

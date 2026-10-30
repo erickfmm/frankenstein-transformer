@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 from torch.optim import Optimizer
 
 from .adamw import AdamWOptimizer
+from .ada_muon import AdaMuon
 from .adafactor import Adafactor
 from .adan import Adan
 from .ademamix import AdEMAMix
@@ -58,6 +59,7 @@ OPTIMIZER_REGISTRY = {
     "muon": Muon,
     "turbo_muon": TurboMuon,
     "af_muon": AFMuon,
+    "ada_muon": AdaMuon,
     "radam": RAdamOptimizer,
     "adan": Adan,
     "adopt": ADOPT,
@@ -115,6 +117,7 @@ OPTIMIZER_ALLOWED_KEYS = {
         "bisection_steps",
         "max_bracket_steps",
     },
+    "ada_muon": _COMMON_PER_GROUP_KEYS | {"momentum", "ns_steps", "ns_eps"},
     "radam": _COMMON_PER_GROUP_KEYS,
     "adan": _COMMON_PER_GROUP_KEYS,
     "adopt": _COMMON_PER_GROUP_KEYS,
@@ -299,6 +302,17 @@ def build_optimizer(
             chunk_rows=chunk_rows,
             bisection_steps=bisection_steps,
             max_bracket_steps=max_bracket_steps,
+        )
+
+    if optimizer_name == "ada_muon":
+        momentum = to_float(scoped.get("momentum"), 0.95)
+        ns_steps = to_int(scoped.get("ns_steps"), 5)
+        ns_eps = to_float(scoped.get("ns_eps"), 1e-7)
+        return optimizer_cls(
+            converted_groups,
+            momentum=momentum,
+            ns_steps=ns_steps,
+            ns_eps=ns_eps,
         )
 
     if optimizer_name in {"apollo", "q_apollo"}:

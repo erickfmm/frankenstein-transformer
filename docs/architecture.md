@@ -20,7 +20,7 @@ dispatches to factories and registries.
 | Dimension | Count | Defined in |
 |---|---:|---|
 | `model.dims.layer_pattern` values | **45** (44 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
-| Optimizer families | **23** | `src/schema/_optimizer.yaml` |
+| Optimizer families | **25** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
 | FFN activations | **43** | `src/schema/_model/_ffn.yaml` |
@@ -80,7 +80,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/embeddings/**` | 12 positional encodings + factorized embedding + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
 | `src/model/activation_function/**` | 43 activations + `ALL_ACTIVATIONS` factory |
-| `src/model/optimizer/**` | 23 optimizers + registry + parameter routing |
+| `src/model/optimizer/**` | 25 optimizers + registry + parameter routing |
 | `src/engine.py` | Framework-neutral `build_model()` used by CLI, DashAI plugin and exports |
 | `src/training/main.py`, `trainer.py` | Task dispatch and training loop |
 | `src/training/streaming_mlm_dataset.py` | Streaming MLM dataset |
@@ -524,7 +524,7 @@ It is selected by `training.task: sbert` and configured under `training.sbert`.
 | `query_prefix`, `document_prefix` | `null` | Instruction prefixes |
 | `output_dir` | — | Checkpoint destination |
 | `pooling_mode` | — | `mean`, `cls`, `max` |
-| `optimizer.optimizer_class` | — | Same 23-family enum |
+| `optimizer.optimizer_class` | — | Same 25-family enum |
 | `batch_size`, `num_epochs`, `learning_rate`, `warmup_steps` | — | Training schedule |
 | `evaluation_steps`, `checkpoint_save_steps`, `resume_from_checkpoint` | — | Checkpointing |
 | `use_amp`, `trust_remote_code`, `resample_balanced`, `standardize_scores` | — | Runtime options |
@@ -665,7 +665,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 
 ## 8. Training runtime
 
-### 8.1 Optimizers (23)
+### 8.1 Optimizers (25)
 
 `training.optimizer.optimizer_class` selects a family; SBERT uses
 `training.sbert.optimizer.optimizer_class` with the same enum.
@@ -678,7 +678,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 | Auto-LR | `prodigy`, `schedulefree_adamw` | Remove LR tuning/scheduling |
 | Adaptive | `radam`, `adan`, `adopt`, `ademamix`, `mars_adamw`, `cautious_adamw`, `lamb` | Rectification, Nesterov, dual EMA, variance reduction, masking, layer-wise scaling |
 | Second-order | `sophia`, `shampoo`, `soap` | Diagonal Hessian / Kronecker / eigenbasis |
-| Orthogonalized | `muon`, `turbo_muon`, `af_muon` | Momentum orthogonalization; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer) |
+| Orthogonalized | `muon`, `turbo_muon`, `af_muon`, `ada_muon` | Momentum orthogonalization; `ada_muon` adds an element-wise second moment on the orthogonalized direction with RMS-aligned Adam-scale updates; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer) |
 | Tunable | `anon` | `gamma` adaptivity |
 
 **Parameter groups:** `embeddings`, `pos`, `attention`, `ffn`, `norms`,

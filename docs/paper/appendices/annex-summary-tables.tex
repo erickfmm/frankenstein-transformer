@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 45 sequence mixers across nine families, 23 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 45 sequence mixers across nine families, 25 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -97,7 +97,7 @@ ssog\_attn & Geometric field & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\math
 
 \subsection{Optimizer Summary}
 
-Table~\ref{tab:all-optimizers} catalogs all 23 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
+Table~\ref{tab:all-optimizers} catalogs all 25 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -151,6 +151,7 @@ Sophia & Curvature-aware & 3 ($m$, $v$, $h$) & $\mathcal{O}(n)$ & lr, $\beta_1$,
 Muon & Orthogonality & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, NS steps $k$ & \citep{shen_convergence_2025} \\
 Turbo-Muon & Orthogonality & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, NS steps $k$ & \citep{boissin_turbo-muon_2025} \\
 AF-Muon & AdamW-free tied table & 1 ($m$) & $\mathcal{O}(n \cdot k + V d\, I)$ & lr, momentum, wd, cap $c$, table scale $s$, $\rho_{out}/\rho_{hid}$, NS steps $k$ & \citep{lagzian_afmuon_2026} \\
+AdaMuon & Orthogonality + adaptive & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, eps, wd, NS steps $k$ & \citep{si_adamuon_2025} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Low-Rank Adaptive \& Tunable Adaptivity}} \\

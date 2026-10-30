@@ -17,14 +17,14 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Model Classes | Training Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-------------:|:--------------:|:-------:|:------------:|
-| **42** | **23** | **11** | **3** | **6** | **122** | **4** |
+| **42** | **25** | **11** | **3** | **6** | **122** | **4** |
 
 ## How It Works
 
 ```mermaid
 flowchart LR
     A["YAML Config"] --> B{"Schema Validation<br/>(JSON Schema + rules)"}
-    B -- valid --> C["Train<br/>23 optimizer families<br/>AMP · schedulers · thermal guard"]
+    B -- valid --> C["Train<br/>25 optimizer families<br/>AMP · schedulers · thermal guard"]
     B -- error --> A
     C --> D["Checkpoint"]
     D --> E["Deploy<br/>(quantize · export)"]
@@ -90,7 +90,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 | Feature | Scale |
 |---------|-------|
 | Sequence mixer architectures | 42 across 8 categories (Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric) |
-| Optimizer families | 23 across 6 categories |
+| Optimizer families | 25 across 6 categories |
 | Positional encodings | 11 model-wide (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`) with per-mixer opt-out |
 | Model classes | `frankenstein`, `frankensteindecoder`, `frankenstein_vit` + reusable in-process engine API |
 | Training tasks | `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation` |

@@ -38,6 +38,7 @@ properties:
       | `muon` | Stable training | Layer-wise momentum with orthogonalization |
       | `turbo_muon` | Faster muon | Accelerated with Nesterov-spectral |
       | `af_muon` | AdamW-free tied-vocab models | Spectral matrices + capped-row LMO table + RMS vectors |
+      | `ada_muon` | Adaptive orthogonal updates | Element-wise second moment on orthogonalized directions + sign stabilization + RMS-aligned scaling (arXiv:2507.11005) |
       | `radam` | Adaptive warmup | Rectified Adam, automatic warmup |
       | `adan` | Nesterov-accelerated | Adaptive with Nesterov, 3 buffers |
       | `adopt` | Momentum-based | Decoupled gradient/variance, optimal convergence |
@@ -74,6 +75,7 @@ properties:
       | `muon` | Entrenamiento estable | Momentum por capa |
       | `turbo_muon` | Muon acelerado | Acelerado con Nesterov-espectral |
       | `af_muon` | Modelos con vocabulario atado sin AdamW | Matrices espectrales + LMO por fila con tope + vectores RMS |
+      | `ada_muon` | Actualizaciones ortogonales adaptativas | Segundo momento por elemento sobre direcciones ortogonalizadas + estabilización por signo + escalado alineado por RMS (arXiv:2507.11005) |
       | `radam` | Warmup adaptativo | Rectified Adam |
       | `adan` | Acelerado con Nesterov | Adaptativo con Nesterov |
       | `adopt` | Basado en momentum | Momentum adaptativo con convergencia óptima |
@@ -107,6 +109,7 @@ properties:
       - muon
       - turbo_muon
       - af_muon
+      - ada_muon
       - radam
       - adan
       - adopt
@@ -144,6 +147,7 @@ properties:
       - `sophia`: `rho`, `update_k`
       - `muon`/`turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
       - `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
+      - `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
       - `cautious_adamw`: `cautious_clip`
       - `anon`: `gamma`
       - `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
@@ -179,6 +183,7 @@ properties:
       - `sophia`: `rho`, `update_k`
       - `muon`/`turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
       - `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
+      - `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
       - `cautious_adamw`: `cautious_clip`
       - `anon`: `gamma`
       - `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
@@ -270,6 +275,10 @@ properties:
           prefix: "af_muon-"
           supports_shared_per_group_suffixes: true
           specific_global_suffixes: [momentum, nesterov, ns_steps, ns_eps, vector_lr, tied_cap, tied_scale, rho_hidden, rho_output, chunk_rows, bisection_steps, max_bracket_steps]
+        ada_muon:
+          prefix: "ada_muon-"
+          supports_shared_per_group_suffixes: true
+          specific_global_suffixes: [momentum, ns_steps, ns_eps]
         radam:
           prefix: "radam-"
           supports_shared_per_group_suffixes: true

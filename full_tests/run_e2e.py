@@ -112,7 +112,7 @@ VISION_PE_TYPES = [
 
 OPTIMIZERS = [
     "sgd_momentum", "adamw", "adafactor", "galore_adamw", "prodigy", "lion",
-    "sophia", "muon", "turbo_muon", "radam", "adan", "adopt", "ademamix",
+    "sophia", "muon", "turbo_muon", "ada_muon", "radam", "adan", "adopt", "ademamix",
     "mars_adamw", "cautious_adamw", "lamb", "schedulefree_adamw", "shampoo",
     "soap", "anon", "apollo", "apollo_mini", "q_apollo",
 ]
@@ -235,6 +235,9 @@ def _with_optimizer(training: dict, optimizer_class: str) -> dict:
     if optimizer_class == "prodigy":
         params[f"{prefix}d_coef"] = 0.8
     if optimizer_class in {"muon", "turbo_muon"}:
+        params[f"{prefix}momentum"] = 0.9
+        params[f"{prefix}ns_steps"] = 5
+    if optimizer_class == "ada_muon":
         params[f"{prefix}momentum"] = 0.9
         params[f"{prefix}ns_steps"] = 5
     if optimizer_class == "sophia":

@@ -1153,6 +1153,54 @@ where the per-row scale $\tau_i$ is obtained by bisection in FP32 over complete-
 \item Improves mean validation loss and perplexity over both Hybrid Muon and a SCION-style Sign endpoint across nine tied-token settings spanning text, image-token, protein, MoE, and encoder-decoder models.
 \end{itemize}
 
+\paragraph{AdaMuon (Adaptive Muon).}
+AdaMuon is an \textbf{adaptive extension of Muon} that keeps the spectral (polar) update while adding coordinate-wise variance normalization. Muon orthogonalizes the momentum matrix into a direction-only update, which removes anisotropic scaling but assigns the same magnitude to every coordinate; AdaMuon addresses the resulting mismatch between noisy and informative coordinates by tracking the element-wise variance of the \emph{orthogonalized} direction rather than of the raw gradient or of the momentum. Because the polar factor is globally scale-invariant, the sign transform applied before orthogonalization preserves the update direction while stabilizing its element-wise magnitudes; the paper proves that $\operatorname{sign}$ is the unique element-wise map that is scale-free, sign-consistent, odd and bounded (Theorem~1). The second-moment estimate therefore sees a stable signal, and its variance-normalized version is rescaled to an RMS of $0.2$, matching Adam's empirical update scale so that existing learning-rate schedules are reused without tuning.
+
+For a weight $W_t \in \mathbb{R}^{n \times m}$, momentum buffer $M_t$, momentum $\beta$, Newton--Schulz steps $T$ and small constant $\varepsilon$:
+\begin{align}
+M_t &= \beta M_{t-1} + G_t, \\
+O_t &= \operatorname{NewtonSchulz}\bigl(\operatorname{sign}(M_t), T\bigr), \\
+V_t &= \beta V_{t-1} + (1-\beta)\, O_t \odot O_t, \\
+\widehat{O}_t &= O_t \oslash \bigl(\sqrt{V_t} + \varepsilon \mathbf{1}\bigr), \\
+\gamma_t &= \frac{0.2\sqrt{mn}}{\|\widehat{O}_t\|_F}, \\
+W_{t+1} &= W_t - \eta\bigl(\gamma_t \widehat{O}_t + \lambda W_t\bigr).
+\end{align}
+The Newton--Schulz map uses $X_0 = \operatorname{sign}(M_t)/\|\operatorname{sign}(M_t)\|_F$ and the cubic iteration $X_k = aX_{k-1} + b(X_{k-1}X_{k-1}^{\mathsf T})X_{k-1} + c(X_{k-1}X_{k-1}^{\mathsf T})^2X_{k-1}$ with $(a,b,c) = (3.4445, -4.7750, 2.0315)$ and $T = 5$. No bias correction is applied to either moment: a constant factor in $V_t$ is cancelled exactly by $\gamma_t \propto \sqrt{c}$, and a constant factor in $M_t$ is removed by the polar map, $\operatorname{polar}(cM) = \operatorname{polar}(M)$.
+
+\begin{algorithm}[H]
+\caption{AdaMuon (Adaptive Muon)}
+\label{alg:ada-muon}
+\begin{algorithmic}[1]
+\Require Initial weights $W_0 \in \mathbb{R}^{n \times m}$, learning rate $\eta$, weight decay $\lambda$, momentum $\beta$, Newton--Schulz steps $T$, small constant $\varepsilon$
+\Ensure Updated weights $W_T$
+\State $M_0 \gets \mathbf{0}$, $V_0 \gets \mathbf{0}$
+\For{each iteration $t = 1, 2, \ldots$}
+    \State $G_t \gets \nabla_{W_t}\mathcal{L}(W_t)$
+    \State $M_t \gets \beta M_{t-1} + G_t$
+    \State $O_t \gets \operatorname{NewtonSchulz}(\operatorname{sign}(M_t), T)$
+    \State $V_t \gets \beta V_{t-1} + (1-\beta)\, O_t \odot O_t$
+    \State $\widehat{O}_t \gets O_t \oslash (\sqrt{V_t} + \varepsilon\mathbf{1})$
+    \State $\gamma_t \gets 0.2\sqrt{mn}/\|\widehat{O}_t\|_F$
+    \State $W_{t+1} \gets W_t - \eta(\gamma_t \widehat{O}_t + \lambda W_t)$
+\EndFor
+\Return $W_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item One additional second-moment buffer per matrix parameter (two buffers versus Muon's single first-moment buffer), plus per-step element-wise EMA, square-root and normalization work on the update.
+\item The update is defined for two-dimensional parameters; one-dimensional parameters (biases, norm scales) require an auxiliary optimizer in the paper's recipe.
+\item The RMS target ($0.2$) is a fixed constant rather than a learned quantity, so the method assumes Adam-like update scales when reusing existing schedules.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item No new hyperparameters: the second-moment EMA reuses Muon's momentum coefficient $\beta$, and the paper reports low sensitivity across $\beta \in [0.8, 0.99]$.
+\item The sign transform makes the variance estimate stable enough to normalize, and the RMS alignment cancels any constant bias in $V_t$, so no bias correction is needed for either moment.
+\item RMS alignment matches Adam's update scale, allowing direct reuse of learning-rate schedules; the authors report up to roughly 40\% training-efficiency gains over AdamW and consistent wins over Muon on GPT-2 (125M--1.5B) and Qwen2.5 (1.5B, 7B).
+\end{itemize}
+
 \small
 \begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
 \toprule
@@ -1164,7 +1212,7 @@ Momentum redesign & Adan, AdEMAMix, MARS, Cautious AdamW & faster or safer first
 Large-batch and schedule simplification & LAMB, Schedule-Free AdamW & operational robustness at scale & Reduce brittleness from batch-size growth or schedule engineering. \\
 Memory-efficient & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & optimizer-state reduction & Most useful when VRAM is dominated by optimizer state rather than activations; APOLLO-family methods replace dense AdamW moments with projected or quantized structured scaling. \\
 Curvature-aware & Shampoo, SOAP, Sophia & better conditioning & Prefer when richer geometry is worth implementation and compute overhead. \\
-Geometry-oriented & Muon, Turbo-Muon, AF-Muon & orthogonalized update structure & Specialized options for matrix geometry and representation shaping; AF-Muon assigns the tied vocabulary table a capped-row table geometry and one-dimensional parameters an RMS update, with no AdamW auxiliary state. \\
+Geometry-oriented & Muon, Turbo-Muon, AF-Muon, AdaMuon & orthogonalized update structure & Specialized options for matrix geometry and representation shaping; AdaMuon adds an element-wise second moment on the orthogonalized direction with RMS-aligned updates; AF-Muon assigns the tied vocabulary table a capped-row table geometry and one-dimensional parameters an RMS update, with no AdamW auxiliary state. \\
 \bottomrule
 \end{longtable}
 \normalsize

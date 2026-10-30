@@ -1,4 +1,5 @@
 from .adamw import AdamWOptimizer
+from .ada_muon import AdaMuon
 from .adafactor import Adafactor
 from .adan import Adan
 from .ademamix import AdEMAMix
@@ -32,6 +33,7 @@ __all__ = [
     "AdEMAMix",
     "Adan",
     "AdamWOptimizer",
+    "AdaMuon",
     "CautiousAdamW",
     "GaLoreAdamW",
     "LAMB",
