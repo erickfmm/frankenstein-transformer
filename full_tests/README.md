@@ -15,7 +15,7 @@ Esta carpeta contiene un harness independiente que entrena modelos **reales pero
 - **Transversales**: BitNet (incluido routers/conv), embeddings factorizados/conv, MoE, MoD, mHC, residuos/AttnRes (`standard`/`none`/`full_attn`/`block_attn`), RoPE vs HoPE, SSMax (`use_ssmax`), SSOG campo fijo (`lookat: false`) y SSOG+BitNet, loops duplicados, activaciones de FFN, etc.
 - **Tareas**: `mlm`/encoder y `causal_lm`/decoder; visión (`classification`, `patch_prediction`, `segmentation`) — cada tarea de visión tiene además una variante `ssog_attn` (`cls_token: false` + `pooling_mode: gap`; la rejilla 2×2 se deriva de la imagen). El mezclador `conformer_attn` (Conformer, arXiv:2005.08100) se barre en el encoder (pares, singles) y en el decoder (`causal_lm`, padding causal de la convolución) y dentro del ViT (`configs/examples/vit_conformer.yaml`).
 - **Audio**: `frankenstein_audio` con `conformer_attn` en `audio_asr_ctc`, `audio_asr_transducer` (RNN-T), `audio_classification` y `audio_eeg_classification` (`feature: raw`, 8 canales). Con `--no-realonall` el harness limpia `audio_dataset.dataset_name`/`dataset_dir` en el YAML temporal de cada run para forzar `DummyAudioDataset` (sin red). Con `--realonall` (por defecto) los casos ASR usan `astroza/chilean-jokes-festival-de-vina` y la clasificación usa `danielquillanroxas/EMOTION_VOICES` (7 clases); el caso EEG `raw` sigue siendo sintético. La decodificación de audio real con la versión actual de `datasets` requiere `torchcodec` instalado en el entorno.
-- **Deploy / inferencia / export / GGUF**: **cada** entrenamiento exitoso se despliega en `standard` y `quantized`, se exporta a HuggingFace Transformers (`deploy --format transformers`) y se evalúa contra muestras reales (`inference.csv`). Los checkpoints de audio deben cargar y validar en ambos formatos; su export a Transformers debe fallar con el mensaje documentado (`frankenstein_audio` no exportable) y se puntúa como `OK` cuando lo hace. El export GGUF BitNet se ejecuta en el combo dedicado (`bitnet_std_attn_for_gguf`).
+- **Deploy / inferencia / export / GGUF**: **cada** combo ejecuta su pipeline completo en el mismo worker y de forma secuencial — entrenamiento → deploy `standard` → evaluación de inferencia → deploy `quantized` → evaluación de inferencia → export a HuggingFace Transformers → persistencia de resultados — antes de pasar al siguiente combo. Los checkpoints de audio deben cargar y validar en ambos formatos; su export a Transformers debe fallar con el mensaje documentado (`frankenstein_audio` no exportable) y se puntúa como `OK` cuando lo hace. El export GGUF BitNet se ejecuta en el combo dedicado (`bitnet_std_attn_for_gguf`). Las comparaciones inferencia-vs-real se guardan en `inference.csv`.
 
 ## Cómo ejecutar
 
@@ -88,6 +88,42 @@ Número de muestras reales comparadas por artefacto desplegado:
 uv run --extra cu118 --extra train python full_tests/run_e2e.py --infer-samples 8
 ```
 
+### Retención de artefactos (`--save-to`)
+
+Por defecto se guarda todo en `full_tests/tmp/`:
+
+```bash
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --save-to disk
+```
+
+- **`disk`** (por defecto): se conservan los directorios de run, los checkpoints, los modelos desplegados y los datos bajo `full_tests/tmp/`.
+- **`delete`**: se ejecuta igual en disco, pero al terminar el pipeline de cada combo (entrenamiento + deploy + inferencia + export) se borran su directorio de run, sus modelos y sus datos; solo sobreviven los resultados (`training_metrics/*.csv`, `inference.csv`, `param_metrics.json`, `results.json|md`). Al final del barrido se elimina todo el árbol de scratch.
+- **`memory`**: el directorio de run y los modelos desplegados viven en un tmpfs en RAM (`/dev/shm/frankenstein-full-tests-<pid>`); ningún artefacto del harness toca el disco. Los resultados siguen escribiéndose en `full_tests/tmp/results/`. El tmpfs se elimina al terminar. Requiere `/dev/shm` escribible y es incompatible con `--resume`; la caché de `datasets` de HuggingFace (fuera del control del harness) no se redirige.
+
+```bash
+# Solo resultados, borrando modelos y datos al terminar cada combo
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --save-to delete
+
+# Modelo y deploy solo en RAM
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --save-to memory
+```
+
+### Evaluación con partición de test (`--test-percentage`)
+
+Por defecto se reserva el **20%** de los datos de cada combo antes de entrenar; al terminar se evalúa el modelo final sobre esa partición reservada y la precisión se escribe en `results.json` y en la columna `test_acc` de `results.md`:
+
+```bash
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --test-percentage 20
+```
+
+El valor se escribe en `training.test_percentage`; el entrenador guarda la pérdida y precisión reservadas en `test_metrics.json` junto al CSV de métricas del run. Aplica a MLM, causal LM, clasificación de texto, las tres tareas de visión, ASR (donde la precisión reportada es la tasa de error de caracteres, `metric: cer`) y clasificación de audio. SBERT gestiona su propia partición de validación (`sbert.max_eval_samples`) y reporta `n/a`. Usar `0` desactiva la partición y restaura el comportamiento sobre todos los datos:
+
+```bash
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --test-percentage 0
+```
+
+Nótese que la partición reduce los ejemplos de entrenamiento (~20% menos), por lo que el número de pasos del optimizador baja en la misma proporción.
+
 ### Selección de dispositivo
 
 Por defecto todo corre en `cpu`. Para ejecutar los tests en otro dispositivo (entrenamiento, deploy e inferencia):
@@ -130,7 +166,7 @@ default del schema. Solo tienen efecto cuando `--gpu-temp-guard` está activo.
 
 Todo se escribe bajo `full_tests/tmp/results/` (git-ignorado):
 
-- **`results.json` / `results.md`** — tabla de estados por run (entrenamiento, deploy, eval, export).
+- **`results.json` / `results.md`** — tabla de estados por run (entrenamiento, deploy, eval, export). Cada fila de entrenamiento incluye `test_accuracy` (en JSON) y la columna `test_acc` (en Markdown) con la precisión medida sobre la partición de test reservada; `n/a` cuando no aplica (SBERT, o `--test-percentage 0`).
 - **`inference.csv`** — una fila por comparación inferencia-vs-real de cada artefacto desplegado (formato `standard` y `quantized`). Columnas: `timestamp, combo_id, model_class, task, deploy_format, sample_id, input_excerpt, predicted, real, metric_name, metric_value, status, notes`. Métricas por tarea:
   - `mlm` → `mlm_top1` (acierto top-1; `notes` incluye `top5_hit`), enmascarando un token real del corpus.
   - `causal_lm` → `causal_next_token` (acierto del siguiente token; `notes` incluye la accuracy por token).
@@ -148,10 +184,10 @@ Todo se escribe bajo `full_tests/tmp/results/` (git-ignorado):
 
 ## Archivos
 
-- `_helpers.py` — entrenamiento del tokenizador SPM, generación del parquet sintético y del corpus real, runner de subprocesos, helpers de deploy/infer/export/gguf, persistencia de resultados y artefactos (`inference.csv`, `param_metrics.json`, `training_metrics/`).
+- `_helpers.py` — entrenamiento del tokenizador SPM, generación del parquet sintético y del corpus real, runner de subprocesos, helpers de deploy/infer/export/gguf, persistencia de resultados y artefactos (`inference.csv`, `param_metrics.json`, `training_metrics/`), lectura de `test_metrics.json` y limpieza por combo (`--save-to delete|memory`).
 - `_infer_eval.py` — subproceso de evaluación inferencia-vs-real (texto, ViT y audio).
-- `run_e2e.py` — bucles for que generan todas las combinaciones, aplican `--realonall` y lanzan el CLI y el battery de deploy/eval/export.
-- `tmp/` — tokenizador, datos, checkpoints por run, resultados, deploys. **Git-ignorado.**
+- `run_e2e.py` — bucles for que generan todas las combinaciones, aplican `--realonall` y ejecutan el pipeline completo de cada combo (train → deploy → infer → export) en un mismo worker, con `--save-to` y `--test-percentage`.
+- `tmp/` — tokenizador, datos, checkpoints por run, resultados, deploys. **Git-ignorado.** Con `--save-to memory` este árbol se ubica en `/dev/shm` (salvo `tmp/results/`).
 
 ## Notas importantes
 

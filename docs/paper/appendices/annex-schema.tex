@@ -291,6 +291,7 @@ dataloader\_workers & int $\ge 0$ & Parallel worker processes for data loading. 
 max\_length & int $\ge 1$ & Maximum token sequence length. Typical: 128--2048. \\
 mlm\_probability & float [0,1] & Fraction of tokens masked for MLM prediction. Standard: 0.15. \\
 max\_samples & int $\ge 1$ & Total samples before stopping, independent of epochs. \\
+test\_percentage & float [0,100] & Fraction of the dataset held out from training and evaluated at the end; the result is written to \texttt{test\_metrics.json}. Default: 0 (disabled). \\
 dataset\_batch\_size & int $\ge 1$ & Internal batch size for streaming dataset. \\
 num\_workers & int $\ge 0$ & Parallel workers for dataset streaming pipeline. \\
 cache\_dir & string & Directory for caching processed datasets. \\

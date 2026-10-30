@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader
 try:
     from .streaming_mlm_dataset import StreamingMLMDataset
     from .trainer import TitanTrainer, TrainingConfig
+    from .test_split import evaluate_and_write, maybe_split_dataloader
     from .config_loader import LoadedTrainingConfig, load_training_config, list_config_paths
     from ..model.config import FrankensteinModelConfig
     from ..model.frankenstein_decoder import FrankensteinDecoder
@@ -34,6 +35,7 @@ try:
 except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
+    from training.test_split import evaluate_and_write, maybe_split_dataloader
     from training.config_loader import LoadedTrainingConfig, load_training_config, list_config_paths
     from model.config import FrankensteinModelConfig
     from model.frankenstein_decoder import FrankensteinDecoder
@@ -778,6 +780,9 @@ def _run_audio_task(loaded, resolved_device, training_config, args, training_run
         collate_fn=audio_collate_fn,
     )
 
+    test_split = maybe_split_dataloader(dataloader, training_runtime)
+    dataloader = test_split.train_loader
+
     logging.info("Step 4: %s training", loaded.task.upper())
     trainer = TitanTrainer(
         model,
@@ -787,13 +792,17 @@ def _run_audio_task(loaded, resolved_device, training_config, args, training_run
         task=loaded.task,
     )
 
+    completed = True
     try:
         for epoch in range(num_epochs):
             logging.info("Epoch %d/%d", epoch + 1, num_epochs)
             avg_loss, should_stop = trainer.train_epoch(dataloader, epoch)
             logging.info("Epoch %d avg loss: %.4f", epoch + 1, avg_loss)
             if should_stop:
+                completed = False
                 break
+        if completed:
+            evaluate_and_write(trainer, test_split, loaded.task)
     finally:
         trainer.close()
 

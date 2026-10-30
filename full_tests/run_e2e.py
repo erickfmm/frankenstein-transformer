@@ -32,17 +32,22 @@ Pass ``--no-realonall`` for the older fully-offline synthetic behaviour. These
 combos download models/corpora on first use, so allow a generous per-combo
 timeout (e.g. ``--timeout 1800``).
 
-Every successful training is then deployed (``standard`` and ``quantized``),
-exported to Transformers (audio export must be rejected with the documented
-message) and evaluated against real samples. The harness writes, under
+Every combo now runs its **whole pipeline in the same worker, sequentially**:
+training → deploy (``standard``) → inference evaluation → deploy
+(``quantized``) → inference evaluation → Transformers export (audio export
+must be rejected with the documented message) → result persistence, and (in
+``--save-to delete|memory``) artifact cleanup. The harness writes, under
 ``tmp/results/``:
 
 * ``inference.csv`` — predicted vs real comparisons per deployed artifact,
 * ``param_metrics.json`` — ``{model: {block: nparams, ..., "total": n}}`` using
   the canonical 10 block categories,
 * ``training_metrics/<model>.csv`` — one ready-to-process training-metrics CSV
-  per model,
-* ``results.json`` / ``results.md`` — the run status table.
+  per model (plus the held-out ``test_accuracy``/``test_loss`` reported by the
+  trainer in ``test_metrics.json``),
+* ``results.json`` / ``results.md`` — the run status table, including a
+  ``test_acc`` column with the held-out accuracy measured at the end of
+  training.
 
 It is intentionally NOT collected by ``pytest tests/`` (it lives in ``full_tests/``
 at the repository root) and is meant to be left running for several hours.
@@ -80,18 +85,50 @@ i.e. fully sequential):
 
     uv run --extra cu118 --extra train python full_tests/run_e2e.py --workers 4
 
-Each worker still launches the training/deploy CLIs as isolated subprocesses in
-its own ``tmp/runs/<combo_id>`` (or ``tmp/deploy/<combo_id>_<fmt>``) directory;
-only the main thread appends to the shared result artifacts, so with
-``--workers > 1`` rows are recorded in completion order rather than combo order.
-Keep ``--workers 1`` when sharing a single GPU (VRAM/thermal-guard contention)
-or on a cold HuggingFace cache with ``--realonall`` (do one sequential run
-first to populate it).
+Each worker owns complete pipelines — it trains, deploys, evaluates and
+exports one combo before moving to the next — and launches every CLI step as an
+isolated subprocess in its own ``tmp/runs/<combo_id>`` (or
+``tmp/deploy/<combo_id>_<fmt>``) directory. Only the main thread appends to the
+shared result artifacts, so with ``--workers > 1`` rows are recorded in
+completion order rather than combo order. Keep ``--workers 1`` when sharing a
+single GPU (VRAM/thermal-guard contention) or on a cold HuggingFace cache with
+``--realonall`` (do one sequential run first to populate it).
+
+Artifact retention is selected with ``--save-to`` (default ``disk``):
+
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --save-to disk
+
+* ``disk`` — every run directory, checkpoint, deployed model and corpus is kept
+  under ``full_tests/tmp/``.
+* ``delete`` — each combo's run directory, models and data are deleted right
+  after its pipeline finishes; only the results (metrics CSVs,
+  ``inference.csv``, ``param_metrics.json``, ``results.json|md``) survive. The
+  whole scratch tree is dropped when the run ends.
+* ``memory`` — the run directory and deployed models live on a RAM-backed
+  tmpfs (``/dev/shm/frankenstein-full-tests-<pid>``) and no harness artifact
+  touches the disk; results still go to ``tmp/results/``. The tmpfs tree is
+  removed at the end. Requires a writable ``/dev/shm``; the HuggingFace
+  ``datasets`` cache (outside the harness' control) is not redirected.
+
+Held-out evaluation is enabled by default:
+
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --test-percentage 20
+
+The value is written to ``training.test_percentage``; the trainer reserves that
+percentage of each combo's dataset before training and reports the held-out
+loss/accuracy in ``test_metrics.json``, which the harness copies into
+``results.json`` and the ``results.md`` ``test_acc`` column. Use
+``--test-percentage 0`` to disable the split and restore the all-data
+behavior.
 
 Per-sweep defaults (what every flag falls back to when it is not passed)
 ------------------------------------------------------------------------
 Every combo trains a single epoch, so
 ``steps = floor(floor(rows / batch_size) / gradient_accumulation_steps)``.
+Unless ``--test-percentage 0`` is passed, the split removes ~20% of the rows
+before that formula is applied (so e.g. 28 toy windows become 22, 32 real rows
+become 26, 64 synthetic images become 51 and 16 synthetic utterances become
+13).
 
 | sweep | batch | sample cap | accum | optimizer steps |
 |---|---|---|---|---|
@@ -109,7 +146,8 @@ Every combo trains a single epoch, so
 Timeouts default to 600 s for training and 300 s for deploy, inference-eval,
 transformers-export and bitnet-gguf.
 
-Global knobs (``full_tests`` only — no schema changes):
+Global knobs (``full_tests`` only — every value is written into a documented
+schema key, never into an ad-hoc one):
 
 * ``--timeout N`` sets the budget for *every* subprocess; ``0`` disables all
   timeouts (wait forever).
@@ -125,9 +163,16 @@ Global knobs (``full_tests`` only — no schema changes):
   ``asr``/``sbert``) and ``sbert.num_epochs``.
 * ``--batch-size N`` overrides ``training.batch_size`` (and ``sbert.batch_size``
   for the SBERT combo). Note that changing it also changes the step count.
+* ``--test-percentage N`` (``0–100``, default ``20``) writes
+  ``training.test_percentage``: the trainer holds out that share of each
+  combo's dataset and reports the held-out loss/accuracy in
+  ``test_metrics.json``. ``0`` disables the split. SBERT reports ``n/a`` (its
+  own evaluator uses ``sbert.max_eval_samples``).
+* ``--save-to {disk,delete,memory}`` (default ``disk``) selects artifact
+  retention; see the retention examples above.
 
-When none of these flags is passed the harness writes exactly the same YAML it
-has always written.
+When ``--test-percentage 0`` is passed and none of the other overrides is
+used, the harness writes exactly the same YAML it has always written.
 """
 from __future__ import annotations
 
@@ -135,12 +180,13 @@ import argparse
 import itertools
 import json
 import logging
+import os
 import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -1508,6 +1554,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="Grace period in seconds before a thermal checkpoint (default: CLI default).",
     )
     parser.add_argument(
+        "--save-to",
+        choices=["disk", "delete", "memory"],
+        default="disk",
+        help=(
+            "Where the pipeline keeps its artifacts (default: disk). "
+            "'disk' keeps run directories, checkpoints, deployed models and "
+            "data as regular files. 'delete' still uses the disk but removes "
+            "each combo's run directory, models and data right after its "
+            "train/deploy/infer/export pipeline finishes, keeping only the "
+            "results (metrics CSVs, inference.csv, param_metrics.json, "
+            "results.json|md); the scratch tree is dropped at the end. "
+            "'memory' keeps the run directory and the deployed models on a "
+            "RAM-backed tmpfs (/dev/shm) and never writes harness artifacts to "
+            "the disk; results stay in tmp/results."
+        ),
+    )
+    parser.add_argument(
+        "--test-percentage",
+        type=int,
+        default=20,
+        metavar="N",
+        help=(
+            "Hold out N%% of each combo's dataset from training and measure "
+            "accuracy on it at the end of training (default: 20). The value is "
+            "written to training.test_percentage; the trainer reports the "
+            "held-out loss/accuracy in test_metrics.json, which the harness "
+            "copies into results.json and the results.md test_acc column. "
+            "0 disables the split."
+        ),
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         help="Resume from existing tmp/results directory instead of cleaning up first.",
@@ -1546,6 +1623,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error("--max-epochs must be >= 1")
     if args.batch_size is not None and args.batch_size < 1:
         parser.error("--batch-size must be >= 1")
+    if not 0 <= args.test_percentage <= 100:
+        parser.error("--test-percentage must be between 0 and 100")
+    if args.save_to == "memory" and args.resume:
+        parser.error("--resume is incompatible with --save-to memory (nothing persists)")
 
     # 0 (or any non-positive value) disables the timeout for ``subprocess.run``,
     # which expects ``None`` to wait forever.
@@ -1559,7 +1640,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     }[args.logging_level]
     helpers.setup_logging(log_level)
 
-    # Clean up tmp directory unless --resume is specified
+    # ``--save-to memory`` redirects every transient artifact to a RAM-backed
+    # tmpfs; the result directory stays on disk. ``disk``/``delete`` use the
+    # repository's tmp/ tree as before.
+    scratch_root = helpers.FULL_TESTS_DIR / "tmp"
+    if args.save_to == "memory":
+        shm_root = Path("/dev/shm")
+        if not shm_root.is_dir() or not os.access(shm_root, os.W_OK):
+            parser.error(
+                "--save-to memory requires a writable /dev/shm (tmpfs); "
+                "use --save-to disk or --save-to delete on this machine"
+            )
+        scratch_root = shm_root / f"frankenstein-full-tests-{os.getpid()}"
+        if scratch_root.exists():
+            shutil.rmtree(scratch_root, ignore_errors=True)
+    helpers.set_scratch_root(scratch_root)
+
+    # Clean up the scratch directory unless --resume is specified
     if not args.resume and helpers.TMP_DIR.exists():
         logging.info("Cleaning up tmp directory: %s", helpers.TMP_DIR)
         shutil.rmtree(helpers.TMP_DIR)
@@ -1597,9 +1694,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         logging.info("Python:    %s", " ".join(python_runner))
     logging.info("Real data: %s", "enabled (--realonall)" if args.realonall else "disabled")
     logging.info("Workers:   %d", args.workers)
+    logging.info("Save to:   %s (scratch: %s)", args.save_to, helpers.TMP_DIR)
     logging.info(
         "Timeout:   %s",
         "no limit" if timeout_secs is None else f"{timeout_secs}s",
+    )
+    logging.info(
+        "Test split: %s",
+        "disabled" if args.test_percentage == 0 else f"{args.test_percentage}% held out",
     )
     logging.info(
         "Overrides: max_samples=%s max_epochs=%s batch_size=%s",
@@ -1746,21 +1848,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         gpu_temp_critical_threshold_c=args.gpu_temp_critical_threshold_c,
         gpu_temp_poll_interval_seconds=args.gpu_temp_poll_interval_seconds,
         gpu_temp_checkpoint_grace_seconds=args.gpu_temp_checkpoint_grace_seconds,
+        test_percentage=args.test_percentage,
     )
-
-    def write_results_incremental() -> None:
-        """Write results to disk immediately (for crash recovery)."""
-        helpers.write_results(results)
-
-    def record_metrics(combo_id: str, result: helpers.RunResult) -> None:
-        """Copy the training CSV and record per-block parameter counts."""
-        metrics_copy = helpers.copy_training_metrics(combo_id)
-        if metrics_copy is not None:
-            result.metrics_path = str(metrics_copy)
-        counts = _count_param_categories(combo_id)
-        if counts is not None:
-            param_metrics[combo_id] = counts
-            helpers.write_param_metrics(param_metrics)
 
     def record_inference(rows: List[dict]) -> None:
         """Append inference-vs-real rows and rewrite ``results/inference.csv``."""
@@ -1772,116 +1861,30 @@ def main(argv: Optional[List[str]] = None) -> int:
         inference_rows.extend(rows)
         helpers.write_inference_csv(inference_rows)
 
-    def run_training_combo(combo_id: str, config: dict) -> helpers.RunResult:
-        """Run one training combo (blocking; safe to call from a worker thread)."""
-        return helpers.run_training(
-            config=config,
-            combo_id=combo_id,
-            batch_size=config["training"].get("batch_size", 1),
-            **train_kwargs,
-        )
-
-    def handle_training_result(combo_id: str, result: helpers.RunResult) -> None:
-        """Persist one finished training combo (main thread only)."""
-        # Copy the metrics CSV into results/ and record parameter counts.
-        if result.status in ("OK", "GRAD_EXPLODED"):
-            record_metrics(combo_id, result)
-        results.append(result)
-        # Write results incrementally after each combo
-        write_results_incremental()
-
-    if args.workers == 1:
-        for idx, (combo_id, config) in enumerate(combos, start=1):
-            logging.info("[%d/%d] Running %s", idx, len(combos), combo_id)
-            result = run_training_combo(combo_id, config)
-            handle_training_result(combo_id, result)
-            logging.info("[%d/%d] %s -> %s (%.1fs) %s", idx, len(combos), combo_id, result.status, result.duration_sec, result.notes)
-    elif combos:
-        logging.info(
-            "Running %d training combos with %d parallel workers", len(combos), args.workers
-        )
-        with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            futures = {
-                pool.submit(run_training_combo, combo_id, config): (idx, combo_id)
-                for idx, (combo_id, config) in enumerate(combos, start=1)
-            }
-            completed = 0
-            for future in as_completed(futures):
-                idx, combo_id = futures[future]
-                try:
-                    result = future.result()
-                except Exception as exc:  # noqa: BLE001
-                    logging.exception("Training worker for %s crashed", combo_id)
-                    result = helpers.RunResult(
-                        category="training",
-                        combo_id=combo_id,
-                        status="FAILED",
-                        duration_sec=0.0,
-                        stdout="",
-                        stderr=str(exc),
-                        returncode=-2,
-                        notes=f"worker exception: {exc}",
-                    )
-                handle_training_result(combo_id, result)
-                completed += 1
-                logging.info(
-                    "[%d/%d] %s (combo %d) -> %s (%.1fs) %s",
-                    completed,
-                    len(combos),
-                    combo_id,
-                    idx,
-                    result.status,
-                    result.duration_sec,
-                    result.notes,
-                )
-
-    # ------------------------------------------------------------------
-    # Deploy / infer / export battery, for every successful training.
-    # ------------------------------------------------------------------
-    # Text artifacts also get an inference-vs-real evaluation (MLM top-1/top-5,
-    # causal next-token, classification accuracy), ViT/audio classification
-    # artifacts get theirs, and audio Transformers export must be rejected with
-    # the documented message. The BitNet-GGUF export stays on its dedicated
-    # combo below (the format only applies to BitNet weights).
-    deployable = [
-        result
-        for result in results
-        if result.category == "training"
-        and result.status == "OK"
-        and result.checkpoint_path
-        and Path(result.checkpoint_path).exists()
-    ]
-    if not args.skip_deploy:
-        logging.info("Deploying and evaluating %d successful checkpoints", len(deployable))
-
-    def deploy_one_checkpoint(
+    def deploy_and_evaluate(
         training_result: helpers.RunResult,
-        on_result: Optional[Callable[[helpers.RunResult, List[dict]], None]] = None,
     ) -> Tuple[List[helpers.RunResult], List[dict]]:
-        """Deploy/evaluate/export one checkpoint (safe to call from a worker thread).
+        """Deploy every format, evaluate inference and export one checkpoint.
 
-        Every artifact path is keyed by ``combo_id`` (``tmp/deploy/<combo>_<fmt>``,
-        ``tmp/inference_eval/<combo>_<fmt>.json``, ``tmp/transformers-export/<combo>``),
-        so independent checkpoints never touch the same files. When ``on_result``
-        is provided it is invoked after every finished step (sequential runs use
-        it to flush the shared result artifacts immediately); otherwise the
-        produced results/rows are returned for the caller to merge.
+        Runs, in order, ``deploy --format standard`` + inference evaluation, the
+        same pair for ``quantized``, and the Transformers export. Audio models
+        have no Transformers equivalent, so that export must be rejected with
+        the documented message and is scored ``OK`` when it is.
+
+        Safe to call from a worker thread: every artifact path is keyed by
+        ``combo_id`` (``tmp/deploy/<combo>_<fmt>``,
+        ``tmp/inference_eval/<combo>_<fmt>.json``,
+        ``tmp/transformers-export/<combo>``), so independent checkpoints never
+        touch the same files.
 
         Args:
             training_result: A successful training ``RunResult`` with a checkpoint.
-            on_result: Optional callback receiving each ``(result, rows)`` pair.
 
         Returns:
             ``(produced_results, inference_rows)`` for this checkpoint.
         """
         produced: List[helpers.RunResult] = []
         rows_out: List[dict] = []
-
-        def emit(result: helpers.RunResult, rows: List[dict]) -> None:
-            produced.append(result)
-            rows_out.extend(rows)
-            if on_result is not None:
-                on_result(result, rows)
 
         combo_id = training_result.combo_id
         checkpoint_path = Path(training_result.checkpoint_path)
@@ -1904,7 +1907,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 timeout=timeout_secs,
                 device=args.device,
             )
-            emit(deploy_result, [])
+            produced.append(deploy_result)
             logging.info(
                 "%s -> %s (%.1fs) %s",
                 deploy_result.combo_id,
@@ -1935,7 +1938,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 timeout=timeout_secs,
                 device=args.device,
             )
-            emit(eval_result, rows)
+            produced.append(eval_result)
+            rows_out.extend(rows)
             logging.info(
                 "%s -> %s (%.1fs) %s",
                 eval_result.combo_id,
@@ -1944,9 +1948,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 eval_result.notes,
             )
 
-        # transformers-export (needs the original YAML). Audio models have no
-        # Transformers equivalent, so the export must be rejected with the
-        # documented message and is scored ``OK`` when it is.
+        # transformers-export (needs the original YAML).
         if yaml_path.exists():
             export_dir = helpers.TMP_DIR / "transformers-export" / combo_id
             logging.info("Running transformers-export %s -> %s", combo_id, export_dir)
@@ -1977,7 +1979,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                         "audio transformers export was not rejected as documented "
                         f"(returncode={export_result.returncode})"
                     )
-            emit(export_result, [])
+            produced.append(export_result)
             logging.info(
                 "%s -> %s (%.1fs) %s",
                 export_result.combo_id,
@@ -1988,54 +1990,153 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         return produced, rows_out
 
-    def flush_deploy_result(result: helpers.RunResult, rows: List[dict]) -> None:
-        """Persist one deploy/eval/export step (main thread only)."""
-        results.append(result)
-        record_inference(rows)
-        write_results_incremental()
+    def run_combo_pipeline(
+        combo_id: str, config: dict
+    ) -> Tuple[List[helpers.RunResult], List[dict], Optional[Dict[str, Any]]]:
+        """Train, deploy, infer and export one combo, sequentially, in one worker.
 
-    deploy_targets = deployable if not args.skip_deploy else []
-    if args.workers == 1 or not deploy_targets:
-        for training_result in deploy_targets:
-            deploy_one_checkpoint(training_result, on_result=flush_deploy_result)
-    else:
+        The training metrics CSV and the per-block parameter counts are
+        collected **before** any cleanup, so ``--save-to delete``/``memory`` can
+        drop the whole run directory without losing results. With
+        ``--save-to delete|memory`` the combo's transient artifacts are removed
+        right after its pipeline finishes.
+
+        Args:
+            combo_id: Combo identifier.
+            config: The combo's YAML config dict.
+
+        Returns:
+            ``(produced_results, inference_rows, param_counts)``. Nothing is
+            written to the shared result artifacts here: the caller (main
+            thread) persists them, so parallel workers never race.
+        """
+        produced: List[helpers.RunResult] = []
+        rows: List[dict] = []
+        param_counts: Optional[Dict[str, Any]] = None
+
+        training_result = helpers.run_training(
+            config=config,
+            combo_id=combo_id,
+            batch_size=config["training"].get("batch_size", 1),
+            **train_kwargs,
+        )
+        produced.append(training_result)
+
+        if training_result.status in ("OK", "GRAD_EXPLODED"):
+            # Copy the metrics CSV and count parameters while the run dir exists.
+            metrics_copy = helpers.copy_training_metrics(combo_id)
+            if metrics_copy is not None:
+                training_result.metrics_path = str(metrics_copy)
+            param_counts = _count_param_categories(combo_id)
+
+        if (
+            not args.skip_deploy
+            and training_result.status == "OK"
+            and training_result.checkpoint_path
+            and Path(training_result.checkpoint_path).exists()
+        ):
+            deploy_results, eval_rows = deploy_and_evaluate(training_result)
+            produced.extend(deploy_results)
+            rows.extend(eval_rows)
+
+        if args.save_to in {"delete", "memory"}:
+            helpers.cleanup_combo_artifacts(combo_id)
+
+        return produced, rows, param_counts
+
+    def persist_pipeline(
+        combo_id: str,
+        produced: List[helpers.RunResult],
+        rows: List[dict],
+        param_counts: Optional[Dict[str, Any]],
+    ) -> None:
+        """Persist one finished pipeline and flush the shared artifacts.
+
+        Main thread only: with parallel workers the shared result files are
+        written once per completed combo, in completion order.
+
+        Args:
+            combo_id: Combo identifier.
+            produced: Results emitted by the pipeline (training + deploy/eval/export).
+            rows: Inference-vs-real rows produced by the evaluation steps.
+            param_counts: Per-block parameter counts, or ``None``.
+        """
+        results.extend(produced)
+        if param_counts is not None:
+            param_metrics[combo_id] = param_counts
+            helpers.write_param_metrics(param_metrics)
+        record_inference(rows)
+        helpers.write_results(results)
+
+    def pipeline_worker(
+        combo_id: str, config: dict
+    ) -> Tuple[str, List[helpers.RunResult], List[dict], Optional[Dict[str, Any]]]:
+        """Run one full pipeline in a worker thread; never writes shared files."""
+        try:
+            produced, rows, counts = run_combo_pipeline(combo_id, config)
+        except Exception as exc:  # noqa: BLE001
+            logging.exception("Pipeline worker for %s crashed", combo_id)
+            produced = [
+                helpers.RunResult(
+                    category="training",
+                    combo_id=combo_id,
+                    status="FAILED",
+                    duration_sec=0.0,
+                    stdout="",
+                    stderr=str(exc),
+                    returncode=-2,
+                    notes=f"worker exception: {exc}",
+                )
+            ]
+            rows, counts = [], None
+        return combo_id, produced, rows, counts
+
+    def log_pipeline_result(
+        combo_id: str, produced: List[helpers.RunResult], prefix: str = ""
+    ) -> None:
+        """Log one finished pipeline as a compact train/deploy/eval summary."""
+        summary = ", ".join(f"{result.category}={result.status}" for result in produced)
+        logging.info("%s%s -> %s", prefix, combo_id, summary or "no results")
+        for result in produced:
+            if result.status != "OK":
+                logging.warning(
+                    "  %s %s: %s", result.category, result.status, result.notes
+                )
+
+    if args.workers == 1:
+        for idx, (combo_id, config) in enumerate(combos, start=1):
+            logging.info(
+                "[%d/%d] %s (train -> deploy -> infer -> export)",
+                idx,
+                len(combos),
+                combo_id,
+            )
+            combo_id_out, produced, rows, counts = pipeline_worker(combo_id, config)
+            persist_pipeline(combo_id_out, produced, rows, counts)
+            log_pipeline_result(
+                combo_id_out, produced, prefix=f"[{idx}/{len(combos)}] "
+            )
+    elif combos:
         logging.info(
-            "Deploying %d checkpoints with %d parallel workers",
-            len(deploy_targets),
+            "Running %d combos with %d parallel pipeline workers",
+            len(combos),
             args.workers,
         )
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
             futures = {
-                pool.submit(deploy_one_checkpoint, training_result): training_result
-                for training_result in deploy_targets
+                pool.submit(pipeline_worker, combo_id, config): (idx, combo_id)
+                for idx, (combo_id, config) in enumerate(combos, start=1)
             }
+            completed = 0
             for future in as_completed(futures):
-                training_result = futures[future]
-                try:
-                    produced, rows = future.result()
-                except Exception as exc:  # noqa: BLE001
-                    logging.exception(
-                        "Deploy worker for %s crashed", training_result.combo_id
-                    )
-                    produced = [
-                        helpers.RunResult(
-                            category="deploy",
-                            combo_id=f"{training_result.combo_id}_deploy",
-                            status="FAILED",
-                            duration_sec=0.0,
-                            stdout="",
-                            stderr=str(exc),
-                            returncode=-2,
-                            notes=f"deploy worker exception: {exc}",
-                            checkpoint_path=training_result.checkpoint_path,
-                        )
-                    ]
-                    rows = []
-                results.extend(produced)
-                record_inference(rows)
-                write_results_incremental()
-                logging.info(
-                    "Deployed %s -> %d new results", training_result.combo_id, len(produced)
+                idx, combo_id = futures[future]
+                combo_id_out, produced, rows, counts = future.result()
+                persist_pipeline(combo_id_out, produced, rows, counts)
+                completed += 1
+                log_pipeline_result(
+                    combo_id_out,
+                    produced,
+                    prefix=f"[{completed}/{len(combos)}] (combo {idx}) ",
                 )
 
     # Dedicated BitNet+standard_attn training + bitnet-gguf export, if not already covered.
@@ -2060,16 +2161,20 @@ def main(argv: Optional[List[str]] = None) -> int:
             batch_size=1,
             **train_kwargs,
         )
-        # Copy metrics and record parameter counts for the dedicated run too.
+        produced: List[helpers.RunResult] = [bitnet_result]
+        bitnet_counts: Optional[Dict[str, Any]] = None
         if bitnet_result.status in ("OK", "GRAD_EXPLODED"):
-            record_metrics(bitnet_id, bitnet_result)
-        results.append(bitnet_result)
-        write_results_incremental()
+            # Copy metrics and record parameter counts for the dedicated run too,
+            # before any cleanup removes the run directory.
+            metrics_copy = helpers.copy_training_metrics(bitnet_id)
+            if metrics_copy is not None:
+                bitnet_result.metrics_path = str(metrics_copy)
+            bitnet_counts = _count_param_categories(bitnet_id)
         if bitnet_result.status == "OK" and bitnet_result.checkpoint_path:
             yaml_path = helpers.RUNS_DIR / bitnet_id / "config.yaml"
             gguf_path = helpers.TMP_DIR / "bitnet-gguf" / f"{bitnet_id}.gguf"
             logging.info("Running bitnet-gguf %s -> %s", bitnet_id, gguf_path)
-            results.append(helpers.run_bitnet_gguf(
+            produced.append(helpers.run_bitnet_gguf(
                 Path(bitnet_result.checkpoint_path),
                 yaml_path,
                 gguf_path,
@@ -2078,11 +2183,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 env_extra,
                 timeout=timeout_secs,
             ))
-            write_results_incremental()
-            logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
+        if args.save_to in {"delete", "memory"}:
+            helpers.cleanup_combo_artifacts(bitnet_id)
+        persist_pipeline(bitnet_id, produced, [], bitnet_counts)
+        log_pipeline_result(bitnet_id, produced)
 
-    # Final write (ensures everything is flushed)
+    # Final write (ensures everything is flushed), then drop the scratch tree in
+    # the modes whose contract is "only the results survive".
     helpers.write_results(results)
+    if args.save_to in {"delete", "memory"}:
+        helpers.cleanup_scratch()
     return helpers.print_summary(results)
 
 

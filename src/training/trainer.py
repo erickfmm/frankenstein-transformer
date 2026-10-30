@@ -1701,6 +1701,103 @@ class TitanTrainer:
         loss = self._add_audio_auxiliary_losses(loss)
         return loss, accuracy
 
+    @staticmethod
+    def _batch_size(batch: Dict[str, Any]) -> int:
+        """Return the leading dimension of the task's input tensor."""
+        for key in ("input_ids", "waveform", "pixel_values"):
+            value = batch.get(key)
+            if torch.is_tensor(value):
+                return int(value.shape[0])
+        return 1
+
+    def _compute_task_loss(
+        self, batch: Dict[str, Any]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Dispatch the task-specific ``(loss, accuracy)`` for one batch.
+
+        Shared by :meth:`train_epoch` and :meth:`evaluate` so the end-of-
+        training held-out evaluation uses exactly the training objective.
+
+        Args:
+            batch: A task batch moved to ``self.device``.
+
+        Returns:
+            Tuple ``(loss, accuracy)``.
+        """
+        if self.task == "causal_lm":
+            return self.compute_causal_lm_loss(
+                batch["input_ids"], batch["attention_mask"], batch["labels"]
+            )
+        if self.task == "text_classification":
+            return self.compute_text_classification_loss(batch)
+        if self.task == "patch_prediction":
+            return self.compute_patch_prediction_loss(batch)
+        if self.task == "classification":
+            return self.compute_classification_loss(batch)
+        if self.task == "segmentation":
+            return self.compute_segmentation_loss(batch)
+        if self.task == "asr":
+            return self.compute_asr_loss(
+                batch["waveform"],
+                batch["labels"],
+                batch["input_lengths"],
+                batch["target_lengths"],
+            )
+        if self.task == "audio_classification":
+            return self.compute_audio_classification_loss(
+                batch["waveform"], batch["labels"]
+            )
+        return self.compute_mlm_loss(
+            batch["input_ids"], batch["attention_mask"], batch["labels"]
+        )
+
+    def evaluate(self, dataloader: DataLoader) -> Dict[str, float]:
+        """Evaluate the current weights over ``dataloader`` without gradients.
+
+        Used by ``training.test_percentage`` for the end-of-training held-out
+        measurement. Metrics are sample-weighted; for ``asr`` the ``accuracy``
+        entry is the character error rate (lower is better), matching the
+        trainer's ``(loss, accuracy)`` convention.
+
+        Args:
+            dataloader: Iterable of task batches (typically the held-out split).
+
+        Returns:
+            Dict with ``loss``, ``accuracy``, ``num_batches`` and
+            ``num_samples``.
+        """
+        was_training = self.model.training
+        self.model.eval()
+        total_loss = 0.0
+        total_accuracy = 0.0
+        num_batches = 0
+        num_samples = 0
+        try:
+            with torch.no_grad():
+                for batch in dataloader:
+                    batch = {
+                        key: value.to(self.device, non_blocking=True)
+                        if torch.is_tensor(value)
+                        else value
+                        for key, value in batch.items()
+                    }
+                    loss, accuracy = self._compute_task_loss(batch)
+                    batch_size = self._batch_size(batch)
+                    total_loss += float(loss.item()) * batch_size
+                    total_accuracy += float(accuracy.item()) * batch_size
+                    num_batches += 1
+                    num_samples += batch_size
+        finally:
+            self.model.train(was_training)
+
+        denominator = max(num_samples, 1)
+        return {
+            "loss": total_loss / denominator,
+            "accuracy": total_accuracy / denominator,
+            "num_batches": float(num_batches),
+            "num_samples": float(num_samples),
+        }
+
     def train_epoch(self, dataloader: DataLoader, epoch: int) -> Tuple[float, bool]:
         """
         Train for one epoch with advanced monitoring.
@@ -1747,38 +1844,7 @@ class TitanTrainer:
                 while retry_count <= self.training_config.max_nan_retries and not batch_done:
                     # Forward pass (AMP if enabled)
                     with autocast(self.device, enabled=amp_enabled, dtype=self.amp_dtype):
-                        if self.task == "causal_lm":
-                            loss, accuracy = self.compute_causal_lm_loss(
-                                batch['input_ids'],
-                                batch['attention_mask'],
-                                batch['labels']
-                            )
-                        elif self.task == "text_classification":
-                            loss, accuracy = self.compute_text_classification_loss(batch)
-                        elif self.task == "patch_prediction":
-                            loss, accuracy = self.compute_patch_prediction_loss(batch)
-                        elif self.task == "classification":
-                            loss, accuracy = self.compute_classification_loss(batch)
-                        elif self.task == "segmentation":
-                            loss, accuracy = self.compute_segmentation_loss(batch)
-                        elif self.task == "asr":
-                            loss, accuracy = self.compute_asr_loss(
-                                batch["waveform"],
-                                batch["labels"],
-                                batch["input_lengths"],
-                                batch["target_lengths"],
-                            )
-                        elif self.task == "audio_classification":
-                            loss, accuracy = self.compute_audio_classification_loss(
-                                batch["waveform"],
-                                batch["labels"],
-                            )
-                        else:
-                            loss, accuracy = self.compute_mlm_loss(
-                                batch['input_ids'],
-                                batch['attention_mask'],
-                                batch['labels']
-                            )
+                        loss, accuracy = self._compute_task_loss(batch)
 
                         if self._check_for_nan(loss * self.gradient_accumulation_steps, batch_idx, batch):
                             repair_action = self._append_repair_action(

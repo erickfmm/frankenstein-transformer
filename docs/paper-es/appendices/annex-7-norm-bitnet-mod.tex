@@ -266,6 +266,21 @@ luego los guardas de desbordamiento usan \texttt{inf\_post\_clip\_threshold} y l
 \end{algorithmic}
 \end{algorithm}
 
+\subsection{Partición de Test Reservada y Evaluación al Final del Entrenamiento}
+
+\texttt{training.test\_percentage} reserva una fracción determinista del dataset de la tarea antes del primer paso del optimizador. Con $n$ ejemplos, porcentaje reservado $\rho=\texttt{test\_percentage}/100$ y una permutación $\pi$ sorteada una sola vez con semilla fija, la partición es
+\[
+n_{\text{test}}=\operatorname{clip}\!\left(\operatorname{round}(\rho n),\,1,\,n-1\right),\qquad
+\mathcal{D}_{\text{train}}=\{x_{\pi(i)}\}_{i=n_{\text{test}}+1}^{n},\qquad
+\mathcal{D}_{\text{test}}=\{x_{\pi(i)}\}_{i=1}^{n_{\text{test}}} ,
+\]
+de modo que la misma configuración siempre reserva los mismos ejemplos, sea cual sea el mezclado del DataLoader. Tras la última época se evalúan los pesos finales una vez con el objetivo de la tarea bajo \texttt{no\_grad}, y la pérdida y precisión ponderadas por muestra
+\[
+\hat{L}=\frac{1}{n_{\text{test}}}\sum_{x\in\mathcal{D}_{\text{test}}}\ell(f_\theta;x),\qquad
+\widehat{\text{acc}}=\frac{1}{n_{\text{test}}}\sum_{x\in\mathcal{D}_{\text{test}}}a(f_\theta;x)
+\]
+se escriben en \texttt{test\_metrics.json} junto al log CSV. La partición cubre modelado de lenguaje enmascarado y causal, clasificación de texto, las tres tareas de visión, ASR (donde el campo de precisión lleva la tasa de error de caracteres, etiquetada \texttt{metric: cer}) y clasificación de audio. SBERT conserva su propia partición de validación mediante \texttt{training.sbert.max\_eval\_samples} y no se ve afectado. Fijar el campo en cero desactiva la partición y restaura el comportamiento histórico sobre todos los datos.
+
 \subsection{Enrutador de Modo de Inferencia SBERT}
 
 El despachador de inferencia SBERT selecciona entre puntuación de similitud, búsqueda sobre corpus, agrupamiento y codificación persistente sobre un único codificador compartido \citep{reimers_sentence-bert_2019}. La similitud coseno y la pérdida de regresión son:

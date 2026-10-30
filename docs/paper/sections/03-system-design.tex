@@ -42,7 +42,7 @@ The complete schema---fields, types, ranges, and validation rules---is documente
 
 \subsection{Training Safety and Runtime Semantics}
 
-The training step accumulates gradients over micro-batches, clips the global norm, checks for post-clip overflow, retries a bounded number of times on non-finite values, dispatches the configured scheduler, and rotates rolling and best checkpoints. The full pseudocode is deferred to Appendix~\ref{sec:annex-norm-bitnet-mod}.
+The training step accumulates gradients over micro-batches, clips the global norm, checks for post-clip overflow, retries a bounded number of times on non-finite values, dispatches the configured scheduler, and rotates rolling and best checkpoints. When \texttt{training.test\_percentage} is positive, a deterministic fraction of the dataset is held out before training and the final weights are evaluated on it; the loss and task accuracy (character error rate for ASR) are written to \texttt{test\_metrics.json}. The full pseudocode and the split formulation are deferred to Appendix~\ref{sec:annex-norm-bitnet-mod}.
 
 \subsection{Normalization Variants}
 \label{sec:normalization}

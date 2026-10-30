@@ -25,6 +25,7 @@ from torch.utils.data import DataLoader
 try:
     from .training.streaming_mlm_dataset import StreamingMLMDataset
     from .training.trainer import TitanTrainer, TrainingConfig
+    from .training.test_split import evaluate_and_write, maybe_split_dataloader
     from .training.config_loader import LoadedTrainingConfig, load_training_config
     from .training.text_dataset_builder import build_text_dataloader_from_config
     from .model.config import FrankensteinModelConfig
@@ -37,6 +38,7 @@ try:
 except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
+    from training.test_split import evaluate_and_write, maybe_split_dataloader
     from training.config_loader import LoadedTrainingConfig, load_training_config
     from training.text_dataset_builder import build_text_dataloader_from_config
     from model.config import FrankensteinModelConfig
@@ -634,6 +636,9 @@ def _train_from_config_path(
     logging.info("Step 4: %s training (%s)", task.upper(), model_descriptor)
     logging.info("=" * 60)
 
+    test_split = maybe_split_dataloader(dataloader, training_runtime)
+    dataloader = test_split.train_loader
+
     trainer = TitanTrainer(
         model,
         runtime_config,
@@ -697,6 +702,7 @@ def _train_from_config_path(
                 raise
         else:
             best_loss = trainer.best_loss
+            evaluate_and_write(trainer, test_split, task)
     finally:
         trainer.close()
 
@@ -1001,6 +1007,9 @@ def _train_vision(
     else:
         dataloader = DataLoader(dataset, batch_size=batch_size_eff, shuffle=True)
 
+    test_split = maybe_split_dataloader(dataloader, loaded.training_runtime)
+    dataloader = test_split.train_loader
+
     logging.info("Step 4: %s training", loaded.task.upper())
     trainer = TitanTrainer(
         model,
@@ -1012,11 +1021,15 @@ def _train_vision(
     )
 
     avg_loss = 0.0
+    completed = True
     try:
         for epoch in range(int(num_epochs_eff)):
             avg_loss, should_stop = trainer.train_epoch(dataloader, epoch)
             if should_stop:
+                completed = False
                 break
+        if completed:
+            evaluate_and_write(trainer, test_split, loaded.task)
     finally:
         trainer.close()
 
@@ -1149,6 +1162,9 @@ def _train_audio(
             collate_fn=audio_collate_fn,
         )
 
+    test_split = maybe_split_dataloader(dataloader, loaded.training_runtime)
+    dataloader = test_split.train_loader
+
     logging.info("Step 4: %s training", loaded.task.upper())
     trainer = TitanTrainer(
         model,
@@ -1160,11 +1176,15 @@ def _train_audio(
     )
 
     avg_loss = 0.0
+    completed = True
     try:
         for epoch in range(int(num_epochs_eff)):
             avg_loss, should_stop = trainer.train_epoch(dataloader, epoch)
             if should_stop:
+                completed = False
                 break
+        if completed:
+            evaluate_and_write(trainer, test_split, loaded.task)
     finally:
         trainer.close()
 

@@ -706,6 +706,21 @@ NaN retries, CSV/NVML telemetry, the GPU thermal guard (`gpu_temp_*`), and
 optional GaLore settings. The guard pauses at `gpu_temp_pause_threshold_c`
 (default 90 °C) and resumes at `gpu_temp_resume_threshold_c` (80 °C).
 
+**Held-out test split.** `training.test_percentage` (float, 0–100, default 0)
+reserves a deterministic fraction of the task dataset before training (seeded
+permutation, so the same config always holds out the same examples) and
+evaluates the final weights on it after the last epoch. The trainer's
+`evaluate()` reuses the training objective through `no_grad`, and
+`src/training/test_split.py` writes `test_metrics.json` next to the CSV log
+(`task`, `metric`, `test_percentage`, `num_train_samples`, `num_test_samples`,
+`test_loss`, `test_accuracy`, `num_batches`). It covers MLM, causal LM, text
+classification, the three vision tasks, ASR (the `test_accuracy` slot carries
+the CER and `metric` is `cer`) and audio classification; SBERT keeps its own
+validation split via `training.sbert.max_eval_samples`. Wired in
+`engine.py` (text/vision/audio) and `training/main.py` (CLI audio path);
+`full_tests/run_e2e.py` reports the value in `results.json` and the
+`results.md` `test_acc` column.
+
 **Per-block gradient norms.** With `enable_block_grad_norms: true` (default),
 each logged step records the L2 gradient norm of every canonical parameter
 block — `embeddings`, `pos`, `attention`, `ffn`, `norm`, `head`, `mhc`,
@@ -755,6 +770,7 @@ generation/cache flag defaults to `None` (no override).
 | SBERT datasets | `training.sbert` (`paired_similarity`, `triplets`, `qa`) | `sbert` |
 | Vision dataset | `src/training/vision_dataset.py` | `patch_prediction`, `classification`, `segmentation` |
 | Audio dataset | `src/training/audio_dataset.py` (HF `datasets` decode or `DummyAudioDataset`) | `asr`, `audio_classification` |
+| Held-out test split | `src/training/test_split.py` (`training.test_percentage` → `test_metrics.json`) | all tasks except `sbert` |
 
 ## 10. Deployment and export
 

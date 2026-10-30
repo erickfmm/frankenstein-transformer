@@ -34,11 +34,16 @@ import yaml
 # ---------------------------------------------------------------------------
 FULL_TESTS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = FULL_TESTS_DIR.parent
+#: Scratch root (runs, deploy artifacts, tokenizer, corpora, ...). Rebinding it
+#: with :func:`set_scratch_root` moves every transient artifact — the results
+#: directory always stays on disk so ``--save-to memory`` never writes harness
+#: artifacts to the physical disk.
 TMP_DIR = FULL_TESTS_DIR / "tmp"
 TOKENIZER_DIR = TMP_DIR / "tokenizer"
 DATA_DIR = TMP_DIR / "data"
 RUNS_DIR = TMP_DIR / "runs"
-RESULTS_DIR = TMP_DIR / "results"
+#: Result artifacts are the harness output and always live on disk.
+RESULTS_DIR = FULL_TESTS_DIR / "tmp" / "results"
 #: Ready-to-process per-model training CSVs (``<combo_id>.csv``).
 RESULTS_TRAINING_METRICS_DIR = RESULTS_DIR / "training_metrics"
 #: Per-model parameter counts by block category (``param_metrics.json``).
@@ -47,6 +52,25 @@ RESULTS_PARAM_METRICS_PATH = RESULTS_DIR / "param_metrics.json"
 RESULTS_INFERENCE_CSV_PATH = RESULTS_DIR / "inference.csv"
 #: Downloaded/cached real corpora used by ``--realonall``.
 REAL_DATA_DIR = DATA_DIR / "real"
+
+
+def set_scratch_root(root: Path) -> None:
+    """Rebind every transient path under ``root`` (results stay on disk).
+
+    Module-level path constants are looked up at call time, so reassigning them
+    here redirects all subsequent subprocess runs, copied tokenizers, corpora
+    and deploy/eval/export directories without touching the code paths.
+
+    Args:
+        root: New scratch directory (e.g. a ``/dev/shm`` mount for memory mode).
+    """
+    global TMP_DIR, TOKENIZER_DIR, DATA_DIR, RUNS_DIR, REAL_DATA_DIR
+    TMP_DIR = Path(root)
+    TOKENIZER_DIR = TMP_DIR / "tokenizer"
+    DATA_DIR = TMP_DIR / "data"
+    RUNS_DIR = TMP_DIR / "runs"
+    REAL_DATA_DIR = DATA_DIR / "real"
+
 
 TOY_VOCAB_SIZE = 512
 SEED = 42
@@ -105,6 +129,11 @@ class RunResult:
     checkpoint_path: Optional[str] = None
     deploy_dir: Optional[str] = None
     metrics_path: Optional[str] = None
+    #: Held-out accuracy measured at the end of training (``None`` when the
+    #: split is disabled, unavailable, or the category is not a training run).
+    test_accuracy: Optional[float] = None
+    #: Held-out loss paired with :attr:`test_accuracy`.
+    test_loss: Optional[float] = None
 
     def to_dict(self) -> dict:
         return {k: v for k, v in dataclasses.asdict(self).items()}
@@ -281,8 +310,9 @@ except Exception:
 """
 
 
-def write_sitecustomize(tmp_dir: Path = TMP_DIR) -> Path:
+def write_sitecustomize(tmp_dir: Optional[Path] = None) -> Path:
     """Write a ``sitecustomize.py`` seed hook into tmp_dir and return its path."""
+    tmp_dir = Path(tmp_dir) if tmp_dir is not None else TMP_DIR
     hook_path = tmp_dir / "sitecustomize.py"
     hook_path.parent.mkdir(parents=True, exist_ok=True)
     hook_path.write_text(SITECUSTOMIZE_PY, encoding="utf-8")
@@ -604,6 +634,7 @@ def run_training(
     gpu_temp_critical_threshold_c: Optional[float] = None,
     gpu_temp_poll_interval_seconds: Optional[float] = None,
     gpu_temp_checkpoint_grace_seconds: Optional[float] = None,
+    test_percentage: Optional[float] = None,
 ) -> RunResult:
     """Run one training combo via the CLI as a subprocess."""
     run_dir = RUNS_DIR / combo_id
@@ -619,6 +650,8 @@ def run_training(
     # (the CLI no longer accepts batch-size or thermal-guard overrides).
     training_cfg = config.setdefault("training", {})
     training_cfg["batch_size"] = int(batch_size)
+    if test_percentage is not None:
+        training_cfg["test_percentage"] = float(test_percentage)
     training_cfg["gpu_temp_guard_enabled"] = bool(gpu_temp_guard)
     if gpu_temp_pause_threshold_c is not None:
         training_cfg["gpu_temp_pause_threshold_c"] = float(gpu_temp_pause_threshold_c)
@@ -704,6 +737,7 @@ def run_training(
 
     # Try to locate the final epoch-end checkpoint for downstream deploy smoke tests.
     checkpoint_path = find_latest_checkpoint(run_dir)
+    test_metrics = read_test_metrics(run_dir)
 
     return RunResult(
         category="training",
@@ -715,7 +749,34 @@ def run_training(
         returncode=proc.returncode,
         notes=notes,
         checkpoint_path=str(checkpoint_path) if checkpoint_path else None,
+        test_accuracy=(
+            float(test_metrics["test_accuracy"])
+            if test_metrics and test_metrics.get("test_accuracy") is not None
+            else None
+        ),
+        test_loss=(
+            float(test_metrics["test_loss"])
+            if test_metrics and test_metrics.get("test_loss") is not None
+            else None
+        ),
     )
+
+
+#: Written by the trainer when ``training.test_percentage > 0``.
+TEST_METRICS_FILENAME = "test_metrics.json"
+
+
+def read_test_metrics(run_dir: Path) -> Optional[Dict[str, Any]]:
+    """Read a run's ``test_metrics.json`` (``None`` when the split was off)."""
+    path = run_dir / TEST_METRICS_FILENAME
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Could not read %s: %s", path, exc)
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def find_latest_checkpoint(run_dir: Path) -> Optional[Path]:
@@ -1221,13 +1282,17 @@ def write_results(results: List[RunResult]) -> Tuple[Path, Path]:
     lines = [
         "# Frankenstein full_tests results",
         "",
-        "| category | combo | status | dur(s) | notes |",
-        "|----------|-------|--------|--------|-------|",
+        "| category | combo | status | dur(s) | test_acc | notes |",
+        "|----------|-------|--------|--------|----------|-------|",
     ]
     for r in results:
         notes = (r.notes or "").replace("|", "\\|")
+        test_accuracy = (
+            "n/a" if r.test_accuracy is None else f"{r.test_accuracy:.4f}"
+        )
         lines.append(
-            f"| {r.category} | {r.combo_id} | {r.status} | {r.duration_sec:.1f} | {notes} |"
+            f"| {r.category} | {r.combo_id} | {r.status} | {r.duration_sec:.1f} "
+            f"| {test_accuracy} | {notes} |"
         )
 
     counts: Dict[str, int] = {}
@@ -1296,6 +1361,71 @@ def write_param_metrics(metrics: Dict[str, Dict[str, Any]]) -> Path:
     )
     logging.info("Parameter metrics written to %s", RESULTS_PARAM_METRICS_PATH)
     return RESULTS_PARAM_METRICS_PATH
+
+
+def _remove_path(path: Path) -> None:
+    """Delete a file or directory tree, ignoring missing paths."""
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+    elif path.exists():
+        try:
+            path.unlink()
+        except OSError as exc:  # noqa: BLE001
+            logging.warning("Could not remove %s: %s", path, exc)
+
+
+def cleanup_combo_artifacts(combo_id: str) -> None:
+    """Delete one combo's transient artifacts after its pipeline finishes.
+
+    Removes the run directory (checkpoints, metrics cache, per-run data) plus
+    its deploy, inference-eval, transformers-export and BitNet-GGUF artifacts.
+    The result artifacts (``tmp/results/**``: metrics CSVs, ``inference.csv``,
+    ``param_metrics.json``, ``results.json|md``) are kept.
+
+    Args:
+        combo_id: Combo identifier whose artifacts are removed.
+    """
+    targets = [
+        RUNS_DIR / combo_id,
+        *(TMP_DIR / "deploy").glob(f"{combo_id}_*"),
+        *(TMP_DIR / "inference_eval").glob(f"{combo_id}_*.json"),
+        TMP_DIR / "transformers-export" / combo_id,
+        TMP_DIR / "bitnet-gguf" / f"{combo_id}.gguf",
+    ]
+    for target in targets:
+        _remove_path(Path(target))
+    logging.debug("Removed transient artifacts for %s", combo_id)
+
+
+def cleanup_scratch() -> None:
+    """Delete the whole scratch tree while preserving ``tmp/results``.
+
+    Used by ``--save-to delete`` after the pipeline ends and by
+    ``--save-to memory`` to free the RAM-backed scratch tree. Shared harness
+    inputs (toy tokenizer, corpora, ``sitecustomize.py``) live in the scratch
+    tree and are removed too; they are regenerated on the next run.
+    """
+    if not TMP_DIR.exists():
+        return
+    default_scratch = FULL_TESTS_DIR / "tmp"
+    try:
+        is_default_scratch = TMP_DIR.resolve() == default_scratch.resolve()
+    except OSError:
+        is_default_scratch = False
+    results = RESULTS_DIR.resolve()
+    for entry in TMP_DIR.iterdir():
+        try:
+            if entry.resolve() == results:
+                continue
+        except OSError:
+            pass
+        _remove_path(entry)
+    if is_default_scratch:
+        logging.info("Cleaned scratch directory %s (results preserved)", TMP_DIR)
+    else:
+        # Memory mode: drop the whole per-process tmpfs mount point too.
+        shutil.rmtree(TMP_DIR, ignore_errors=True)
+        logging.info("Cleaned RAM scratch directory %s", TMP_DIR)
 
 
 def print_summary(results: List[RunResult]) -> int:

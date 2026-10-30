@@ -266,6 +266,21 @@ then overflow guards use \texttt{inf\_post\_clip\_threshold} and retry logic bou
 \end{algorithmic}
 \end{algorithm}
 
+\subsection{Held-Out Test Split and End-of-Training Evaluation}
+
+\texttt{training.test\_percentage} reserves a deterministic fraction of the task dataset before the first optimizer step. With $n$ dataset examples, held-out percentage $\rho=\texttt{test\_percentage}/100$, and a permutation $\pi$ drawn once from a fixed seed, the partition is
+\[
+n_{\text{test}}=\operatorname{clip}\!\left(\operatorname{round}(\rho n),\,1,\,n-1\right),\qquad
+\mathcal{D}_{\text{train}}=\{x_{\pi(i)}\}_{i=n_{\text{test}}+1}^{n},\qquad
+\mathcal{D}_{\text{test}}=\{x_{\pi(i)}\}_{i=1}^{n_{\text{test}}} ,
+\]
+so the same configuration always reserves the same examples regardless of DataLoader shuffling. After the last epoch the final weights are evaluated once with the task objective under \texttt{no\_grad}, and the sample-weighted loss and accuracy
+\[
+\hat{L}=\frac{1}{n_{\text{test}}}\sum_{x\in\mathcal{D}_{\text{test}}}\ell(f_\theta;x),\qquad
+\widehat{\text{acc}}=\frac{1}{n_{\text{test}}}\sum_{x\in\mathcal{D}_{\text{test}}}a(f_\theta;x)
+\]
+are written to \texttt{test\_metrics.json} next to the CSV log. The split covers masked and causal language modeling, text classification, the three vision tasks, ASR (where the accuracy slot carries the character error rate, labelled \texttt{metric: cer}), and audio classification. SBERT keeps its own validation partition through \texttt{training.sbert.max\_eval\_samples} and is unaffected. Setting the field to zero disables the split and restores the historical all-data behavior.
+
 \subsection{SBERT Inference Mode Router}
 
 The SBERT inference dispatcher selects among similarity scoring, corpus search, clustering, and persistent encoding modes over a single shared encoder \citep{reimers_sentence-bert_2019}. The cosine similarity and regression loss are:

@@ -257,6 +257,59 @@ properties:
       '
     examples:
     - 20000000
+  test_percentage:
+    type: number
+    default: 0
+    minimum: 0
+    maximum: 100
+    title: Held-Out Test Percentage
+    title_es: Porcentaje de Test Reservado
+    description: 'Percentage of the task dataset held out from training and used
+      for the end-of-training evaluation (``0`` disables the split).
+
+      The partition is deterministic (fixed seed): the same configuration always
+      reserves the same examples, whatever the DataLoader shuffle order. Training
+      sees only the complementary part; after the last epoch the final weights
+      are evaluated on the held-out part with the task objective and the result
+      is written to ``test_metrics.json`` next to the CSV log (fields: ``task``,
+      ``metric``, ``test_percentage``, ``num_train_samples``, ``num_test_samples``,
+      ``test_loss``, ``test_accuracy``, ``num_batches``).
+
+      Applies to ``mlm``, ``causal_lm``, ``text_classification``, the three vision
+      tasks, ``asr`` and ``audio_classification``. For ``asr`` the reported value
+      is the character error rate (lower is better), labelled ``metric: cer``.
+      SBERT manages its own validation split (``training.sbert.max_eval_samples``)
+      and is not affected.
+
+      Typical: 10–20. **Impact:** a held-out split costs training examples but
+      gives an unbiased accuracy estimate without a separate evaluation run.
+
+      '
+    description_es: 'Porcentaje del dataset de la tarea reservado fuera del
+      entrenamiento y usado para la evaluación al finalizar (``0`` desactiva
+      la partición).
+
+      La partición es determinista (semilla fija): la misma configuración siempre
+      reserva los mismos ejemplos, sea cual sea el orden de mezcla del DataLoader.
+      El entrenamiento ve solo la parte complementaria; tras la última época se
+      evalúan los pesos finales sobre la parte reservada con el objetivo de la
+      tarea y el resultado se escribe en ``test_metrics.json`` junto al log CSV
+      (campos: ``task``, ``metric``, ``test_percentage``, ``num_train_samples``,
+      ``num_test_samples``, ``test_loss``, ``test_accuracy``, ``num_batches``).
+
+      Aplica a ``mlm``, ``causal_lm``, ``text_classification``, las tres tareas
+      de visión, ``asr`` y ``audio_classification``. Para ``asr`` el valor
+      reportado es la tasa de error de caracteres (menor es mejor), etiquetada
+      ``metric: cer``. SBERT gestiona su propia partición de validación
+      (``training.sbert.max_eval_samples``) y no se ve afectado.
+
+      Típico: 10–20. **Impacto:** reservar un conjunto de test cuesta ejemplos de
+      entrenamiento pero ofrece una estimación de precisión insesgada sin una
+      ejecución de evaluación separada.
+
+      '
+    examples:
+    - 20
   dataset_batch_size:
     type: integer
     default: 25000
