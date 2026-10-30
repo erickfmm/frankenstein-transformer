@@ -1,9 +1,11 @@
 """Helpers for the exhaustive end-to-end Frankenstein test harness.
 
 This module is intentionally self-contained: it builds the tiny on-the-fly
-SentencePiece tokenizer, writes a toy parquet corpus, constructs training
-YAMLs, runs the ``frankenstein-transformer`` CLI as a subprocess, and
-collects results.
+SentencePiece tokenizer, writes a toy parquet corpus, materializes the real
+HuggingFace corpora used by ``--realonall``, constructs training YAMLs, runs
+the ``frankenstein-transformer`` CLI as a subprocess, collects results, and
+writes the derived artifacts (``inference.csv``, ``param_metrics.json`` and
+``training_metrics/<model>.csv``).
 
 Run with the project uv env (``uv run --extra cu118 --extra train``), or any
 environment that has ``sentencepiece``, ``pandas``, ``pyarrow`` and the project
@@ -11,6 +13,7 @@ installed).
 """
 from __future__ import annotations
 
+import csv
 import dataclasses
 import json
 import logging
@@ -36,6 +39,14 @@ TOKENIZER_DIR = TMP_DIR / "tokenizer"
 DATA_DIR = TMP_DIR / "data"
 RUNS_DIR = TMP_DIR / "runs"
 RESULTS_DIR = TMP_DIR / "results"
+#: Ready-to-process per-model training CSVs (``<combo_id>.csv``).
+RESULTS_TRAINING_METRICS_DIR = RESULTS_DIR / "training_metrics"
+#: Per-model parameter counts by block category (``param_metrics.json``).
+RESULTS_PARAM_METRICS_PATH = RESULTS_DIR / "param_metrics.json"
+#: Inference-vs-real comparison rows (``inference.csv``).
+RESULTS_INFERENCE_CSV_PATH = RESULTS_DIR / "inference.csv"
+#: Downloaded/cached real corpora used by ``--realonall``.
+REAL_DATA_DIR = DATA_DIR / "real"
 
 TOY_VOCAB_SIZE = 512
 SEED = 42
@@ -163,6 +174,28 @@ def resolve_runner() -> Tuple[List[str], dict]:
     # 4) current interpreter
     logging.warning("Falling back to current interpreter; ensure the project is installed.")
     return [sys.executable, "-m", "src.cli"], env_extra
+
+
+def resolve_python_runner() -> List[str]:
+    """Return the command prefix that runs a plain Python script in the project env.
+
+    Mirrors :func:`resolve_runner` but targets ``python`` instead of the
+    ``frankenstein-transformer`` entrypoint, so the harness can launch its own
+    helper scripts (``_infer_eval.py``) inside the same uv environment that
+    trains the models.
+    """
+    uv_prefix = ["uv", "run", "--extra", "cu118", "--extra", "train"]
+    rc, _, _ = _run_silent([*uv_prefix, "python", "-c", "import sys"], cwd=PROJECT_ROOT)
+    if rc == 0:
+        return [*uv_prefix, "python"]
+
+    venv_python = PROJECT_ROOT / ".venv" / "bin" / "python"
+    if sys.platform == "win32":
+        venv_python = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    if venv_python.exists():
+        return [str(venv_python)]
+
+    return [sys.executable]
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +333,54 @@ def ensure_toy_parquet() -> Path:
     df.to_parquet(parquet_path, index=False)
     logging.info("Wrote toy parquet: %s (%d rows)", parquet_path, len(df))
     return parquet_path
+
+
+def ensure_real_text_parquet(
+    dataset_name: str = "adleme94/borges",
+    split: str = "train",
+    text_column: str = "poem",
+    max_samples: int = 400,
+) -> Path:
+    """Materialize a real HuggingFace text corpus as a local parquet directory.
+
+    ``--realonall`` needs a real corpus for the paths that read a local
+    ``data_dir`` (the ``train_from_dataset`` tokenizer cases). The dataset is
+    downloaded once from the Hub and normalized to a single ``text`` column so
+    the engine's parquet loader can consume it like the toy corpus.
+
+    Args:
+        dataset_name: HuggingFace dataset id.
+        split: Dataset split to materialize.
+        text_column: Column holding the raw text.
+        max_samples: Maximum number of rows to keep (0 keeps everything).
+
+    Returns:
+        The directory containing ``train.parquet``.
+    """
+    target_dir = REAL_DATA_DIR / "text_corpus"
+    parquet_path = target_dir / "train.parquet"
+    if parquet_path.exists():
+        return target_dir
+
+    try:
+        from datasets import load_dataset  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            "The 'datasets' package is required by --realonall; "
+            "install the train extras (uv sync --extra cu118 --extra train)."
+        ) from exc
+    if not HAVE_PANDAS:
+        raise RuntimeError("pandas is required to write the real-text parquet corpus")
+
+    logging.info("Downloading real text corpus %s (%s) ...", dataset_name, split)
+    ds = load_dataset(dataset_name, split=split)
+    if max_samples:
+        ds = ds.select(range(min(int(max_samples), len(ds))))
+    frame = pd.DataFrame({"text": [str(value) for value in ds[text_column]]})
+    target_dir.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(parquet_path, index=False)
+    logging.info("Wrote real-text parquet: %s (%d rows)", parquet_path, len(frame))
+    return target_dir
 
 
 # ---------------------------------------------------------------------------
@@ -966,6 +1047,164 @@ def run_bitnet_gguf(
 
 
 # ---------------------------------------------------------------------------
+# Inference-vs-real evaluation
+# ---------------------------------------------------------------------------
+INFERENCE_CSV_COLUMNS = [
+    "timestamp",
+    "combo_id",
+    "model_class",
+    "task",
+    "deploy_format",
+    "sample_id",
+    "input_excerpt",
+    "predicted",
+    "real",
+    "metric_name",
+    "metric_value",
+    "status",
+    "notes",
+]
+
+
+def run_inference_eval(
+    deploy_dir: Path,
+    run_config: Path,
+    combo_id: str,
+    python_runner: Sequence[str],
+    env_extra: dict,
+    *,
+    model_class: str,
+    task: str,
+    deploy_format: str,
+    samples: int = 4,
+    timeout: int = 300,
+    device: str = "cpu",
+) -> Tuple["RunResult", List[dict]]:
+    """Compare a deployed artifact's predictions against real sample targets.
+
+    Launches ``full_tests/_infer_eval.py`` in the project environment, which
+    builds the real evaluation batches from the run's YAML (``text_dataset``,
+    ``vision_dataset`` or ``audio_dataset``), loads the deployed artifact and
+    writes one JSON row per compared sample.
+
+    Args:
+        deploy_dir: Deployment directory produced by ``deploy``.
+        run_config: The training YAML saved in ``tmp/runs/<combo_id>/config.yaml``.
+        combo_id: Unique combo id (``<model>`` name in the result artifacts).
+        python_runner: Prefix that runs a Python script in the project env.
+        env_extra: Extra environment variables for subprocesses.
+        model_class: ``frankenstein_text_encoder`` / ``..._decoder`` /
+            ``frankenstein_vit`` / ``frankenstein_audio``.
+        task: Training task name.
+        deploy_format: ``standard`` or ``quantized``.
+        samples: Number of real samples to compare per artifact.
+        timeout: Subprocess timeout in seconds.
+        device: Torch device (``cpu``/``cuda``/``mps``/``auto``).
+
+    Returns:
+        ``(RunResult, rows)``; ``rows`` may be empty when the eval produced no
+        comparable samples.
+    """
+    out_dir = TMP_DIR / "inference_eval"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{combo_id}_{deploy_format}.json"
+
+    env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
+    env["PYTHONPATH"] = str(TMP_DIR) + os.pathsep + str(PROJECT_ROOT)
+    if os.environ.get("PYTHONPATH"):
+        env["PYTHONPATH"] += os.pathsep + os.environ["PYTHONPATH"]
+
+    cmd = [
+        *python_runner,
+        str(FULL_TESTS_DIR / "_infer_eval.py"),
+        "--deploy-dir", str(deploy_dir),
+        "--run-config", str(run_config),
+        "--combo-id", combo_id,
+        "--model-class", model_class,
+        "--task", task,
+        "--deploy-format", deploy_format,
+        "--samples", str(samples),
+        "--device", device,
+        "--out", str(out_path),
+    ]
+    start = time.time()
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(PROJECT_ROOT),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+        )
+        output = proc.stdout or ""
+        duration = time.time() - start
+    except subprocess.TimeoutExpired as exc:
+        return (
+            RunResult(
+                category="inference-eval",
+                combo_id=f"{combo_id}_eval_{deploy_format}",
+                status="TIMEOUT",
+                duration_sec=time.time() - start,
+                stdout=exc.stdout or "",
+                stderr="",
+                returncode=-1,
+                notes=f"inference eval timeout ({deploy_format})",
+                deploy_dir=str(deploy_dir),
+            ),
+            [],
+        )
+    except Exception as exc:  # noqa: BLE001
+        return (
+            RunResult(
+                category="inference-eval",
+                combo_id=f"{combo_id}_eval_{deploy_format}",
+                status="FAILED",
+                duration_sec=time.time() - start,
+                stdout="",
+                stderr=str(exc),
+                returncode=-2,
+                notes=f"inference eval exception: {exc}",
+                deploy_dir=str(deploy_dir),
+            ),
+            [],
+        )
+
+    rows: List[dict] = []
+    if out_path.exists():
+        try:
+            payload = json.loads(out_path.read_text(encoding="utf-8"))
+            if isinstance(payload, list):
+                rows = [row for row in payload if isinstance(row, dict)]
+        except Exception:  # noqa: BLE001
+            rows = []
+
+    status = "OK" if proc.returncode == 0 else "FAILED"
+    if status == "OK" and not rows:
+        status = "FAILED"
+    notes = f"inference eval {deploy_format}: {len(rows)} rows"
+    if status != "OK":
+        tail = (output.strip().splitlines() or [""])[-1][:240]
+        notes = f"{notes}; rc={proc.returncode}; {tail}"
+
+    return (
+        RunResult(
+            category="inference-eval",
+            combo_id=f"{combo_id}_eval_{deploy_format}",
+            status=status,
+            duration_sec=duration,
+            stdout=output,
+            stderr="",
+            returncode=proc.returncode,
+            notes=notes,
+            deploy_dir=str(deploy_dir),
+        ),
+        rows,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Result persistence
 # ---------------------------------------------------------------------------
 def write_results(results: List[RunResult]) -> Tuple[Path, Path]:
@@ -997,6 +1236,62 @@ def write_results(results: List[RunResult]) -> Tuple[Path, Path]:
     md_path.write_text("\n".join(lines), encoding="utf-8")
     logging.info("Results written to %s and %s", json_path, md_path)
     return json_path, md_path
+
+
+def copy_training_metrics(
+    combo_id: str,
+    run_dir: Optional[Path] = None,
+) -> Optional[Path]:
+    """Copy one run's metrics CSV into ``results/training_metrics/<combo_id>.csv``.
+
+    Args:
+        combo_id: Run/model identifier (used as the destination file stem).
+        run_dir: Run directory; defaults to ``tmp/runs/<combo_id>``.
+
+    Returns:
+        The copied path, or ``None`` when the run produced no non-empty CSV.
+    """
+    run_dir = run_dir or (RUNS_DIR / combo_id)
+    candidates = [run_dir / "training_metrics.csv"]
+    if not candidates[0].exists():
+        # SBERT (and some legacy paths) name the CSV from ``csv_log_path``.
+        candidates = sorted(run_dir.glob("*.csv"))
+    source = next(
+        (path for path in candidates if path.is_file() and path.stat().st_size > 0),
+        None,
+    )
+    if source is None:
+        return None
+    RESULTS_TRAINING_METRICS_DIR.mkdir(parents=True, exist_ok=True)
+    destination = RESULTS_TRAINING_METRICS_DIR / f"{combo_id}.csv"
+    shutil.copy(str(source), str(destination))
+    logging.info("Training metrics copied to %s", destination)
+    return destination
+
+
+def write_inference_csv(rows: List[dict]) -> Path:
+    """Rewrite ``results/inference.csv`` with the inference-vs-real rows."""
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    with RESULTS_INFERENCE_CSV_PATH.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=INFERENCE_CSV_COLUMNS, extrasaction="ignore"
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in INFERENCE_CSV_COLUMNS})
+    logging.info("Inference comparison rows written to %s", RESULTS_INFERENCE_CSV_PATH)
+    return RESULTS_INFERENCE_CSV_PATH
+
+
+def write_param_metrics(metrics: Dict[str, Dict[str, Any]]) -> Path:
+    """Rewrite ``results/param_metrics.json`` with the per-model block counts."""
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    RESULTS_PARAM_METRICS_PATH.write_text(
+        json.dumps(metrics, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    logging.info("Parameter metrics written to %s", RESULTS_PARAM_METRICS_PATH)
+    return RESULTS_PARAM_METRICS_PATH
 
 
 def print_summary(results: List[RunResult]) -> int:

@@ -1,6 +1,6 @@
 # `full_tests` — Tests end-to-end exhaustivos
 
-Esta carpeta contiene un harness independiente que entrena modelos **reales pero diminutos** usando el CLI `frankenstein-transformer` como subproceso, con datos sintéticos y un tokenizador entrenado **al vuelo** una sola vez y persistido en `tmp/`.
+Esta carpeta contiene un harness independiente que entrena modelos **reales pero diminutos** usando el CLI `frankenstein-transformer` como subproceso. Por defecto (`--realonall`) **todas** las categorías entrenan contra datasets reales de HuggingFace Hub; con `--no-realonall` se usa el corpus sintético y el tokenizador entrenado al vuelo que se persiste en `tmp/`.
 
 **No forma parte de la suite CI/CD** (vive fuera de `tests/`) y está pensado para dejarse corriendo varias horas en una máquina de desarrollo.
 
@@ -14,8 +14,8 @@ Esta carpeta contiene un harness independiente que entrena modelos **reales pero
 - **Todas las `pos_embedding_type` del ViT** (`learned_1d`, `none`, `learned_absolute`, `sinusoidal_absolute`, `sinusoidal_rotary`, `pape`, `pape_efficient`, `pape_ri`, `rope`, `hope`, `nope`, `alibi`, `bam`) a través de las 3 tareas de visión (classification, patch_prediction, segmentation) — 39 configs, sin cross product con mixers.
 - **Transversales**: BitNet (incluido routers/conv), embeddings factorizados/conv, MoE, MoD, mHC, residuos/AttnRes (`standard`/`none`/`full_attn`/`block_attn`), RoPE vs HoPE, SSMax (`use_ssmax`), SSOG campo fijo (`lookat: false`) y SSOG+BitNet, loops duplicados, activaciones de FFN, etc.
 - **Tareas**: `mlm`/encoder y `causal_lm`/decoder; visión (`classification`, `patch_prediction`, `segmentation`) — cada tarea de visión tiene además una variante `ssog_attn` (`cls_token: false` + `pooling_mode: gap`; la rejilla 2×2 se deriva de la imagen). El mezclador `conformer_attn` (Conformer, arXiv:2005.08100) se barre en el encoder (pares, singles) y en el decoder (`causal_lm`, padding causal de la convolución) y dentro del ViT (`configs/examples/vit_conformer.yaml`).
-- **Audio**: `frankenstein_audio` con `conformer_attn` en `audio_asr_ctc`, `audio_asr_transducer` (RNN-T), `audio_classification` y `audio_eeg_classification` (`feature: raw`, 8 canales). Los presets ASR apuntan al dataset de HuggingFace `astroza/chilean-jokes-festival-de-vina`; el harness limpia `audio_dataset.dataset_name`/`dataset_dir` en el YAML temporal de cada run para forzar `DummyAudioDataset` (sin red) y deja 1 paso de optimización.
-- **Deploy / infer / export a HuggingFace Transformers / export GGUF BitNet** (smoke tests sobre el primer entrenamiento exitoso, vía `deploy --format transformers|gguf`). Los checkpoints de audio se prueban aparte: `deploy --format standard|quantized` deben cargar y validar; `transformers` debe fallar con el mensaje documentado (`frankenstein_audio` no exportable). No hay GGUF para audio.
+- **Audio**: `frankenstein_audio` con `conformer_attn` en `audio_asr_ctc`, `audio_asr_transducer` (RNN-T), `audio_classification` y `audio_eeg_classification` (`feature: raw`, 8 canales). Con `--no-realonall` el harness limpia `audio_dataset.dataset_name`/`dataset_dir` en el YAML temporal de cada run para forzar `DummyAudioDataset` (sin red). Con `--realonall` (por defecto) los casos ASR usan `astroza/chilean-jokes-festival-de-vina` y la clasificación usa `danielquillanroxas/EMOTION_VOICES` (7 clases); el caso EEG `raw` sigue siendo sintético. La decodificación de audio real con la versión actual de `datasets` requiere `torchcodec` instalado en el entorno.
+- **Deploy / inferencia / export / GGUF**: **cada** entrenamiento exitoso se despliega en `standard` y `quantized`, se exporta a HuggingFace Transformers (`deploy --format transformers`) y se evalúa contra muestras reales (`inference.csv`). Los checkpoints de audio deben cargar y validar en ambos formatos; su export a Transformers debe fallar con el mensaje documentado (`frankenstein_audio` no exportable) y se puntúa como `OK` cuando lo hace. El export GGUF BitNet se ejecuta en el combo dedicado (`bitnet_std_attn_for_gguf`).
 
 ## Cómo ejecutar
 
@@ -62,6 +62,32 @@ smoke de deploy:
 uv run --extra cu118 --extra train python full_tests/run_e2e.py --category audio
 ```
 
+### Datos reales por defecto (`--realonall`)
+
+`--realonall` está **activo por defecto**: cada categoría (pares de atenciones, singles, optimizadores, normas, codificaciones posicionales, transversales, tareas, batch size, tokenizer, visión, audio y realdata) se reescribe para entrenar con datos reales del Hub, reutilizando los mismos datasets de `--category realdata`:
+
+| Modalidad | Dataset / tokenizer |
+|---|---|
+| Texto | `adleme94/borges` (columna `poem`) + tokenizer `dccuchile/bert-base-spanish-wwm-cased` |
+| Visión — classification / patch_prediction | `as-cle-bert/breastcanc-ultrasound-class` (2 clases, 64×64) |
+| Visión — segmentation | `SerdarHelli/SegmentationOfTeethPanoramicXRayImages` (máscara en `label`, 2 clases, 64×64) |
+| Audio — ASR | `astroza/chilean-jokes-festival-de-vina` |
+| Audio — classification | `danielquillanroxas/EMOTION_VOICES` (7 clases) |
+| Audio — EEG `raw` | `DummyAudioDataset` (sigue sintético; no hay corpus EEG real) |
+| Tokenizer | `train_from_dataset` entrena sobre un parquet real materializado desde `adleme94/borges` |
+
+Los datasets se descargan la primera vez (caché de `datasets`), así que conviene un `--timeout` generoso (p. ej. `--timeout 1800`). Para volver al camino totalmente offline:
+
+```bash
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --no-realonall
+```
+
+Número de muestras reales comparadas por artefacto desplegado:
+
+```bash
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --infer-samples 8
+```
+
 ### Selección de dispositivo
 
 Por defecto todo corre en `cpu`. Para ejecutar los tests en otro dispositivo (entrenamiento, deploy e inferencia):
@@ -100,21 +126,37 @@ uv run --extra cu118 --extra train python full_tests/run_e2e.py --device cuda \
 Cada umbral del harness es opcional; si se omite, no se escribe la clave y rige el
 default del schema. Solo tienen efecto cuando `--gpu-temp-guard` está activo.
 
+## Artefactos de resultados
+
+Todo se escribe bajo `full_tests/tmp/results/` (git-ignorado):
+
+- **`results.json` / `results.md`** — tabla de estados por run (entrenamiento, deploy, eval, export).
+- **`inference.csv`** — una fila por comparación inferencia-vs-real de cada artefacto desplegado (formato `standard` y `quantized`). Columnas: `timestamp, combo_id, model_class, task, deploy_format, sample_id, input_excerpt, predicted, real, metric_name, metric_value, status, notes`. Métricas por tarea:
+  - `mlm` → `mlm_top1` (acierto top-1; `notes` incluye `top5_hit`), enmascarando un token real del corpus.
+  - `causal_lm` → `causal_next_token` (acierto del siguiente token; `notes` incluye la accuracy por token).
+  - `text_classification` / ViT `classification` / `audio_classification` → accuracy etiqueta predicha vs real.
+  - `segmentation`, `patch_prediction`, `asr` → fila `SKIPPED_NO_INFER` (no hay métrica de etiqueta equivalente).
+  - `SKIPPED_NO_DATASET` cuando no hay dataset/tokenizer HF (p. ej. con `--no-realonall`).
+- **`param_metrics.json`** — `{modelo: {bloque: nparams, ..., "total": n}}` con las 10 categorías canónicas de `src/utils/param_categories.py` (`embeddings, pos, attention, ffn, norm, head, mhc, router, residual, other`). Se calcula con `build_model` sobre `torch.device("meta")` desde el `config.yaml` de cada run.
+- **`training_metrics/<modelo>.csv`** — copia lista para procesar del `training_metrics.csv` de cada run, renombrada con el id del modelo.
+
 ## Filosofía de los resultados
 
 - `OK`: el entrenamiento terminó sin error.
 - `GRAD_EXPLODED`: el proceso falló con una señal numérica inequívoca (NaN/Inf, pérdida no finita o gradientes explotados). **Esto es tolerado y esperado** para algunas combinaciones; se registra pero no detiene la ejecución. La detección es por palabra completa y solo sobre líneas no indentadas, así que un `RuntimeError` cualquiera (p. ej. un desajuste de formas) o los banners `INFO` / `Gradient Accumulation` ya **no** se confunden con una explosión de gradiente.
 - `FAILED` / `TIMEOUT`: fallo inesperado. El script termina con exit code != 0 si hay alguno.
 
-## Arhivos
+## Archivos
 
-- `_helpers.py` — entrenamiento del tokenizador SPM, generación del parquet, runner de subprocesos, helpers de deploy/infer/export/gguf, persistencia de resultados.
-- `run_e2e.py` — bucles for que generan todas las combinaciones y lanzan el CLI.
+- `_helpers.py` — entrenamiento del tokenizador SPM, generación del parquet sintético y del corpus real, runner de subprocesos, helpers de deploy/infer/export/gguf, persistencia de resultados y artefactos (`inference.csv`, `param_metrics.json`, `training_metrics/`).
+- `_infer_eval.py` — subproceso de evaluación inferencia-vs-real (texto, ViT y audio).
+- `run_e2e.py` — bucles for que generan todas las combinaciones, aplican `--realonall` y lanzan el CLI y el battery de deploy/eval/export.
 - `tmp/` — tokenizador, datos, checkpoints por run, resultados, deploys. **Git-ignorado.**
 
 ## Notas importantes
 
-- `max_samples` y `dataset_batch_size` son pequeños para que el corpus de 7 frases produzca unos pocos batches.
+- `max_samples` y `dataset_batch_size` son pequeños para que el corpus produzca unos pocos batches.
 - Cada run tiene su propio `cwd` (`full_tests/tmp/runs/<id>/`) para aislar los checkpoints.
-- El tokenizador se entrena una sola vez y se copia al CWD de cada run (`es_redpajama_<vocab_size>.model`) para evitar que el loader legacy intente bajar 100 GB de datos.
+- Con `--no-realonall` el tokenizador se entrena una sola vez y se copia al CWD de cada run (`es_redpajama_<vocab_size>.model`) para evitar que el loader legacy intente bajar 100 GB de datos.
+- La decodificación de audio real requiere `torchcodec` en el entorno con la versión actual de `datasets`; si falta, los combos de audio real fallan con `ImportError` y el harness continúa.
 - Se fija semilla vía un `sitecustomize.py` generado en `tmp/` y añadido a `PYTHONPATH`, sembrando `torch`, `numpy` y `random` en cada subproceso sin modificar el proyecto.

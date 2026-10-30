@@ -1,7 +1,6 @@
 """Exhaustive end-to-end smoke tests for frankenstein-transformer.
 
-This script drives the real CLI with tiny synthetic data and a tiny on-the-fly
-SentencePiece tokenizer, exercising:
+This script drives the real CLI with tiny models, exercising:
 
 * every trainable attention mixer in unordered pairs,
 * every optimizer,
@@ -14,18 +13,36 @@ SentencePiece tokenizer, exercising:
 * encoder/MLM and decoder/causal-LM tasks,
 * vision tasks (frankenstein_vit: patch_prediction, classification, segmentation),
 * audio tasks (frankenstein_audio: asr with CTC and RNN-Transducer,
-  audio_classification, and `feature: raw` EEG-style signals) using
-  `DummyAudioDataset` only (no network access),
+  audio_classification, and `feature: raw` EEG-style signals),
 * real-data combos (`--category realdata`): every task family trained against
   small HuggingFace Hub datasets — MLM/causal-LM on Spanish poetry, text
   classification, SBERT triplets, ViT segmentation/classification/patch
-  prediction, and audio ASR/classification. These combos download from the
-  Hub (models + corpora), so run them with a larger per-combo timeout
-  (e.g. `--timeout 1800`) because first-time downloads can exceed the
-  default,
-* deploy, inference, transformers and BitNet-GGUF export smoke tests (audio
-  checkpoints support `standard`/`quantized` deploy; Transformers export must
-  be rejected with the documented message).
+  prediction, and audio ASR/classification.
+
+By default (`--realonall`, enabled) **every** category trains against real
+HuggingFace Hub data instead of the offline toy corpus:
+
+* text sweeps use ``adleme94/borges`` + the BETO tokenizer,
+* vision sweeps use breast-ultrasound (classification/patch prediction) and
+  teeth panoramic X-rays (segmentation),
+* audio sweeps use the Chilean-jokes ASR corpus and EMOTION_VOICES (the raw
+  EEG case keeps the synthetic ``DummyAudioDataset``).
+
+Pass ``--no-realonall`` for the older fully-offline synthetic behaviour. These
+combos download models/corpora on first use, so allow a generous per-combo
+timeout (e.g. ``--timeout 1800``).
+
+Every successful training is then deployed (``standard`` and ``quantized``),
+exported to Transformers (audio export must be rejected with the documented
+message) and evaluated against real samples. The harness writes, under
+``tmp/results/``:
+
+* ``inference.csv`` — predicted vs real comparisons per deployed artifact,
+* ``param_metrics.json`` — ``{model: {block: nparams, ..., "total": n}}`` using
+  the canonical 10 block categories,
+* ``training_metrics/<model>.csv`` — one ready-to-process training-metrics CSV
+  per model,
+* ``results.json`` / ``results.md`` — the run status table.
 
 It is intentionally NOT collected by ``pytest tests/`` (it lives in ``full_tests/``
 at the repository root) and is meant to be left running for several hours.
@@ -36,10 +53,13 @@ Run from the repo root with the uv project env:
 
 To run only a subset:
 
-    uv run --extra cu118 --extra train python full_tests/run_e2e.py --category optimizers --limit 3
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --category opt --limit 3
 
-To run only the real-data (HuggingFace Hub) combos — downloads the base model,
-tokenizers and corpora on first use, so allow a generous per-combo timeout:
+To restore the fully-offline synthetic data path:
+
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --no-realonall
+
+To run only the real-data (HuggingFace Hub) combos:
 
     uv run --extra cu118 --extra train python full_tests/run_e2e.py --category realdata --timeout 1800
 
@@ -59,9 +79,11 @@ from __future__ import annotations
 
 import argparse
 import itertools
+import json
 import logging
 import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -71,6 +93,8 @@ import yaml
 _FULL_TESTS_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _FULL_TESTS_DIR.parent
 sys.path.insert(0, str(_FULL_TESTS_DIR))
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(_PROJECT_ROOT))
 
 import _helpers as helpers  # type: ignore  # noqa: E402
 
@@ -132,6 +156,59 @@ REALDATA_TEXT_TOKENIZER = "dccuchile/bert-base-spanish-wwm-cased"
 # SBERT training hard-requires a top-level ``base_model`` (``_train_sbert`` in
 # ``src/engine.py``); BETO matches the shipped ``es_sbert_*`` examples.
 REALDATA_SBERT_BASE_MODEL = "dccuchile/bert-base-spanish-wwm-cased"
+
+# --- ``--realonall`` dataset bindings -------------------------------------
+# Every category reuses the same small, publicly available corpora already
+# exercised by ``--category realdata`` so the whole sweep trains on real data.
+REAL_TEXT_TOKENIZER_SPEC: Dict[str, Any] = {
+    "source": "hf_repo",
+    "name_or_path": REALDATA_TEXT_TOKENIZER,
+}
+REAL_TEXT_DATASET: Dict[str, Any] = {
+    "dataset_name": "adleme94/borges",
+    "split": "train",
+    "text_column": "poem",
+    "max_samples": 32,
+}
+REAL_TEXT_MAX_LENGTH = 64
+REAL_TEXT_TOKENIZER_SAMPLES = 400
+
+REAL_VISION_CLASSIFICATION_DATASET: Dict[str, Any] = {
+    "dataset_name": "as-cle-bert/breastcanc-ultrasound-class",
+    "split": "train",
+    "image_column": "image",
+    "label_column": "label",
+}
+REAL_VISION_SEGMENTATION_DATASET: Dict[str, Any] = {
+    "dataset_name": "SerdarHelli/SegmentationOfTeethPanoramicXRayImages",
+    "split": "train",
+    "image_column": "image",
+    "segmentation_column": "label",
+}
+REAL_VISION_IMAGE_SIZE = {"height": 64, "width": 64}
+
+REAL_AUDIO_ASR_DATASET: Dict[str, Any] = {
+    "dataset_name": "astroza/chilean-jokes-festival-de-vina",
+    "split": "test",
+    "audio_column": "audio",
+    "text_column": "text",
+    "max_duration_sec": 10.0,
+    "resample": True,
+}
+REAL_AUDIO_CLASSIFICATION_DATASET: Dict[str, Any] = {
+    "dataset_name": "danielquillanroxas/EMOTION_VOICES",
+    "split": "train",
+    "audio_column": "audio",
+    "label_column": "label",
+    "max_duration_sec": 10.0,
+    "resample": True,
+}
+REAL_AUDIO_CLASSIFICATION_NUM_CLASSES = 7
+
+TEXT_MODEL_CLASSES = {
+    "frankenstein_text_encoder",
+    "frankenstein_text_decoder",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +283,105 @@ def _ensure_ssog_grid(model: dict, training: dict) -> dict:
     model = dict(model)
     model["attention"] = attention
     return model
+
+
+def apply_realonall(combo_id: str, config: dict, real_text_dir: Optional[Path]) -> dict:
+    """Swap a combo's synthetic data source for the real HuggingFace corpus.
+
+    Applied to every generated combo when ``--realonall`` is enabled (the
+    default). The model architecture stays untouched — only the data-bearing
+    blocks (``tokenizer``/``text_dataset``, ``vision_dataset``/``image``,
+    ``audio_dataset``/``audio``) are rewritten, so each sweep still isolates
+    the mixer/norm/optimizer/toggle under test.
+
+    Args:
+        combo_id: Combo identifier (only used for log messages).
+        config: The combo's YAML config dict.
+        real_text_dir: Local parquet directory with the real text corpus, used
+            by the ``train_from_dataset`` tokenizer cases.
+
+    Returns:
+        A new config dict bound to real data.
+    """
+    model_class = str(config.get("model_class") or "").strip().lower()
+    training = dict(config.get("training") or {})
+    task = str(training.get("task") or "mlm").strip().lower()
+    config = dict(config)
+
+    if model_class in TEXT_MODEL_CLASSES:
+        tokenizer = dict(config.get("tokenizer") or {})
+        existing_text_dataset = dict(config.get("text_dataset") or {})
+        already_real = bool(existing_text_dataset.get("dataset_name"))
+        if str(tokenizer.get("source") or "").strip().lower() == "train_from_dataset":
+            # The tokenizer category exercises tokenizer training itself; it
+            # reads a local parquet directory, so point it at the real corpus.
+            if real_text_dir is not None:
+                config["text_dataset"] = {
+                    "data_dir": str(real_text_dir),
+                    "text_column": "text",
+                    "max_samples": 200,
+                }
+        elif not already_real:
+            config["tokenizer"] = dict(REAL_TEXT_TOKENIZER_SPEC)
+            config["text_dataset"] = dict(REAL_TEXT_DATASET)
+        if task in {"mlm", "causal_lm", "text_classification"}:
+            training["max_length"] = max(
+                int(training.get("max_length", 0) or 0), REAL_TEXT_MAX_LENGTH
+            )
+        config["training"] = training
+        config["model"] = _ensure_ssog_grid(config.get("model") or {}, training)
+        logging.debug(
+            "realonall: %s -> text data (%s)",
+            combo_id,
+            config.get("text_dataset", {}).get("dataset_name") or "real corpus",
+        )
+        return config
+
+    if model_class == "frankenstein_vit":
+        image = dict(config.get("image") or {})
+        existing_vision_dataset = dict(config.get("vision_dataset") or {})
+        already_real = bool(existing_vision_dataset.get("dataset_name"))
+        image["image_size"] = dict(REAL_VISION_IMAGE_SIZE)
+        if task == "segmentation":
+            if not already_real:
+                config["vision_dataset"] = dict(REAL_VISION_SEGMENTATION_DATASET)
+            image.setdefault("seg_head_type", "pixel")
+            image["num_seg_classes"] = 2
+        elif task == "classification":
+            if not already_real:
+                config["vision_dataset"] = dict(REAL_VISION_CLASSIFICATION_DATASET)
+            image["num_classes"] = 2
+        elif not already_real:
+            config["vision_dataset"] = {
+                "dataset_name": REAL_VISION_CLASSIFICATION_DATASET["dataset_name"],
+                "split": REAL_VISION_CLASSIFICATION_DATASET["split"],
+                "image_column": REAL_VISION_CLASSIFICATION_DATASET["image_column"],
+            }
+        config["image"] = image
+        logging.debug("realonall: %s -> vision data (%s)", combo_id, task)
+        return config
+
+    if model_class == "frankenstein_audio":
+        audio = dict(config.get("audio") or {})
+        dataset = dict(config.get("audio_dataset") or {})
+        feature = str(
+            audio.get("feature") or dataset.get("feature") or "logmel"
+        ).strip().lower()
+        already_real = bool(dataset.get("dataset_name"))
+        if task == "asr":
+            if not already_real:
+                config["audio_dataset"] = dict(REAL_AUDIO_ASR_DATASET)
+        elif task == "audio_classification" and feature != "raw":
+            if not already_real:
+                config["audio_dataset"] = dict(REAL_AUDIO_CLASSIFICATION_DATASET)
+            audio["num_classes"] = REAL_AUDIO_CLASSIFICATION_NUM_CLASSES
+        # ``feature: raw`` (EEG-style multichannel) keeps DummyAudioDataset:
+        # no real EEG corpus is bound to this harness.
+        config["audio"] = audio
+        logging.debug("realonall: %s -> audio data (%s)", combo_id, task)
+        return config
+
+    return config
 
 
 def _with_optimizer(training: dict, optimizer_class: str) -> dict:
@@ -629,7 +805,10 @@ def make_audio_configs(vocab_size: int) -> List[Tuple[str, dict]]:
 
     * ``audio_dataset.dataset_name``/``dataset_dir`` are cleared, so the
       engine falls back to :class:`DummyAudioDataset` (synthetic waves and
-      transcripts) and never touches the network;
+      transcripts) and never touches the network. When ``--realonall`` is
+      active, :func:`apply_realonall` restores the real Hub datasets for the
+      ASR and classification cases afterwards (the raw-EEG case stays
+      synthetic);
     * the training block is reduced to a single optimizer step
       (``batch_size=16`` over 16 dummy examples, ``gradient_accumulation_steps=1``,
       ``num_epochs=1``). The accumulation override is required: with the
@@ -678,9 +857,11 @@ def make_tokenizer_configs(vocab_size: int) -> List[Tuple[str, dict]]:
 
     * ``source: hf_repo`` — load a pretrained tokenizer from a repo id; the
       vocab size is injected into ``model.dims.vocab_size``.
-    * ``source: train_from_dataset`` — train a NEW tokenizer from the toy
+    * ``source: train_from_dataset`` — train a NEW tokenizer from the local
       parquet corpus (``text_dataset`` block) with each of the 4 algorithms
-      (bpe, wordpiece, wordlevel, unigram).
+      (bpe, wordpiece, wordlevel, unigram). The toy parquet is used unless
+      ``--realonall`` is active, in which case :func:`apply_realonall` points
+      ``data_dir`` at the downloaded real-text corpus.
     """
     configs: List[Tuple[str, dict]] = []
 
@@ -941,6 +1122,88 @@ def make_real_dataset_configs(vocab_size: int) -> List[Tuple[str, dict]]:
 
 
 # ---------------------------------------------------------------------------
+# Metrics artifacts (parameter counts / training metrics / inference rows)
+# ---------------------------------------------------------------------------
+def _count_param_categories(combo_id: str) -> Optional[Dict[str, Any]]:
+    """Count a run's parameters per canonical block category.
+
+    Builds the model on the ``meta`` device from ``tmp/runs/<combo_id>/config.yaml``
+    (same recipe as ``full_tests/param_count_check.py``) so no weights are
+    allocated. The result feeds ``results/param_metrics.json``:
+    ``{model: {block: nparams, ..., "total": n}}`` using the 10 canonical
+    categories from ``src/utils/param_categories.py``.
+
+    Args:
+        combo_id: Run/model identifier.
+
+    Returns:
+        The per-category counts, ``None`` when the config has no buildable
+        ``model`` block (base-model/SBERT presets), or ``{"error": ...}`` when
+        the build failed.
+    """
+    yaml_path = helpers.RUNS_DIR / combo_id / "config.yaml"
+    if not yaml_path.exists():
+        return None
+    try:
+        import torch  # lazy import: keeps the harness importable without torch
+
+        from src.engine import build_model
+        from src.training.config_loader import load_training_config
+        from src.utils.param_categories import BLOCK_CATEGORIES, categorize_param
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Parameter counting unavailable: %s", exc)
+        return None
+    try:
+        loaded = load_training_config(str(yaml_path))
+        if loaded.model_config is None:
+            return None
+        with torch.device("meta"):
+            model = build_model(loaded.model_class, loaded.model_config)
+        counts: Dict[str, Any] = {category: 0 for category in BLOCK_CATEGORIES}
+        total = 0
+        for name, parameter in model.named_parameters():
+            numel = int(parameter.numel())
+            counts[categorize_param(name)] += numel
+            total += numel
+        counts["total"] = total
+        del model
+        return counts
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+def _combo_training_config(combo_id: str) -> Dict[str, Any]:
+    """Load the YAML config saved for a run (``tmp/runs/<combo_id>/config.yaml``)."""
+    yaml_path = helpers.RUNS_DIR / combo_id / "config.yaml"
+    if not yaml_path.exists():
+        return {}
+    try:
+        return yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _combo_meta(combo_id: str) -> Tuple[str, str]:
+    """Return ``(model_class, task)`` for a run from its saved YAML."""
+    config = _combo_training_config(combo_id)
+    model_class = str(
+        config.get("model_class") or "frankenstein_text_encoder"
+    ).strip().lower()
+    task = str((config.get("training") or {}).get("task") or "mlm").strip().lower()
+    return model_class, task
+
+
+def _combo_vocab_size(combo_id: str, fallback: int) -> int:
+    """Return the configured ``model.dims.vocab_size`` for a run (or ``fallback``)."""
+    config = _combo_training_config(combo_id)
+    dims = (config.get("model") or {}).get("dims") or {}
+    try:
+        return int(dims.get("vocab_size") or fallback)
+    except Exception:  # noqa: BLE001
+        return fallback
+
+
+# ---------------------------------------------------------------------------
 # CLI / main
 # ---------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
@@ -1038,6 +1301,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Resume from existing tmp/results directory instead of cleaning up first.",
     )
+    parser.add_argument(
+        "--realonall",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Train every category on real HuggingFace Hub data (default: on). "
+            "Use --no-realonall for the fully-offline synthetic corpus."
+        ),
+    )
+    parser.add_argument(
+        "--infer-samples",
+        type=int,
+        default=4,
+        help=(
+            "Real samples compared per deployed artifact when writing "
+            "results/inference.csv (default: 4)."
+        ),
+    )
     return parser
 
 
@@ -1063,12 +1344,32 @@ def main(argv: Optional[List[str]] = None) -> int:
     tokenizer_path = helpers.ensure_toy_tokenizer(args.vocab_size)
     parquet_path = helpers.ensure_toy_parquet()
     runner, env_extra = helpers.resolve_runner()
+    python_runner = helpers.resolve_python_runner() if not args.skip_deploy else []
+
+    # ``--realonall`` binds every sweep to the real corpora. The tokenizer
+    # category trains from a local parquet directory, so materialize the real
+    # text corpus once (falls back to the toy corpus when unavailable).
+    real_text_dir: Optional[Path] = None
+    if args.realonall:
+        try:
+            real_text_dir = helpers.ensure_real_text_parquet(
+                dataset_name=REAL_TEXT_DATASET["dataset_name"],
+                split=REAL_TEXT_DATASET["split"],
+                text_column=REAL_TEXT_DATASET["text_column"],
+                max_samples=REAL_TEXT_TOKENIZER_SAMPLES,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("Could not materialize the real text corpus: %s", exc)
+            real_text_dir = None
 
     logging.info("=" * 60)
     logging.info("Frankenstein exhaustive end-to-end smoke tests")
     logging.info("Tokenizer: %s", tokenizer_path)
     logging.info("Parquet:   %s", parquet_path)
     logging.info("Runner:    %s", " ".join(runner))
+    if python_runner:
+        logging.info("Python:    %s", " ".join(python_runner))
+    logging.info("Real data: %s", "enabled (--realonall)" if args.realonall else "disabled")
     logging.info("=" * 60)
 
     combos: List[Tuple[str, dict]] = []
@@ -1106,6 +1407,24 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "Hub; consider --timeout 1800 (current: %ds)", args.timeout,
             )
 
+    if args.realonall:
+        logging.info(
+            "Binding every combo to real data: text=%s, vision=%s, audio=%s",
+            REAL_TEXT_DATASET["dataset_name"],
+            REAL_VISION_CLASSIFICATION_DATASET["dataset_name"],
+            REAL_AUDIO_CLASSIFICATION_DATASET["dataset_name"],
+        )
+        combos = [
+            (combo_id, apply_realonall(combo_id, config, real_text_dir))
+            for combo_id, config in combos
+        ]
+        if args.timeout <= 600:
+            logging.warning(
+                "--realonall downloads models/corpora from the HuggingFace Hub "
+                "on first use; consider --timeout 1800 (current: %ds)",
+                args.timeout,
+            )
+
     if args.limit is not None:
         combos = combos[: args.limit]
 
@@ -1114,7 +1433,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                   args.category, args.limit, args.skip_attn_pairs, args.skip_singles, args.skip_deploy)
 
     results: List[helpers.RunResult] = []
-    successful_training: helpers.RunResult | None = None
+    param_metrics: Dict[str, Dict[str, Any]] = {}
+    if args.resume and helpers.RESULTS_PARAM_METRICS_PATH.exists():
+        try:
+            loaded_metrics = json.loads(
+                helpers.RESULTS_PARAM_METRICS_PATH.read_text(encoding="utf-8")
+            )
+            if isinstance(loaded_metrics, dict):
+                param_metrics.update(loaded_metrics)
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("Could not load existing param_metrics.json: %s", exc)
+    inference_rows: List[dict] = []
 
     train_kwargs = dict(
         runner=runner,
@@ -1133,13 +1462,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         """Write results to disk immediately (for crash recovery)."""
         helpers.write_results(results)
 
-    def find_metrics_csv(combo_id: str) -> Optional[str]:
-        """Find the training_metrics.csv file for a given combo."""
-        run_dir = helpers.RUNS_DIR / combo_id
-        metrics_path = run_dir / "training_metrics.csv"
-        if metrics_path.exists():
-            return str(metrics_path)
-        return None
+    def record_metrics(combo_id: str, result: helpers.RunResult) -> None:
+        """Copy the training CSV and record per-block parameter counts."""
+        metrics_copy = helpers.copy_training_metrics(combo_id)
+        if metrics_copy is not None:
+            result.metrics_path = str(metrics_copy)
+        counts = _count_param_categories(combo_id)
+        if counts is not None:
+            param_metrics[combo_id] = counts
+            helpers.write_param_metrics(param_metrics)
+
+    def record_inference(rows: List[dict]) -> None:
+        """Append inference-vs-real rows and rewrite ``results/inference.csv``."""
+        if not rows:
+            return
+        timestamp = datetime.now().isoformat(timespec="seconds")
+        for row in rows:
+            row.setdefault("timestamp", timestamp)
+        inference_rows.extend(rows)
+        helpers.write_inference_csv(inference_rows)
 
     for idx, (combo_id, config) in enumerate(combos, start=1):
         logging.info("[%d/%d] Running %s", idx, len(combos), combo_id)
@@ -1149,125 +1490,112 @@ def main(argv: Optional[List[str]] = None) -> int:
             batch_size=config["training"].get("batch_size", 1),
             **train_kwargs,
         )
-        # Capture metrics CSV path if training produced one
+        # Copy the metrics CSV into results/ and record parameter counts.
         if result.status in ("OK", "GRAD_EXPLODED"):
-            metrics_path = find_metrics_csv(combo_id)
-            if metrics_path:
-                result.metrics_path = metrics_path
-                logging.info("  Metrics saved to: %s", metrics_path)
+            record_metrics(combo_id, result)
         results.append(result)
         logging.info("[%d/%d] %s -> %s (%.1fs) %s", idx, len(combos), combo_id, result.status, result.duration_sec, result.notes)
 
         # Write results incrementally after each combo
         write_results_incremental()
 
-        if result.status == "OK" and successful_training is None:
-            successful_training = result
+    # ------------------------------------------------------------------
+    # Deploy / infer / export battery, for every successful training.
+    # ------------------------------------------------------------------
+    # Text artifacts also get an inference-vs-real evaluation (MLM top-1/top-5,
+    # causal next-token, classification accuracy), ViT/audio classification
+    # artifacts get theirs, and audio Transformers export must be rejected with
+    # the documented message. The BitNet-GGUF export stays on its dedicated
+    # combo below (the format only applies to BitNet weights).
+    deployable = [
+        result
+        for result in results
+        if result.category == "training"
+        and result.status == "OK"
+        and result.checkpoint_path
+        and Path(result.checkpoint_path).exists()
+    ]
+    if not args.skip_deploy:
+        logging.info("Deploying and evaluating %d successful checkpoints", len(deployable))
 
-    # Deploy / infer / export smoke tests, using the first successful training
-    # run. Audio checkpoints follow the dedicated path below: the text `infer`
-    # CLI does not apply to them and Transformers export must be rejected.
-    def _is_audio_combo(combo_id: str) -> bool:
-        return combo_id.startswith("audio_") or combo_id.startswith("realdata_audio_")
+    for training_result in (deployable if not args.skip_deploy else []):
+        combo_id = training_result.combo_id
+        checkpoint_path = Path(training_result.checkpoint_path)
+        model_class, task = _combo_meta(combo_id)
+        yaml_path = helpers.RUNS_DIR / combo_id / "config.yaml"
+        vocab_size = _combo_vocab_size(combo_id, args.vocab_size)
+        is_audio = model_class == "frankenstein_audio"
+        is_text = model_class in TEXT_MODEL_CLASSES
 
-    if (
-        not args.skip_deploy
-        and successful_training is not None
-        and not _is_audio_combo(successful_training.combo_id)
-    ):
-        checkpoint_path = Path(successful_training.checkpoint_path) if successful_training.checkpoint_path else None
-        if checkpoint_path and checkpoint_path.exists():
-            base_id = successful_training.combo_id
-            vocab_size = args.vocab_size
-
-            # standard deploy
-            deploy_std_dir = helpers.TMP_DIR / "deploy" / f"{base_id}_standard"
-            logging.info("Running deploy (standard) %s -> %s", base_id, deploy_std_dir)
-            res = helpers.run_deploy(checkpoint_path, deploy_std_dir, f"{base_id}_deploy_std", runner, env_extra, fmt="standard", device=args.device)
-            results.append(res)
-            write_results_incremental()
-            logging.info("%s -> %s (%.1fs) %s", res.combo_id, res.status, res.duration_sec, res.notes)
-            if res.status == "OK":
-                helpers.copy_tokenizer_to_deploy_dir(
-                    deploy_std_dir, vocab_size,
-                    run_dir=helpers.RUNS_DIR / base_id,
-                )
-                results.append(helpers.run_infer(deploy_std_dir, f"{base_id}_infer", runner, env_extra, device=args.device))
-                write_results_incremental()
-                logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
-
-            # quantized deploy
-            deploy_q_dir = helpers.TMP_DIR / "deploy" / f"{base_id}_quantized"
-            logging.info("Running deploy (quantized) %s -> %s", base_id, deploy_q_dir)
-            results.append(helpers.run_deploy(checkpoint_path, deploy_q_dir, f"{base_id}_deploy_quantized", runner, env_extra, fmt="quantized", device=args.device))
-            write_results_incremental()
-            logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
-
-            # transformers-export (needs the original YAML)
-            yaml_path = helpers.RUNS_DIR / base_id / "config.yaml"
-            if yaml_path.exists():
-                export_dir = helpers.TMP_DIR / "transformers-export" / base_id
-                logging.info("Running transformers-export %s -> %s", base_id, export_dir)
-                results.append(helpers.run_transformers_export(checkpoint_path, yaml_path, export_dir, f"{base_id}_export", runner, env_extra))
-                write_results_incremental()
-                logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
-
-    # Audio deploy smoke: `standard`/`quantized` must load the audio checkpoint
-    # and run the validation forward pass. There is no text-style `infer` for
-    # audio, no GGUF export, and the Transformers exporter must reject audio
-    # models with the documented message.
-    if not args.skip_deploy and args.category in {"all", "audio", "realdata"}:
-        audio_result = next(
-            (
-                result
-                for result in results
-                if _is_audio_combo(result.combo_id)
-                and result.status == "OK"
-                and result.checkpoint_path
-                and Path(result.checkpoint_path).exists()
-            ),
-            None,
-        )
-        if audio_result is None:
-            logging.warning(
-                "No successful audio training run with a checkpoint; skipping the audio deploy smoke"
+        for fmt in ("standard", "quantized"):
+            deploy_dir = helpers.TMP_DIR / "deploy" / f"{combo_id}_{fmt}"
+            logging.info("Running deploy (%s) %s -> %s", fmt, combo_id, deploy_dir)
+            deploy_result = helpers.run_deploy(
+                checkpoint_path,
+                deploy_dir,
+                f"{combo_id}_deploy_{fmt}",
+                runner,
+                env_extra,
+                fmt=fmt,
+                device=args.device,
             )
-        else:
-            audio_checkpoint = Path(audio_result.checkpoint_path)
-            audio_id = audio_result.combo_id
-            for fmt in ("standard", "quantized"):
-                audio_deploy_dir = helpers.TMP_DIR / "deploy" / f"{audio_id}_{fmt}"
-                logging.info(
-                    "Running audio deploy (%s) %s -> %s", fmt, audio_id, audio_deploy_dir
-                )
-                results.append(helpers.run_deploy(
-                    audio_checkpoint,
-                    audio_deploy_dir,
-                    f"{audio_id}_deploy_{fmt}",
-                    runner,
-                    env_extra,
-                    fmt=fmt,
-                    device=args.device,
-                ))
-                write_results_incremental()
-                logging.info("%s -> %s (%.1fs) %s", results[-1].combo_id, results[-1].status, results[-1].duration_sec, results[-1].notes)
+            results.append(deploy_result)
+            write_results_incremental()
+            logging.info(
+                "%s -> %s (%.1fs) %s",
+                deploy_result.combo_id,
+                deploy_result.status,
+                deploy_result.duration_sec,
+                deploy_result.notes,
+            )
+            if deploy_result.status != "OK":
+                continue
 
-            audio_yaml_path = helpers.RUNS_DIR / audio_id / "config.yaml"
-            if audio_yaml_path.exists():
-                export_dir = helpers.TMP_DIR / "transformers-export" / f"{audio_id}_rejected"
-                logging.info(
-                    "Running transformers-export (expected rejection) %s -> %s",
-                    audio_id,
-                    export_dir,
+            if is_text:
+                # The eval tokenizes real text with the deployed tokenizer.
+                helpers.copy_tokenizer_to_deploy_dir(
+                    deploy_dir,
+                    vocab_size,
+                    run_dir=helpers.RUNS_DIR / combo_id,
                 )
-                export_result = helpers.run_transformers_export(
-                    audio_checkpoint,
-                    audio_yaml_path,
-                    export_dir,
-                    f"{audio_id}_export_expected_reject",
-                    runner,
-                    env_extra,
-                )
+            eval_result, rows = helpers.run_inference_eval(
+                deploy_dir,
+                yaml_path,
+                combo_id,
+                python_runner,
+                env_extra,
+                model_class=model_class,
+                task=task,
+                deploy_format=fmt,
+                samples=args.infer_samples,
+                device=args.device,
+            )
+            results.append(eval_result)
+            record_inference(rows)
+            write_results_incremental()
+            logging.info(
+                "%s -> %s (%.1fs) %s",
+                eval_result.combo_id,
+                eval_result.status,
+                eval_result.duration_sec,
+                eval_result.notes,
+            )
+
+        # transformers-export (needs the original YAML). Audio models have no
+        # Transformers equivalent, so the export must be rejected with the
+        # documented message and is scored ``OK`` when it is.
+        if yaml_path.exists():
+            export_dir = helpers.TMP_DIR / "transformers-export" / combo_id
+            logging.info("Running transformers-export %s -> %s", combo_id, export_dir)
+            export_result = helpers.run_transformers_export(
+                checkpoint_path,
+                yaml_path,
+                export_dir,
+                f"{combo_id}_export",
+                runner,
+                env_extra,
+            )
+            if is_audio:
                 combined = f"{export_result.stdout}\n{export_result.stderr}".lower()
                 rejected_as_documented = (
                     export_result.status == "FAILED"
@@ -1285,9 +1613,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                         "audio transformers export was not rejected as documented "
                         f"(returncode={export_result.returncode})"
                     )
-                results.append(export_result)
-                write_results_incremental()
-                logging.info("%s -> %s (%.1fs) %s", export_result.combo_id, export_result.status, export_result.duration_sec, export_result.notes)
+            results.append(export_result)
+            write_results_incremental()
+            logging.info(
+                "%s -> %s (%.1fs) %s",
+                export_result.combo_id,
+                export_result.status,
+                export_result.duration_sec,
+                export_result.notes,
+            )
 
     # Dedicated BitNet+standard_attn training + bitnet-gguf export, if not already covered.
     if not args.skip_deploy and (args.category in {"all", "transversal"}):
@@ -1297,19 +1631,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             "use_bitnet": True,
         })
         bitnet_id = "bitnet_std_attn_for_gguf"
+        bitnet_config: Dict[str, Any] = {
+            "model_class": "frankenstein_text_encoder",
+            "model": model,
+            "training": training,
+        }
+        if args.realonall:
+            bitnet_config = apply_realonall(bitnet_id, bitnet_config, real_text_dir)
         logging.info("Running dedicated %s training", bitnet_id)
         bitnet_result = helpers.run_training(
-            config={"model_class": "frankenstein_text_encoder", "model": model, "training": training},
+            config=bitnet_config,
             combo_id=bitnet_id,
             batch_size=1,
             **train_kwargs,
         )
-        # Capture metrics for bitnet training too
+        # Copy metrics and record parameter counts for the dedicated run too.
         if bitnet_result.status in ("OK", "GRAD_EXPLODED"):
-            metrics_path = find_metrics_csv(bitnet_id)
-            if metrics_path:
-                bitnet_result.metrics_path = metrics_path
-                logging.info("  Metrics saved to: %s", metrics_path)
+            record_metrics(bitnet_id, bitnet_result)
         results.append(bitnet_result)
         write_results_incremental()
         if bitnet_result.status == "OK" and bitnet_result.checkpoint_path:
