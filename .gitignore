@@ -35,4 +35,7 @@ full_tests/**/*.pyc
 full_tests/**/*.model
 full_tests/**/*.vocab
 
+exp.zip
+experimentos/
+
 erickfmm.github.io/
