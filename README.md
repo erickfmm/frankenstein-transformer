@@ -149,7 +149,7 @@ Configure via `layer_pattern` in YAML. See [src/schema.yaml](src/schema.yaml) fo
 | **Memory-Efficient** | `adafactor`, `galore_adamw`, `lion`, `apollo`, `apollo_mini`, `q_apollo` | 6 |
 | **Schedule-Free** | `schedulefree_adamw`, `prodigy` | 2 |
 | **Second-Order** | `sophia`, `shampoo`, `soap` | 3 |
-| **Geometry-Oriented** | `muon`, `turbo_muon`, `dion3`, `anon` | 4 |
+| **Geometry-Oriented** | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `anon` | 6 |
 
 Parameters use prefixed keys: `<optimizer_class>-<group>_<param>` (e.g. `adamw-lr_embeddings`, `muon-ns_steps`). See [configs/README.md](configs/README.md) for the full parameter reference.
 
