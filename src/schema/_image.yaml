@@ -2,26 +2,36 @@ type: object
 title: Vision Image Configuration
 title_es: Configuración de Imagen de Visión
 description: |-
-  Vision-specific configuration for the `frankenstein_vit` model class (arXiv:2010.11929).
+  Vision-specific configuration for the `frankenstein_vit` model class (paper: arxiv:2010.11929).
   Defines image dimensions, patch parameters, positional encoding, masking strategy for
   autosupervised patch prediction, classification pooling, and segmentation head type.
 
   Required when `model_class: frankenstein_vit`.
+
+  **References:** (paper: arxiv:2010.11929)
 description_es: |-
-  Configuración específica de visión para el modelo `frankenstein_vit` (arXiv:2010.11929).
+  Configuración específica de visión para el modelo `frankenstein_vit` (paper: arxiv:2010.11929).
   Define dimensiones de imagen, parámetros de parche, codificación posicional, estrategia
   de enmascaramiento para predicción autosupervisada de parches, pooling de clasificación,
   y tipo de cabeza de segmentación.
 
   Obligatorio cuando `model_class: frankenstein_vit`.
+
+  **Referencias:** (paper: arxiv:2010.11929)
 additionalProperties: false
 properties:
   image_size:
     type: object
     title: Image Size
     title_es: Tamaño de Imagen
-    description: Target image dimensions (height, width) before patch embedding.
-    description_es: Dimensiones objetivo de la imagen (alto, ancho) antes del patch embedding.
+    description: |-
+      Target image dimensions (height, width) before patch embedding.
+
+      **References:** (paper: arxiv:2010.11929)
+    description_es: |-
+      Dimensiones objetivo de la imagen (alto, ancho) antes del patch embedding.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     additionalProperties: false
     properties:
       height:
@@ -29,11 +39,23 @@ properties:
         minimum: 1
         title: Image Height
         title_es: Alto de Imagen
+        description: |-
+          Image height in pixels before patch embedding (ViT recipes: 224 or 384).
+          **References:** (paper: arxiv:2010.11929)
+        description_es: |-
+          Alto de la imagen en píxeles antes del patch embedding (recetas ViT: 224 o 384).
+          **Referencias:** (paper: arxiv:2010.11929)
       width:
         type: integer
         minimum: 1
         title: Image Width
         title_es: Ancho de Imagen
+        description: |-
+          Image width in pixels before patch embedding (ViT recipes: 224 or 384).
+          **References:** (paper: arxiv:2010.11929)
+        description_es: |-
+          Ancho de la imagen en píxeles antes del patch embedding (recetas ViT: 224 o 384).
+          **Referencias:** (paper: arxiv:2010.11929)
     required:
       - height
       - width
@@ -47,10 +69,14 @@ properties:
       `patch_size`×`patch_size` patches. `image_height` and `image_width` must
       each be divisible by `patch_size`. The number of patches is
       `(image_height / patch_size) * (image_width / patch_size)`.
+
+      **References:** (paper: arxiv:2010.11929)
     description_es: |-
       Tamaño de cada parche cuadrado de imagen. La imagen se divide en parches
       no solapados de `patch_size`×`patch_size`. `image_height` e `image_width`
       deben ser divisibles por `patch_size`.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     default: 16
     examples:
       - 16
@@ -60,8 +86,14 @@ properties:
     minimum: 1
     title: Input Channels
     title_es: Canales de Entrada
-    description: Number of image channels (3 for RGB, 1 for grayscale).
-    description_es: Número de canales de imagen (3 para RGB, 1 para escala de grises).
+    description: |-
+      Number of image channels (3 for RGB, 1 for grayscale).
+
+      **References:** (paper: arxiv:2010.11929)
+    description_es: |-
+      Número de canales de imagen (3 para RGB, 1 para escala de grises).
+
+      **Referencias:** (paper: arxiv:2010.11929)
     default: 3
   to_grayscale:
     type: boolean
@@ -77,7 +109,7 @@ properties:
     description: |-
       Positional encoding for the ViT. `learned_1d` adds a learnable
       `nn.Parameter` of shape `(1, N+cls, D)` after patch embedding
-      (faithful to the ViT paper, arXiv:2010.11929); it is a **deprecated**
+      (faithful to the ViT paper (paper: arxiv:2010.11929)); it is a **deprecated**
       alias for `learned_absolute` and will be removed in a future release.
       `none` disables the absolute positional embedding
       and relies on the existing RoPE/HoPE rotary positional encodings applied
@@ -90,6 +122,8 @@ properties:
       added before the layer stack). `model.positional_encoding` independently
       controls the PE applied inside each attention mixer. Setting `none` here
       leaves the mixer PE untouched; it does not disable `model.positional_encoding`.
+
+      **References:** (paper: arxiv:2010.11929)
     description_es: |-
       Codificación posicional para el ViT. `learned_1d` añade un
       `nn.Parameter` aprendible de forma `(1, N+cls, D)` después del patch
@@ -105,6 +139,8 @@ properties:
       (absoluta, añadida antes de la pila de capas). `model.positional_encoding`
       controla de forma independiente la PE aplicada dentro de cada mixer.
       Poner `none` aquí no desactiva `model.positional_encoding`.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     enum:
       - learned_1d
       - none
@@ -127,10 +163,14 @@ properties:
       If true, prepend a learnable [CLS] token to the patch embeddings (ViT
       paper default). The output at position 0 is used as the image
       representation for classification (when `pooling_mode: cls`).
+
+      **References:** (paper: arxiv:2010.11929)
     description_es: |-
       Si es verdadero, antepone un token [CLS] aprendible a los embeddings de
       parche (predeterminado del paper ViT). La salida en posición 0 se usa
       como representación de imagen para clasificación.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     default: true
   pooling_mode:
     type: string
@@ -140,10 +180,14 @@ properties:
       Pooling strategy for classification. `cls` reads the [CLS] token output
       at position 0. `gap` (Global Average Pooling) averages over all patch
       tokens. Both work well; GAP may need a different learning rate.
+
+      **References:** (paper: arxiv:2010.11929)
     description_es: |-
       Estrategia de pooling para clasificación. `cls` lee la salida del token
       [CLS] en posición 0. `gap` (Global Average Pooling) promedia sobre todos
       los tokens de parche.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     enum:
       - cls
       - gap
@@ -158,9 +202,13 @@ properties:
       Fraction of patches to corrupt during `task: patch_prediction`. The
       ViT paper (App. B.1.2) uses 50% (0.5). Each corrupted patch is replaced
       following `mask_token_strategy`.
+
+      **References:** (paper: arxiv:2111.06377)
     description_es: |-
       Fracción de parches a corromper durante `task: patch_prediction`. El
       paper ViT usa 50% (0.5).
+
+      **Referencias:** (paper: arxiv:2111.06377)
     default: 0.5
   mask_token_strategy:
     type: string
@@ -170,9 +218,13 @@ properties:
       Strategy for corrupting masked patches. `bert` = 80% mask-token / 10%
       random other patch / 10% keep (BERT recipe, ViT paper default).
       `mask_only` = 100% mask token. `random_only` = 100% random patch.
+
+      **References:** (paper: arxiv:1810.04805) (paper: arxiv:2111.06377)
     description_es: |-
       Estrategia para corromper parches enmascarados. `bert` = 80% token de
       máscara / 10% parche aleatorio / 10% mantener.
+
+      **Referencias:** (paper: arxiv:1810.04805) (paper: arxiv:2111.06377)
     enum:
       - bert
       - mask_only
@@ -187,9 +239,13 @@ properties:
       (512-way CE, ViT paper best) predicts the 3-bit mean color of each
       corrupted patch. `downsampled_3bit` predicts a 4×4 downsampled 3-bit
       patch (16 predictions of 512 colors). `full_patch_l2` reconstructs raw
-      patch pixels via MSE (MAE-style, arXiv:2111.06377).
+      patch pixels via MSE (MAE-style (paper: arxiv:2111.06377)).
+
+      **References:** (paper: arxiv:2111.06377)
     description_es: |-
       Objetivo de reconstrucción para `task: patch_prediction`.
+
+      **Referencias:** (paper: arxiv:2111.06377)
     enum:
       - mean_color_3bit
       - downsampled_3bit
@@ -204,10 +260,14 @@ properties:
       a per-pixel linear head that reshapes patch tokens back to H×W and
       upsamples — directly supports 1D grayscale and multicolor
       non-overlapping segmentation. `eomt` uses the Encoder-only Mask
-      Transformer (arXiv:2503.19108) with learnable queries, Hungarian
+      Transformer (paper: arxiv:2503.19108) with learnable queries, Hungarian
       matching, and mask annealing.
+
+      **References:** (paper: arxiv:2503.19108)
     description_es: |-
       Arquitectura de cabeza de segmentación para `task: segmentation`.
+
+      **Referencias:** (paper: arxiv:2503.19108)
     enum:
       - pixel
       - eomt
@@ -217,8 +277,11 @@ properties:
     minimum: 1
     title: Number of Classes
     title_es: Número de Clases
-    description: "Number of classes for image classification (`task: classification`). Required for that task — no implicit ImageNet default is applied by the schema."
-    description_es: Número de clases para clasificación de imágenes. Obligatorio para esa tarea — el esquema no aplica un valor por defecto implícito de ImageNet.
+    description: "Number of classes for image classification (`task: classification`). Required for that task — no implicit ImageNet default is applied by the schema. **References:** (paper: arxiv:2010.11929)"
+    description_es: |-
+      Número de clases para clasificación de imágenes. Obligatorio para esa tarea — el esquema no aplica un valor por defecto implícito de ImageNet.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     examples: [1000, 10]
   num_seg_classes:
     type: integer
@@ -230,8 +293,12 @@ properties:
       (`task: segmentation`, `seg_head_type: pixel`). For 1D grayscale
       segmentation, set to 2 (background + foreground). For multicolor
       non-overlapping segmentation, set to the number of object classes + 1.
+
+      **References:** (paper: arxiv:2503.19108)
     description_es: |-
       Número de clases de segmentación incluyendo fondo.
+
+      **Referencias:** (paper: arxiv:2503.19108)
     default: 21
   seg_num_queries:
     type: integer
@@ -242,8 +309,12 @@ properties:
       Number of learnable object queries for EoMT segmentation
       (`seg_head_type: eomt`). Paper default: 100 (semantic), 200
       (panoptic/instance).
+
+      **References:** (paper: arxiv:2503.19108)
     description_es: |-
       Número de consultas de objeto aprendibles para segmentación EoMT.
+
+      **Referencias:** (paper: arxiv:2503.19108)
     default: 100
   seg_l2_blocks:
     type: integer
@@ -254,18 +325,26 @@ properties:
       Number of L₂ ViT blocks that process patches + queries jointly in EoMT
       segmentation. The remaining blocks (L₁) process patches only. Paper
       values: ViT-S/B=3, ViT-L=4, ViT-g=5.
+
+      **References:** (paper: arxiv:2503.19108)
     description_es: |-
       Número de bloques L₂ del ViT que procesan parches + consultas.
+
+      **Referencias:** (paper: arxiv:2503.19108)
     default: 3
   seg_mask_annealing:
     type: boolean
     title: Segmentation Mask Annealing
     title_es: Recocido de Máscara de Segmentación
     description: |-
-      If true, apply mask annealing (arXiv:2503.19108) during EoMT training:
+      If true, apply mask annealing (paper: arxiv:2503.19108) during EoMT training:
       the probability of masked query-to-patch attention decays polynomially
       (factor 0.9) to 0 by end of training, so inference uses plain ViT with
       zero masking overhead.
+
+      **References:** (paper: arxiv:2503.19108)
     description_es: |-
       Si es verdadero, aplica recocido de máscara durante el entrenamiento EoMT.
+
+      **Referencias:** (paper: arxiv:2503.19108)
     default: true

@@ -4,7 +4,7 @@ title: "Fixed Numerics"
 title_es: "Numéricas Corregidas"
 description: |-
   Numerical fixes for softmax and cross-entropy from Barron, Gnanapragasam &
-  Tschannen (arXiv:2610.31642, "A Fix for Softmax and Cross-Entropy").
+  Tschannen (paper: arxiv:2610.31642, "A Fix for Softmax and Cross-Entropy").
   Standard implementations subtract the maximum logit before exponentiating,
   which prevents overflow but still rounds the target/argmax gradient to zero
   once the logit margin passes the floating-point precision cliff (Softmax
@@ -12,9 +12,11 @@ description: |-
   that no longer sum to zero and produces the "Slingshot" loss spikes seen
   with adaptive optimizers. Both flags are off by default and preserve the
   mathematical semantics of the standard operations.
+
+  **References:** (paper: arxiv:2610.31642)
 description_es: |-
   Correcciones numéricas de softmax y cross-entropy de Barron, Gnanapragasam
-  y Tschannen (arXiv:2610.31642, "A Fix for Softmax and Cross-Entropy").
+  y Tschannen (paper: arxiv:2610.31642, "A Fix for Softmax and Cross-Entropy").
   Las implementaciones estándar restan el logit máximo antes de exponenciar,
   lo que evita el desbordamiento pero aún redondea a cero el gradiente del
   logit objetivo/argmax cuando el margen de logits cruza el acantilado de
@@ -22,6 +24,8 @@ description_es: |-
   Esto deja gradientes que ya no suman cero y produce los picos de pérdida
   "Slingshot" con optimizadores adaptativos. Ambos flags están desactivados
   por defecto y preservan la semántica matemática de las operaciones estándar.
+
+  **Referencias:** (paper: arxiv:2610.31642)
 properties:
   fixed_softmax:
     type: boolean
@@ -37,6 +41,8 @@ properties:
       rounding to zero. Forward outputs are mathematically identical to
       standard softmax; only the backward pass changes. Note: the internal
       SSOG LSE kernels keep their own formulation.
+
+      **References:** (paper: arxiv:2610.31642)
     description_es: |-
       Reemplaza cada softmax y log-softmax explícito del modelo (mixers de
       atención, routers MoE/MoD, residuales de atención en profundidad, rutas
@@ -48,6 +54,8 @@ properties:
       forward son matemáticamente idénticas a softmax estándar; solo cambia
       el backward. Nota: los núcleos LSE internos de SSOG conservan su propia
       formulación.
+
+      **Referencias:** (paper: arxiv:2610.31642)
     default: false
     examples: [false, true]
   fixed_cross_entropy:
@@ -57,7 +65,7 @@ properties:
     description: |-
       Replace the task cross-entropy losses (mlm, causal_lm, classification,
       segmentation, text_classification and patch_prediction) with the
-      hard-target formulation from arXiv:2610.31642 §2: the target logit is
+      hard-target formulation from (paper: arxiv:2610.31642) §2: the target logit is
       used as the reference and the loss is `softplus(logsumexp(z - z_t))`
       over the non-target logits, so autograd yields a target gradient equal
       to minus the sum of the non-target gradients — the gradient sums to
@@ -65,10 +73,12 @@ properties:
       Soft-target/distillation cross-entropy is not affected. `ignore_index`
       and the `mean` reduction follow `torch.nn.functional.cross_entropy`
       semantics.
+
+      **References:** (paper: arxiv:2610.31642)
     description_es: |-
       Reemplaza las pérdidas de cross-entropy de las tareas (mlm, causal_lm,
       classification, segmentation, text_classification y patch_prediction)
-      por la formulación de objetivo duro de arXiv:2610.31642 §2: el logit
+      por la formulación de objetivo duro de (paper: arxiv:2610.31642) §2: el logit
       objetivo se usa como referencia y la pérdida es
       `softplus(logsumexp(z - z_t))` sobre los logits no objetivo, de modo que
       autograd produce un gradiente objetivo igual a menos la suma de los
@@ -77,5 +87,7 @@ properties:
       objetivo blando/destilación no se ve afectada. `ignore_index` y la
       reducción `mean` siguen la semántica de
       `torch.nn.functional.cross_entropy`.
+
+      **Referencias:** (paper: arxiv:2610.31642)
     default: false
     examples: [false, true]

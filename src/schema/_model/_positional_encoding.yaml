@@ -8,35 +8,43 @@ properties:
     description: |-
       Model-wide positional encoding method applied to attention mixers.
       Controls how position information is injected into the attention computation.
-      - `rope`: Rotary Position Embedding (arXiv:2104.09864). Rotates q/k vectors by position-dependent angles. Standard in Llama, GPT-3.5, Mistral.
-      - `hope`: Higher-Order Position Encoding (arXiv:2503.0). Hyperbolic rotation with exponential damping. HoPE enforces monotonic attention decay with distance.
-      - `nope`: No Position Encoding (arXiv:2305.19466). Identity — lets the model learn position implicitly via causal masking. Works well for decoder-only models.
-      - `alibi`: Attention with Linear Biases (arXiv:2108.12409). Adds a distance-proportional negative bias to attention scores. Enables length extrapolation without retraining.
-      - `bam`: Bayesian Attention Mechanism (arXiv:2505.22842). Generalized-Gaussian relative-position bias added to attention scores; learnable per-head shape (β) and scale (α) parameters. Recovers ALiBi at β=1, Normal prior at β=2, heavy tails at 0<β<1, and long-range retrieval heads at β<0. Uniform-prior init (θ=0). Optional Scalable Softmax rescale via the top-level `use_ssmax` flag.
-      - `pape`: Parabolic Position Encoding (arXiv:2602.01418). Augments q/k with learnable parabola terms (distance + direction + semantics). Vision-centric, supports nD positions.
-      - `pape_efficient`: Efficient PaPE (arXiv:2602.01418). Same math as `pape` but with a pre-computed layout for faster eval. Pure-PyTorch (no Triton).
-      - `pape_ri`: Rotation-Invariant PaPE (arXiv:2602.01418). Distance-only parabola terms; rotation-invariant for 3D vision tasks (point clouds).
-      - `sinusoidal_absolute`: Sinusoidal absolute PE (arXiv:1706.03762). Fixed sin/cos added to token embeddings before the first layer.
+      - `rope`: Rotary Position Embedding (paper: arxiv:2104.09864). Rotates q/k vectors by position-dependent angles. Standard in Llama, GPT-3.5, Mistral.
+      - `hope`: Higher-Order Position Encoding (paper: arxiv:2509.05218). Hyperbolic rotation with exponential damping. HoPE enforces monotonic attention decay with distance.
+      - `nope`: No Position Encoding (paper: arxiv:2305.19466). Identity — lets the model learn position implicitly via causal masking. Works well for decoder-only models.
+      - `alibi`: Attention with Linear Biases (paper: arxiv:2108.12409). Adds a distance-proportional negative bias to attention scores. Enables length extrapolation without retraining.
+      - `bam`: Bayesian Attention Mechanism (paper: arxiv:2505.22842). Generalized-Gaussian relative-position bias added to attention scores; learnable per-head shape (β) and scale (α) parameters. Recovers ALiBi at β=1, Normal prior at β=2, heavy tails at 0<β<1, and long-range retrieval heads at β<0. Uniform-prior init (θ=0). Optional Scalable Softmax rescale via the top-level `use_ssmax` flag.
+      - `pape`: Parabolic Position Encoding (paper: arxiv:2602.01418). Augments q/k with learnable parabola terms (distance + direction + semantics). Vision-centric, supports nD positions.
+      - `pape_efficient`: Efficient PaPE (paper: arxiv:2602.01418). Same math as `pape` but with a pre-computed layout for faster eval. Pure-PyTorch (no Triton).
+      - `pape_ri`: Rotation-Invariant PaPE (paper: arxiv:2602.01418). Distance-only parabola terms; rotation-invariant for 3D vision tasks (point clouds).
+      - `sinusoidal_absolute`: Sinusoidal absolute PE (paper: arxiv:1706.03762). Fixed sin/cos added to token embeddings before the first layer.
       - `sinusoidal_rotary`: Sinusoidal rotary PE. Absolute-position sin/cos rotation applied to q/k (like RoPE but with absolute angles).
-      - `learned_absolute`: Learnable absolute PE (arXiv:2010.11929). nn.Parameter added to token embeddings. Standard in BERT and ViT.
+      - `learned_absolute`: Learnable absolute PE (paper: arxiv:2010.11929). nn.Parameter added to token embeddings. Standard in BERT and ViT.
       - `none`: No positional encoding. Explicitly disables PE.
 
       **Per-mixer control:** Each mixer has a `<mixer>_use_pe` flag (default True for attention mixers, False for recurrent/decay mixers like retnet, mamba, ode, gla, deltanet, hgrn2, fox, kda, mtla). Set to False to opt a specific mixer out of the model-wide PE.
+
+      **References:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805) (paper: arxiv:2104.09864)
+      (paper: arxiv:2509.05218) (paper: arxiv:2305.19466) (paper: arxiv:2108.12409) (paper:
+      arxiv:2505.22842) (paper: arxiv:2602.01418) (paper: arxiv:1906.08237)
     description_es: |-
       Método de codificación posicional a nivel de modelo aplicado a los mezcladores de atención.
       Controla cómo se inyecta la información de posición en el cálculo de atención.
-      - `rope`: Embedding Posicional Rotatorio (arXiv:2104.09864). Rota vectores q/k por ángulos dependientes de posición. Estándar en Llama, GPT-3.5, Mistral.
-      - `hope`: Codificación Posicional de Orden Superior (arXiv:2503.0). Rotación hiperbólica con amortiguación exponencial.
-      - `nope`: Sin Codificación Posicional (arXiv:2305.19466). Identidad — el modelo aprende posición implícitamente vía máscara causal.
-      - `alibi`: Atención con Sesgos Lineales (arXiv:2108.12409). Añade sesgo negativo proporcional a la distancia a las puntuaciones de atención.
-      - `bam`: Mecanismo de Atención Bayesiana (arXiv:2505.22842). Sesgo de posición relativa con Gaussiana Generalizada añadido a las puntuaciones de atención; parámetros de forma (β) y escala (α) aprendibles por cabeza. Recupera ALiBi en β=1, prior Normal en β=2, colas pesadas en 0<β<1, y cabezas de recuperación de largo alcance en β<0. Inicialización con prior Uniforme (θ=0). Scalable Softmax opcional vía la bandera `use_ssmax`.
-      - `pape`: Codificación Posicional Parabólica (arXiv:2602.01418). Augmenta q/k con términos parabólicos aprendibles. Céntrica en visión, soporta posiciones nD.
-      - `pape_efficient`: PaPE Eficiente (arXiv:2602.01418). Misma matemática que `pape` con layout pre-calculado para evaluación más rápida.
-      - `pape_ri`: PaPE Invariante a Rotación (arXiv:2602.01418). Términos de distancia únicamente; invariante a rotación para tareas de visión 3D.
-      - `sinusoidal_absolute`: PE sinusoidal absoluta (arXiv:1706.03762). sin/cos fijo añadido a embeddings de tokens.
+      - `rope`: Embedding Posicional Rotatorio (paper: arxiv:2104.09864). Rota vectores q/k por ángulos dependientes de posición. Estándar en Llama, GPT-3.5, Mistral.
+      - `hope`: Codificación Posicional de Orden Superior (paper: arxiv:2509.05218). Rotación hiperbólica con amortiguación exponencial.
+      - `nope`: Sin Codificación Posicional (paper: arxiv:2305.19466). Identidad — el modelo aprende posición implícitamente vía máscara causal.
+      - `alibi`: Atención con Sesgos Lineales (paper: arxiv:2108.12409). Añade sesgo negativo proporcional a la distancia a las puntuaciones de atención.
+      - `bam`: Mecanismo de Atención Bayesiana (paper: arxiv:2505.22842). Sesgo de posición relativa con Gaussiana Generalizada añadido a las puntuaciones de atención; parámetros de forma (β) y escala (α) aprendibles por cabeza. Recupera ALiBi en β=1, prior Normal en β=2, colas pesadas en 0<β<1, y cabezas de recuperación de largo alcance en β<0. Inicialización con prior Uniforme (θ=0). Scalable Softmax opcional vía la bandera `use_ssmax`.
+      - `pape`: Codificación Posicional Parabólica (paper: arxiv:2602.01418). Augmenta q/k con términos parabólicos aprendibles. Céntrica en visión, soporta posiciones nD.
+      - `pape_efficient`: PaPE Eficiente (paper: arxiv:2602.01418). Misma matemática que `pape` con layout pre-calculado para evaluación más rápida.
+      - `pape_ri`: PaPE Invariante a Rotación (paper: arxiv:2602.01418). Términos de distancia únicamente; invariante a rotación para tareas de visión 3D.
+      - `sinusoidal_absolute`: PE sinusoidal absoluta (paper: arxiv:1706.03762). sin/cos fijo añadido a embeddings de tokens.
       - `sinusoidal_rotary`: PE sinusoidal rotatoria. Rotación sin/cos de posición absoluta aplicada a q/k.
-      - `learned_absolute`: PE absoluta aprendible (arXiv:2010.11929). nn.Parameter añadido a embeddings. Estándar en BERT y ViT.
+      - `learned_absolute`: PE absoluta aprendible (paper: arxiv:2010.11929). nn.Parameter añadido a embeddings. Estándar en BERT y ViT.
       - `none`: Sin codificación posicional. Desactiva PE explícitamente.
+
+      **Referencias:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805) (paper: arxiv:2104.09864)
+      (paper: arxiv:2509.05218) (paper: arxiv:2305.19466) (paper: arxiv:2108.12409) (paper:
+      arxiv:2505.22842) (paper: arxiv:2602.01418) (paper: arxiv:1906.08237)
     enum:
       - rope
       - hope
@@ -69,14 +77,20 @@ properties:
         additionalProperties: false
         title: "RoPE Parameters"
         title_es: "Parámetros RoPE"
+        description: |-
+          Parameters for Rotary Position Embedding (RoPE): base frequency and position scaling.
+          **References:** (paper: arxiv:2104.09864)
+        description_es: |-
+          Parámetros para Rotary Position Embedding (RoPE): frecuencia base y escalado de posiciones.
+          **Referencias:** (paper: arxiv:2104.09864)
         properties:
           base:
             type: number
             minimum: 0
             title: "RoPE Base"
             title_es: "Base RoPE"
-            description: "Base frequency for RoPE. Standard: 10000 (Llama). Extended: 100000-1000000 for longer contexts."
-            description_es: "Frecuencia base para RoPE. Estándar: 10000. Extendido: 100000-1000000."
+            description: "Base frequency for RoPE. Standard: 10000 (Llama). Extended: 100000-1000000 for longer contexts. **References:** (paper: arxiv:2104.09864)"
+            description_es: "Frecuencia base para RoPE. Estándar: 10000. Extendido: 100000-1000000. **Referencias:** (paper: arxiv:2104.09864)"
             default: 10000.0
             examples: [10000.0]
           scaling:
@@ -84,8 +98,8 @@ properties:
             minimum: 0
             title: "RoPE Scaling"
             title_es: "Escalado RoPE"
-            description: "Multiplier for RoPE position indices for context extrapolation. Typical: 1.0 (none), 2-8 (moderate), 16+ (aggressive)."
-            description_es: "Multiplicador para índices de posición RoPE. Típico: 1.0, 2-8, 16+."
+            description: "Multiplier for RoPE position indices for context extrapolation. Typical: 1.0 (none), 2-8 (moderate), 16+ (aggressive). **References:** (paper: arxiv:2104.09864) (paper: arxiv:2305.19466)"
+            description_es: "Multiplicador para índices de posición RoPE. Típico: 1.0, 2-8, 16+. **Referencias:** (paper: arxiv:2104.09864) (paper: arxiv:2305.19466)"
             default: 1.0
             examples: [1.0]
       hope:
@@ -93,14 +107,20 @@ properties:
         additionalProperties: false
         title: "HoPE Parameters"
         title_es: "Parámetros HoPE"
+        description: |-
+          Parameters for HoPE (Hyperbolic Rotary Positional Encoding): base frequency scale and damping coefficient.
+          **References:** (paper: arxiv:2509.05218)
+        description_es: |-
+          Parámetros para HoPE (Hyperbolic Rotary Positional Encoding): escala de frecuencia base y coeficiente de amortiguación.
+          **Referencias:** (paper: arxiv:2509.05218)
         properties:
           base:
             type: number
             minimum: 0
             title: "HoPE Base"
             title_es: "Base HoPE"
-            description: "Base frequency scale for HoPE. Typical: 10000 (standard), 100000 (long-range)."
-            description_es: "Escala de frecuencia base para HoPE. Típico: 10000, 100000."
+            description: "Base frequency scale for HoPE. Typical: 10000 (standard), 100000 (long-range). **References:** (paper: arxiv:2509.05218)"
+            description_es: "Escala de frecuencia base para HoPE. Típico: 10000, 100000. **Referencias:** (paper: arxiv:2509.05218)"
             default: 10000.0
             examples: [10000.0]
           damping:
@@ -108,8 +128,8 @@ properties:
             minimum: 0
             title: "HoPE Damping"
             title_es: "Amortiguación HoPE"
-            description: "Damping coefficient for HoPE attention decay. Typical: 0.01 (strong/local), 0.5 (mild/long-range)."
-            description_es: "Coeficiente de amortiguación para HoPE. Típico: 0.01, 0.5."
+            description: "Damping coefficient for HoPE attention decay. Typical: 0.01 (strong/local), 0.5 (mild/long-range). **References:** (paper: arxiv:2509.05218)"
+            description_es: "Coeficiente de amortiguación para HoPE. Típico: 0.01, 0.5. **Referencias:** (paper: arxiv:2509.05218)"
             default: 0.01
             examples: [0.01]
       alibi:
@@ -121,10 +141,14 @@ properties:
           ALiBi is parameter-free: slopes are derived from the head count. By
           default the model uses `dims.num_heads`; `num_heads` here overrides
           that derivation for ALiBi only.
+
+          **References:** (paper: arxiv:2108.12409)
         description_es: |-
           ALiBi es libre de parámetros: las pendientes se derivan del número de
           cabezas. Por defecto el modelo usa `dims.num_heads`; `num_heads` aquí
           sobrescribe esa derivación solo para ALiBi.
+
+          **Referencias:** (paper: arxiv:2108.12409)
         properties:
           num_heads:
             type: [integer, "null"]
@@ -134,9 +158,13 @@ properties:
             description: |-
               Number of heads used to derive the ALiBi slopes. `null` (default)
               means use `dims.num_heads`.
+
+              **References:** (paper: arxiv:2108.12409)
             description_es: |-
               Número de cabezas usado para derivar las pendientes ALiBi. `null`
               (por defecto) significa usar `dims.num_heads`.
+
+              **Referencias:** (paper: arxiv:2108.12409)
             default: null
             examples: [null, 8, 16]
       bam:
@@ -152,6 +180,8 @@ properties:
           `theta_init=0` yields the Uniform prior (zero bias at init), which the paper's
           ablation H.1 found best. The `eps` floor guards the `|·|^β` exponentiation
           when β < 0 (long-range retrieval-head regime).
+
+          **References:** (paper: arxiv:2505.22842)
         description_es: |-
           Parámetros aprendibles por cabeza del Mecanismo de Atención Bayesiana. BAM
           añade un sesgo de posición relativa con Gaussiana Generalizada a las
@@ -161,29 +191,31 @@ properties:
           prior Uniforme (sesgo cero en init), que la ablation H.1 del paper encontró
           óptima. El piso `eps` protege la exponenciación `|·|^β` cuando β < 0
           (régimen de cabezas de recuperación de largo alcance).
+
+          **Referencias:** (paper: arxiv:2505.22842)
         properties:
           learn_mu:
             type: boolean
             title: "Learn Mu"
             title_es: "Aprender Mu"
-            description: "If true, the location parameter θ_µ is learnable. Default false (µ=0) per the paper's ablation H.1."
-            description_es: "Si verdadero, el parámetro de localización θ_µ es aprendible. Por defecto falso (µ=0) según ablation H.1 del paper."
+            description: "If true, the location parameter θ_µ is learnable. Default false (µ=0) per the paper's ablation H.1. **References:** (paper: arxiv:2505.22842)"
+            description_es: "Si verdadero, el parámetro de localización θ_µ es aprendible. Por defecto falso (µ=0) según ablation H.1 del paper. **Referencias:** (paper: arxiv:2505.22842)"
             default: false
             examples: [false]
           theta_init:
             type: number
             title: "Theta Init"
             title_es: "Init Theta"
-            description: "Initial value for θ_α and θ_β. 0.0 = Uniform prior (paper's best). 1.0 = Laplace/ALiBi-like prior."
-            description_es: "Valor inicial para θ_α y θ_β. 0.0 = prior Uniforme (óptimo del paper). 1.0 = prior Laplace/ALiBi."
+            description: "Initial value for θ_α and θ_β. 0.0 = Uniform prior (paper's best). 1.0 = Laplace/ALiBi-like prior. **References:** (paper: arxiv:2505.22842)"
+            description_es: "Valor inicial para θ_α y θ_β. 0.0 = prior Uniforme (óptimo del paper). 1.0 = prior Laplace/ALiBi. **Referencias:** (paper: arxiv:2505.22842)"
             default: 0.0
             examples: [0.0]
           mu_init:
             type: number
             title: "Mu Init"
             title_es: "Init Mu"
-            description: "Initial value for θ_µ. Typically 0.0 (no shift). Only used when learn_mu=true."
-            description_es: "Valor inicial para θ_µ. Típicamente 0.0 (sin desplazamiento). Solo se usa cuando learn_mu=true."
+            description: "Initial value for θ_µ. Typically 0.0 (no shift). Only used when learn_mu=true. **References:** (paper: arxiv:2505.22842)"
+            description_es: "Valor inicial para θ_µ. Típicamente 0.0 (sin desplazamiento). Solo se usa cuando learn_mu=true. **Referencias:** (paper: arxiv:2505.22842)"
             default: 0.0
             examples: [0.0]
           eps:
@@ -191,8 +223,8 @@ properties:
             exclusiveMinimum: 0
             title: "Epsilon"
             title_es: "Epsilon"
-            description: "Numerical stability floor added to |·| before exponentiation when β < 0. Default 1e-5."
-            description_es: "Piso de estabilidad numérica añadido a |·| antes de la exponenciación cuando β < 0. Por defecto 1e-5."
+            description: "Numerical stability floor added to |·| before exponentiation when β < 0. Default 1e-5. **References:** (paper: arxiv:2505.22842)"
+            description_es: "Piso de estabilidad numérica añadido a |·| antes de la exponenciación cuando β < 0. Por defecto 1e-5. **Referencias:** (paper: arxiv:2505.22842)"
             default: 0.00001
             examples: [0.00001]
       pape:
@@ -200,16 +232,22 @@ properties:
         additionalProperties: false
         title: "PaPE Parameters"
         title_es: "Parámetros PaPE"
-        description: Parameters shared by pape, pape_efficient, and pape_ri.
-        description_es: Parámetros compartidos por pape, pape_efficient y pape_ri.
+        description: |-
+          Parameters shared by pape, pape_efficient, and pape_ri.
+
+          **References:** (paper: arxiv:2602.01418)
+        description_es: |-
+          Parámetros compartidos por pape, pape_efficient y pape_ri.
+
+          **Referencias:** (paper: arxiv:2602.01418)
         properties:
           num_parabolas:
             type: integer
             minimum: 1
             title: "Number of Parabolas"
             title_es: "Número de Parábolas"
-            description: "Number of learnable parabola terms per head. Controls expressiveness of the distance/direction decomposition. Typical: 4-8."
-            description_es: "Número de términos parabólicos aprendibles por cabeza. Típico: 4-8."
+            description: "Number of learnable parabola terms per head. Controls expressiveness of the distance/direction decomposition. Typical: 4-8. **References:** (paper: arxiv:2602.01418)"
+            description_es: "Número de términos parabólicos aprendibles por cabeza. Típico: 4-8. **Referencias:** (paper: arxiv:2602.01418)"
             default: 4
             examples: [4, 8]
           num_positions:
@@ -217,16 +255,28 @@ properties:
             minimum: 1
             title: "Number of Position Dimensions"
             title_es: "Número de Dimensiones de Posición"
-            description: Dimensionality of position vectors. 1 for language (token index), 2 for vision (row/col), 3 for point clouds.
-            description_es: Dimensionalidad de los vectores de posición. 1 para lenguaje, 2 para visión, 3 para nubes de puntos.
+            description: |-
+              Dimensionality of position vectors. 1 for language (token index), 2 for vision (row/col), 3 for point clouds.
+
+              **References:** (paper: arxiv:2602.01418)
+            description_es: |-
+              Dimensionalidad de los vectores de posición. 1 para lenguaje, 2 para visión, 3 para nubes de puntos.
+
+              **Referencias:** (paper: arxiv:2602.01418)
             default: 1
             examples: [1, 2, 3]
           rotation_invariant:
             type: boolean
             title: "Rotation Invariant"
             title_es: "Invariante a Rotación"
-            description: If true, use the rotation-invariant PaPE-RI formulation (distance-only parabola terms). Recommended for 3D vision tasks.
-            description_es: Si verdadero, usar formulación PaPE-RI invariante a rotación. Recomendado para visión 3D.
+            description: |-
+              If true, use the rotation-invariant PaPE-RI formulation (distance-only parabola terms). Recommended for 3D vision tasks.
+
+              **References:** (paper: arxiv:2602.01418)
+            description_es: |-
+              Si verdadero, usar formulación PaPE-RI invariante a rotación. Recomendado para visión 3D.
+
+              **Referencias:** (paper: arxiv:2602.01418)
             default: false
             examples: [false]
       sinusoidal:
@@ -234,14 +284,26 @@ properties:
         additionalProperties: false
         title: "Sinusoidal Parameters"
         title_es: "Parámetros Sinusoidal"
+        description: |-
+          Parameters for the fixed sinusoidal positional table: max length, base and scale.
+          **References:** (paper: arxiv:1706.03762)
+        description_es: |-
+          Parámetros para la tabla posicional sinusoidal fija: longitud máxima, base y escala.
+          **Referencias:** (paper: arxiv:1706.03762)
         properties:
           max_len:
             type: integer
             minimum: 1
             title: "Maximum Length"
             title_es: "Longitud Máxima"
-            description: Maximum sequence length for precomputed sin/cos tables. Sequences longer than this will fail.
-            description_es: Longitud máxima de secuencia para tablas sin/cos pre-calculadas.
+            description: |-
+              Maximum sequence length for precomputed sin/cos tables. Sequences longer than this will fail.
+
+              **References:** (paper: arxiv:1706.03762)
+            description_es: |-
+              Longitud máxima de secuencia para tablas sin/cos pre-calculadas.
+
+              **Referencias:** (paper: arxiv:1706.03762)
             default: 512
             examples: [512, 1024]
           base:
@@ -249,16 +311,22 @@ properties:
             minimum: 0
             title: "Sinusoidal Base"
             title_es: "Base Sinusoidal"
-            description: "Base frequency for the geometric progression of wavelengths. Standard: 10000."
-            description_es: "Frecuencia base para la progresión geométrica de longitudes de onda. Estándar: 10000."
+            description: "Base frequency for the geometric progression of wavelengths. Standard: 10000. **References:** (paper: arxiv:1706.03762)"
+            description_es: "Frecuencia base para la progresión geométrica de longitudes de onda. Estándar: 10000. **Referencias:** (paper: arxiv:1706.03762)"
             default: 10000.0
             examples: [10000.0]
           scale:
             type: number
             title: "Sinusoidal Scale"
             title_es: "Escala Sinusoidal"
-            description: Scaling factor applied to position indices. Useful for length extrapolation.
-            description_es: Factor de escalado aplicado a índices de posición. Útil para extrapolación.
+            description: |-
+              Scaling factor applied to position indices. Useful for length extrapolation.
+
+              **References:** (paper: arxiv:1706.03762)
+            description_es: |-
+              Factor de escalado aplicado a índices de posición. Útil para extrapolación.
+
+              **Referencias:** (paper: arxiv:1706.03762)
             default: 1.0
             examples: [1.0]
       learned:
@@ -266,14 +334,26 @@ properties:
         additionalProperties: false
         title: "Learned Absolute Parameters"
         title_es: "Parámetros Absoluta Aprendible"
+        description: |-
+          Parameters for the learnable absolute positional embedding: max length and init std.
+          **References:** (paper: arxiv:1810.04805)
+        description_es: |-
+          Parámetros para el embedding posicional absoluto aprendible: longitud máxima y std de init.
+          **Referencias:** (paper: arxiv:1810.04805)
         properties:
           max_len:
             type: integer
             minimum: 1
             title: "Maximum Length"
             title_es: "Longitud Máxima"
-            description: Maximum sequence length for the learnable positional embedding parameter.
-            description_es: Longitud máxima de secuencia para el embedding posicional aprendible.
+            description: |-
+              Maximum sequence length for the learnable positional embedding parameter.
+
+              **References:** (paper: arxiv:1810.04805)
+            description_es: |-
+              Longitud máxima de secuencia para el embedding posicional aprendible.
+
+              **Referencias:** (paper: arxiv:1810.04805)
             default: 512
             examples: [512, 1024]
           init_std:
@@ -281,8 +361,8 @@ properties:
             minimum: 0
             title: "Init Std"
             title_es: "Std de Inicialización"
-            description: "Standard deviation for truncated normal initialization of the learnable positional embedding. Typical: 0.02."
-            description_es: "Desviación estándar para inicialización truncada normal. Típico: 0.02."
+            description: "Standard deviation for truncated normal initialization of the learnable positional embedding. Typical: 0.02. **References:** (paper: arxiv:1810.04805)"
+            description_es: "Desviación estándar para inicialización truncada normal. Típico: 0.02. **Referencias:** (paper: arxiv:1810.04805)"
             default: 0.02
             examples: [0.02]
       use_pe:
@@ -302,48 +382,48 @@ properties:
           posicional a nivel de modelo para mixers específicos. Por defecto: True para
           mixers de atención, False para mixers recurrentes/de decaimiento.
         properties:
-          standard_attn: { type: boolean, title: "standard_attn", description: "Model-wide PE for `standard_attn` layers.", default: true }
-          titan_attn: { type: boolean, title: "titan_attn", description: "Model-wide PE for `titan_attn` layers.", default: true }
-          sigmoid_attn: { type: boolean, title: "sigmoid_attn", description: "Model-wide PE for `sigmoid_attn` layers.", default: true }
-          gated_softmax_attn: { type: boolean, title: "gated_softmax_attn", description: "Model-wide PE for `gated_softmax_attn` layers.", default: true }
-          gqa_attn: { type: boolean, title: "gqa_attn", description: "Model-wide PE for `gqa_attn` layers.", default: true }
-          mla_attn: { type: boolean, title: "mla_attn", description: "Model-wide PE for `mla_attn` layers.", default: true }
-          gqla_attn: { type: boolean, title: "gqla_attn", description: "Model-wide PE for `gqla_attn` layers.", default: true }
-          mlra_attn: { type: boolean, title: "mlra_attn", description: "Model-wide PE for `mlra_attn` layers.", default: true }
-          tucker_attn: { type: boolean, title: "tucker_attn", description: "Model-wide PE for `tucker_attn` layers.", default: true }
-          iha_attn: { type: boolean, title: "iha_attn", description: "Model-wide PE for `iha_attn` layers.", default: true }
-          gta_attn: { type: boolean, title: "gta_attn", description: "Model-wide PE for `gta_attn` layers.", default: true }
-          mtla_attn: { type: boolean, title: "mtla_attn", description: "Model-wide PE for `mtla_attn` layers (temporal latent merge).", default: false }
-          cca_attn: { type: boolean, title: "cca_attn", description: "Model-wide PE for `cca_attn` layers.", default: true }
-          ccgqa_attn: { type: boolean, title: "ccgqa_attn", description: "Model-wide PE for `ccgqa_attn` layers.", default: true }
-          msa_attn: { type: boolean, title: "msa_attn", description: "Model-wide PE for `msa_attn` layers.", default: true }
-          sparda_attn: { type: boolean, title: "sparda_attn", description: "Model-wide PE for `sparda_attn` layers.", default: true }
-          gma_attn: { type: boolean, title: "gma_attn", description: "Model-wide PE for `gma_attn` layers.", default: true }
-          conformer_attn: { type: boolean, title: "conformer_attn", description: "Model-wide PE for `conformer_attn` layers.", default: true }
-          longformer_attn: { type: boolean, title: "longformer_attn", description: "Model-wide PE for `longformer_attn` layers.", default: true }
-          swa_attn: { type: boolean, title: "swa_attn", description: "Model-wide PE for `swa_attn` layers.", default: true }
-          bigbird_attn: { type: boolean, title: "bigbird_attn", description: "Model-wide PE for `bigbird_attn` layers.", default: true }
-          sparse_transformer_attn: { type: boolean, title: "sparse_transformer_attn", description: "Model-wide PE for `sparse_transformer_attn` layers.", default: true }
-          sparsek_attn: { type: boolean, title: "sparsek_attn", description: "Model-wide PE for `sparsek_attn` layers.", default: true }
-          nsa_attn: { type: boolean, title: "nsa_attn", description: "Model-wide PE for `nsa_attn` layers.", default: true }
-          fasa_attn: { type: boolean, title: "fasa_attn", description: "Model-wide PE for `fasa_attn` layers (inference-time sparse selection; trained as dense attention).", default: true }
-          sparge_attn: { type: boolean, title: "sparge_attn", description: "Model-wide PE for `sparge_attn` layers (inference-time block pruning; trained as dense attention).", default: true }
-          engram_attn: { type: boolean, title: "engram_attn", description: "Model-wide PE for `engram_attn` layers.", default: true }
-          retnet: { type: boolean, title: "retnet", description: "Model-wide PE for `retnet` layers.", default: false }
-          retnet_attn: { type: boolean, title: "retnet_attn", description: "Model-wide PE for `retnet_attn` layers.", default: false }
-          mamba: { type: boolean, title: "mamba", description: "Model-wide PE for `mamba` layers.", default: false }
-          ode: { type: boolean, title: "ode", description: "Model-wide PE for `ode` layers.", default: false }
-          gla_attn: { type: boolean, title: "gla_attn", description: "Model-wide PE for `gla_attn` layers.", default: false }
-          deltanet_attn: { type: boolean, title: "deltanet_attn", description: "Model-wide PE for `deltanet_attn` layers.", default: false }
-          gated_deltanet_attn: { type: boolean, title: "gated_deltanet_attn", description: "Model-wide PE for `gated_deltanet_attn` layers.", default: false }
-          gated_deltanet2_attn: { type: boolean, title: "gated_deltanet2_attn", description: "Model-wide PE for `gated_deltanet2_attn` layers.", default: false }
-          hgrn2_attn: { type: boolean, title: "hgrn2_attn", description: "Model-wide PE for `hgrn2_attn` layers.", default: false }
-          fox_attn: { type: boolean, title: "fox_attn", description: "Model-wide PE for `fox_attn` layers.", default: false }
-          kda_attn: { type: boolean, title: "kda_attn", description: "Model-wide PE for `kda_attn` layers.", default: false }
-          falcon1_attn: { type: boolean, title: "falcon1_attn", description: "Model-wide PE for `falcon1_attn` layers.", default: false }
-          falcon2_attn: { type: boolean, title: "falcon2_attn", description: "Model-wide PE for `falcon2_attn` layers.", default: false }
-          falcon3_attn: { type: boolean, title: "falcon3_attn", description: "Model-wide PE for `falcon3_attn` layers.", default: false }
-          falcon1a_attn: { type: boolean, title: "falcon1a_attn", description: "Model-wide PE for `falcon1a_attn` layers.", default: false }
-          falcon2a_attn: { type: boolean, title: "falcon2a_attn", description: "Model-wide PE for `falcon2a_attn` layers.", default: false }
-          falcon3a_attn: { type: boolean, title: "falcon3a_attn", description: "Model-wide PE for `falcon3a_attn` layers.", default: false }
-          ssog_attn: { type: boolean, title: "ssog_attn", description: "Model-wide PE for `ssog_attn` layers (its Gaussian field already encodes relative position).", default: true }
+          standard_attn: { type: boolean, title: "standard_attn", description: "Model-wide PE for `standard_attn` layers (paper: arxiv:1706.03762).", default: true, description_es: "PE a nivel de modelo para capas `standard_attn` (paper: arxiv:1706.03762)." }
+          titan_attn: { type: boolean, title: "titan_attn", description: "Model-wide PE for `titan_attn` layers (paper: arxiv:2501.00663).", default: true, description_es: "PE a nivel de modelo para capas `titan_attn` (paper: arxiv:2501.00663)." }
+          sigmoid_attn: { type: boolean, title: "sigmoid_attn", description: "Model-wide PE for `sigmoid_attn` layers (paper: arxiv:2409.04431).", default: true, description_es: "PE a nivel de modelo para capas `sigmoid_attn` (paper: arxiv:2409.04431)." }
+          gated_softmax_attn: { type: boolean, title: "gated_softmax_attn", description: "Model-wide PE for `gated_softmax_attn` layers (paper: arxiv:2505.06708).", default: true, description_es: "PE a nivel de modelo para capas `gated_softmax_attn` (paper: arxiv:2505.06708)." }
+          gqa_attn: { type: boolean, title: "gqa_attn", description: "Model-wide PE for `gqa_attn` layers (paper: arxiv:2305.13245).", default: true, description_es: "PE a nivel de modelo para capas `gqa_attn` (paper: arxiv:2305.13245)." }
+          mla_attn: { type: boolean, title: "mla_attn", description: "Model-wide PE for `mla_attn` layers (paper: arxiv:2506.09342).", default: true, description_es: "PE a nivel de modelo para capas `mla_attn` (paper: arxiv:2506.09342)." }
+          gqla_attn: { type: boolean, title: "gqla_attn", description: "Model-wide PE for `gqla_attn` layers (paper: arxiv:2605.15250).", default: true, description_es: "PE a nivel de modelo para capas `gqla_attn` (paper: arxiv:2605.15250)." }
+          mlra_attn: { type: boolean, title: "mlra_attn", description: "Model-wide PE for `mlra_attn` layers (paper: arxiv:2603.02188).", default: true, description_es: "PE a nivel de modelo para capas `mlra_attn` (paper: arxiv:2603.02188)." }
+          tucker_attn: { type: boolean, title: "tucker_attn", description: "Model-wide PE for `tucker_attn` layers (paper: arxiv:2603.30033).", default: true, description_es: "PE a nivel de modelo para capas `tucker_attn` (paper: arxiv:2603.30033)." }
+          iha_attn: { type: boolean, title: "iha_attn", description: "Model-wide PE for `iha_attn` layers (paper: arxiv:2602.21371).", default: true, description_es: "PE a nivel de modelo para capas `iha_attn` (paper: arxiv:2602.21371)." }
+          gta_attn: { type: boolean, title: "gta_attn", description: "Model-wide PE for `gta_attn` layers (paper: arxiv:2506.17286).", default: true, description_es: "PE a nivel de modelo para capas `gta_attn` (paper: arxiv:2506.17286)." }
+          mtla_attn: { type: boolean, title: "mtla_attn", description: "Model-wide PE for `mtla_attn` layers (temporal latent merge) (paper: arxiv:2505.13544).", default: false, description_es: "PE a nivel de modelo para capas `mtla_attn` (paper: arxiv:2505.13544)." }
+          cca_attn: { type: boolean, title: "cca_attn", description: "Model-wide PE for `cca_attn` layers (paper: arxiv:2510.04476).", default: true, description_es: "PE a nivel de modelo para capas `cca_attn` (paper: arxiv:2510.04476)." }
+          ccgqa_attn: { type: boolean, title: "ccgqa_attn", description: "Model-wide PE for `ccgqa_attn` layers (paper: arxiv:2510.04476).", default: true, description_es: "PE a nivel de modelo para capas `ccgqa_attn` (paper: arxiv:2510.04476)." }
+          msa_attn: { type: boolean, title: "msa_attn", description: "Model-wide PE for `msa_attn` layers (paper: arxiv:2606.13392).", default: true, description_es: "PE a nivel de modelo para capas `msa_attn` (paper: arxiv:2606.13392)." }
+          sparda_attn: { type: boolean, title: "sparda_attn", description: "Model-wide PE for `sparda_attn` layers (paper: arxiv:2606.04511).", default: true, description_es: "PE a nivel de modelo para capas `sparda_attn` (paper: arxiv:2606.04511)." }
+          gma_attn: { type: boolean, title: "gma_attn", description: "Model-wide PE for `gma_attn` layers (paper: arxiv:2606.18283).", default: true, description_es: "PE a nivel de modelo para capas `gma_attn` (paper: arxiv:2606.18283)." }
+          conformer_attn: { type: boolean, title: "conformer_attn", description: "Model-wide PE for `conformer_attn` layers (paper: arxiv:2005.08100).", default: true, description_es: "PE a nivel de modelo para capas `conformer_attn` (paper: arxiv:2005.08100)." }
+          longformer_attn: { type: boolean, title: "longformer_attn", description: "Model-wide PE for `longformer_attn` layers (paper: arxiv:2004.05150).", default: true, description_es: "PE a nivel de modelo para capas `longformer_attn` (paper: arxiv:2004.05150)." }
+          swa_attn: { type: boolean, title: "swa_attn", description: "Model-wide PE for `swa_attn` layers (paper: arxiv:2608.28444) (paper: arxiv:2309.17453).", default: true, description_es: "PE a nivel de modelo para capas `swa_attn` (paper: arxiv:2608.28444) (paper: arxiv:2309.17453)." }
+          bigbird_attn: { type: boolean, title: "bigbird_attn", description: "Model-wide PE for `bigbird_attn` layers (paper: arxiv:2007.14062).", default: true, description_es: "PE a nivel de modelo para capas `bigbird_attn` (paper: arxiv:2007.14062)." }
+          sparse_transformer_attn: { type: boolean, title: "sparse_transformer_attn", description: "Model-wide PE for `sparse_transformer_attn` layers (paper: arxiv:1904.10509).", default: true, description_es: "PE a nivel de modelo para capas `sparse_transformer_attn` (paper: arxiv:1904.10509)." }
+          sparsek_attn: { type: boolean, title: "sparsek_attn", description: "Model-wide PE for `sparsek_attn` layers (paper: arxiv:2406.16747).", default: true, description_es: "PE a nivel de modelo para capas `sparsek_attn` (paper: arxiv:2406.16747)." }
+          nsa_attn: { type: boolean, title: "nsa_attn", description: "Model-wide PE for `nsa_attn` layers (paper: arxiv:2502.11089).", default: true, description_es: "PE a nivel de modelo para capas `nsa_attn` (paper: arxiv:2502.11089)." }
+          fasa_attn: { type: boolean, title: "fasa_attn", description: "Model-wide PE for `fasa_attn` layers (inference-time sparse selection; trained as dense attention) (paper: arxiv:2602.03152).", default: true, description_es: "PE a nivel de modelo para capas `fasa_attn` (selección dispersa en inferencia; entrenada como atención densa) (paper: arxiv:2602.03152)." }
+          sparge_attn: { type: boolean, title: "sparge_attn", description: "Model-wide PE for `sparge_attn` layers (inference-time block pruning; trained as dense attention) (paper: arxiv:2502.18137).", default: true, description_es: "PE a nivel de modelo para capas `sparge_attn` (poda de bloques en inferencia; entrenada como atención densa) (paper: arxiv:2502.18137)." }
+          engram_attn: { type: boolean, title: "engram_attn", description: "Model-wide PE for `engram_attn` layers (paper: arxiv:2601.07372).", default: true, description_es: "PE a nivel de modelo para capas `engram_attn` (paper: arxiv:2601.07372)." }
+          retnet: { type: boolean, title: "retnet", description: "Model-wide PE for `retnet` layers (paper: arxiv:2307.08621).", default: false, description_es: "PE a nivel de modelo para capas `retnet` (paper: arxiv:2307.08621)." }
+          retnet_attn: { type: boolean, title: "retnet_attn", description: "Model-wide PE for `retnet_attn` layers (paper: arxiv:2307.08621).", default: false, description_es: "PE a nivel de modelo para capas `retnet_attn` (paper: arxiv:2307.08621)." }
+          mamba: { type: boolean, title: "mamba", description: "Model-wide PE for `mamba` layers (paper: arxiv:2312.00752).", default: false, description_es: "PE a nivel de modelo para capas `mamba` (paper: arxiv:2312.00752)." }
+          ode: { type: boolean, title: "ode", description: "Model-wide PE for `ode` layers (paper: arxiv:1906.02762) (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692).", default: false, description_es: "PE a nivel de modelo para capas `ode` (paper: arxiv:1906.02762) (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692)." }
+          gla_attn: { type: boolean, title: "gla_attn", description: "Model-wide PE for `gla_attn` layers (paper: arxiv:2312.06635).", default: false, description_es: "PE a nivel de modelo para capas `gla_attn` (paper: arxiv:2312.06635)." }
+          deltanet_attn: { type: boolean, title: "deltanet_attn", description: "Model-wide PE for `deltanet_attn` layers (paper: arxiv:2406.06484) (paper: arxiv:2412.06464).", default: false, description_es: "PE a nivel de modelo para capas `deltanet_attn` (paper: arxiv:2406.06484) (paper: arxiv:2412.06464)." }
+          gated_deltanet_attn: { type: boolean, title: "gated_deltanet_attn", description: "Model-wide PE for `gated_deltanet_attn` layers (paper: arxiv:2412.06464).", default: false, description_es: "PE a nivel de modelo para capas `gated_deltanet_attn` (paper: arxiv:2412.06464)." }
+          gated_deltanet2_attn: { type: boolean, title: "gated_deltanet2_attn", description: "Model-wide PE for `gated_deltanet2_attn` layers (paper: arxiv:2605.22791).", default: false, description_es: "PE a nivel de modelo para capas `gated_deltanet2_attn` (paper: arxiv:2605.22791)." }
+          hgrn2_attn: { type: boolean, title: "hgrn2_attn", description: "Model-wide PE for `hgrn2_attn` layers (paper: arxiv:2404.07904).", default: false, description_es: "PE a nivel de modelo para capas `hgrn2_attn` (paper: arxiv:2404.07904)." }
+          fox_attn: { type: boolean, title: "fox_attn", description: "Model-wide PE for `fox_attn` layers (paper: arxiv:2503.02130).", default: false, description_es: "PE a nivel de modelo para capas `fox_attn` (paper: arxiv:2503.02130)." }
+          kda_attn: { type: boolean, title: "kda_attn", description: "Model-wide PE for `kda_attn` layers (paper: arxiv:2510.26692).", default: false, description_es: "PE a nivel de modelo para capas `kda_attn` (paper: arxiv:2510.26692)." }
+          falcon1_attn: { type: boolean, title: "falcon1_attn", description: "Model-wide PE for `falcon1_attn` layers (paper: arxiv:2608.27763).", default: false, description_es: "PE a nivel de modelo para capas `falcon1_attn` (paper: arxiv:2608.27763)." }
+          falcon2_attn: { type: boolean, title: "falcon2_attn", description: "Model-wide PE for `falcon2_attn` layers (paper: arxiv:2608.27763).", default: false, description_es: "PE a nivel de modelo para capas `falcon2_attn` (paper: arxiv:2608.27763)." }
+          falcon3_attn: { type: boolean, title: "falcon3_attn", description: "Model-wide PE for `falcon3_attn` layers (paper: arxiv:2608.27763).", default: false, description_es: "PE a nivel de modelo para capas `falcon3_attn` (paper: arxiv:2608.27763)." }
+          falcon1a_attn: { type: boolean, title: "falcon1a_attn", description: "Model-wide PE for `falcon1a_attn` layers (paper: arxiv:2608.27763).", default: false, description_es: "PE a nivel de modelo para capas `falcon1a_attn` (paper: arxiv:2608.27763)." }
+          falcon2a_attn: { type: boolean, title: "falcon2a_attn", description: "Model-wide PE for `falcon2a_attn` layers (paper: arxiv:2608.27763).", default: false, description_es: "PE a nivel de modelo para capas `falcon2a_attn` (paper: arxiv:2608.27763)." }
+          falcon3a_attn: { type: boolean, title: "falcon3a_attn", description: "Model-wide PE for `falcon3a_attn` layers (paper: arxiv:2608.27763).", default: false, description_es: "PE a nivel de modelo para capas `falcon3a_attn` (paper: arxiv:2608.27763)." }
+          ssog_attn: { type: boolean, title: "ssog_attn", description: "Model-wide PE for `ssog_attn` layers (its Gaussian field already encodes relative position) (paper: https://www.pisoni.ai/posts/ssog/).", default: true, description_es: "PE a nivel de modelo para capas `ssog_attn` (su campo Gaussiano ya codifica la posición relativa) (paper: https://www.pisoni.ai/posts/ssog/)." }

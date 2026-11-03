@@ -4,6 +4,12 @@ properties:
   msa:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `msa_attn` (MiniMax Sparse Attention): block size, top-k block selection, Index Branch dimension and its KL alignment loss. Only applies when `msa_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2606.13392)
+    description_es: |-
+      Hiperparámetros para `msa_attn` (MiniMax Sparse Attention): tamaño de bloque, selección top-k de bloques, dimensión de la rama índice y su pérdida de alineación KL. Solo aplica cuando `msa_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2606.13392)
     properties:
       block_size:
         type: integer
@@ -11,14 +17,18 @@ properties:
         title_es: "Tamaño de Bloque MSA"
         description: |-
           Block size `B_k` for `msa_attn` (MiniMax Sparse Attention,
-          arXiv:2606.13392). Tokens are partitioned into contiguous blocks of
+          (paper: arxiv:2606.13392)). Tokens are partitioned into contiguous blocks of
           this size; the Index Branch scores blocks and the Main Branch
           attends to selected blocks. Paper default: 128.
+
+          **References:** (paper: arxiv:2606.13392)
         description_es: |-
           Tamaño de bloque `B_k` para `msa_attn` (MiniMax Sparse Attention,
-          arXiv:2606.13392). Los tokens se particionan en bloques contiguos de
+          (paper: arxiv:2606.13392)). Los tokens se particionan en bloques contiguos de
           este tamaño; la rama índice puntúa bloques y la rama principal atiende
           a los seleccionados. Por defecto del paper: 128.
+
+          **Referencias:** (paper: arxiv:2606.13392)
         examples: [128]
       topk_blocks:
         type: integer
@@ -29,11 +39,15 @@ properties:
           The block containing the query is always forced into the selected
           set. Paper default: 16 (giving a fixed 2048-token budget per
           query at `block_size=128`).
+
+          **References:** (paper: arxiv:2606.13392)
         description_es: |-
           Número de bloques seleccionados por grupo GQA por consulta para
           `msa_attn`. El bloque que contiene la consulta siempre se incluye.
           Por defecto del paper: 16 (presupuesto fijo de 2048 tokens por
           consulta con `block_size=128`).
+
+          **Referencias:** (paper: arxiv:2606.13392)
         examples: [16]
       index_dim:
         type: integer
@@ -43,10 +57,14 @@ properties:
           Dimensionality `d_idx` of the Index Branch heads for `msa_attn`.
           Constraint: `num_kv_heads * d_idx << num_heads * head_dim`. Default:
           64. The exact value is an appendix hyperparameter in the paper.
+
+          **References:** (paper: arxiv:2606.13392)
         description_es: |-
           Dimensionalidad `d_idx` de las cabezas de la rama índice para
           `msa_attn`. Restricción: `num_kv_heads * d_idx << num_heads *
           head_dim`. Por defecto: 64.
+
+          **Referencias:** (paper: arxiv:2606.13392)
         examples: [64]
       kl_loss_weight:
         type: number
@@ -57,25 +75,39 @@ properties:
           of `msa_attn`. Set to 0 to disable (Index Branch then only learns via
           the indexer warmup). The paper leaves the exact value to appendix
           ablations. Default: 0.0.
+
+          **References:** (paper: arxiv:2606.13392)
         description_es: |-
           Peso `lambda` de la pérdida de alineación KL que entrena la rama
           índice de `msa_attn`. 0 para deshabilitar. El paper deja el valor
           exacto a ablacions del apéndice. Por defecto: 0.0.
+
+          **Referencias:** (paper: arxiv:2606.13392)
         examples: [0.0]
   sparda:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `sparda_attn` (SparDA): KV block size, top-k block selection and the Forecast projection dimension. Only applies when `sparda_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2606.04511)
+    description_es: |-
+      Hiperparámetros para `sparda_attn` (SparDA): tamaño de bloque KV, selección top-k de bloques y la dimensión de la proyección Forecast. Solo aplica cuando `sparda_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2606.04511)
     properties:
       block_size:
         type: integer
         title: "SparDA Block Size"
         title_es: "Tamaño de Bloque SparDA"
         description: |-
-          KV block size for `sparda_attn` (SparDA, arXiv:2606.04511). The
+          KV block size for `sparda_attn` (SparDA (paper: arxiv:2606.04511)). The
           Forecast projection scores blocks of this size. Default: 128.
+
+          **References:** (paper: arxiv:2606.04511)
         description_es: |-
-          Tamaño de bloque KV para `sparda_attn` (SparDA, arXiv:2606.04511). La
+          Tamaño de bloque KV para `sparda_attn` (SparDA (paper: arxiv:2606.04511)). La
           proyección Forecast puntúa bloques de este tamaño. Por defecto: 128.
+
+          **Referencias:** (paper: arxiv:2606.04511)
         examples: [128]
       topk_blocks:
         type: integer
@@ -84,9 +116,13 @@ properties:
         description: |-
           Number of KV blocks selected per GQA group per query for
           `sparda_attn`. Default: 16.
+
+          **References:** (paper: arxiv:2606.04511)
         description_es: |-
           Número de bloques KV seleccionados por grupo GQA por consulta para
           `sparda_attn`. Por defecto: 16.
+
+          **Referencias:** (paper: arxiv:2606.04511)
         examples: [16]
       forecast_dim:
         type: integer
@@ -95,7 +131,11 @@ properties:
         description: |-
           Dimensionality of the Forecast projection for `sparda_attn`. One
           Forecast head per GQA group. Default: 64.
+
+          **References:** (paper: arxiv:2606.04511)
         description_es: |-
           Dimensionalidad de la proyección Forecast para `sparda_attn`. Una
           cabeza Forecast por grupo GQA. Por defecto: 64.
+
+          **Referencias:** (paper: arxiv:2606.04511)
         examples: [64]

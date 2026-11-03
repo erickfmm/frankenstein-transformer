@@ -3,7 +3,7 @@ title: Image Classification Task Configuration
 title_es: Configuración de Tarea Classification
 description: |-
   Task-specific configuration for `training.task: classification` (image
-  classification, arXiv:2010.11929). The model predicts a multiclass Y
+  classification (paper: arxiv:2010.11929)). The model predicts a multiclass Y
   objective via a classification head (Linear or MLP) applied to the pooled
   image representation ([CLS] token or GAP).
 
@@ -11,6 +11,8 @@ description: |-
   gradient clipping, checkpointing, etc.) are read from the top-level
   `training:` block — the same fields used by `mlm` and `causal_lm` tasks.
   This sub-block only carries classification-specific knobs.
+
+  **References:** (paper: arxiv:2010.11929)
 description_es: |-
   Configuración específica de tarea para `training.task: classification`
   (clasificación de imágenes).
@@ -19,6 +21,8 @@ description_es: |-
   scheduler, gradient clipping, checkpointing, etc.) se leen del bloque
   top-level `training:` — los mismos campos usados por `mlm` y `causal_lm`.
   Este sub-bloque solo contiene parámetros específicos de clasificación.
+
+  **Referencias:** (paper: arxiv:2010.11929)
 additionalProperties: false
 properties:
   label_smoothing:

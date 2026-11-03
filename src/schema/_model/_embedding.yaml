@@ -4,6 +4,12 @@ properties:
   factorized:
     type: object
     additionalProperties: false
+    description: |-
+      Factorized (low-rank) embedding configuration: enable flag and intermediate dimension. Splits the `vocab_size × hidden_size` matrix into two smaller matrices.
+      **References:** (paper: arxiv:2004.02984) (paper: arxiv:2502.10001)
+    description_es: |-
+      Configuración de embeddings factorizados (bajo rango): bandera de activación y dimensión intermedia. Divide la matriz `vocab_size × hidden_size` en dos matrices más pequeñas.
+      **Referencias:** (paper: arxiv:2004.02984) (paper: arxiv:2502.10001)
     properties:
       enabled:
         type: boolean
@@ -20,6 +26,8 @@ properties:
           - `true` with `embedding.factorized.dim=64`: More aggressive compression. ~3.3M params but may start to lose fine-grained token distinctions. Best for models where total parameter budget is tight.
           - `true` with `embedding.factorized.dim=256`: Conservative compression. ~13.1M params. If model quality is the priority but some savings are desired. Close to full embedding quality.
           - Decision rule: If `vocab_size × hidden_size` exceeds 20% of your parameter budget, consider factorized embeddings. Use `embedding.factorized.dim ≈ sqrt(vocab_size)` or `hidden_size/6` as starting point.
+
+          **References:** (paper: arxiv:2004.02984) (paper: arxiv:2502.10001)
         description_es: |-
           Habilita factorización de matriz de embedding para reducir parámetros. En lugar de
           `(vocab_size × hidden_size)` completo, usa dos matrices más pequeñas. Reduce de O(V×H) a
@@ -31,6 +39,8 @@ properties:
           - `true` con `embedding.factorized.dim=64`: Compresión más agresiva. ~3.3M params pero puede empezar a perder distinciones finas entre tokens. Mejor para modelos donde el presupuesto total de parámetros es ajustado.
           - `true` con `embedding.factorized.dim=256`: Compresión conservadora. ~13.1M params. Si la calidad del modelo es prioridad pero se desean algunos ahorros. Cercano a la calidad de embedding completo.
           - Regla de decisión: Si `vocab_size × hidden_size` excede el 20% de tu presupuesto de parámetros, considerar embeddings factorizados. Usar `embedding.factorized.dim ≈ sqrt(vocab_size)` o `hidden_size/6` como punto de partida.
+
+          **Referencias:** (paper: arxiv:2004.02984) (paper: arxiv:2502.10001)
         default: false
         examples: [false]
       dim:
@@ -44,17 +54,27 @@ properties:
 
           **Impact:** Lower = more compression but possible quality loss. <32 degrades quality;
           >512 reduces compression benefits. For vocab=50k and hidden=768: try 128–224.
+
+          **References:** (paper: arxiv:2004.02984) (paper: arxiv:2502.10001)
         description_es: |
           Dimensión intermedia para embeddings factorizados (solo cuando `embedding.factorized.enabled=true`).
           Típico: 64–256. Regla general: `embedding.factorized.dim ≈ sqrt(vocab_size)` o `hidden_size/6`.
 
           **Impacto:** Menor = más compresión pero posible pérdida de calidad. <32 degrada calidad;
           >512 reduce los beneficios de compresión. Para vocab=50k y hidden=768: probar 128–224.
+
+          **Referencias:** (paper: arxiv:2004.02984) (paper: arxiv:2502.10001)
         default: 128
         examples: [128]
   conv:
     type: object
     additionalProperties: false
+    description: |-
+      Embedding 1-D convolution configuration: enable flag and kernel size. Captures local n-gram patterns before the first layer.
+      **References:** (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692)
+    description_es: |-
+      Configuración de la convolución 1-D sobre embeddings: bandera de activación y tamaño de kernel. Captura patrones n-gramas locales antes de la primera capa.
+      **Referencias:** (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692)
     properties:
       enabled:
         type: boolean
@@ -66,6 +86,8 @@ properties:
 
           **Impact:** Adds `hidden_size × embedding.conv.kernel` parameters. Little gain for
           languages where global context is more important than local patterns. Try with kernel=3.
+
+          **References:** (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692)
         description_es: |
           Aplica convolución 1D sobre embeddings de tokens para capturar patrones locales
           de n-gramas antes del transformer. Experimental — puede ayudar con código o idiomas
@@ -73,6 +95,8 @@ properties:
 
           **Impacto:** Agrega `hidden_size × embedding.conv.kernel` parámetros. Poca ganancia para
           idiomas donde el contexto global es más importante que los patrones locales. Probar con kernel=3.
+
+          **Referencias:** (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692)
         default: true
         examples: [false, true]
       kernel:
@@ -86,11 +110,15 @@ properties:
 
           **Impact:** Kernel=3 is the safe starting point. Values >15 negate the benefit of
           the transformer's global attention. Only applies if `embedding.conv.enabled=true`.
+
+          **References:** (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692)
         description_es: |
           Tamaño de kernel para Conv1d de embeddings cuando `embedding.conv.enabled=true`. Típico: 3 (trigrama), 5, 7.
           Mayor = contexto local más amplio pero más parámetros (`kernel_size × hidden_size`).
 
           **Impacto:** Kernel=3 es el punto de partida seguro. Valores >15 anulan el beneficio de
           la atención global del transformer. Solo aplica si `embedding.conv.enabled=true`.
+
+          **Referencias:** (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692)
         default: 3
         examples: [3]

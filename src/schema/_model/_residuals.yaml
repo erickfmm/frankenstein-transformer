@@ -5,7 +5,7 @@ title_es: "Conexiones Residuales (AttnRes / estándar)"
 description: |-
   Configuration for the residual-connection strategy used between
   consecutive layers. Implements the four variants discussed in the
-  Attention Residuals paper (arXiv:2603.15031) plus the classical
+  Attention Residuals paper (paper: arxiv:2603.15031) plus the classical
   standard residual.
 
   **Mathematical framing.** Let ``h_l ∈ R^d`` denote the hidden state
@@ -47,13 +47,17 @@ description: |-
   AttnRes variants can be combined with MoD; only the tokens selected
   by MoD contribute to the layer-output buffer / partial sum.
 
-  **Reference:** Sun et al., "Attention Residuals", arXiv:2603.15031.
+  **Reference:** Sun et al., "Attention Residuals" (paper: arxiv:2603.15031).
   The standard residual is from He et al. (2015), "Deep Residual
-  Learning for Image Recognition", arXiv:1512.03385.
+  Learning for Image Recognition" (paper: arxiv:1512.03385).
+
+  **References:** (paper: arxiv:1512.03385) (paper:
+  https://proceedings.neurips.cc/paper_files/paper/2015/hash/a58f4765a99bf77336cf034926677066-Abstract.html)
+  (paper: arxiv:2603.15031)
 description_es: |-
   Configuración de la estrategia de conexión residual entre capas
   consecutivas. Implementa las cuatro variantes discutidas en el
-  paper de Attention Residuals (arXiv:2603.15031) más la conexión
+  paper de Attention Residuals (paper: arxiv:2603.15031) más la conexión
   residual estándar clásica.
 
   **Planteamiento matemático.** Sea ``h_l ∈ R^d`` el estado oculto
@@ -97,9 +101,13 @@ description_es: |-
   solo los tokens seleccionados por MoD contribuyen al buffer de
   salidas / suma parcial de capa.
 
-  **Referencia:** Sun et al., "Attention Residuals", arXiv:2603.15031.
+  **Referencia:** Sun et al., "Attention Residuals" (paper: arxiv:2603.15031).
   El residual estándar proviene de He et al. (2015), "Deep Residual
-  Learning for Image Recognition", arXiv:1512.03385.
+  Learning for Image Recognition" (paper: arxiv:1512.03385).
+
+  **Referencias:** (paper: arxiv:1512.03385) (paper:
+  https://proceedings.neurips.cc/paper_files/paper/2015/hash/a58f4765a99bf77336cf034926677066-Abstract.html)
+  (paper: arxiv:2603.15031)
 properties:
   type:
     type: string
@@ -116,6 +124,8 @@ properties:
       cost of additional memory/compute (one learned query vector per
       layer + a buffer of layer outputs). `none` is experimental and
       should only be used as an ablation probe.
+
+      **References:** (paper: arxiv:1512.03385) (paper: arxiv:2603.15031)
     description_es: |
       Selecciona la estrategia de conexión residual aplicada entre
       capas transformer consecutivas. Ver la descripción del módulo
@@ -127,6 +137,8 @@ properties:
       calidad a costa de memoria/cómputo extra (un vector de query
       aprendido por capa + un buffer de salidas de capa). `none` es
       experimental y debe usarse solo como sonda de ablación.
+
+      **Referencias:** (paper: arxiv:1512.03385) (paper: arxiv:2603.15031)
     enum: [standard, none, full_attn, block_attn]
     default: standard
     examples: [standard, full_attn, block_attn]
@@ -138,9 +150,13 @@ properties:
     description: |
       Hyper-parameters for the `full_attn` residual type. Ignored for
       all other `type` values.
+
+      **References:** (paper: arxiv:2603.15031)
     description_es: |
       Hiperparámetros para el tipo de residual `full_attn`. Se ignoran
       para todos los demás valores de `type`.
+
+      **Referencias:** (paper: arxiv:2603.15031)
     properties:
       init_query_zero:
         type: boolean
@@ -153,6 +169,8 @@ properties:
           average of all previous outputs, matching the standard
           residual and avoiding training volatility. If `false`, the
           queries are random-initialised (rarely useful).
+
+          **References:** (paper: arxiv:2603.15031)
         description_es: |
           Si es `true`, inicializa cada vector de query por capa
           ``w_l`` a cero. El paper (§5) muestra que esto es crítico:
@@ -161,6 +179,8 @@ properties:
           previas, igualando el residual estándar y evitando
           volatilidad de entrenamiento. Si es `false`, los queries se
           inicializan aleatoriamente (rara vez útil).
+
+          **Referencias:** (paper: arxiv:2603.15031)
         default: true
         examples: [true]
       use_rmsnorm_keys:
@@ -173,12 +193,16 @@ properties:
           prevents layers with naturally large magnitudes from
           dominating the softmax. Ablations in §5.3 show a measurable
           degradation without RMSNorm.
+
+          **References:** (paper: arxiv:2603.15031) (paper: arxiv:1910.07467)
         description_es: |
           Si es `true` (paper §3.1 por defecto), aplica RMSNorm a los
           vectores fuente ``v_i`` antes del producto punto con ``w_l``.
           Esto evita que capas con magnitudes naturalmente grandes
           dominen el softmax. Las ablaciones en §5.3 muestran una
           degradación medible sin RMSNorm.
+
+          **Referencias:** (paper: arxiv:2603.15031) (paper: arxiv:1910.07467)
         default: true
         examples: [true]
   block_attn:
@@ -189,9 +213,13 @@ properties:
     description: |
       Hyper-parameters for the `block_attn` residual type. Ignored for
       all other `type` values.
+
+      **References:** (paper: arxiv:2603.15031)
     description_es: |
       Hiperparámetros para el tipo de residual `block_attn`. Se
       ignoran para todos los demás valores de `type`.
+
+      **Referencias:** (paper: arxiv:2603.15031)
     properties:
       num_blocks:
         type: integer
@@ -214,6 +242,8 @@ properties:
 
           Must satisfy ``N ≤ num_layers × num_loops`` (the total
           logical depth).
+
+          **References:** (paper: arxiv:2603.15031)
         description_es: |
           Número de representaciones de bloque ``N`` almacenadas
           durante el forward. El trade-off es:
@@ -232,6 +262,8 @@ properties:
 
           Debe satisfacer ``N ≤ num_layers × num_loops`` (la
           profundidad lógica total).
+
+          **Referencias:** (paper: arxiv:2603.15031)
         minimum: 1
         default: 8
         examples: [8]
@@ -243,11 +275,15 @@ properties:
           If `true` (paper default), initialise every per-layer query
           ``w_l`` to zero so the initial attention is uniform. Same
           rationale as in `full_attn.init_query_zero`.
+
+          **References:** (paper: arxiv:2603.15031)
         description_es: |
           Si es `true` (paper por defecto), inicializa cada query por
           capa ``w_l`` a cero, de modo que la atención inicial sea
           uniforme. Misma justificación que en
           `full_attn.init_query_zero`.
+
+          **Referencias:** (paper: arxiv:2603.15031)
         default: true
         examples: [true]
       use_rmsnorm_keys:
@@ -260,12 +296,16 @@ properties:
           important for Block AttnRes because block sums grow with
           block depth — without RMSNorm, later blocks dominate the
           softmax.
+
+          **References:** (paper: arxiv:2603.15031) (paper: arxiv:1910.07467)
         description_es: |
           Si es `true` (paper por defecto), aplica RMSNorm a las
           representaciones de bloque fuente antes del producto punto.
           Especialmente importante para Block AttnRes porque las sumas
           de bloque crecen con la profundidad del bloque — sin
           RMSNorm, los bloques posteriores dominan el softmax.
+
+          **Referencias:** (paper: arxiv:2603.15031) (paper: arxiv:1910.07467)
         default: true
         examples: [true]
   mhc_stream_mode:
@@ -290,6 +330,8 @@ properties:
         flattened ``n × hidden_size`` projection of each source.
         Treats all streams as one fat residual. More expressive but
         also more parameter-hungry and slower to train.
+
+      **References:** (paper: arxiv:2603.15031) (paper: arxiv:2512.24880)
     description_es: |
       Cómo interactúa la atención sobre la profundidad con el
       residual de ``n`` streams de mHC. Solo relevante cuando
@@ -309,6 +351,8 @@ properties:
         los streams como un único residual grueso. Más expresivo
         pero también más hambriento de parámetros y más lento de
         entrenar.
+
+      **Referencias:** (paper: arxiv:2603.15031) (paper: arxiv:2512.24880)
     enum: [independent, joint]
     default: independent
     examples: [independent]

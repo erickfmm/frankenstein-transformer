@@ -9,6 +9,8 @@ description: |
 
   **Impact:** SBERT converts the base model into a sentence encoder. The choice of
   dataset type determines the loss function and model behavior.
+
+  **References:** (paper: arxiv:1908.10084)
 description_es: |
   Entrenamiento Sentence-BERT para fine-tuning de embeddings semánticos (cuando `training.task=sbert`).
   SBERT aprende a producir embeddings similares para textos semánticamente similares mediante
@@ -17,6 +19,8 @@ description_es: |
 
   **Impacto:** SBERT convierte el modelo base en un codificador de oraciones. La elección del
   dataset type determines the loss function and model behavior.
+
+  **Referencias:** (paper: arxiv:1908.10084)
 additionalProperties: false
 properties:
   dataset_name:
@@ -39,6 +43,8 @@ properties:
       - `qa`: question-answer pairs. Optimizes QA embedding similarity.
 
       **Impact:** Determines the loss function and how data is interpreted.
+
+      **References:** (paper: arxiv:1908.10084) (paper: arxiv:2004.11362)
     description_es: |
       Formato de dataset y estrategia de entrenamiento:
       - `paired_similarity`: pares de oraciones con puntajes de similitud (STS). Usa CosineSimilarityLoss.
@@ -46,6 +52,8 @@ properties:
       - `qa`: pares pregunta-respuesta. Optimiza similitud de embeddings QA.
 
       **Impacto:** Determina la función de pérdida y cómo se interpretan los datos.
+
+      **Referencias:** (paper: arxiv:1908.10084) (paper: arxiv:2004.11362)
     enum: [paired_similarity, triplets, qa]
     examples: [paired_similarity, triplets, qa]
   columns:
@@ -151,8 +159,12 @@ properties:
     title_es: "Tamaño de Lote"
     description: |
       Examples per batch. Typical: 16–64. Larger = more negatives, better contrastive learning. Use `gradient_accumulation_steps` to increase effective batch.
+
+      **References:** (paper: arxiv:2004.11362)
     description_es: |
       Ejemplos por lote. Típico: 16–64. Mayor = más negativos, mejor aprendizaje contrastivo. Usar `gradient_accumulation_steps` para aumentar lote efectivo.
+
+      **Referencias:** (paper: arxiv:2004.11362)
     examples: [16]
   gradient_accumulation_steps:
     type: integer
@@ -271,6 +283,8 @@ properties:
       - `max`: max-pooling across tokens (salient features).
 
       **Impact:** `mean` is the most common and robust option. `cls` for classification-style tasks.
+
+      **References:** (paper: arxiv:1908.10084)
     description_es: |
       Agregación de tokens en embedding de oración:
       - `mean`: promedio de todos los tokens — **recomendado**, más estable.
@@ -278,6 +292,8 @@ properties:
       - `max`: max-pooling entre tokens (características salientes).
 
       **Impacto:** `mean` es la opción más común y robusta. `cls` para tareas estilo clasificación.
+
+      **Referencias:** (paper: arxiv:1908.10084)
     enum: [mean, cls, max]
     examples: [mean]
   trust_remote_code:
@@ -304,8 +320,12 @@ properties:
     title_es: "Remuestreo Balanceado"
     description: |
       Resample to balanced distribution over similarity scores. Useful for imbalanced paired_similarity datasets. May duplicate/discard data.
+
+      **References:** (paper: arxiv:1908.10084)
     description_es: |
       Remuestrear a distribución balanceada sobre puntajes de similitud. Útil para datasets paired_similarity desbalanceados. Puede duplicar/descartar datos.
+
+      **Referencias:** (paper: arxiv:1908.10084)
     examples: [true]
   standardize_scores:
     type: boolean
@@ -313,8 +333,12 @@ properties:
     title_es: "Estandarizar Puntajes"
     description: |
       Z-score normalize similarity scores (mean=0, std=`resample_std`). Alternative to `resample_balanced`. Preserves all data.
+
+      **References:** (paper: arxiv:1908.10084)
     description_es: |
       Normalizar puntajes de similitud con z-score (media=0, std=`resample_std`). Alternativa a `resample_balanced`. Preserva todos los datos.
+
+      **Referencias:** (paper: arxiv:1908.10084)
     examples: [false]
   resample_std:
     type: number
@@ -322,8 +346,12 @@ properties:
     title_es: "Desviación Estándar de Remuestreo"
     description: |
       Target std dev when `standardize_scores=true`. Typical: 0.2–0.5. Formula: `(score - mean) / resample_std`.
+
+      **References:** (paper: arxiv:1908.10084)
     description_es: |
       Desviación estándar objetivo cuando `standardize_scores=true`. Típico: 0.2–0.5. Fórmula: `(score - mean) / resample_std`.
+
+      **Referencias:** (paper: arxiv:1908.10084)
     examples: [0.3]
   optimizer:
     type: object
@@ -334,11 +362,15 @@ properties:
       Uses the same classes as MLM training. If omitted, default AdamW is used.
 
       **Impact:** Only specify if a different optimizer than standard AdamW is needed.
+
+      **References:** (paper: arxiv:1711.05101)
     description_es: |
       Optimizador personalizado para SBERT. Anula el AdamW por defecto de sentence-transformers
       cuando se especifica. Usa las mismas clases que entrenamiento MLM. Si se omite, se usa AdamW por defecto.
 
       **Impacto:** Solo especificar si se necesita un optimizador diferente al AdamW estándar.
+
+      **Referencias:** (paper: arxiv:1711.05101)
     additionalProperties: false
     required:
       - optimizer_class
@@ -349,8 +381,8 @@ properties:
         type: object
         title: "Optimizer Kwargs"
         title_es: "Parámetros del Optimizador"
-        description: "Optimizer-specific hyperparameters passed to the optimizer constructor. Each optimizer supports different parameters. Common parameters: lr (learning rate, overridden by learning_rate field), momentum (for SGD/muon/turbo_muon/af_muon/ada_muon/dion3), nesterov (for muon/turbo_muon/af_muon), ns_steps (Nesterov-spectral steps for muon/turbo_muon/af_muon/ada_muon/dion3), ns_eps (Nesterov-spectral epsilon for muon/turbo_muon/af_muon/ada_muon/dion3), fraction (row-selection fraction for dion3), normuon (row-wise second-moment flavor for dion3), vector_lr/tied_cap/tied_scale/rho_hidden/rho_output/chunk_rows/bisection_steps/max_bracket_steps (for af_muon), cautious_clip (for cautious_adamw), rho/update_k (for sophia), d_coef (for prodigy), rank/update_proj_gap (for galore_adamw), beta2_decay/clip_threshold/eps1/eps2 (for adafactor). For ada_muon the shared per-group eps is the variance-normalization epsilon (default 1e-8). Parameters are passed as key-value pairs."
-        description_es: "Hiperparámetros específicos del optimizador que se pasan al constructor del optimizador. Cada optimizador soporta parámetros distintos. Parámetros comunes: `lr` (tasa de aprendizaje, sobrescrita por el campo `learning_rate`), `momentum` (para `sgd_momentum`/`muon`/`turbo_muon`/`af_muon`/`ada_muon`/`dion3`), `nesterov` (para `muon`/`turbo_muon`/`af_muon`), `ns_steps` (pasos espectrales de Nesterov para `muon`/`turbo_muon`/`af_muon`/`ada_muon`/`dion3`), `ns_eps` (epsilon espectral de Nesterov para `muon`/`turbo_muon`/`af_muon`/`ada_muon`/`dion3`), `fraction` (fracción de filas seleccionadas para `dion3`), `normuon` (variante con segundo momento por fila para `dion3`), `vector_lr`/`tied_cap`/`tied_scale`/`rho_hidden`/`rho_output`/`chunk_rows`/`bisection_steps`/`max_bracket_steps` (para `af_muon`), `cautious_clip` (para `cautious_adamw`), `rho`/`update_k` (para `sophia`), `d_coef` (para `prodigy`), `rank`/`update_proj_gap` (para `galore_adamw`), `beta2_decay`/`clip_threshold`/`eps1`/`eps2` (para `adafactor`). Para `ada_muon`, el `eps` por grupo compartido es el épsilon de normalización por varianza (por defecto 1e-8). Los parámetros se pasan como pares clave-valor."
+        description: "Optimizer-specific hyperparameters passed to the optimizer constructor. Each optimizer supports different parameters. Common parameters: lr (learning rate, overridden by learning_rate field), momentum (for SGD/muon/turbo_muon/af_muon/ada_muon/dion3), nesterov (for muon/turbo_muon/af_muon), ns_steps (Nesterov-spectral steps for muon/turbo_muon/af_muon/ada_muon/dion3), ns_eps (Nesterov-spectral epsilon for muon/turbo_muon/af_muon/ada_muon/dion3), fraction (row-selection fraction for dion3), normuon (row-wise second-moment flavor for dion3), vector_lr/tied_cap/tied_scale/rho_hidden/rho_output/chunk_rows/bisection_steps/max_bracket_steps (for af_muon), cautious_clip (for cautious_adamw), rho/update_k (for sophia), d_coef (for prodigy), rank/update_proj_gap (for galore_adamw), beta2_decay/clip_threshold/eps1/eps2 (for adafactor). For ada_muon the shared per-group eps is the variance-normalization epsilon (default 1e-8). Parameters are passed as key-value pairs. **References:** (paper: arxiv:1711.05101)"
+        description_es: "Hiperparámetros específicos del optimizador que se pasan al constructor del optimizador. Cada optimizador soporta parámetros distintos. Parámetros comunes: `lr` (tasa de aprendizaje, sobrescrita por el campo `learning_rate`), `momentum` (para `sgd_momentum`/`muon`/`turbo_muon`/`af_muon`/`ada_muon`/`dion3`), `nesterov` (para `muon`/`turbo_muon`/`af_muon`), `ns_steps` (pasos espectrales de Nesterov para `muon`/`turbo_muon`/`af_muon`/`ada_muon`/`dion3`), `ns_eps` (epsilon espectral de Nesterov para `muon`/`turbo_muon`/`af_muon`/`ada_muon`/`dion3`), `fraction` (fracción de filas seleccionadas para `dion3`), `normuon` (variante con segundo momento por fila para `dion3`), `vector_lr`/`tied_cap`/`tied_scale`/`rho_hidden`/`rho_output`/`chunk_rows`/`bisection_steps`/`max_bracket_steps` (para `af_muon`), `cautious_clip` (para `cautious_adamw`), `rho`/`update_k` (para `sophia`), `d_coef` (para `prodigy`), `rank`/`update_proj_gap` (para `galore_adamw`), `beta2_decay`/`clip_threshold`/`eps1`/`eps2` (para `adafactor`). Para `ada_muon`, el `eps` por grupo compartido es el épsilon de normalización por varianza (por defecto 1e-8). Los parámetros se pasan como pares clave-valor. **Referencias:** (paper: arxiv:1711.05101)"
         additionalProperties: true
         minProperties: 0
         examples:

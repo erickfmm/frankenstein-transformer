@@ -4,6 +4,12 @@ properties:
   ssog:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `ssog_attn` (SSOG): Gaussian atoms per head, content steering, token grid geometry and numerical floors. Only applies when `ssog_attn` appears in `layer_pattern`.
+      **References:** (paper: https://www.pisoni.ai/posts/ssog/)
+    description_es: |-
+      Hiperparámetros para `ssog_attn` (SSOG): átomos Gaussianos por cabeza, dirección por contenido, geometría de la cuadrícula de tokens y pisos numéricos. Solo aplica cuando `ssog_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: https://www.pisoni.ai/posts/ssog/)
     properties:
       num_atoms:
         type: integer
@@ -28,6 +34,8 @@ properties:
             reference recipe — a good first ablation.
           - `num_atoms=8`: more geometric capacity; "showing off" at
             small scale, but larger models may put more atoms to work.
+
+          **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Numero `R` de atomos Gaussianos por cabeza para `ssog_attn`
           (Separable Sum of Gaussians, Pisoni 2026,
@@ -49,6 +57,8 @@ properties:
             de referencia — buena primera ablacion.
           - `num_atoms=8`: mas capacidad geometrica; "presumir" a escala
             pequena, aunque modelos mayores pueden aprovechar mas atomos.
+
+          **Referencias:** (paper: https://www.pisoni.ai/posts/ssog/)
         examples: [4]
       lookat:
         type: boolean
@@ -70,6 +80,8 @@ properties:
           On small grids (e.g. CIFAR at 16x16) steering is roughly
           neutral — the fixed field already covers everything worth
           covering.
+
+          **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Habilita el direccionamiento por contenido para `ssog_attn`:
           pequenas sondas lineales inicializadas en cero predicen
@@ -88,6 +100,8 @@ properties:
           (mu+sigma+lambda) la supera por ~0.9. En rejillas pequenas
           (p.ej. CIFAR a 16x16) el direccionamiento es casi neutral — el
           campo fijo ya cubre todo lo relevante.
+
+          **Referencias:** (paper: https://www.pisoni.ai/posts/ssog/)
         examples: [true, false]
       max_offset:
         type: number
@@ -104,6 +118,8 @@ properties:
           Zero-shot resolution transfer degrades once the evaluation grid
           is much larger than the training grid and the offset bound
           can no longer reach distant content.
+
+          **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Cota del desplazamiento por token de mu para el
           direccionamiento `ssog_attn`, en celdas de rejilla. Los
@@ -118,6 +134,8 @@ properties:
           zero-shot degrada cuando la rejilla de evaluacion es mucho
           mayor que la de entrenamiento y la cota de offset ya no alcanza
           el contenido lejano.
+
+          **Referencias:** (paper: https://www.pisoni.ai/posts/ssog/)
         examples: [4.0, 2.0]
       cold_init:
         type: boolean
@@ -133,6 +151,8 @@ properties:
           points on CIFAR-100 in the reference recipe. Starting
           geometric and learning to listen to content beats doing both
           from scratch.
+
+          **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Inicia las compuertas de direccionamiento `ssog_attn` en ~0
           (softplus(-8) ~= 3e-4) para que el modelo arranque como un
@@ -144,6 +164,8 @@ properties:
           compuertas en caliente pierde ~1.1 puntos en CIFAR-100 con la
           receta de referencia. Empezar geometrico y aprender a escuchar
           al contenido supera hacer ambos desde cero.
+
+          **Referencias:** (paper: https://www.pisoni.ai/posts/ssog/)
         examples: [true, false]
       sigma_floor:
         type: number
@@ -159,6 +181,8 @@ properties:
           stays smooth and translation-invariant); smaller floors allow
           tight, convolution-like blobs around the query in early
           layers. Default 0.25 follows the reference recipe.
+
+          **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Ancho minimo de los atomos Gaussianos para `ssog_attn`, en
           celdas de rejilla. Los anchos se reparametrizan como
@@ -171,6 +195,8 @@ properties:
           permiten blobs ajustados tipo convolucion alrededor del query
           en capas tempranas. El por defecto 0.25 sigue la receta de
           referencia.
+
+          **Referencias:** (paper: https://www.pisoni.ai/posts/ssog/)
         examples: [0.25]
       grid_h:
         type: [integer, "null"]
@@ -188,6 +214,8 @@ properties:
           so SSOG transfers zero-shot to other resolutions — but the
           sequence length must always equal `grid_h * grid_w` (a
           mismatch raises a clear runtime error).
+
+          **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Filas de la rejilla de tokens sobre la que se define el campo
           `ssog_attn`. Los tokens deben ser el raster row-major de
@@ -202,6 +230,8 @@ properties:
           — pero la longitud de secuencia siempre debe igualar
           `grid_h * grid_w` (un desajuste lanza un error claro en
           ejecucion).
+
+          **Referencias:** (paper: https://www.pisoni.ai/posts/ssog/)
         examples: [null, 1]
       grid_w:
         type: [integer, "null"]
@@ -216,6 +246,8 @@ properties:
           **Impact:** Together with `grid_h` this fixes the raster the
           Gaussian atoms are evaluated on; the per-query steering
           kernels scale with the grid, not with `N^2`.
+
+          **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Columnas de la rejilla de tokens sobre la que se define el
           campo `ssog_attn`. `null` (por defecto) deriva
@@ -226,4 +258,6 @@ properties:
           **Impacto:** Junto con `grid_h` fija el raster sobre el que se
           evaluan los atomos Gaussianos; los kernels de direccionamiento
           por query escalan con la rejilla, no con `N^2`.
+
+          **Referencias:** (paper: https://www.pisoni.ai/posts/ssog/)
         examples: [null, 128]

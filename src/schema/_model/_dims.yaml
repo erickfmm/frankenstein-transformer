@@ -17,6 +17,8 @@ properties:
       - `vocab_size=100000`: Very large vocab for code or highly multilingual models. ~77M embedding params — strongly consider `embedding.factorized.enabled=true` to reduce this cost.
       - With `embedding.factorized.enabled=true` and `embedding.factorized.dim=128`: vocab_size=50k, hidden=768 → embedding params drop from 38.4M to ~8.4M (4.5× reduction). Quality impact is typically negligible for vocabs > 10k.
       - If using `base_model`: vocab_size must exactly match the pretrained model's vocabulary. Mismatch causes token ID corruption and unrecoverable training failure.
+
+      **References:** (paper: arxiv:1810.04805)
     description_es: |-
       Número de tokens únicos en el vocabulario del modelo. Debe coincidir con el tamaño del
       vocabulario del tokenizador. Valores típicos: 30k–100k. Vocabularios más grandes mejoran la
@@ -28,6 +30,8 @@ properties:
       - `vocab_size=100000`: Vocabulario muy grande para código o modelos altamente multilingües. ~77M params de embedding — considerar seriamente `embedding.factorized.enabled=true` para reducir este costo.
       - Con `embedding.factorized.enabled=true` y `embedding.factorized.dim=128`: vocab_size=50k, hidden=768 → params de embedding bajan de 38.4M a ~8.4M (reducción 4.5×). El impacto en calidad es típicamente insignificante para vocabularios > 10k.
       - Si se usa `base_model`: vocab_size debe coincidir exactamente con el vocabulario del modelo preentrenado. Una discrepancia causa corrupción de IDs de token y falla de entrenamiento irrecuperable.
+
+      **Referencias:** (paper: arxiv:1810.04805)
     default: 50000
     examples: [50000]
   hidden_size:
@@ -46,6 +50,8 @@ properties:
       - `hidden_size=1024` with `num_heads=16` → 64 dimensions per head. BERT-large scale, higher capacity for complex tasks (~340M params).
       - `hidden_size=2048` with `num_heads=32` → 64 dimensions per head. Large model scale, requires significant GPU memory. Consider factorized embeddings and MoE to manage parameter count.
       - Golden rule: per-head dimension should be ≥ 64. Values below 48 degrade attention quality. Use `hidden_size / num_heads >= 64` as a design constraint.
+
+      **References:** (paper: arxiv:1706.03762)
     description_es: |-
       Dimensión de las representaciones ocultas del modelo. Parámetro clave de tamaño que afecta
       capacidad y memoria. Típico: 512 (pequeño), 768 (BERT-base), 1024 (BERT-large), 2048+
@@ -57,6 +63,8 @@ properties:
       - `hidden_size=1024` con `num_heads=16` → 64 dimensiones por cabeza. Escala BERT-large, mayor capacidad para tareas complejas (~340M params).
       - `hidden_size=2048` con `num_heads=32` → 64 dimensiones por cabeza. Escala de modelo grande, requiere memoria GPU significativa. Considerar embeddings factorizados y MoE para manejar el conteo de parámetros.
       - Regla de oro: dimensión por cabeza debe ser ≥ 64. Valores por debajo de 48 degradan calidad de atención. Usar `hidden_size / num_heads >= 64` como restricción de diseño.
+
+      **Referencias:** (paper: arxiv:1706.03762)
     default: 2048
     examples: [768]
   num_layers:
@@ -74,6 +82,8 @@ properties:
       - `num_layers=12` with `num_loops=1`: Standard BERT-base depth. 12 distinct layers each with their own weights. Good balance for most tasks.
       - `num_layers=24` with `num_loops=1`: BERT-large depth. Requires careful training (Pre-LN, gradient clipping, warmup). Use for large datasets and complex tasks.
       - Relationship with `num_loops`: Logical depth = `num_layers × num_loops`. Use loops to increase effective depth without parameter explosion. Loops share weights across iterations, trading capacity for compute.
+
+      **References:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805)
     description_es: |-
       Número de capas físicas del transformer. Típico: 6 (pequeño), 12 (BERT-base), 24 (BERT-large).
       Más capas aumentan la profundidad y capacidad para representaciones jerárquicas pero dificultan el entrenamiento (flujo de gradientes).
@@ -84,6 +94,8 @@ properties:
       - `num_layers=12` con `num_loops=1`: Profundidad BERT-base estándar. 12 capas distintas cada una con sus propios pesos. Buen balance para la mayoría de tareas.
       - `num_layers=24` con `num_loops=1`: Profundidad BERT-large. Requiere entrenamiento cuidadoso (Pre-LN, gradient clipping, warmup). Usar para datasets grandes y tareas complejas.
       - Relación con `num_loops`: Profundidad lógica = `num_layers × num_loops`. Usar loops para aumentar profundidad efectiva sin explosión de parámetros. Los loops comparten pesos entre iteraciones, intercambiando capacidad por cómputo.
+
+      **Referencias:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805)
     default: 12
     examples: [12]
   num_loops:
@@ -99,6 +111,8 @@ properties:
       **Impact:** Increases compute cost without increasing parameter memory. Ideal for compensating
       models with few physical layers. Doesn't improve representation capacity as much as additional physical layers
       (weights are shared across loop iterations by position).
+
+      **References:** (paper: arxiv:2311.12424)
     description_es: |
       Número de veces que se recorre `layer_pattern` en una pasada hacia adelante. Cuando >1,
       crea capas lógicas sin aumentar parámetros. `num_loops=2` con `num_layers=6` se comporta como
@@ -107,6 +121,8 @@ properties:
       **Impacto:** Aumenta el costo de cómputo sin aumentar memoria de parámetros. Ideal para compensar
       modelos con pocas capas físicas. No mejora la capacidad de representación tanto como capas
       físicas adicionales (los pesos se comparten entre iteraciones de bucle por posición).
+
+      **Referencias:** (paper: arxiv:2311.12424)
     default: 2
     examples: [1, 2]
   num_heads:
@@ -121,6 +137,8 @@ properties:
       **Impact:** Per-head dimension = `hidden_size / num_heads`. Values <64 per head can degrade
       quality. Too many heads with small dimensions fragment the representation. Rule of thumb:
       keep per-head dimension between 64 and 128. With `hidden_size=768`, `num_heads=12` gives 64/head.
+
+      **References:** (paper: arxiv:1706.03762)
     description_es: |
       Número de cabezas de atención paralelas. Debe dividir `hidden_size` exactamente. Típico:
       8 (pequeño), 12 (BERT-base), 16 (BERT-large), 32 (grande). Cada cabeza aprende patrones de atención distintos.
@@ -129,6 +147,8 @@ properties:
       degradar la calidad. Demasiadas cabezas con dimensiones pequeñas fragmentan la representación.
       Regla general: mantener la dimensión por cabeza entre 64 y 128. Con `hidden_size=768`,
       `num_heads=12` da 64/cabeza.
+
+      **Referencias:** (paper: arxiv:1706.03762)
     default: 16
     examples: [12]
   num_kv_heads:
@@ -142,6 +162,8 @@ properties:
       multi-query attention) to ``num_heads`` (equivalent to multi-head
       attention). The paper suggests 8 as a favorable middle ground for
       typical model sizes.
+
+      **References:** (paper: arxiv:2305.13245)
     description_es: |
       Número de cabezas clave-valor para Grouped-Query Attention
       (``gqa_attn``). Debe dividir ``num_heads`` exactamente. Los valores
@@ -150,6 +172,8 @@ properties:
       punto medio favorable para tamaños de modelo típicos.
       También lo consumen los mixers GQA-based (`msa_attn`, `sparda_attn`) y
       `attention.ccgqa.num_kv_heads` para CCGQA.
+
+      **Referencias:** (paper: arxiv:2305.13245)
     default: 1
     examples: [1, 8]
   dropout:
@@ -192,49 +216,49 @@ properties:
 
       | Type | Description | Training | Inference |
       |------|-------------|----------|-----------|
-      | `standard_attn` | Classic multi-head self-attention (like BERT) | ✅ | ✅ |
-      | `sigmoid_attn` | Sigmoid-gated attention | ✅ | ✅ |
-      | `gated_softmax_attn` | Gated softmax attention with post-SDPA sigmoid | ✅ | ✅ |
-      | `titan_attn` | Titan attention with positional encoding (`hope`/`rope`) | ✅ | ✅ |
-      | `retnet` / `retnet_attn` | Retention Network (RNN+transformer hybrid) | ✅ | ✅ |
-      | `mamba` | Selective state-space model (SSM) | ✅ | ✅ |
-      | `ode` | Continuous-depth ODE layer (uses `attention.ode.solver`/`attention.ode.steps`) | ✅ | ✅ |
-      | `gla_attn` | Gated Linear Attention with multiplicative decay | ✅ | ✅ |
-      | `deltanet_attn` / `gated_deltanet_attn` | DeltaNet with corrective delta rule | ✅ | ✅ |
-      | `gated_deltanet2_attn` | Gated DeltaNet-2 with decoupled channel-wise erase/write gates (arXiv:2605.22791) | ✅ | ✅ |
-      | `hgrn2_attn` | HGRN2 with hierarchical forget gates | ✅ | ✅ |
-      | `fox_attn` | Forgetting Transformer (FoX) with forget bias in logits | ✅ | ✅ |
-      | `nsa_attn` | Native Sparse Attention (three-branch) | ✅ | ✅ |
-      | `engram_attn` | N-gram conditional memory lookup (arXiv:2601.07372) | ✅ | ✅ |
-      | `gqa_attn` | Grouped-Query Attention — configurable KV heads (arXiv:2305.13245) | ✅ | ✅ |
-      | `longformer_attn` | Longformer: sliding windows + global tokens | ✅ | ✅ |
-      | `swa_attn` | Sliding-window attention with attention sinks — SWA(w, s) (arXiv:2608.28444) | ✅ | ✅ |
-      | `bigbird_attn` | BigBird: local + random + global attention | ✅ | ✅ |
-      | `sparse_transformer_attn` | Sparse Transformer: factorized patterns | ✅ | ✅ |
-      | `sparsek_attn` | SparseK: differentiable top-k KV selection | ✅ | ✅ |
-      | `sparge_attn` ⚠️ | SpargeAttn — two-stage block pruning; **trains as dense attention**, sparse filter at inference | ✅ (dense) | ✅ (sparse) |
-      | `fasa_attn` ⚠️ | FASA — frequency-aware token selection; **trains as dense attention**, sparse selection at inference | ✅ (dense) | ✅ (sparse) |
-      | `msa_attn` | MiniMax Sparse Attention — block-sparse on GQA (arXiv:2606.13392) | ✅ | ✅ |
-      | `sparda_attn` | SparDA — decoupled sparse attention with a Forecast projection (arXiv:2606.04511) | ✅ | ✅ |
-      | `kda_attn` | Kimi Delta Attention — channel-wise decay + scalar write gate (arXiv:2510.26692) | ✅ | ✅ |
-      | `falcon1_attn` | Falcon-1 — scalar NLMS regression (delta-rule) fast-weight update, read-after-write prefix-aligned (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon2_attn` | Falcon-2 — per-column NLMS regression fast-weight update (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon3_attn` | Falcon-3 — sliding-window minibatch regression fast-weight update (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon1a_attn` | Falcon-1A — scalar inner-product (additive) fast-weight update (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon2a_attn` | Falcon-2A — per-column inner-product fast-weight update (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon3a_attn` | Falcon-3A — sliding-window inner-product fast-weight update, best length extrapolation (arXiv:2608.27763) | ✅ | ✅ |
-      | `mla_attn` | Multi-Head Latent Attention + RoPE (arXiv:2506.09342) | ✅ | ✅ |
-      | `gqla_attn` | Group-Query Latent Attention — two decoding paths (arXiv:2605.15250) | ✅ | ✅ |
-      | `mlra_attn` | Multi-Head Low-Rank Attention — partitionable latent (arXiv:2603.02188) | ✅ | ✅ |
-      | `tucker_attn` | Tucker Attention — generalised low-rank factorisation (arXiv:2603.30033) | ✅ | ✅ |
-      | `iha_attn` | Interleaved Head Attention — cross-head pseudo-heads (arXiv:2602.21371) | ✅ | ✅ |
-      | `gta_attn` | Grouped-head laTenT Attention — shared map + latent values (arXiv:2506.17286) | ✅ | ✅ |
-      | `mtla_attn` | Multi-head Temporal Latent Attention — temporal KV merge (arXiv:2505.13544) | ✅ | ✅ |
-      | `cca_attn` | Compressed Convolutional Attention — latent-space attention + convs (arXiv:2510.04476) | ✅ | ✅ |
-      | `ccgqa_attn` | Compressed Convolutional Grouped Query Attention — CCA + GQA in latent (arXiv:2510.04476) | ✅ | ✅ |
-      | `gma_attn` | Gaussian Mixture Attention — probabilistic latent routing, O(NK) linear-time (arXiv:2606.18283) | ✅ | ✅ |
-      | `ssog_attn` | SSOG — separable Gaussian field over relative position, near-linear O(R·N·√N); content steers, never scores (Pisoni 2026) | ✅ | ✅ |
-      | `conformer_attn` | Conformer — macaron FFN₁ + MHSA + convolution module (arXiv:2005.08100) | ✅ | ✅ |
+      | `standard_attn` | Classic multi-head self-attention (like BERT) (paper: arxiv:1706.03762) | ✅ | ✅ |
+      | `sigmoid_attn` | Sigmoid-gated attention (paper: arxiv:2409.04431) | ✅ | ✅ |
+      | `gated_softmax_attn` | Gated softmax attention with post-SDPA sigmoid (paper: arxiv:2505.06708) | ✅ | ✅ |
+      | `titan_attn` | Titan attention with positional encoding (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
+      | `retnet` / `retnet_attn` | Retention Network (RNN+transformer hybrid) (paper: arxiv:2307.08621) | ✅ | ✅ |
+      | `mamba` | Selective state-space model (SSM) (paper: arxiv:2312.00752) | ✅ | ✅ |
+      | `ode` | Continuous-depth ODE layer (uses `attention.ode.solver`/`attention.ode.steps`) (paper: arxiv:1906.02762) (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692) | ✅ | ✅ |
+      | `gla_attn` | Gated Linear Attention with multiplicative decay (paper: arxiv:2312.06635) | ✅ | ✅ |
+      | `deltanet_attn` / `gated_deltanet_attn` | DeltaNet with corrective delta rule (paper: arxiv:2406.06484) (paper: arxiv:2412.06464) | ✅ | ✅ |
+      | `gated_deltanet2_attn` | Gated DeltaNet-2 with decoupled channel-wise erase/write gates (paper: arxiv:2605.22791) | ✅ | ✅ |
+      | `hgrn2_attn` | HGRN2 with hierarchical forget gates (paper: arxiv:2404.07904) | ✅ | ✅ |
+      | `fox_attn` | Forgetting Transformer (FoX) with forget bias in logits (paper: arxiv:2503.02130) | ✅ | ✅ |
+      | `nsa_attn` | Native Sparse Attention (three-branch) (paper: arxiv:2502.11089) | ✅ | ✅ |
+      | `engram_attn` | N-gram conditional memory lookup (paper: arxiv:2601.07372) | ✅ | ✅ |
+      | `gqa_attn` | Grouped-Query Attention — configurable KV heads (paper: arxiv:2305.13245) | ✅ | ✅ |
+      | `longformer_attn` | Longformer: sliding windows + global tokens (paper: arxiv:2004.05150) | ✅ | ✅ |
+      | `swa_attn` | Sliding-window attention with attention sinks — SWA(w, s) (paper: arxiv:2608.28444) | ✅ | ✅ |
+      | `bigbird_attn` | BigBird: local + random + global attention (paper: arxiv:2007.14062) | ✅ | ✅ |
+      | `sparse_transformer_attn` | Sparse Transformer: factorized patterns (paper: arxiv:1904.10509) | ✅ | ✅ |
+      | `sparsek_attn` | SparseK: differentiable top-k KV selection (paper: arxiv:2406.16747) | ✅ | ✅ |
+      | `sparge_attn` ⚠️ | SpargeAttn — two-stage block pruning; **trains as dense attention**, sparse filter at inference (paper: arxiv:2502.18137) | ✅ (dense) | ✅ (sparse) |
+      | `fasa_attn` ⚠️ | FASA — frequency-aware token selection; **trains as dense attention**, sparse selection at inference (paper: arxiv:2602.03152) | ✅ (dense) | ✅ (sparse) |
+      | `msa_attn` | MiniMax Sparse Attention — block-sparse on GQA (paper: arxiv:2606.13392) | ✅ | ✅ |
+      | `sparda_attn` | SparDA — decoupled sparse attention with a Forecast projection (paper: arxiv:2606.04511) | ✅ | ✅ |
+      | `kda_attn` | Kimi Delta Attention — channel-wise decay + scalar write gate (paper: arxiv:2510.26692) | ✅ | ✅ |
+      | `falcon1_attn` | Falcon-1 — scalar NLMS regression (delta-rule) fast-weight update, read-after-write prefix-aligned (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon2_attn` | Falcon-2 — per-column NLMS regression fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon3_attn` | Falcon-3 — sliding-window minibatch regression fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon1a_attn` | Falcon-1A — scalar inner-product (additive) fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon2a_attn` | Falcon-2A — per-column inner-product fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon3a_attn` | Falcon-3A — sliding-window inner-product fast-weight update, best length extrapolation (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `mla_attn` | Multi-Head Latent Attention + RoPE (paper: arxiv:2506.09342) | ✅ | ✅ |
+      | `gqla_attn` | Group-Query Latent Attention — two decoding paths (paper: arxiv:2605.15250) | ✅ | ✅ |
+      | `mlra_attn` | Multi-Head Low-Rank Attention — partitionable latent (paper: arxiv:2603.02188) | ✅ | ✅ |
+      | `tucker_attn` | Tucker Attention — generalised low-rank factorisation (paper: arxiv:2603.30033) | ✅ | ✅ |
+      | `iha_attn` | Interleaved Head Attention — cross-head pseudo-heads (paper: arxiv:2602.21371) | ✅ | ✅ |
+      | `gta_attn` | Grouped-head laTenT Attention — shared map + latent values (paper: arxiv:2506.17286) | ✅ | ✅ |
+      | `mtla_attn` | Multi-head Temporal Latent Attention — temporal KV merge (paper: arxiv:2505.13544) | ✅ | ✅ |
+      | `cca_attn` | Compressed Convolutional Attention — latent-space attention + convs (paper: arxiv:2510.04476) | ✅ | ✅ |
+      | `ccgqa_attn` | Compressed Convolutional Grouped Query Attention — CCA + GQA in latent (paper: arxiv:2510.04476) | ✅ | ✅ |
+      | `gma_attn` | Gaussian Mixture Attention — probabilistic latent routing, O(NK) linear-time (paper: arxiv:2606.18283) | ✅ | ✅ |
+      | `ssog_attn` | SSOG — separable Gaussian field over relative position, near-linear O(R·N·√N); content steers, never scores (Pisoni 2026) (paper: https://www.pisoni.ai/posts/ssog/) | ✅ | ✅ |
+      | `conformer_attn` | Conformer — macaron FFN₁ + MHSA + convolution module (paper: arxiv:2005.08100) | ✅ | ✅ |
 
       **Examples explained:**
       - `[standard_attn]` repeated 12 times: Classic BERT-like encoder. Simplest configuration, serves as a reliable baseline. All layers use full quadratic attention.
@@ -248,49 +272,49 @@ properties:
 
       | Tipo | Descripción | Entrenamiento | Inferencia |
       |------|-------------|---------------|------------|
-      | `standard_attn` | Atención multi-cabeza clásica (tipo BERT) | ✅ | ✅ |
-      | `sigmoid_attn` | Atención con compuerta sigmoide | ✅ | ✅ |
-      | `gated_softmax_attn` | Atención softmax con compuerta post-SDPA | ✅ | ✅ |
-      | `titan_attn` | Atención Titan con codificación posicional (`hope`/`rope`) | ✅ | ✅ |
-      | `retnet` / `retnet_attn` | Retention Network (híbrido RNN+transformer) | ✅ | ✅ |
-      | `mamba` | Modelo de espacio de estados (SSM) selectivo | ✅ | ✅ |
-      | `ode` | Capa ODE de profundidad continua (usa `attention.ode.solver`/`attention.ode.steps`) | ✅ | ✅ |
-      | `gla_attn` | Gated Linear Attention con decaimiento multiplicativo | ✅ | ✅ |
-      | `deltanet_attn` / `gated_deltanet_attn` | DeltaNet con regla delta correctiva | ✅ | ✅ |
-      | `gated_deltanet2_attn` | Gated DeltaNet-2 con compuertas erase/write canalizadas decoupladas (arXiv:2605.22791) | ✅ | ✅ |
-      | `hgrn2_attn` | HGRN2 con compuertas de olvido jerárquicas | ✅ | ✅ |
-      | `fox_attn` | Forgetting Transformer (FoX) con sesgo de olvido en logits | ✅ | ✅ |
-      | `nsa_attn` | Native Sparse Attention de tres ramas | ✅ | ✅ |
-      | `engram_attn` | Memoria condicional por N-gramas (arXiv:2601.07372) | ✅ | ✅ |
-      | `gqa_attn` | Grouped-Query Attention — cabezas KV configurables (arXiv:2305.13245) | ✅ | ✅ |
-      | `longformer_attn` | Longformer: ventanas deslizantes + tokens globales | ✅ | ✅ |
-      | `swa_attn` | Atención de ventana deslizante con sumideros de atención — SWA(w, s) (arXiv:2608.28444) | ✅ | ✅ |
-      | `bigbird_attn` | BigBird: local + aleatorio + global | ✅ | ✅ |
-      | `sparse_transformer_attn` | Sparse Transformer: patrones factorizados | ✅ | ✅ |
-      | `sparsek_attn` | SparseK: selección top-k diferenciable | ✅ | ✅ |
-      | `sparge_attn` ⚠️ | SpargeAttn — poda de bloques en dos etapas; **entrena como atención densa**, filtro disperso en inferencia | ✅ (densa) | ✅ (dispersa) |
-      | `fasa_attn` ⚠️ | FASA — selección de tokens consciente de frecuencia; **entrena como atención densa**, selección dispersa en inferencia | ✅ (densa) | ✅ (dispersa) |
-      | `msa_attn` | MiniMax Sparse Attention — bloques dispersos sobre GQA (arXiv:2606.13392) | ✅ | ✅ |
-      | `sparda_attn` | SparDA — atención dispersa desacoplada con proyección Forecast (arXiv:2606.04511) | ✅ | ✅ |
-      | `kda_attn` | Kimi Delta Attention — decaimiento canalizado + compuerta escalar (arXiv:2510.26692) | ✅ | ✅ |
-      | `falcon1_attn` | Falcon-1 — actualización fast-weight de regresión NLMS escalar (regla delta), alineada al prefijo read-after-write (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon2_attn` | Falcon-2 — actualización fast-weight de regresión NLMS por columna (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon3_attn` | Falcon-3 — actualización fast-weight de regresión por mini-lote de ventana deslizante (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon1a_attn` | Falcon-1A — actualización fast-weight de producto interno escalar (aditiva) (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon2a_attn` | Falcon-2A — actualización fast-weight de producto interno por columna (arXiv:2608.27763) | ✅ | ✅ |
-      | `falcon3a_attn` | Falcon-3A — actualización fast-weight de producto interno con ventana deslizante, mejor extrapolación de longitud (arXiv:2608.27763) | ✅ | ✅ |
-      | `mla_attn` | Multi-Head Latent Attention + RoPE (arXiv:2506.09342) | ✅ | ✅ |
-      | `gqla_attn` | Group-Query Latent Attention — dos rutas de decodificación (arXiv:2605.15250) | ✅ | ✅ |
-      | `mlra_attn` | Multi-Head Low-Rank Attention — latente particionable (arXiv:2603.02188) | ✅ | ✅ |
-      | `tucker_attn` | Tucker Attention — factorización de bajo rango generalizada (arXiv:2603.30033) | ✅ | ✅ |
-      | `iha_attn` | Interleaved Head Attention — pseudo-cabezas entre cabezas (arXiv:2602.21371) | ✅ | ✅ |
-      | `gta_attn` | Grouped-head laTenT Attention — mapa compartido + valores latentes (arXiv:2506.17286) | ✅ | ✅ |
-      | `mtla_attn` | Multi-head Temporal Latent Attention — fusión temporal de KV (arXiv:2505.13544) | ✅ | ✅ |
-      | `cca_attn` | Compressed Convolutional Attention — atención en espacio latente + convoluciones (arXiv:2510.04476) | ✅ | ✅ |
-      | `ccgqa_attn` | Compressed Convolutional Grouped Query Attention — CCA + GQA en latente (arXiv:2510.04476) | ✅ | ✅ |
-      | `gma_attn` | Gaussian Mixture Attention — enrutamiento latente probabilístico, O(NK) en tiempo lineal (arXiv:2606.18283) | ✅ | ✅ |
-      | `ssog_attn` | SSOG — campo Gaussiano separable sobre posición relativa, casi lineal O(R·N·√N); el contenido dirige, nunca puntúa (Pisoni 2026) | ✅ | ✅ |
-      | `conformer_attn` | Conformer — FFN₁ macaron + MHSA + módulo de convolución (arXiv:2005.08100) | ✅ | ✅ |
+      | `standard_attn` | Atención multi-cabeza clásica (tipo BERT) (paper: arxiv:1706.03762) | ✅ | ✅ |
+      | `sigmoid_attn` | Atención con compuerta sigmoide (paper: arxiv:2409.04431) | ✅ | ✅ |
+      | `gated_softmax_attn` | Atención softmax con compuerta post-SDPA (paper: arxiv:2505.06708) | ✅ | ✅ |
+      | `titan_attn` | Atención Titan con codificación posicional (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
+      | `retnet` / `retnet_attn` | Retention Network (híbrido RNN+transformer) (paper: arxiv:2307.08621) | ✅ | ✅ |
+      | `mamba` | Modelo de espacio de estados (SSM) selectivo (paper: arxiv:2312.00752) | ✅ | ✅ |
+      | `ode` | Capa ODE de profundidad continua (usa `attention.ode.solver`/`attention.ode.steps`) (paper: arxiv:1906.02762) (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692) | ✅ | ✅ |
+      | `gla_attn` | Gated Linear Attention con decaimiento multiplicativo (paper: arxiv:2312.06635) | ✅ | ✅ |
+      | `deltanet_attn` / `gated_deltanet_attn` | DeltaNet con regla delta correctiva (paper: arxiv:2406.06484) (paper: arxiv:2412.06464) | ✅ | ✅ |
+      | `gated_deltanet2_attn` | Gated DeltaNet-2 con compuertas erase/write canalizadas decoupladas (paper: arxiv:2605.22791) | ✅ | ✅ |
+      | `hgrn2_attn` | HGRN2 con compuertas de olvido jerárquicas (paper: arxiv:2404.07904) | ✅ | ✅ |
+      | `fox_attn` | Forgetting Transformer (FoX) con sesgo de olvido en logits (paper: arxiv:2503.02130) | ✅ | ✅ |
+      | `nsa_attn` | Native Sparse Attention de tres ramas (paper: arxiv:2502.11089) | ✅ | ✅ |
+      | `engram_attn` | Memoria condicional por N-gramas (paper: arxiv:2601.07372) | ✅ | ✅ |
+      | `gqa_attn` | Grouped-Query Attention — cabezas KV configurables (paper: arxiv:2305.13245) | ✅ | ✅ |
+      | `longformer_attn` | Longformer: ventanas deslizantes + tokens globales (paper: arxiv:2004.05150) | ✅ | ✅ |
+      | `swa_attn` | Atención de ventana deslizante con sumideros de atención — SWA(w, s) (paper: arxiv:2608.28444) | ✅ | ✅ |
+      | `bigbird_attn` | BigBird: local + aleatorio + global (paper: arxiv:2007.14062) | ✅ | ✅ |
+      | `sparse_transformer_attn` | Sparse Transformer: patrones factorizados (paper: arxiv:1904.10509) | ✅ | ✅ |
+      | `sparsek_attn` | SparseK: selección top-k diferenciable (paper: arxiv:2406.16747) | ✅ | ✅ |
+      | `sparge_attn` ⚠️ | SpargeAttn — poda de bloques en dos etapas; **entrena como atención densa**, filtro disperso en inferencia (paper: arxiv:2502.18137) | ✅ (densa) | ✅ (dispersa) |
+      | `fasa_attn` ⚠️ | FASA — selección de tokens consciente de frecuencia; **entrena como atención densa**, selección dispersa en inferencia (paper: arxiv:2602.03152) | ✅ (densa) | ✅ (dispersa) |
+      | `msa_attn` | MiniMax Sparse Attention — bloques dispersos sobre GQA (paper: arxiv:2606.13392) | ✅ | ✅ |
+      | `sparda_attn` | SparDA — atención dispersa desacoplada con proyección Forecast (paper: arxiv:2606.04511) | ✅ | ✅ |
+      | `kda_attn` | Kimi Delta Attention — decaimiento canalizado + compuerta escalar (paper: arxiv:2510.26692) | ✅ | ✅ |
+      | `falcon1_attn` | Falcon-1 — actualización fast-weight de regresión NLMS escalar (regla delta), alineada al prefijo read-after-write (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon2_attn` | Falcon-2 — actualización fast-weight de regresión NLMS por columna (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon3_attn` | Falcon-3 — actualización fast-weight de regresión por mini-lote de ventana deslizante (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon1a_attn` | Falcon-1A — actualización fast-weight de producto interno escalar (aditiva) (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon2a_attn` | Falcon-2A — actualización fast-weight de producto interno por columna (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon3a_attn` | Falcon-3A — actualización fast-weight de producto interno con ventana deslizante, mejor extrapolación de longitud (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `mla_attn` | Multi-Head Latent Attention + RoPE (paper: arxiv:2506.09342) | ✅ | ✅ |
+      | `gqla_attn` | Group-Query Latent Attention — dos rutas de decodificación (paper: arxiv:2605.15250) | ✅ | ✅ |
+      | `mlra_attn` | Multi-Head Low-Rank Attention — latente particionable (paper: arxiv:2603.02188) | ✅ | ✅ |
+      | `tucker_attn` | Tucker Attention — factorización de bajo rango generalizada (paper: arxiv:2603.30033) | ✅ | ✅ |
+      | `iha_attn` | Interleaved Head Attention — pseudo-cabezas entre cabezas (paper: arxiv:2602.21371) | ✅ | ✅ |
+      | `gta_attn` | Grouped-head laTenT Attention — mapa compartido + valores latentes (paper: arxiv:2506.17286) | ✅ | ✅ |
+      | `mtla_attn` | Multi-head Temporal Latent Attention — fusión temporal de KV (paper: arxiv:2505.13544) | ✅ | ✅ |
+      | `cca_attn` | Compressed Convolutional Attention — atención en espacio latente + convoluciones (paper: arxiv:2510.04476) | ✅ | ✅ |
+      | `ccgqa_attn` | Compressed Convolutional Grouped Query Attention — CCA + GQA en latente (paper: arxiv:2510.04476) | ✅ | ✅ |
+      | `gma_attn` | Gaussian Mixture Attention — enrutamiento latente probabilístico, O(NK) en tiempo lineal (paper: arxiv:2606.18283) | ✅ | ✅ |
+      | `ssog_attn` | SSOG — campo Gaussiano separable sobre posición relativa, casi lineal O(R·N·√N); el contenido dirige, nunca puntúa (Pisoni 2026) (paper: https://www.pisoni.ai/posts/ssog/) | ✅ | ✅ |
+      | `conformer_attn` | Conformer — FFN₁ macaron + MHSA + módulo de convolución (paper: arxiv:2005.08100) | ✅ | ✅ |
       **Ejemplos explicados:**
       - `[standard_attn]` repetido 12 veces: Encoder clásico tipo BERT. Configuración más simple, sirve como línea base confiable. Todas las capas usan atención cuadrática completa.
       - `[retnet, titan_attn, retnet, mamba, titan_attn, ode]` con `num_layers=6`: Arquitectura mixta que combina retención recurrente (largo alcance eficiente), atención Titan con codificación posicional (atención local precisa), Mamba SSM (modelado de secuencias en tiempo lineal) y ODE de profundidad continua. Cada posición recibe un tipo diferente de cómputo, permitiendo representaciones diversas.
@@ -298,6 +322,10 @@ properties:
       - Mezcla de recurrente (retnet, mamba) con atención (standard_attn, titan_attn): Las capas recurrentes proporcionan memoria y contexto de largo alcance a costo O(1) en inferencia, mientras que las capas de atención proporcionan interacciones locales de alta precisión. Este es el patrón recomendado para modelos que necesitan tanto eficiencia como calidad.
       - ⚠️ `sparge_attn` y `fasa_attn` aplican su heurística dispersa **solo en evaluación/inferencia**. Durante el entrenamiento `HybridLayer` sustituye atención estándar densa sobre las mismas proyecciones (`q/k/v/out`), por lo que pueden entrenarse desde cero; los pesos entrenados son exactamente los que usa la ruta dispersa al evaluar.
     items:
+      description: |-
+        One mixer type from the `layer_pattern` enum; see the table in `dims.layer_pattern` for the full catalogue with per-mixer references.
+      description_es: |-
+        Un tipo de mezclador del enum `layer_pattern`; consulta la tabla en `dims.layer_pattern` para el catálogo completo con referencias por mezclador.
       type: string
       enum:
         - retnet
@@ -358,6 +386,8 @@ properties:
 
       **Impact:** `encoder` allows each token to attend to all others (BERT-style). `decoder` only
       allows attending to previous tokens (GPT-style). Changing modes fundamentally changes the task.
+
+      **References:** (paper: arxiv:1706.03762)
     description_es: |
       Controla el enmascaramiento de atención. `encoder` = atención bidireccional. `decoder` = máscara
       causal para predicción autorregresiva de siguiente token. Con `model_class=frankenstein_text_decoder`,
@@ -365,6 +395,8 @@ properties:
 
       **Impacto:** `encoder` permite que cada token atienda a todos los demás (tipo BERT). `decoder` solo
       permite atender a tokens anteriores (tipo GPT). Cambiar de modo cambia fundamentalmente la tarea.
+
+      **Referencias:** (paper: arxiv:1706.03762)
     enum: [encoder, decoder]
     default: encoder
     examples: [encoder, decoder]

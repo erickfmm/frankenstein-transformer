@@ -8,9 +8,11 @@ description: |-
 
   `loss` overrides `audio.asr_loss`: `ctc` builds the Connectionist Temporal
   Classification projection, `transducer` builds the RNN-Transducer prediction
-  and joint networks (arXiv:1211.3711). The value must match the head the
+  and joint networks (paper: arxiv:1211.3711). The value must match the head the
   checkpoint was trained with; leaving it unset keeps `audio.asr_loss`
   (`ctc` by default).
+
+  **References:** (paper: arxiv:2005.08100)
 description_es: |-
   Anulaciones opcionales de entrenamiento ASR para `training.task: asr`. Estos
   valores se aplican sobre el bloque `audio:` del modelo antes de construir el
@@ -18,9 +20,11 @@ description_es: |-
 
   `loss` anula `audio.asr_loss`: `ctc` construye la proyección de
   Connectionist Temporal Classification, `transducer` construye las redes de
-  predicción y conjunta del RNN-Transducer (arXiv:1211.3711). El valor debe
+  predicción y conjunta del RNN-Transducer (paper: arxiv:1211.3711). El valor debe
   coincidir con la cabeza con la que se entrenó el checkpoint; si se omite se
   conserva `audio.asr_loss` (`ctc` por defecto).
+
+  **Referencias:** (paper: arxiv:2005.08100)
 additionalProperties: false
 properties:
   loss:
@@ -32,11 +36,15 @@ properties:
       encoder frames. `transducer` = RNN-Transducer with an LSTM prediction
       network and a joint network. Overrides `audio.asr_loss`; it must match
       the head that is built.
+
+      **References:** (paper: https://doi.org/10.1145/1143844.1143891) (paper: arxiv:1211.3711)
     description_es: |-
       Objetivo ASR. `ctc` = Connectionist Temporal Classification sobre las
       tramas del encoder. `transducer` = RNN-Transducer con una red de
       predicción LSTM y una red conjunta. Anula `audio.asr_loss`; debe coincidir
       con la cabeza que se construye.
+
+      **Referencias:** (paper: https://doi.org/10.1145/1143844.1143891) (paper: arxiv:1211.3711)
     enum:
       - ctc
       - transducer

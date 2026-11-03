@@ -22,6 +22,8 @@ description: |
 
   **Impact:** An incorrect tokenizer (one that doesn't match the base model) produces meaningless
   embeddings and unrecoverable loss. Always verify that `name_or_path` matches the base model.
+
+  **References:** (paper: arxiv:1910.03771)
 description_es: |
   Configuración del tokenizador usado por las tareas de entrenamiento NLP (`mlm`,
   `causal_lm`, `text_classification`). Disponible tanto para la ruta `base_model`
@@ -44,6 +46,8 @@ description_es: |
 
   **Impacto:** Un tokenizador incorrecto (que no coincida con el del modelo base) produce embeddings
   sin sentido y pérdida irrecuperable. Siempre verificar que `name_or_path` coincida con el modelo base.
+
+  **Referencias:** (paper: arxiv:1910.03771)
 additionalProperties: false
 properties:
   source:
@@ -61,6 +65,8 @@ properties:
         injected into `model.dims.vocab_size` before model construction.
 
       When `train_from_dataset` is selected, `name_or_path` must be omitted.
+
+      **References:** (paper: arxiv:1910.03771)
     description_es: |
       Modo de fuente del tokenizador:
 
@@ -71,6 +77,8 @@ properties:
         en `model.dims.vocab_size` antes de construir el modelo.
 
       Cuando se selecciona `train_from_dataset`, `name_or_path` debe omitirse.
+
+      **Referencias:** (paper: arxiv:1910.03771)
     examples: [hf_repo]
     default: hf_repo
   training:
@@ -81,11 +89,15 @@ properties:
       Sub-object configuring tokenizer training from a dataset. Required when
       `source: train_from_dataset`; ignored otherwise. Uses the HuggingFace
       `tokenizers` library trainers (BPE, WordPiece, WordLevel, Unigram).
+
+      **References:** (paper: arxiv:1910.03771)
     description_es: |
       Sub-objeto que configura el entrenamiento del tokenizador desde un dataset.
       Obligatorio cuando `source: train_from_dataset`; ignorado en otro caso.
       Usa los trainers de la biblioteca `tokenizers` de HuggingFace
       (BPE, WordPiece, WordLevel, Unigram).
+
+      **Referencias:** (paper: arxiv:1910.03771)
     additionalProperties: false
     properties:
       algorithm:
@@ -144,6 +156,12 @@ properties:
       special_tokens:
         type: array
         items:
+          description: |-
+            A special token string (e.g. `[MASK]`, `[SEP]`, `[CLS]`). For MLM training the BERT token set is expected.
+            **References:** (paper: arxiv:1810.04805)
+          description_es: |-
+            Una cadena de token especial (p. ej. `[MASK]`, `[SEP]`, `[CLS]`). Para entrenamiento MLM se espera el conjunto de tokens de BERT.
+            **Referencias:** (paper: arxiv:1810.04805)
           type: string
         title: "Special Tokens"
         title_es: "Tokens Especiales"
@@ -177,9 +195,13 @@ properties:
         description: |
           Lowercase all text before training (BERT-uncased style). Recommended when
           the corpus is mixed-case and vocabulary efficiency matters.
+
+          **References:** (paper: arxiv:1810.04805)
         description_es: |
           Convertir todo el texto a minúsculas antes de entrenar (estilo BERT-uncased).
           Recomendado cuando el corpus mezcla mayúsculas y se busca eficiencia de vocabulario.
+
+          **Referencias:** (paper: arxiv:1810.04805)
         default: false
       strip_accents:
         type: boolean
@@ -236,6 +258,8 @@ properties:
 
       **Impact:** Si no coincide con el modelo base, los IDs de tokens no corresponderán a las
       embeddings correctas, resultando en un modelo inutilizable.
+
+      **References:** (paper: arxiv:1910.03771)
     description_es: |
       Identificador de tokenizador de HuggingFace o ruta local pasado a `AutoTokenizer.from_pretrained()`.
       Obligatorio cuando `source: hf_repo` (el valor por defecto). Debe coincidir con el
@@ -244,6 +268,8 @@ properties:
 
       **Impacto:** Si no coincide con el modelo base, los IDs de tokens no corresponderán a las
       embeddings correctas, resultando en un modelo inutilizable.
+
+      **Referencias:** (paper: arxiv:1910.03771)
     examples:
       - answerdotai/ModernBERT-base
   use_fast:
@@ -256,6 +282,8 @@ properties:
 
       **Impact:** `true` reduce el tiempo de preprocesamiento drásticamente. Usar `false` solo
       si el tokenizador no soporta la versión rápida o si hay problemas de compatibilidad.
+
+      **References:** (paper: arxiv:1910.03771)
     description_es: |
       Habilita la implementación rápida del tokenizador basada en Rust para una tokenización
       significativamente más rápida (5-10x vs Python). Recomendado para entrenamiento. Algunos
@@ -263,6 +291,8 @@ properties:
 
       **Impacto:** `true` reduce el tiempo de preprocesamiento drásticamente. Usar `false` solo
       si el tokenizador no soporta la versión rápida o si hay problemas de compatibilidad.
+
+      **Referencias:** (paper: arxiv:1910.03771)
     examples: [true]
   trust_remote_code:
     type: boolean

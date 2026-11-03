@@ -8,7 +8,7 @@ properties:
     title_es: "Atención Fast-Weight Falcon"
     description: |-
       Shared configuration of the Falcon fast-weight attention family
-      (arXiv:2608.27763, "Fast Weight Attention for Continual Learning",
+      ((paper: arxiv:2608.27763), "Fast Weight Attention for Continual Learning",
       Zhang et al. 2026). The six mixers `falcon1_attn`, `falcon2_attn`,
       `falcon3_attn` (squared-error regression family) and
       `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn` (negative
@@ -29,9 +29,11 @@ properties:
       - `beta_mode=static, beta=1.0, lambda_mode=static, lambda=0.0`:
         classical NLMS delta rule with orthogonal projection along the
         write direction.
+
+      **References:** (paper: arxiv:2608.27763)
     description_es: |-
       Configuración compartida de la familia de atención fast-weight
-      Falcon (arXiv:2608.27763, "Fast Weight Attention for Continual
+      Falcon ((paper: arxiv:2608.27763), "Fast Weight Attention for Continual
       Learning", Zhang et al. 2026). Los seis mixers `falcon1_attn`,
       `falcon2_attn`, `falcon3_attn` (familia de regresión de error
       cuadrático) y `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn`
@@ -53,6 +55,8 @@ properties:
       - `beta_mode=static, beta=1.0, lambda_mode=static, lambda=0.0`:
         regla delta NLMS clásica con proyección ortogonal en la
         dirección de escritura.
+
+      **Referencias:** (paper: arxiv:2608.27763)
     properties:
       chunk_size:
         type: [integer, "null"]
@@ -65,6 +69,8 @@ properties:
           and rank-B block substitution for the sliding variants).
           `null` forces the recurrent reference scan (O(N) per-step
           loop). Typical: 64 or 128. Default: 64.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Tamaño de chunk de los kernels chunk-parallel estilo SSD
           (resoluciones triangulares WY para la familia de regresión,
@@ -73,6 +79,8 @@ properties:
           bloques de rango B para las variantes deslizantes).
           `null` fuerza el escaneo recurrente de referencia (bucle
           O(N) por paso). Típico: 64 o 128. Por defecto: 64.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         examples: [64, 128]
       qk_norm:
         type: string
@@ -84,12 +92,16 @@ properties:
           stabilizes the NLMS denominator in mixed precision;
           `l2_norm` is the DeltaNet-style QK-l2-norm ablation
           (`||x_t|| = 1`). Default: rms_norm.
+
+          **References:** (paper: arxiv:2608.27763) (paper: arxiv:1910.07467)
         description_es: |-
           Normalización de query/key. `rms_norm` (por defecto del
           paper, QK-RMSNorm calculada en fp32) mantiene `||x_t||^2 ~=
           d`, lo que estabiliza el denominador NLMS en precisión
           mixta; `l2_norm` es la ablaación estilo DeltaNet
           (`||x_t|| = 1`). Por defecto: rms_norm.
+
+          **Referencias:** (paper: arxiv:2608.27763) (paper: arxiv:1910.07467)
         enum: [rms_norm, l2_norm]
         examples: [rms_norm]
       beta_mode:
@@ -104,6 +116,8 @@ properties:
           numerator directly (allows the sign-flip regime beta > 2,
           useful for state tracking). The paper's best configs use
           ctx_eta. Default: ctx_eta.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Parametrización de la compuerta de plasticidad (numerador del
           tamaño de paso). `static` usa el escalar fijo `beta`;
@@ -113,6 +127,8 @@ properties:
           de inversión de signo beta > 2, útil para state tracking). Las
           mejores configuraciones del paper usan ctx_eta. Por defecto:
           ctx_eta.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         enum: [static, ctx_beta, ctx_eta]
         examples: [ctx_eta]
       lambda_mode:
@@ -126,6 +142,8 @@ properties:
           with the detached objective statistic (`lambda_t = lam_bar_t *
           statistic_t`, Sec. 4.1 of the paper). The paper's best configs
           use ctx. Default: ctx.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Parametrización de la compuerta de olvido (ridge). `static`
           usa el escalar fijo `lambda` (debe ser >= 0); `ctx` emite un
@@ -134,6 +152,8 @@ properties:
           (`lambda_t = lam_bar_t * statistic_t`, Sec. 4.1 del paper).
           Las mejores configuraciones del paper usan ctx. Por defecto:
           ctx.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         enum: [static, ctx]
         examples: [ctx]
       beta:
@@ -144,11 +164,15 @@ properties:
           Static dimensionless NLMS gain used when `beta_mode=static`.
           Must be in (0, 2); beta = 1 is an orthogonal projection along
           the write direction. Ignored otherwise. Default: 1.0.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Ganancia NLMS adimensional estática usada cuando
           `beta_mode=static`. Debe estar en (0, 2); beta = 1 es una
           proyección ortogonal en la dirección de escritura. Se ignora
           en otro caso. Por defecto: 1.0.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         exclusiveMinimum: 0
         exclusiveMaximum: 2
         examples: [1.0]
@@ -160,10 +184,14 @@ properties:
           Static ridge coefficient used when `lambda_mode=static`.
           Must be >= 0; lambda = 0 is the purely additive ablation (no
           forgetting). Ignored otherwise. Default: 0.0.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Coeficiente ridge estático usado cuando `lambda_mode=static`.
           Debe ser >= 0; lambda = 0 es la ablaación puramente aditiva
           (sin olvido). Se ignora en otro caso. Por defecto: 0.0.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         minimum: 0
         examples: [0.0]
       window:
@@ -176,6 +204,8 @@ properties:
           replayed in B consecutive window-averaged updates
           (window-averaging keeps the update magnitude invariant to B).
           Ignored by the non-windowed variants. Paper default: 4.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Tamaño de ventana deslizante B de las variantes de ensayo
           acotado `falcon3_attn` / `falcon3a_attn`: cada par alineado al
@@ -183,6 +213,8 @@ properties:
           ventana consecutivas (el promediado mantiene la magnitud de
           actualización invariante a B). Ignorada por las variantes no
           deslizantes. Por defecto del paper: 4.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         minimum: 1
         examples: [4]
       short_conv:
@@ -194,12 +226,16 @@ properties:
           (H3/SLConv-style) on the q/k/v projections. The paper notes
           this component is orthogonal to the fast-memory update; it is
           on by default and can be disabled for ablation. Default: true.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Aplica convoluciones cortas causales depth-wise ligeras
           (estilo H3/SLConv) sobre las proyecciones q/k/v. El paper
           señala que este componente es ortogonal a la actualización de
           la memoria rápida; está activado por defecto y puede
           deshabilitarse para ablación. Por defecto: true.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         examples: [true]
       conv_kernel:
         type: integer
@@ -208,9 +244,13 @@ properties:
         description: |-
           Kernel size of the Falcon short convolutions. Only applies
           when `short_conv=true`. Default: 4.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Tamaño de kernel de las convoluciones cortas Falcon. Solo
           aplica cuando `short_conv=true`. Por defecto: 4.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         minimum: 1
         examples: [4]
       eps:
@@ -222,11 +262,15 @@ properties:
           `eta_t = beta_t / (statistic_t + lambda_t + eps)`. Any eps > 0
           only decreases eta_t and therefore preserves descent. Must be
           > 0. Default: 1e-6.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Estabilizador numérico en el denominador del tamaño de paso
           normalizado `eta_t = beta_t / (statistic_t + lambda_t + eps)`.
           Cualquier eps > 0 solo disminuye eta_t y por lo tanto
           preserva el descenso. Debe ser > 0. Por defecto: 1e-6.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         exclusiveMinimum: 0
         examples: [1.0e-6]
       eps_gamma:
@@ -239,6 +283,8 @@ properties:
           `gamma_t = 1 - alpha_t >= eps_gamma` stays strictly positive
           (the numerically stable positive-decay renormalization of
           Sec. 4.4). Must be in (0, 1). Default: 1e-4.
+
+          **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Piso del recorte de decaimiento positivo: la contracción por
           paso obedece `alpha_t = min(eta_t * lambda_t, 1 - eps_gamma)`
@@ -246,6 +292,8 @@ properties:
           permanece estrictamente positivo (la renormalización de
           decaimiento positivo numéricamente estable de la Sec. 4.4).
           Debe estar en (0, 1). Por defecto: 1e-4.
+
+          **Referencias:** (paper: arxiv:2608.27763)
         exclusiveMinimum: 0
         exclusiveMaximum: 1
         examples: [1.0e-4]

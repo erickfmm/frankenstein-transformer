@@ -4,6 +4,12 @@ properties:
   mla:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `mla_attn` (Multi-Head Latent Attention): rank of the joint key-value latent. Only applies when `mla_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2506.09342)
+    description_es: |-
+      Hiperparámetros para `mla_attn` (Multi-Head Latent Attention): rango del latente conjunto clave-valor. Solo aplica cuando `mla_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2506.09342)
     properties:
       latent_rank:
         type: [integer, "null"]
@@ -12,7 +18,7 @@ properties:
         title_es: "Rango Latente MLA"
         description: |-
           Rank of the joint key-value latent for `mla_attn` (Multi-Head Latent
-          Attention, arXiv:2506.09342). The paper's Pareto-optimal setting is
+          Attention (paper: arxiv:2506.09342)). The paper's Pareto-optimal setting is
           `hidden_size // 2` with RoPE, which halves the KV cache while
           matching MHA quality. Set to `null` (the default) to use
           `hidden_size // 2`. Only applies when `mla_attn` appears in
@@ -26,16 +32,26 @@ properties:
             aggressive compression. Larger quality impact, useful for very
             cache-constrained deployment.
           - `mla_latent_rank=null`: defaults to `hidden_size // 2`.
+
+          **References:** (paper: arxiv:2506.09342)
         description_es: |-
           Rango del latente conjunto clave-valor para `mla_attn` (Multi-Head
-          Latent Attention, arXiv:2506.09342). La configuración Pareto-óptima del
+          Latent Attention (paper: arxiv:2506.09342)). La configuración Pareto-óptima del
           paper es `hidden_size // 2` con RoPE, lo que reduce a la mitad el caché
           KV manteniendo la calidad de MHA. `null` (por defecto) usa
           `hidden_size // 2`. Solo aplica cuando `mla_attn` está en `layer_pattern`.
+
+          **Referencias:** (paper: arxiv:2506.09342)
         examples: [384]
   gqla:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `gqla_attn` (Group-Query Latent Attention): joint KV latent rank, GQA groups and the decoding path. Only applies when `gqla_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2605.15250)
+    description_es: |-
+      Hiperparámetros para `gqla_attn` (Group-Query Latent Attention): rango del latente KV conjunto, grupos GQA y la ruta de decodificación. Solo aplica cuando `gqla_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2605.15250)
     properties:
       latent_rank:
         type: [integer, "null"]
@@ -44,12 +60,16 @@ properties:
         title_es: "Rango Latente GQLA"
         description: |-
           Rank of the joint KV latent for `gqla_attn` (Group-Query Latent
-          Attention, arXiv:2605.15250). `null` defaults to `hidden_size // 2`.
+          Attention (paper: arxiv:2605.15250)). `null` defaults to `hidden_size // 2`.
           Only applies when `gqla_attn` is in `layer_pattern`.
+
+          **References:** (paper: arxiv:2605.15250)
         description_es: |-
           Rango del latente KV conjunto para `gqla_attn` (Group-Query Latent
-          Attention, arXiv:2605.15250). `null` por defecto es `hidden_size // 2`.
+          Attention (paper: arxiv:2605.15250)). `null` por defecto es `hidden_size // 2`.
           Solo aplica cuando `gqla_attn` está en `layer_pattern`.
+
+          **Referencias:** (paper: arxiv:2605.15250)
         examples: [384]
       num_groups:
         type: [integer, "null"]
@@ -60,10 +80,14 @@ properties:
           Number of GQA groups used by the expanded `gqa` decoding path of
           `gqla_attn`. Must divide `num_heads` evenly. `null` defaults to
           `num_heads // 4`. Only applies when `gqla_attn` is in `layer_pattern`.
+
+          **References:** (paper: arxiv:2605.15250)
         description_es: |-
           Número de grupos GQA usados por la ruta de decodificación `gqa`
           expandida de `gqla_attn`. Debe dividir `num_heads`. `null` por
           defecto es `num_heads // 4`. Solo aplica con `gqla_attn`.
+
+          **Referencias:** (paper: arxiv:2605.15250)
         examples: [4]
       decode_path:
         type: string
@@ -74,16 +98,26 @@ properties:
           absorbed MQA form (best for H100-class bandwidth). `"gqa"` expands the
           latent into per-group full heads (best for commodity GPUs with MTP).
           Both paths are algebraically equivalent for the forward output.
+
+          **References:** (paper: arxiv:2605.15250)
         description_es: |-
           Ruta de decodificación seleccionada para `gqla_attn`. `"mqa_absorb"`
           corresponde a la forma MQA absorbida de MLA (mejor para H100).
           `"gqa"` expande el latente en cabezas completas por grupo (mejor para
           GPUs commodity con MTP). Ambas rutas son algebraicamente equivalentes.
+
+          **Referencias:** (paper: arxiv:2605.15250)
         enum: [mqa_absorb, gqa]
         examples: [gqa]
   mlra:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `mlra_attn` (Multi-Head Low-Rank Attention): total latent rank and number of disjoint latent sub-spaces. Only applies when `mlra_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2603.02188)
+    description_es: |-
+      Hiperparámetros para `mlra_attn` (Multi-Head Low-Rank Attention): rango latente total y número de sub-espacios latentes disjuntos. Solo aplica cuando `mlra_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2603.02188)
     properties:
       latent_rank:
         type: [integer, "null"]
@@ -92,14 +126,18 @@ properties:
         title_es: "Rango Latente MLRA"
         description: |-
           Total latent rank for `mlra_attn` (Multi-Head Low-Rank Attention,
-          arXiv:2603.02188), partitioned across `mlra_num_latent_heads`
+          (paper: arxiv:2603.02188)), partitioned across `mlra_num_latent_heads`
           sub-heads for tensor-parallel decoding. `null` defaults to
           `hidden_size // 2`. Must be divisible by `mlra_num_latent_heads`.
+
+          **References:** (paper: arxiv:2603.02188)
         description_es: |-
           Rango latente total para `mlra_attn` (Multi-Head Low-Rank Attention,
-          arXiv:2603.02188), particionado entre `mlra_num_latent_heads`
+          (paper: arxiv:2603.02188)), particionado entre `mlra_num_latent_heads`
           sub-cabezas para decodificación tensor-paralela. `null` por defecto es
           `hidden_size // 2`. Debe ser divisible por `mlra_num_latent_heads`.
+
+          **Referencias:** (paper: arxiv:2603.02188)
         examples: [384]
       num_latent_heads:
         type: integer
@@ -109,14 +147,24 @@ properties:
           Number of disjoint latent sub-spaces for `mlra_attn`. Enables
           partitionable 4-way tensor-parallel decoding (each device loads a
           disjoint slice). Must divide `mlra_latent_rank` evenly. Default: 4.
+
+          **References:** (paper: arxiv:2603.02188)
         description_es: |-
           Número de sub-espacios latentes disjuntos para `mlra_attn`. Habilita
           decodificación tensor-paralela de 4 vías (cada dispositivo carga un
           slice disjunto). Debe dividir `mlra_latent_rank`. Por defecto: 4.
+
+          **Referencias:** (paper: arxiv:2603.02188)
         examples: [4]
   tucker:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `tucker_attn` (Tucker Attention): ranks of the Tucker factorization for the query, key and value weight tensors. Only applies when `tucker_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2603.30033)
+    description_es: |-
+      Hiperparámetros para `tucker_attn` (Tucker Attention): rangos de la factorización Tucker de los tensores de pesos de query, key y value. Solo aplica cuando `tucker_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2603.30033)
     properties:
       query_rank:
         type: [integer, "null"]
@@ -125,13 +173,17 @@ properties:
         title_es: "Rango de Query Tucker"
         description: |-
           Tucker rank along the hidden axis for the query weight tensor of
-          `tucker_attn` (arXiv:2603.30033). `null` defaults to `hidden_size`
+          `tucker_attn` (paper: arxiv:2603.30033). `null` defaults to `hidden_size`
           (recovers MHA query rank). Special cases: MHA = `hidden_size`;
           MLA = latent rank.
+
+          **References:** (paper: arxiv:2603.30033)
         description_es: |-
           Rango Tucker a lo largo del eje oculto para el tensor de pesos de
-          query de `tucker_attn` (arXiv:2603.30033). `null` por defecto es
+          query de `tucker_attn` (paper: arxiv:2603.30033). `null` por defecto es
           `hidden_size` (recupera el rango de query de MHA).
+
+          **Referencias:** (paper: arxiv:2603.30033)
         examples: [768]
       key_rank:
         type: [integer, "null"]
@@ -143,11 +195,15 @@ properties:
           defaults to `hidden_size // 2`. Setting `key_rank = value_rank =
           hidden_size` recovers MHA; setting both to a small latent rank
           recovers MLA.
+
+          **References:** (paper: arxiv:2603.30033)
         description_es: |-
           Rango Tucker para el tensor de pesos de key de `tucker_attn`. `null`
           por defecto es `hidden_size // 2`. Igualar `key_rank = value_rank =
           hidden_size` recupera MHA; igualar ambos a un rango latente pequeño
           recupera MLA.
+
+          **Referencias:** (paper: arxiv:2603.30033)
         examples: [384]
       value_rank:
         type: [integer, "null"]
@@ -158,14 +214,24 @@ properties:
           Tucker rank for the value weight tensor of `tucker_attn`. `null`
           defaults to `hidden_size // 2`. See `tucker_key_rank` for the
           MHA/MLA special cases.
+
+          **References:** (paper: arxiv:2603.30033)
         description_es: |-
           Rango Tucker para el tensor de pesos de value de `tucker_attn`. `null`
           por defecto es `hidden_size // 2`. Ver `tucker_key_rank` para los
           casos especiales MHA/MLA.
+
+          **Referencias:** (paper: arxiv:2603.30033)
         examples: [384]
   iha:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `iha_attn` (Interleaved Head Attention): number of interleaved pseudo-heads per head. Only applies when `iha_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2602.21371)
+    description_es: |-
+      Hiperparámetros para `iha_attn` (Interleaved Head Attention): número de pseudo-cabezas intercaladas por cabeza. Solo aplica cuando `iha_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2602.21371)
     properties:
       num_pseudo_heads:
         type: [integer, "null"]
@@ -174,20 +240,30 @@ properties:
         title_es: "Pseudo-Cabezas IHA"
         description: |-
           Number of pseudo-heads `P` per head for `iha_attn` (Interleaved Head
-          Attention, arXiv:2602.21371). Typically `P = num_heads`. Pseudo
+          Attention (paper: arxiv:2602.21371)). Typically `P = num_heads`. Pseudo
           Q/K/V are learned linear combinations of all `H` original heads,
           inducing up to `P**2` attention patterns per head with modest
           `O(H**2 * P)` parameter overhead. `null` defaults to `num_heads`.
+
+          **References:** (paper: arxiv:2602.21371)
         description_es: |-
           Número de pseudo-cabezas `P` por cabeza para `iha_attn` (Interleaved
-          Head Attention, arXiv:2602.21371). Típicamente `P = num_heads`. Las
+          Head Attention (paper: arxiv:2602.21371)). Típicamente `P = num_heads`. Las
           pseudo Q/K/V son combinaciones lineales aprendidas de todas las `H`
           cabezas originales, induciendo hasta `P**2` patrones de atención por
           cabeza con overhead `O(H**2 * P)`. `null` por defecto es `num_heads`.
+
+          **Referencias:** (paper: arxiv:2602.21371)
         examples: [12]
   gta:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `gta_attn` (Grouped-head laTenT Attention): head groups sharing one attention map and the value latent rank. Only applies when `gta_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2506.17286)
+    description_es: |-
+      Hiperparámetros para `gta_attn` (Grouped-head laTenT Attention): grupos de cabezas que comparten un mapa de atención y el rango del latente de valores. Solo aplica cuando `gta_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2506.17286)
     properties:
       num_shared_groups:
         type: [integer, "null"]
@@ -196,14 +272,18 @@ properties:
         title_es: "Grupos Compartidos GTA"
         description: |-
           Number of head groups sharing a single attention map for `gta_attn`
-          (Grouped-head laTenT Attention, arXiv:2506.17286). Must divide
+          (Grouped-head laTenT Attention (paper: arxiv:2506.17286)). Must divide
           `num_heads`. `null` defaults to `num_heads // 4`. Smaller values =
           more sharing = smaller key cache.
+
+          **References:** (paper: arxiv:2506.17286)
         description_es: |-
           Número de grupos de cabezas que comparten un único mapa de atención
-          para `gta_attn` (Grouped-head laTenT Attention, arXiv:2506.17286).
+          para `gta_attn` (Grouped-head laTenT Attention (paper: arxiv:2506.17286)).
           Debe dividir `num_heads`. `null` por defecto es `num_heads // 4`.
           Valores menores = más compartir = menor caché de claves.
+
+          **Referencias:** (paper: arxiv:2506.17286)
         examples: [4]
       value_latent_rank:
         type: [integer, "null"]
@@ -214,15 +294,25 @@ properties:
           Rank of the value-cache latent for `gta_attn`. The value cache is
           compressed by a down-projection and reconstructed by a non-linear
           (silu) decoder. `null` defaults to `hidden_size // 2`.
+
+          **References:** (paper: arxiv:2506.17286)
         description_es: |-
           Rango del latente del caché de valores para `gta_attn`. El caché de
           valores se comprime con una proyección de bajada y se reconstruye con
           un decodificador no lineal (silu). `null` por defecto es
           `hidden_size // 2`.
+
+          **Referencias:** (paper: arxiv:2506.17286)
         examples: [384]
   mtla:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `mtla_attn` (Multi-head Temporal Latent Attention): feature-axis latent rank plus the temporal KV merge factor and stride. Only applies when `mtla_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2505.13544)
+    description_es: |-
+      Hiperparámetros para `mtla_attn` (Multi-head Temporal Latent Attention): rango latente del eje de características más el factor y el stride de fusión temporal de KV. Solo aplica cuando `mtla_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2505.13544)
     properties:
       latent_rank:
         type: [integer, "null"]
@@ -231,12 +321,16 @@ properties:
         title_es: "Rango Latente MTLA"
         description: |-
           Latent rank along the feature axis for `mtla_attn` (Multi-head
-          Temporal Latent Attention, arXiv:2505.13544). `null` defaults to
+          Temporal Latent Attention (paper: arxiv:2505.13544)). `null` defaults to
           `hidden_size // 2`.
+
+          **References:** (paper: arxiv:2505.13544)
         description_es: |-
           Rango latente a lo largo del eje de features para `mtla_attn`
-          (Multi-head Temporal Latent Attention, arXiv:2505.13544). `null` por
+          (Multi-head Temporal Latent Attention (paper: arxiv:2505.13544)). `null` por
           defecto es `hidden_size // 2`.
+
+          **Referencias:** (paper: arxiv:2505.13544)
         examples: [384]
       merge_factor:
         type: integer
@@ -246,10 +340,14 @@ properties:
           Number of consecutive KV cache entries merged into a single
           temporal slot for `mtla_attn`. Shrinks the temporal length by this
           factor. Must be >= 1. Default: 2.
+
+          **References:** (paper: arxiv:2505.13544)
         description_es: |-
           Número de entradas consecutivas del caché KV fusionadas en un único
           slot temporal para `mtla_attn`. Reduce la longitud temporal por este
           factor. Debe ser >= 1. Por defecto: 2.
+
+          **Referencias:** (paper: arxiv:2505.13544)
         examples: [2]
       stride:
         type: [integer, "null"]
@@ -260,8 +358,12 @@ properties:
           Stride between merged temporal slots for `mtla_attn`. `null`
           defaults to `mtla_merge_factor`. Smaller stride = overlapping
           windows; larger stride = non-overlapping.
+
+          **References:** (paper: arxiv:2505.13544)
         description_es: |-
           Stride entre slots temporales fusionados para `mtla_attn`. `null`
           por defecto es `mtla_merge_factor`. Stride menor = ventanas
           superpuestas; stride mayor = no superpuestas.
+
+          **Referencias:** (paper: arxiv:2505.13544)
         examples: [2]

@@ -5,13 +5,15 @@ description: |-
   Task-specific configuration for `training.task: segmentation` (image
   segmentation). Supports per-pixel linear head (`seg_head_type: pixel`)
   for 1D grayscale or multicolor non-overlapping segmentation, or EoMT
-  query-based head (`seg_head_type: eomt`, arXiv:2503.19108) with Hungarian
+  query-based head (`seg_head_type: eomt` (paper: arxiv:2503.19108)) with Hungarian
   matching, BCE+Dice+CE loss, and mask annealing.
 
   General training fields (batch_size, num_epochs, optimizer, scheduler,
   gradient clipping, checkpointing, etc.) are read from the top-level
   `training:` block — the same fields used by `mlm` and `causal_lm` tasks.
   This sub-block only carries segmentation-specific loss/annealing knobs.
+
+  **References:** (paper: arxiv:2503.19108)
 description_es: |-
   Configuración específica de tarea para `training.task: segmentation`
   (segmentación de imágenes).
@@ -21,6 +23,8 @@ description_es: |-
   top-level `training:` — los mismos campos usados por `mlm` y `causal_lm`.
   Este sub-bloque solo contiene parámetros específicos de pérdida/annealing
   de segmentación.
+
+  **Referencias:** (paper: arxiv:2503.19108)
 additionalProperties: false
 properties:
   seg_loss_bce_weight:
@@ -28,30 +32,30 @@ properties:
     minimum: 0
     title: BCE Loss Weight
     title_es: Peso de Pérdida BCE
-    description: "Weight for binary cross-entropy mask loss (EoMT). Paper default: 5.0."
-    description_es: "Peso para la pérdida BCE de máscara (EoMT)."
+    description: "Weight for binary cross-entropy mask loss (EoMT). Paper default: 5.0. **References:** (paper: arxiv:2503.19108)"
+    description_es: "Peso para la pérdida BCE de máscara (EoMT). **Referencias:** (paper: arxiv:2503.19108)"
     default: 5
   seg_loss_dice_weight:
     type: number
     minimum: 0
     title: Dice Loss Weight
     title_es: Peso de Pérdida Dice
-    description: "Weight for Dice mask loss (EoMT). Paper default: 5.0."
-    description_es: "Peso para la pérdida Dice de máscara (EoMT)."
+    description: "Weight for Dice mask loss (EoMT). Paper default: 5.0. **References:** (paper: arxiv:2503.19108)"
+    description_es: "Peso para la pérdida Dice de máscara (EoMT). **Referencias:** (paper: arxiv:2503.19108)"
     default: 5
   seg_loss_ce_weight:
     type: number
     minimum: 0
     title: CE Loss Weight
     title_es: Peso de Pérdida CE
-    description: "Weight for cross-entropy class loss (EoMT). Paper default: 2.0."
-    description_es: "Peso para la pérdida CE de clase (EoMT)."
+    description: "Weight for cross-entropy class loss (EoMT). Paper default: 2.0. **References:** (paper: arxiv:2503.19108)"
+    description_es: "Peso para la pérdida CE de clase (EoMT). **Referencias:** (paper: arxiv:2503.19108)"
     default: 2
   mask_annealing_factor:
     type: number
     exclusiveMinimum: 0
     title: Mask Annealing Factor
     title_es: Factor de Recocido de Máscara
-    description: "Polynomial decay factor for mask annealing (EoMT). Paper default: 0.9."
-    description_es: "Factor de decaimiento polinomial para recocido de máscara (EoMT)."
+    description: "Polynomial decay factor for mask annealing (EoMT). Paper default: 0.9. **References:** (paper: arxiv:2503.19108)"
+    description_es: "Factor de decaimiento polinomial para recocido de máscara (EoMT). **Referencias:** (paper: arxiv:2503.19108)"
     default: 0.9

@@ -6,10 +6,16 @@ description: |-
   Configuration for the continuous-depth `ode` mixer. Only applies when `ode`
   appears in `model.dims.layer_pattern`. This mirrors the per-mixer layout used
   by every other configurable mixer.
+
+  **References:** (paper: arxiv:1906.02762) (paper:
+  https://ojs.aaai.org/index.php/AAAI/article/view/17692)
 description_es: |-
   Configuración del mixer `ode` de profundidad continua. Solo aplica cuando
   `ode` aparece en `model.dims.layer_pattern`. Refleja el layout por mixer
   usado por el resto de mixers configurables.
+
+  **Referencias:** (paper: arxiv:1906.02762) (paper:
+  https://ojs.aaai.org/index.php/AAAI/article/view/17692)
 properties:
   solver:
     type: string
@@ -21,12 +27,18 @@ properties:
         cost of `euler`.
       - `euler`: Euler method — faster, may require smaller `steps` or careful
         tuning.
+
+      **References:** (paper: arxiv:1906.02762) (paper:
+      https://ojs.aaai.org/index.php/AAAI/article/view/17692)
     description_es: |-
       Método de integración numérica:
       - `rk4`: Runge-Kutta de orden 4 — mayor precisión y estabilidad, 4× el
         costo de `euler`.
       - `euler`: Método de Euler — más rápido, puede requerir `steps` menores o
         ajuste cuidadoso.
+
+      **Referencias:** (paper: arxiv:1906.02762) (paper:
+      https://ojs.aaai.org/index.php/AAAI/article/view/17692)
     enum: [rk4, euler]
     default: rk4
     examples: [rk4, euler]
@@ -39,9 +51,15 @@ properties:
       Number of integration steps between consecutive transformer layers.
       Typical: 2–4. More steps improve the continuous-dynamics approximation at
       linear compute cost; `rk4` usually needs fewer than `euler`.
+
+      **References:** (paper: arxiv:1906.02762) (paper:
+      https://ojs.aaai.org/index.php/AAAI/article/view/17692)
     description_es: |-
       Número de pasos de integración entre capas transformer consecutivas.
       Típico: 2–4. Más pasos mejoran la aproximación de dinámicas continuas con
       costo lineal; `rk4` suele necesitar menos que `euler`.
+
+      **Referencias:** (paper: arxiv:1906.02762) (paper:
+      https://ojs.aaai.org/index.php/AAAI/article/view/17692)
     default: 2
     examples: [2, 4]

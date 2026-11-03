@@ -10,6 +10,8 @@ description: |
 
   **Impact:** Using a base model drastically accelerates convergence and reduces data requirements.
   The model inherits the vocabulary and tokenizer from the original checkpoint.
+
+  **References:** (paper: arxiv:1910.03771)
 description_es: |
   Identificador de modelo de HuggingFace o ruta local para preentrenamiento continuo o fine-tuning SBERT.
   Cuando se especifica, se usa un modelo preentrenado existente en lugar de construir uno desde cero. Esto
@@ -19,6 +21,8 @@ description_es: |
 
   **Impacto:** Usar un modelo base acelera drásticamente la convergencia y reduce los datos necesarios.
   El modelo hereda el vocabulario y tokenizador del checkpoint original.
+
+  **Referencias:** (paper: arxiv:1910.03771)
 examples:
   - answerdotai/ModernBERT-base
   - /path/to/local/model

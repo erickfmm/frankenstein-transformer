@@ -9,6 +9,8 @@ description: |-
 
   Required when `model_class: frankenstein_vit`. For text/NLP tasks use
   `text_dataset` instead.
+
+  **References:** (paper: arxiv:2010.11929) (paper: arxiv:2111.06377)
 description_es: |-
   Configuración de dataset de visión para tareas de imagen (`patch_prediction`,
   `classification`, `segmentation`). Especifica la fuente de datos, mapeo de
@@ -16,6 +18,8 @@ description_es: |-
 
   Obligatorio cuando `model_class: frankenstein_vit`. Para tareas de texto/NLP
   usa `text_dataset` en su lugar.
+
+  **Referencias:** (paper: arxiv:2010.11929) (paper: arxiv:2111.06377)
 additionalProperties: false
 properties:
   dataset_name:
@@ -74,11 +78,19 @@ properties:
         minimum: 1
         title: Rescale Height
         title_es: Alto de Reescalado
+        description: |-
+          Fallback height in pixels when the top-level `image.image_size` is not set.
+        description_es: |-
+          Alto de respaldo en píxeles cuando no se fija `image.image_size`.
       width:
         type: integer
         minimum: 1
         title: Rescale Width
         title_es: Ancho de Reescalado
+        description: |-
+          Fallback width in pixels when the top-level `image.image_size` is not set.
+        description_es: |-
+          Ancho de respaldo en píxeles cuando no se fija `image.image_size`.
     required:
       - height
       - width
@@ -95,15 +107,31 @@ properties:
       mean:
         type: array
         items:
+          description: |-
+            Mean value for one channel.
+          description_es: |-
+            Valor de media para un canal.
           type: number
         title: Mean
         title_es: Media
+        description: |-
+          Per-channel means applied after rescaling (ImageNet default: `[0.485, 0.456, 0.406]`).
+        description_es: |-
+          Medias por canal aplicadas tras el reescalado (por defecto ImageNet: `[0.485, 0.456, 0.406]`).
       std:
         type: array
         items:
+          description: |-
+            Standard deviation for one channel.
+          description_es: |-
+            Desviación estándar para un canal.
           type: number
         title: Std
         title_es: Desviación Estándar
+        description: |-
+          Per-channel standard deviations applied after rescaling (ImageNet default: `[0.229, 0.224, 0.225]`).
+        description_es: |-
+          Desviaciones estándar por canal aplicadas tras el reescalado (por defecto ImageNet: `[0.229, 0.224, 0.225]`).
   augmentations:
     type: object
     title: Augmentations
@@ -116,20 +144,36 @@ properties:
         type: boolean
         title: Random Crop
         title_es: Recorte Aleatorio
+        description: |-
+          Random crop augmentation applied during training.
+        description_es: |-
+          Aumentación de recorte aleatorio aplicada durante el entrenamiento.
         default: false
       horizontal_flip:
         type: boolean
         title: Horizontal Flip
         title_es: Volteo Horizontal
+        description: |-
+          Random horizontal flip applied during training.
+        description_es: |-
+          Volteo horizontal aleatorio aplicado durante el entrenamiento.
         default: true
       color_jitter:
         type: boolean
         title: Color Jitter
         title_es: Variación de Color
+        description: |-
+          Random brightness/contrast/saturation jitter applied during training.
+        description_es: |-
+          Variación aleatoria de brillo/contraste/saturación aplicada durante el entrenamiento.
         default: false
       mixup_alpha:
         type: number
         minimum: 0
         title: Mixup Alpha
         title_es: Alpha de Mixup
+        description: |-
+          Mixup interpolation strength; `0` disables mixup.
+        description_es: |-
+          Fuerza de interpolación Mixup; `0` desactiva mixup.
         default: 0

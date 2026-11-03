@@ -3,10 +3,10 @@ title: Audio Configuration
 title_es: Configuración de Audio
 description: |-
   Audio-specific configuration for the `frankenstein_audio` model class
-  (Conformer, arXiv:2005.08100). Defines the waveform frontend (`logmel`,
+  (Conformer (paper: arxiv:2005.08100)). Defines the waveform frontend (`logmel`,
   `spectrogram` or raw 1-D signals), the sample rate and frame geometry, the
   convolutional subsampling stack, the classification pooling strategy and
-  the ASR head (CTC or RNN-Transducer, arXiv:1211.3711).
+  the ASR head (CTC or RNN-Transducer (paper: arxiv:1211.3711)).
 
   Required when `model_class: frankenstein_audio`.
 
@@ -17,13 +17,15 @@ description: |-
   same conv subsampling, supporting biomedical and sensor time series (EEG,
   EMG, accelerometer, ...) for classification; set `in_channels` to the
   number of signal channels.
+
+  **References:** (paper: arxiv:2005.08100)
 description_es: |-
   Configuración específica de audio para el modelo `frankenstein_audio`
-  (Conformer, arXiv:2005.08100). Define el frontend de forma de onda
+  (Conformer (paper: arxiv:2005.08100)). Define el frontend de forma de onda
   (`logmel`, `spectrogram` o señales 1-D crudas), la tasa de muestreo y la
   geometría de tramas, la pila de submuestreo convolucional, la estrategia de
   pooling de clasificación y la cabeza ASR (CTC o RNN-Transducer,
-  arXiv:1211.3711).
+  (paper: arxiv:1211.3711)).
 
   Obligatorio cuando `model_class: frankenstein_audio`.
 
@@ -34,6 +36,8 @@ description_es: |-
   mismo submuestreo convolucional, soportando series temporales biomédicas y
   de sensores (EEG, EMG, acelerómetro, ...) para clasificación; ajusta
   `in_channels` al número de canales de la señal.
+
+  **Referencias:** (paper: arxiv:2005.08100)
 additionalProperties: false
 properties:
   sample_rate:
@@ -44,9 +48,13 @@ properties:
     description: |-
       Audio sample rate in Hz used by the mel/STFT frontend. The Conformer
       recipe uses 16 kHz.
+
+      **References:** (paper: arxiv:2005.08100)
     description_es: |-
       Tasa de muestreo de audio en Hz usada por el frontend mel/STFT. La
       receta de Conformer usa 16 kHz.
+
+      **Referencias:** (paper: arxiv:2005.08100)
     default: 16000
     examples: [8000, 16000, 22050]
   n_mels:
@@ -57,9 +65,13 @@ properties:
     description: |-
       Number of mel filterbank channels (`feature: logmel`). The Conformer
       paper uses 80.
+
+      **References:** (paper: arxiv:2005.08100)
     description_es: |-
       Número de canales del banco de filtros mel (`feature: logmel`). El
       paper de Conformer usa 80.
+
+      **Referencias:** (paper: arxiv:2005.08100)
     default: 80
     examples: [40, 80, 128]
   window_ms:
@@ -70,9 +82,13 @@ properties:
     description: |-
       Analysis window length in milliseconds for the short-time Fourier
       transform. The Conformer paper uses 25 ms.
+
+      **References:** (paper: arxiv:2005.08100)
     description_es: |-
       Longitud de la ventana de análisis en milisegundos para la transformada
       de Fourier de corto tiempo. El paper de Conformer usa 25 ms.
+
+      **Referencias:** (paper: arxiv:2005.08100)
     default: 25.0
     examples: [20.0, 25.0, 32.0]
   stride_ms:
@@ -83,10 +99,14 @@ properties:
     description: |-
       Frame stride in milliseconds (hop length). The Conformer paper uses
       10 ms, which the two stride-2 convolutions reduce to 40 ms frames.
+
+      **References:** (paper: arxiv:2005.08100)
     description_es: |-
       Salto entre tramas en milisegundos (hop length). El paper de Conformer
       usa 10 ms, que las dos convoluciones de stride 2 reducen a tramas de
       40 ms.
+
+      **Referencias:** (paper: arxiv:2005.08100)
     default: 10.0
     examples: [10.0, 12.5, 20.0]
   n_fft:
@@ -98,11 +118,15 @@ properties:
       FFT size of the short-time Fourier transform. Must be at least the
       window length in samples (`window_ms * sample_rate / 1000`). The
       Conformer recipe uses 400 for a 25 ms window at 16 kHz.
+
+      **References:** (paper: arxiv:2005.08100)
     description_es: |-
       Tamaño de la FFT de la transformada de Fourier de corto tiempo. Debe
       ser al menos la longitud de la ventana en muestras
       (`window_ms * sample_rate / 1000`). La receta de Conformer usa 400 para
       una ventana de 25 ms a 16 kHz.
+
+      **Referencias:** (paper: arxiv:2005.08100)
     default: 400
     examples: [256, 400, 512]
   feature:
@@ -115,6 +139,8 @@ properties:
       generic multichannel 1-D signals (EEG, EMG, accelerometer, ...) fed
       directly to the convolutional subsampling; use it for biomedical and
       sensor time series classification.
+
+      **References:** (paper: arxiv:2005.08100)
     description_es: |-
       Tipo de característica del frontend. `logmel` = filtros log-mel de 80
       canales (la receta de Conformer). `spectrogram` = tramas STFT de
@@ -122,6 +148,8 @@ properties:
       EMG, acelerómetro, ...) alimentadas directamente al submuestreo
       convolucional; úsalo para clasificación de series temporales biomédicas
       y de sensores.
+
+      **Referencias:** (paper: arxiv:2005.08100)
     enum:
       - logmel
       - spectrogram
@@ -153,10 +181,14 @@ properties:
       Number of channels of the convolutional subsampling stack
       (two stride-2 convolutions, kernel 3, padding 1). The stack reduces the
       frame rate by 4× (10 ms → 40 ms for the Conformer recipe).
+
+      **References:** (paper: arxiv:2005.08100)
     description_es: |-
       Número de canales de la pila de submuestreo convolucional (dos
       convoluciones de stride 2, kernel 3, padding 1). La pila reduce la tasa
       de tramas en 4× (10 ms → 40 ms para la receta de Conformer).
+
+      **Referencias:** (paper: arxiv:2005.08100)
     default: 32
     examples: [16, 32, 64]
   num_classes:
@@ -200,14 +232,18 @@ properties:
     description: |-
       Automatic speech recognition head. `ctc` = Connectionist Temporal
       Classification projection over the encoder frames. `transducer` =
-      RNN-Transducer (arXiv:1211.3711) with an LSTM prediction network and a
+      RNN-Transducer (paper: arxiv:1211.3711) with an LSTM prediction network and a
       joint network returning per-frame/per-label logits.
+
+      **References:** (paper: https://doi.org/10.1145/1143844.1143891) (paper: arxiv:1211.3711)
     description_es: |-
       Cabeza de reconocimiento automático del habla. `ctc` = proyección de
       Connectionist Temporal Classification sobre las tramas del encoder.
-      `transducer` = RNN-Transducer (arXiv:1211.3711) con una red de
+      `transducer` = RNN-Transducer (paper: arxiv:1211.3711) con una red de
       predicción LSTM y una red conjunta que devuelve logits por
       trama/etiqueta.
+
+      **Referencias:** (paper: https://doi.org/10.1145/1143844.1143891) (paper: arxiv:1211.3711)
     enum:
       - ctc
       - transducer
@@ -221,9 +257,13 @@ properties:
     description: |-
       Hidden size of the RNN-Transducer prediction network (`asr_loss:
       transducer`). The Conformer paper uses 320 (S), 640 (M/L).
+
+      **References:** (paper: arxiv:1211.3711)
     description_es: |-
       Tamaño oculto de la red de predicción del RNN-Transducer (`asr_loss:
       transducer`). El paper de Conformer usa 320 (S) y 640 (M/L).
+
+      **Referencias:** (paper: arxiv:1211.3711)
     default: 320
     examples: [320, 640]
   asr_decoder_layers:
@@ -233,8 +273,12 @@ properties:
     title_es: Capas del Decoder ASR
     description: |-
       Number of LSTM layers in the RNN-Transducer prediction network.
+
+      **References:** (paper: arxiv:1211.3711)
     description_es: |-
       Número de capas LSTM de la red de predicción del RNN-Transducer.
+
+      **Referencias:** (paper: arxiv:1211.3711)
     default: 1
     examples: [1, 2]
   asr_decoder_dropout:
@@ -246,9 +290,13 @@ properties:
     description: |-
       Dropout applied inside the RNN-Transducer prediction network (only
       active when `asr_decoder_layers > 1`, as required by `nn.LSTM`).
+
+      **References:** (paper: arxiv:1211.3711)
     description_es: |-
       Dropout aplicado dentro de la red de predicción del RNN-Transducer
       (solo activo cuando `asr_decoder_layers > 1`, como exige `nn.LSTM`).
+
+      **Referencias:** (paper: arxiv:1211.3711)
     default: 0.1
     examples: [0.0, 0.1, 0.2]
   spec_augment:
@@ -256,36 +304,52 @@ properties:
     title: SpecAugment
     title_es: SpecAugment
     description: |-
-      SpecAugment time/frequency masking (arXiv:1904.08779) applied inside the
+      SpecAugment time/frequency masking (paper: arxiv:1904.08779) applied inside the
       audio frontend after the log-mel/spectrogram computation, only while the
       model is in training mode (`model.train()`), so evaluation and inference
       see unmasked features. The Conformer recipe uses a frequency mask width
       `F = 27`, `m_T = 10` time masks and a maximum time-mask ratio
       `p_S = 0.05`.
+
+      **References:** (paper: arxiv:1904.08779)
     description_es: |-
-      Enmascaramiento de tiempo/frecuencia SpecAugment (arXiv:1904.08779)
+      Enmascaramiento de tiempo/frecuencia SpecAugment (paper: arxiv:1904.08779)
       aplicado dentro del frontend de audio tras calcular el log-mel /
       espectrograma, solo mientras el modelo está en modo entrenamiento
       (`model.train()`), por lo que la evaluación e inferencia ven
       características sin enmascarar. La receta de Conformer usa un ancho de
       máscara de frecuencia `F = 27`, `m_T = 10` máscaras de tiempo y una
       proporción máxima de máscara de tiempo `p_S = 0.05`.
+
+      **Referencias:** (paper: arxiv:1904.08779)
     additionalProperties: false
     properties:
       enabled:
         type: boolean
         title: Enabled
         title_es: Habilitado
-        description: Enable SpecAugment masking during training.
-        description_es: Habilita el enmascaramiento SpecAugment durante el entrenamiento.
+        description: |-
+          Enable SpecAugment masking during training.
+
+          **References:** (paper: arxiv:1904.08779)
+        description_es: |-
+          Habilita el enmascaramiento SpecAugment durante el entrenamiento.
+
+          **Referencias:** (paper: arxiv:1904.08779)
         default: false
       freq_mask_width:
         type: integer
         minimum: 1
         title: Frequency Mask Width
         title_es: Ancho de Máscara de Frecuencia
-        description: Maximum width `F` of each frequency mask (paper value 27).
-        description_es: Ancho máximo `F` de cada máscara de frecuencia (valor del paper 27).
+        description: |-
+          Maximum width `F` of each frequency mask (paper value 27).
+
+          **References:** (paper: arxiv:1904.08779)
+        description_es: |-
+          Ancho máximo `F` de cada máscara de frecuencia (valor del paper 27).
+
+          **Referencias:** (paper: arxiv:1904.08779)
         default: 27
         examples: [13, 27]
       time_masks:
@@ -293,8 +357,14 @@ properties:
         minimum: 1
         title: Time Masks
         title_es: Máscaras de Tiempo
-        description: Number `m_T` of time masks (paper value 10).
-        description_es: Número `m_T` de máscaras de tiempo (valor del paper 10).
+        description: |-
+          Number `m_T` of time masks (paper value 10).
+
+          **References:** (paper: arxiv:1904.08779)
+        description_es: |-
+          Número `m_T` de máscaras de tiempo (valor del paper 10).
+
+          **Referencias:** (paper: arxiv:1904.08779)
         default: 10
         examples: [2, 10]
       time_mask_ratio:
@@ -306,8 +376,12 @@ properties:
         description: |-
           Maximum time-mask width as a fraction `p_S` of the frame count
           (paper value 0.05).
+
+          **References:** (paper: arxiv:1904.08779)
         description_es: |-
           Ancho máximo de la máscara de tiempo como fracción `p_S` del número
           de tramas (valor del paper 0.05).
+
+          **Referencias:** (paper: arxiv:1904.08779)
         default: 0.05
         examples: [0.05, 0.1]

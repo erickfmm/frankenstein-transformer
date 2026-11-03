@@ -4,25 +4,35 @@ properties:
   engram:
     type: object
     additionalProperties: false
+    description: |-
+      Configuration of the Engram conditional-memory module: N-gram orders, hashing heads, per-head embedding width and the short conv over retrieved vectors. Only applies when `engram_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2601.07372)
+    description_es: |-
+      Configuración del módulo de memoria condicional Engram: órdenes de N-gramas, cabezas de hashing, ancho de embedding por cabeza y la conv corta sobre los vectores recuperados. Solo aplica cuando `engram_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2601.07372)
     properties:
       max_ngram_size:
         type: integer
         title: "Engram Max N-gram Size"
         title_es: "Tamaño Máximo de N-grama Engram"
         description: |
-          Highest N-gram order for the Engram conditional memory module (arXiv:2601.07372).
+          Highest N-gram order for the Engram conditional memory module (paper: arxiv:2601.07372).
           Builds lookup tables for all N-gram sizes from 2 up to this value. 3 = bigrams + trigrams.
           Only when `engram_attn` appears in `layer_pattern`.
 
           **Impact:** Higher values give richer context keys but increase the number of
           embedding tables quadratically.
+
+          **References:** (paper: arxiv:2601.07372)
         description_es: |
-          Orden máximo de N-grama para el módulo de memoria condicional Engram (arXiv:2601.07372).
+          Orden máximo de N-grama para el módulo de memoria condicional Engram (paper: arxiv:2601.07372).
           Construye tablas de búsqueda para todos los tamaños de N-grama desde 2 hasta este valor.
           3 = bigramas + trigramas. Solo cuando `engram_attn` aparece en `layer_pattern`.
 
           **Impacto:** Valores mayores dan claves de contexto más ricas pero aumentan el número de
           embedding tables quadratically.
+
+          **Referencias:** (paper: arxiv:2601.07372)
         examples: [3]
       n_heads_per_ngram:
         type: integer
@@ -34,12 +44,16 @@ properties:
           diversity, more embedding params. Only when `engram_attn` in `layer_pattern`.
 
           **Impact:** Typical: 4–8. Total Engram params grow with: (max_ngram-1) × n_heads × embed_dim.
+
+          **References:** (paper: arxiv:2601.07372)
         description_es: |
           Funciones hash independientes (cabezas) por orden de N-grama en el módulo Engram. Cada
           cabeza usa un módulo primo diferente para colisiones estadísticamente independientes. Más cabezas
           = más diversidad de recuperación, más parámetros de embedding. Solo con `engram_attn` en `layer_pattern`.
 
           **Impacto:** Típico: 4–8. Total Engram params crecen con: (max_ngram-1) × n_heads × embed_dim.
+
+          **Referencias:** (paper: arxiv:2601.07372)
         examples: [4]
       embed_dim_per_head:
         type: integer
@@ -52,6 +66,8 @@ properties:
 
           **Impact:** Lower = memory savings. Higher = more expressivity. With max_ngram=3, heads=4, dim=32:
           total = 2 × 4 × 32 = 256 channels.
+
+          **References:** (paper: arxiv:2601.07372)
         description_es: |
           Dimensionalidad de cada embedding N-grama por cabeza. Tamaño total oculto de Engram =
           `(max_ngram_size-1) × n_heads_per_ngram × embed_dim_per_head`. Típico: 16–64 (pequeño), 128+ (grande).
@@ -59,6 +75,8 @@ properties:
 
           **Impacto:** Menor = ahorro de memoria. Mayor = más expresividad. Con max_ngram=3, heads=4, dim=32:
           total = 2 × 4 × 32 = 256 channels.
+
+          **Referencias:** (paper: arxiv:2601.07372)
         examples: [32]
       kernel_size:
         type: integer
@@ -70,12 +88,16 @@ properties:
           Only when `engram_attn` in `layer_pattern`.
 
           **Impact:** Larger kernels capture wider local context in the embedding space.
+
+          **References:** (paper: arxiv:2601.07372)
         description_es: |
           Ancho del kernel de convolución causal depthwise sobre embeddings N-grama recuperados.
           Típico: 3–8. Dilatado por `max_ngram_size` → campo receptivo efectivo = `kernel_size × max_ngram_size` tokens.
           Solo con `engram_attn` en `layer_pattern`.
 
           **Impacto:** Kernels más grandes capturan contexto local más amplio en el espacio de embedding.
+
+          **Referencias:** (paper: arxiv:2601.07372)
         examples: [4]
       seed:
         type: integer
@@ -88,6 +110,8 @@ properties:
 
           **Impact:** Affects which tokens collide in hash space. Use 42 for standard
           reproducibility. Change if adverse collisions are suspected.
+
+          **References:** (paper: arxiv:2601.07372)
         description_es: |
           Semilla aleatoria para generar multiplicadores impares para hashing de N-gramas en el
           módulo Engram. Cambiarla produce un mapeo hash diferente pero igualmente válido. Valor fijo para
@@ -95,4 +119,6 @@ properties:
 
           **Impacto:** Afecta qué tokens colisionan en el espacio hash. Usar 42 para reproducibilidad
           reproducibility. Change if adverse collisions are suspected.
+
+          **Referencias:** (paper: arxiv:2601.07372)
         examples: [42]

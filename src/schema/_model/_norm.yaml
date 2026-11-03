@@ -10,9 +10,9 @@ properties:
       - `layer_norm`: Standard Layer Normalization — subtracts mean, divides by std. Stable, widely used. **Recommended.**
       - `dynamic_tanh`: Dynamic tanh normalization (DyT) — replaces explicit normalization with a learned bounded map: `tanh(α·x)`. Normalization-free, experimental.
       - `derf`: Dynamic erf normalization — extends DyT with erf function: `erf(α·x + s)`. Normalization-free, experimental, may improve over DyT.
-      - `rms_norm`: Root Mean Square Layer Normalization — rescales by RMS magnitude only, without mean subtraction. Computationally simpler than LayerNorm; widely used in Llama, GPT-NeoX, and T5. Has a learnable per-dimension scale `g` (no bias). (arXiv:1910.07467)
-      - `prms_norm`: Partial RMSNorm — estimates the RMS statistic from only the first `p`% of hidden dimensions (controlled by `norm.partial_ratio`, default 6.25%). Same re-scaling invariance as `rms_norm` with reduced computation. (arXiv:1910.07467, §5)
-      - `flash_norm`: FlashNorm — weightless RMSNorm. Drops the learnable per-dimension scale `g` (it is meant to be folded into the subsequent linear layer's weights via Prop. 1 of the paper). Composes with partial-RMS via `norm.flashnorm_partial_ratio` (default 0.0 = full RMS). (arXiv:2407.09577)
+      - `rms_norm`: Root Mean Square Layer Normalization — rescales by RMS magnitude only, without mean subtraction. Computationally simpler than LayerNorm; widely used in Llama, GPT-NeoX, and T5. Has a learnable per-dimension scale `g` (no bias). (paper: arxiv:1910.07467)
+      - `prms_norm`: Partial RMSNorm — estimates the RMS statistic from only the first `p`% of hidden dimensions (controlled by `norm.partial_ratio`, default 6.25%). Same re-scaling invariance as `rms_norm` with reduced computation. (paper: arxiv:1910.07467, §5)
+      - `flash_norm`: FlashNorm — weightless RMSNorm. Drops the learnable per-dimension scale `g` (it is meant to be folded into the subsequent linear layer's weights via Prop. 1 of the paper). Composes with partial-RMS via `norm.flashnorm_partial_ratio` (default 0.0 = full RMS). (paper: arxiv:2407.09577)
 
       **Examples explained:**
       - `layer_norm`: Safest choice. Used in BERT, GPT, and most transformer architectures. Well-understood behavior, no tuning needed. Start here for new models.
@@ -21,14 +21,17 @@ properties:
       - `rms_norm`: Efficient choice for large models. Drops mean-centering (7%–64% faster than LayerNorm per the paper). Standard in Llama-family models. Use when normalization overhead matters and mean re-centering is not needed.
       - `prms_norm`: Most efficient RMS variant. Uses only the first `norm.partial_ratio` fraction of dims for RMS estimation. The paper reports competitive results with as little as 6.25%. Best for extreme throughput; may show gradient instability with very small ratios.
       - `flash_norm`: Weightless RMSNorm. Equivalent to `rms_norm` with `g=1`; the per-dim scale is dropped entirely (Prop. 1 of the paper folds it into the next linear layer at load time). Use when reducing parameter count / preparing for fused norm+matmul kernels; the model can absorb the scale via downstream projection weights during training.
+
+      **References:** (paper: arxiv:1607.06450) (paper: arxiv:2503.10622) (paper: arxiv:2512.10938)
+      (paper: arxiv:1910.07467) (paper: arxiv:2407.09577)
     description_es: |-
       Estrategia de normalización usada en todo el modelo.
       - `layer_norm`: Layer Normalization estándar — resta la media, divide por la desviación estándar. Estable, ampliamente usada. **Recomendada.**
       - `dynamic_tanh`: Normalización tanh dinámica (DyT) — reemplaza la normalización explícita con un mapa acotado aprendido: `tanh(α·x)`. Libre de normalización, experimental.
       - `derf`: Normalización erf dinámica — extiende DyT con función erf: `erf(α·x + s)`. Libre de normalización, experimental, puede mejorar sobre DyT.
-      - `rms_norm`: Root Mean Square Layer Normalization — reescala por la magnitud RMS únicamente, sin resta de media. Computacionalmente más simple que LayerNorm; ampliamente usada en Llama, GPT-NeoX y T5. Tiene una escala `g` aprendible por dimensión (sin bias). (arXiv:1910.07467)
-      - `prms_norm`: Partial RMSNorm — estima la estadística RMS de solo el primer `p`% de dimensiones ocultas (controlado por `norm.partial_ratio`, por defecto 6.25%). Misma invariancia de re-escalamiento que `rms_norm` con menor cómputo. (arXiv:1910.07467, §5)
-      - `flash_norm`: FlashNorm — RMSNorm sin pesos. Elimina la escala `g` aprendible por dimensión (se pliega en los pesos de la capa lineal subsecuente vía Prop. 1 del paper). Se compone con RMS parcial vía `norm.flashnorm_partial_ratio` (por defecto 0.0 = RMS completo). (arXiv:2407.09577)
+      - `rms_norm`: Root Mean Square Layer Normalization — reescala por la magnitud RMS únicamente, sin resta de media. Computacionalmente más simple que LayerNorm; ampliamente usada en Llama, GPT-NeoX y T5. Tiene una escala `g` aprendible por dimensión (sin bias). (paper: arxiv:1910.07467)
+      - `prms_norm`: Partial RMSNorm — estima la estadística RMS de solo el primer `p`% de dimensiones ocultas (controlado por `norm.partial_ratio`, por defecto 6.25%). Misma invariancia de re-escalamiento que `rms_norm` con menor cómputo. (paper: arxiv:1910.07467, §5)
+      - `flash_norm`: FlashNorm — RMSNorm sin pesos. Elimina la escala `g` aprendible por dimensión (se pliega en los pesos de la capa lineal subsecuente vía Prop. 1 del paper). Se compone con RMS parcial vía `norm.flashnorm_partial_ratio` (por defecto 0.0 = RMS completo). (paper: arxiv:2407.09577)
 
       **Ejemplos explicados:**
       - `layer_norm`: Opción más segura. Usada en BERT, GPT y la mayoría de arquitecturas transformer. Comportamiento bien comprendido, no requiere ajuste. Empezar aquí para nuevos modelos.
@@ -37,6 +40,9 @@ properties:
       - `rms_norm`: Opción eficiente para modelos grandes. Elimina la centralización de media (7%–64% más rápido que LayerNorm según el paper). Estándar en modelos tipo Llama. Usar cuando la sobrecarga de normalización importa y no se necesita re-centrar la media.
       - `prms_norm`: Variante RMS más eficiente. Usa solo la fracción `norm.partial_ratio` de dimensiones para la estimación RMS. El paper reporta resultados competitivos con tan solo 6.25%. Mejor para rendimiento extremo; puede mostrar inestabilidad de gradiente con razones muy pequeñas.
       - `flash_norm`: RMSNorm sin pesos. Equivalente a `rms_norm` con `g=1`; la escala por dimensión se elimina por completo (Prop. 1 del paper la pliega en la siguiente capa lineal al cargar el modelo). Usar cuando se busca reducir el conteo de parámetros o preparar la vía para kernels fusionados norm+matmul; el modelo puede absorber la escala vía los pesos de la proyección subsecuente durante el entrenamiento.
+
+      **Referencias:** (paper: arxiv:1607.06450) (paper: arxiv:2503.10622) (paper: arxiv:2512.10938)
+      (paper: arxiv:1910.07467) (paper: arxiv:2407.09577)
     enum: [layer_norm, dynamic_tanh, derf, rms_norm, prms_norm, flash_norm]
     default: dynamic_tanh
     examples: [layer_norm, dynamic_tanh]
@@ -49,19 +55,21 @@ properties:
       `norm.type=prms_norm`. The RMS is computed over the first
       `ceil(hidden_size * norm.partial_ratio)` elements.
 
-      The paper (arXiv:1910.07467) reports competitive results with as little
+      The paper (paper: arxiv:1910.07467) reports competitive results with as little
       as 6.25%. Must be in (0, 1]. Ignored when `norm.type` is not `prms_norm`.
 
       **Impact:** Smaller values = faster RMS computation but a noisier (biased)
       estimate, which can cause gradient instability at very small ratios.
       Values approaching 1.0 converge to standard `rms_norm`. The paper's
       recommended default is 6.25% (0.0625).
+
+      **References:** (paper: arxiv:1910.07467)
     description_es: |-
       Fracción de dimensiones ocultas usadas para la estimación RMS cuando
       `norm.type=prms_norm`. El RMS se calcula sobre los primeros
       `ceil(hidden_size * norm.partial_ratio)` elementos.
 
-      El paper (arXiv:1910.07467) reporta resultados competitivos con tan solo
+      El paper (paper: arxiv:1910.07467) reporta resultados competitivos con tan solo
       6.25%. Debe estar en (0, 1]. Se ignora cuando `norm.type` no es `prms_norm`.
 
       **Impacto:** Valores más pequeños = cómputo de RMS más rápido pero una
@@ -69,6 +77,8 @@ properties:
       gradiente con razones muy pequeñas. Valores cercanos a 1.0 convergen al
       `rms_norm` estándar. El valor por defecto recomendado por el paper es
       6.25% (0.0625).
+
+      **Referencias:** (paper: arxiv:1910.07467)
     exclusiveMinimum: 0
     maximum: 1
     default: 0.0625
@@ -89,7 +99,9 @@ properties:
 
       **Impact:** Same trade-off as `partial_ratio` for pRMSNorm — smaller
       values are faster but a noisier (biased) RMS estimate. The paper
-      (arXiv:2407.09577) composes naturally with arXiv:1910.07467 §5 here.
+      (paper: arxiv:2407.09577) composes naturally with (paper: arxiv:1910.07467) §5 here.
+
+      **References:** (paper: arxiv:2407.09577) (paper: arxiv:1910.07467)
     description_es: |-
       Fracción de dimensiones ocultas usadas para la estimación RMS cuando
       `norm.type=flash_norm`. Cuando es mayor que 0, FlashNorm calcula el
@@ -102,8 +114,10 @@ properties:
 
       **Impacto:** Misma compensación que `partial_ratio` para pRMSNorm —
       valores más pequeños son más rápidos pero producen una estimación RMS
-      más ruidosa (sesgada). El paper (arXiv:2407.09577) se compone
-      naturalmente con arXiv:1910.07467 §5 aquí.
+      más ruidosa (sesgada). El paper (paper: arxiv:2407.09577) se compone
+      naturalmente con (paper: arxiv:1910.07467) §5 aquí.
+
+      **Referencias:** (paper: arxiv:2407.09577) (paper: arxiv:1910.07467)
     minimum: 0
     maximum: 1
     default: 0.0

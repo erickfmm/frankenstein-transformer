@@ -5,10 +5,14 @@ title_es: "Red Feed-Forward (FFN)"
 description: |-
   Feed-forward network configuration shared by every HybridLayer: hidden
   dimension, activation function, and learnable-activation parameters.
+
+  **References:** (paper: arxiv:1706.03762) (paper: arxiv:2002.05202)
 description_es: |-
   Configuración de la red feed-forward compartida por cada HybridLayer:
   dimensión oculta, función de activación y parámetros de activaciones
   aprendibles.
+
+  **Referencias:** (paper: arxiv:1706.03762) (paper: arxiv:2002.05202)
 properties:
   hidden_size:
     type: integer
@@ -29,6 +33,8 @@ properties:
         knowledge-intensive tasks; higher memory.
       - With MoE: each expert uses this hidden size, so FFN params multiply by
         `moe.num_experts` (stored, not all active). Prefer 2–3× ratios with MoE.
+
+      **References:** (paper: arxiv:1706.03762)
     description_es: |-
       Dimensión intermedia de las capas feed-forward. Ratio típico: 4×
       `dims.hidden_size` (p. ej. 768→3072 para BERT-base). Cuando
@@ -44,6 +50,8 @@ properties:
       - Con MoE: cada experto usa este tamaño oculto, así que los params FFN se
         multiplican por `moe.num_experts` (almacenados, no todos activos).
         Preferir ratios 2–3× con MoE.
+
+      **Referencias:** (paper: arxiv:1706.03762)
     default: null
     examples: [3072]
   activation:
@@ -53,7 +61,7 @@ properties:
     description: |
       Non-linear activation for feed-forward networks. Grouped by family:
 
-      **Common / classical** (survey: Lederer arXiv:2101.09957; Dubey et al. arXiv:2109.14545):
+      **Common / classical** (survey: Lederer (paper: arxiv:2101.09957); Dubey et al. (paper: arxiv:2109.14545)):
       - `silu`: Sigmoid Linear Unit / Swish₁ — smoother, used in Llama/PaLM. **Recommended default for new models.**
       - `gelu`: Gaussian Error Linear Unit — classic, used in BERT/GPT-2/GPT-3. More stable for very small models.
       - `gelu_tanh`: GELU with the tanh approximation (faster; GPT-2/BERT original).
@@ -68,17 +76,28 @@ properties:
 
       **Learnable / adaptive**: `swish` (β-hyperparam), `swish_trainable` (β-trainable), `maxout`,
       `raf` (**Rational Activation Function**, learnable Padé polynomial ratio, Fang et al.
-      arXiv:2208.14111). Configure via `ffn.activation_config`.
+      (paper: arxiv:2208.14111)). Configure via `ffn.activation_config`.
 
       **Gated FFN variants** (own their projections, replace the FFN block): `swiglu`, `geglu`, `reglu`.
 
       **Impact:** `silu`/`gelu` tend to converge well. With BitNet or quantization, `silu` may be
       more robust. Learnable activations (`raf`, `prelu`, `swish_trainable`) add parameters but can
       adapt per-task, especially in low-data regimes.
+
+      **References:** `silu`/`swish` (paper: arxiv:1710.05941) (paper: arxiv:1702.03118); `gelu` (paper:
+      arxiv:1606.08415); `relu` (paper: https://www.cs.toronto.edu/~fritz/absps/reluICML.pdf);
+      `leaky_relu` (paper: https://ai.stanford.edu/~amaas/papers/relu_hybrid_icml2013_final.pdf); `elu`
+      (paper: arxiv:1511.07289); `selu` (paper: arxiv:1706.02515); `celu` (paper: arxiv:1704.07483);
+      `mish` (paper: arxiv:1908.08681); `prelu` (paper: arxiv:1502.01852); `softplus` (paper:
+      https://proceedings.mlr.press/v15/glorot11a.html); `elish`/`hardelish` (paper: arxiv:1905.10144);
+      `hardswish` (paper: arxiv:1905.02244); `pau` (paper: arxiv:2007.14617); `maxout` (paper:
+      arxiv:1302.4389); `lisht` (paper: arxiv:1811.05870); `pelu` (paper: arxiv:1605.09332); `softexp`
+      (paper: arxiv:1602.01321); `raf` (paper: arxiv:2208.14111); `swiglu`/`geglu`/`reglu` (paper:
+      arxiv:2002.05202); surveys (paper: arxiv:2101.09957) (paper: arxiv:2109.14545)
     description_es: |
       Activación no lineal para redes feed-forward, agrupada por familia:
 
-      **Comunes / clásicas** (survey: Lederer arXiv:2101.09957; Dubey et al. arXiv:2109.14545):
+      **Comunes / clásicas** (survey: Lederer (paper: arxiv:2101.09957); Dubey et al. (paper: arxiv:2109.14545)):
       - `silu`: Sigmoid Linear Unit / Swish₁ — más suave, usada en Llama/PaLM. **Recomendada por defecto.**
       - `gelu`: Gaussian Error Linear Unit — clásica, usada en BERT/GPT-2/GPT-3.
       - `gelu_tanh`: GELU con aproximación tanh (más rápida; GPT-2/BERT original).
@@ -93,9 +112,20 @@ properties:
 
       **Aprendibles / adaptativas**: `swish` (β hiperparámetro), `swish_trainable` (β entrenable),
       `maxout`, `raf` (**Rational Activation Function**, razón polinómica Padé aprendible, Fang et al.
-      arXiv:2208.14111). Configurar vía `ffn.activation_config`.
+      (paper: arxiv:2208.14111)). Configurar vía `ffn.activation_config`.
 
       **Variantes FFN con compuerta** (tienen sus proyecciones, reemplazan el bloque FFN): `swiglu`, `geglu`, `reglu`.
+
+      **Referencias:** `silu`/`swish` (paper: arxiv:1710.05941) (paper: arxiv:1702.03118); `gelu` (paper:
+      arxiv:1606.08415); `relu` (paper: https://www.cs.toronto.edu/~fritz/absps/reluICML.pdf);
+      `leaky_relu` (paper: https://ai.stanford.edu/~amaas/papers/relu_hybrid_icml2013_final.pdf); `elu`
+      (paper: arxiv:1511.07289); `selu` (paper: arxiv:1706.02515); `celu` (paper: arxiv:1704.07483);
+      `mish` (paper: arxiv:1908.08681); `prelu` (paper: arxiv:1502.01852); `softplus` (paper:
+      https://proceedings.mlr.press/v15/glorot11a.html); `elish`/`hardelish` (paper: arxiv:1905.10144);
+      `hardswish` (paper: arxiv:1905.02244); `pau` (paper: arxiv:2007.14617); `maxout` (paper:
+      arxiv:1302.4389); `lisht` (paper: arxiv:1811.05870); `pelu` (paper: arxiv:1605.09332); `softexp`
+      (paper: arxiv:1602.01321); `raf` (paper: arxiv:2208.14111); `swiglu`/`geglu`/`reglu` (paper:
+      arxiv:2002.05202); surveys (paper: arxiv:2101.09957) (paper: arxiv:2109.14545)
     enum: [silu, gelu, gelu_tanh, relu, sigmoid, tanh, arctan, softsign, elliott, identity, softplus, mish, leaky_relu, relu6, hardswish, prelu, abs_relu, nl_relu, brelu, vrelu, hexpo, ptanh, dis_relu, lisht, elu, selu, celu, pelu, mpelu, felu, eelu, pdelu, preu, softexp, elish, hardelish, swish, swish_trainable, maxout, raf, swiglu, geglu, reglu]
     default: silu
     examples: [gelu, silu]
@@ -107,7 +137,7 @@ properties:
       Optional nested parameters for learnable / parametric activations. Ignored for
       stateless activations. All keys are optional.
 
-      **RAF (Rational Activation Function, arXiv:2208.14111):**
+      **RAF (Rational Activation Function (paper: arxiv:2208.14111)):**
       - `raf_degrees`: `[m, n]` Padé numerator/denominator degrees (ints ≥ 1). Default `[5, 4]`.
       - `raf_version`: denominator form, one of `A` (default, "safe"), `B`, `C`, `D`, `N`.
       - `raf_approx_func`: init target — `gelu` (default), `relu`, `leaky_relu`, `leaky_relu_0.1`,
@@ -120,11 +150,13 @@ properties:
       `celu_alpha`, `swish_beta` (`1.0`), `leaky_relu_slope` (`0.01`), `pelu_alpha`, `mpelu_alpha`,
       `mpelu_beta`, `felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`,
       `preu_beta`, `softexp_alpha`, `maxout_pieces` (int ≥ 1, default `2`).
+
+      **References:** (paper: arxiv:2208.14111) (paper: arxiv:1502.01852) (paper: arxiv:1710.05941)
     description_es: |
       Parámetros anidados opcionales para activaciones aprendibles / paramétricas. Se ignoran para
       activaciones sin estado. Todas las claves son opcionales.
 
-      **RAF (Rational Activation Function, arXiv:2208.14111):**
+      **RAF (Rational Activation Function (paper: arxiv:2208.14111)):**
       - `raf_degrees`: grados `[m, n]` del numerador/denominador Padé (ints ≥ 1). Por defecto `[5, 4]`.
       - `raf_version`: forma del denominador, uno de `A` (por defecto, "segura"), `B`, `C`, `D`, `N`.
       - `raf_approx_func`: objetivo de inicialización — `gelu` (por defecto), `relu`, `leaky_relu`,
@@ -137,9 +169,17 @@ properties:
       `swish_beta` (`1.0`), `leaky_relu_slope` (`0.01`), `pelu_alpha`, `mpelu_alpha`, `mpelu_beta`,
       `felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`, `preu_beta`,
       `softexp_alpha`, `maxout_pieces` (int ≥ 1, `2`).
+
+      **Referencias:** (paper: arxiv:2208.14111) (paper: arxiv:1502.01852) (paper: arxiv:1710.05941)
     additionalProperties: false
     properties:
       raf_degrees:
+        description: |-
+          Numerator/denominator polynomial degrees `[m, n]` of the rational (Padé) function for `raf`.
+          **References:** (paper: arxiv:2208.14111)
+        description_es: |-
+          Grados polinómicos `[m, n]` de numerador/denominador de la función racional (Padé) para `raf`.
+          **Referencias:** (paper: arxiv:2208.14111)
         type: array
         items: {type: integer, minimum: 1}
         minItems: 2
@@ -147,80 +187,200 @@ properties:
         default: [5, 4]
         examples: [[5, 4]]
       raf_version:
+        description: |-
+          Denominator formulation of the RaF rational function: `A` (safe, default), `B`, `C`, `D` or `N`.
+          **References:** (paper: arxiv:2208.14111)
+        description_es: |-
+          Formulación del denominador de la función racional RaF: `A` (segura, por defecto), `B`, `C`, `D` o `N`.
+          **Referencias:** (paper: arxiv:2208.14111)
         type: string
         enum: [A, B, C, D, N]
         default: A
       raf_approx_func:
+        description: |-
+          Base function the RaF coefficients are initialized to approximate (`gelu` by default).
+          **References:** (paper: arxiv:2208.14111)
+        description_es: |-
+          Función base que los coeficientes RaF se inicializan para aproximar (`gelu` por defecto).
+          **Referencias:** (paper: arxiv:2208.14111)
         type: string
         enum: [gelu, relu, leaky_relu, leaky_relu_0.1, sigmoid, tanh, swish, silu, identity]
         default: gelu
       raf_trainable:
+        description: |-
+          Whether the RaF rational coefficients remain trainable (`true`) or stay frozen after init (`false`).
+          **References:** (paper: arxiv:2208.14111)
+        description_es: |-
+          Si los coeficientes racionales RaF permanecen entrenables (`true`) o quedan congelados tras el init (`false`).
+          **Referencias:** (paper: arxiv:2208.14111)
         type: boolean
         default: true
       raf_input_scaling:
+        description: |-
+          Enable per-token min-max input scaling to `[-3, 3]` before the RaF (RAFT preprocessing).
+          **References:** (paper: arxiv:2208.14111)
+        description_es: |-
+          Activa el escalado min-max por token a `[-3, 3]` antes del RaF (preprocesamiento RAFT).
+          **Referencias:** (paper: arxiv:2208.14111)
         type: boolean
         default: false
       prelu_init:
+        description: |-
+          Initial value of the learnable PReLU slope.
+          **References:** (paper: arxiv:1502.01852)
+        description_es: |-
+          Valor inicial de la pendiente aprendible de PReLU.
+          **Referencias:** (paper: arxiv:1502.01852)
         type: number
         default: 0.25
         examples: [0.25]
       elu_alpha:
+        description: |-
+          Alpha of the ELU saturation region.
+          **References:** (paper: arxiv:1511.07289)
+        description_es: |-
+          Alfa de la región de saturación del ELU.
+          **Referencias:** (paper: arxiv:1511.07289)
         type: number
         default: 1.0
         examples: [1.0]
       celu_alpha:
+        description: |-
+          Alpha of the CELU (continuously differentiable ELU).
+          **References:** (paper: arxiv:1704.07483)
+        description_es: |-
+          Alfa del CELU (ELU continuamente diferenciable).
+          **Referencias:** (paper: arxiv:1704.07483)
         type: number
         default: 1.0
         examples: [1.0]
       swish_beta:
+        description: |-
+          Beta of the parametric Swish/SiLU form `x · sigmoid(β·x)`.
+          **References:** (paper: arxiv:1710.05941)
+        description_es: |-
+          Beta de la forma paramétrica Swish/SiLU `x · sigmoid(β·x)`.
+          **Referencias:** (paper: arxiv:1710.05941)
         type: number
         default: 1.0
         examples: [1.0]
       leaky_relu_slope:
+        description: |-
+          Slope of the negative branch for `leaky_relu`.
+          **References:** (paper: https://ai.stanford.edu/~amaas/papers/relu_hybrid_icml2013_final.pdf)
+        description_es: |-
+          Pendiente de la rama negativa para `leaky_relu`.
+          **Referencias:** (paper: https://ai.stanford.edu/~amaas/papers/relu_hybrid_icml2013_final.pdf)
         type: number
         default: 0.01
         examples: [0.01]
       pelu_alpha:
+        description: |-
+          Learnable alpha of the Parametric ELU (PELU).
+          **References:** (paper: arxiv:1605.09332)
+        description_es: |-
+          Alfa aprendible del Parametric ELU (PELU).
+          **Referencias:** (paper: arxiv:1605.09332)
         type: number
         default: 1.0
         examples: [1.0]
       mpelu_alpha:
+        description: |-
+          Alpha of the Minus Parametric ELU (MPELU).
+          **References:** (paper: arxiv:2109.14545)
+        description_es: |-
+          Alfa del Minus Parametric ELU (MPELU).
+          **Referencias:** (paper: arxiv:2109.14545)
         type: number
         default: 1.0
         examples: [1.0]
       mpelu_beta:
+        description: |-
+          Beta of the Minus Parametric ELU (MPELU).
+          **References:** (paper: arxiv:2109.14545)
+        description_es: |-
+          Beta del Minus Parametric ELU (MPELU).
+          **Referencias:** (paper: arxiv:2109.14545)
         type: number
         default: 1.0
         examples: [1.0]
       felu_alpha:
+        description: |-
+          Alpha of the Flexible ELU (FELU).
+          **References:** (paper: arxiv:2109.14545)
+        description_es: |-
+          Alfa del Flexible ELU (FELU).
+          **Referencias:** (paper: arxiv:2109.14545)
         type: number
         default: 1.0
         examples: [1.0]
       eelu_alpha:
+        description: |-
+          Alpha of the Extended ELU (EELU).
+          **References:** (paper: arxiv:2109.14545)
+        description_es: |-
+          Alfa del Extended ELU (EELU).
+          **Referencias:** (paper: arxiv:2109.14545)
         type: number
         default: 1.0
         examples: [1.0]
       eelu_beta:
+        description: |-
+          Beta of the Extended ELU (EELU).
+          **References:** (paper: arxiv:2109.14545)
+        description_es: |-
+          Beta del Extended ELU (EELU).
+          **Referencias:** (paper: arxiv:2109.14545)
         type: number
         default: 1.0
         examples: [1.0]
       pdelu_alpha:
+        description: |-
+          Alpha of the Parametric DELU (PDELU).
+          **References:** (paper: arxiv:2109.14545)
+        description_es: |-
+          Alfa del Parametric DELU (PDELU).
+          **Referencias:** (paper: arxiv:2109.14545)
         type: number
         default: 1.0
         examples: [1.0]
       preu_alpha:
+        description: |-
+          Alpha of the Parametric ReLU-Exp (PREU).
+          **References:** (paper: arxiv:2109.14545)
+        description_es: |-
+          Alfa del Parametric ReLU-Exp (PREU).
+          **Referencias:** (paper: arxiv:2109.14545)
         type: number
         default: 1.0
         examples: [1.0]
       preu_beta:
+        description: |-
+          Beta of the Parametric ReLU-Exp (PREU).
+          **References:** (paper: arxiv:2109.14545)
+        description_es: |-
+          Beta del Parametric ReLU-Exp (PREU).
+          **Referencias:** (paper: arxiv:2109.14545)
         type: number
         default: 1.0
         examples: [1.0]
       softexp_alpha:
+        description: |-
+          Alpha of the SoftExponential activation.
+          **References:** (paper: arxiv:1602.01321)
+        description_es: |-
+          Alfa de la activación SoftExponential.
+          **Referencias:** (paper: arxiv:1602.01321)
         type: number
         default: 0.0
         examples: [0.0]
       maxout_pieces:
+        description: |-
+          Number of linear pieces per Maxout unit.
+          **References:** (paper: arxiv:1302.4389)
+        description_es: |-
+          Número de piezas lineales por unidad Maxout.
+          **Referencias:** (paper: arxiv:1302.4389)
         type: integer
         minimum: 1
         default: 2

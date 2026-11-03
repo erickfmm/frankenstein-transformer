@@ -4,6 +4,12 @@ properties:
   cca:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `cca_attn` (Compressed Convolutional Attention): latent rank, convolution stack and bias toggles. Only applies when `cca_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2510.04476)
+    description_es: |-
+      Hiperparámetros para `cca_attn` (Compressed Convolutional Attention): rango latente, pila de convoluciones y conmutadores de sesgo. Solo aplica cuando `cca_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2510.04476)
     properties:
       latent_rank:
         type: [integer, "null"]
@@ -12,7 +18,7 @@ properties:
         title_es: "Rango Latente CCA"
         description: |-
           Latent width ẽ for `cca_attn` (Compressed Convolutional Attention,
-          arXiv:2510.04476). CCA down-projects q/k/v into this shared latent
+          (paper: arxiv:2510.04476)). CCA down-projects q/k/v into this shared latent
           and performs attention entirely inside it (no up-projections),
           reducing parameters, KV-cache, AND FLOPs by the compression factor
           C = hidden_size / cca_latent_rank. Must be divisible by
@@ -28,9 +34,11 @@ properties:
             More aggressive; ~8x fewer attention FLOPs and KV-cache.
           - `cca_latent_rank=null`: `hidden_size // 4` rounded up to a
             multiple of `2 * num_heads`.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Ancho latente ẽ para `cca_attn` (Compressed Convolutional Attention,
-          arXiv:2510.04476). CCA proyecta q/k/v a este latente compartido y
+          (paper: arxiv:2510.04476)). CCA proyecta q/k/v a este latente compartido y
           realiza la atención enteramente en él (sin up-proyecciones),
           reduciendo parámetros, caché KV Y FLOPs por el factor de compresión
           C = hidden_size / cca_latent_rank. Debe ser divisible por
@@ -39,6 +47,8 @@ properties:
           HACIA ARRIBA a un múltiplo de `2 * num_heads` para que el default
           siempre sea construible (p.ej. hidden_size=96, num_heads=8 → 24 es
           inválido, resuelve a 32).
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [128]
       num_conv_layers:
         type: integer
@@ -49,12 +59,16 @@ properties:
           `cca_attn` (0, 1, or 2). The paper's ablation shows 2 layers (a
           depth-wise causal sequence conv + a head-wise grouped channel conv)
           is optimal. 0 disables convolutions entirely. Default: 2.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Número de capas de convolución aplicadas al tensor empaquetado q/k
           en `cca_attn` (0, 1 o 2). La ablacición del paper muestra que 2
           capas (una convolución causal depth-wise de secuencia + una
           convolución agrupada de canales por cabeza) es óptima. 0 desactiva
           las convoluciones. Por defecto: 2.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         enum: [0, 1, 2]
         examples: [2]
       conv_kernel_seq:
@@ -66,11 +80,15 @@ properties:
           in `cca_attn`. Mixes information across positions within the
           compressed latent. Only applies when `cca_num_conv_layers >= 1`.
           Default: 4.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Tamaño de kernel `k_seq` de la convolución causal depth-wise de
           secuencia en `cca_attn`. Mezcla información entre posiciones dentro
           del latente comprimido. Solo aplica cuando `cca_num_conv_layers >= 1`.
           Por defecto: 4.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [4]
       conv_kernel_ch:
         type: integer
@@ -80,11 +98,15 @@ properties:
           Kernel size `k_ch` of the head-wise grouped channel convolution in
           `cca_attn`. Mixes information across channels within each head.
           Only applies when `cca_num_conv_layers >= 2`. Default: 3.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Tamaño de kernel `k_ch` de la convolución agrupada de canales por
           cabeza en `cca_attn`. Mezcla información entre canales dentro de
           cada cabeza. Solo aplica cuando `cca_num_conv_layers >= 2`.
           Por defecto: 3.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [3]
       qk_mean:
         type: boolean
@@ -95,11 +117,15 @@ properties:
           mean of q and k to the post-convolution values, increasing
           attention-diagonal sparsity when combined with QK-norm. Default:
           True (recommended by the paper's ablation).
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Habilita el sesgo q-k-mean en `cca_attn`: añade la media
           pre-convolución de q y k a los valores post-convolución,
           aumentando la dispersión de la diagonal de atención cuando se
           combina con QK-norm. Por defecto: True.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [true]
       value_shift:
         type: boolean
@@ -111,16 +137,26 @@ properties:
           (a token-shift inductive bias borrowed from RWKV), implemented via
           two independent value projections. Requires `cca_latent_rank` even
           (the split halves the latent width, not the heads). Default: True.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Habilita value-shift en `cca_attn`: cada cabeza de atención recibe
           la mitad de sus valores del token actual y la mitad del token
           *anterior* (un sesgo inductivo de token-shift tomado de RWKV),
           implementado con dos proyecciones de valor independientes. Requiere
           `num_heads` par y `cca_latent_rank` par. Por defecto: True.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [true]
   ccgqa:
     type: object
     additionalProperties: false
+    description: |-
+      Hyperparameters for `ccgqa_attn` (Compressed Convolutional Grouped Query Attention): CCA convolutions applied inside a GQA-grouped latent. Only applies when `ccgqa_attn` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2510.04476) (paper: arxiv:2305.13245)
+    description_es: |-
+      Hiperparámetros para `ccgqa_attn` (Compressed Convolutional Grouped Query Attention): convoluciones CCA dentro de un latente agrupado estilo GQA. Solo aplica cuando `ccgqa_attn` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2510.04476) (paper: arxiv:2305.13245)
     properties:
       query_latent_rank:
         type: [integer, "null"]
@@ -129,17 +165,21 @@ properties:
         title_es: "Rango Latente de Query CCGQA"
         description: |-
           Query latent width `E / C₁` for `ccgqa_attn` (Compressed
-          Convolutional Grouped Query Attention, arXiv:2510.04476). CCGQA
+          Convolutional Grouped Query Attention (paper: arxiv:2510.04476)). CCGQA
           decouples query and KV compression: queries are compressed by `C₁`
           and keys/values by `C₂` (≥ `C₁`). `null` defaults to
           `hidden_size // 2` (C₁=2). Must be divisible by `num_heads`.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Ancho latente de query `E / C₁` para `ccgqa_attn` (Compressed
-          Convolutional Grouped Query Attention, arXiv:2510.04476). CCGQA
+          Convolutional Grouped Query Attention (paper: arxiv:2510.04476)). CCGQA
           desacopla la compresión de query y KV: las consultas se comprimen
           por `C₁` y las claves/valores por `C₂` (≥ `C₁`). `null` por
           defecto es `hidden_size // 2` (C₁=2). Debe ser divisible por
           `num_heads`.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [256]
       kv_latent_rank:
         type: [integer, "null"]
@@ -152,12 +192,16 @@ properties:
           ccgqa_num_kv_heads` must hold (same per-head latent dim `d_h`).
           `null` defaults to `hidden_size // 8` (C₂=8). Must be ≤
           `ccgqa_query_latent_rank`.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Ancho latente de KV `E / C₂` para `ccgqa_attn`. La restricción
           `ccgqa_query_latent_rank / num_heads == ccgqa_kv_latent_rank /
           ccgqa_num_kv_heads` debe cumplirse (misma dimensión latente por
           cabeza `d_h`). `null` por defecto es `hidden_size // 8` (C₂=8).
           Debe ser ≤ `ccgqa_query_latent_rank`.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [64]
       num_kv_heads:
         type: [integer, "null"]
@@ -168,11 +212,15 @@ properties:
           Number of KV (group) heads for `ccgqa_attn`. Must divide
           `num_heads`. The group size is `num_heads / ccgqa_num_kv_heads`,
           which also equals `C₂ / C₁`. `null` defaults to `num_heads // 4`.
+
+          **References:** (paper: arxiv:2305.13245)
         description_es: |-
           Número de cabezas KV (grupo) para `ccgqa_attn`. Debe dividir
           `num_heads`. El tamaño de grupo es `num_heads /
           ccgqa_num_kv_heads`, que también iguala `C₂ / C₁`. `null` por
           defecto es `num_heads // 4`.
+
+          **Referencias:** (paper: arxiv:2305.13245)
         examples: [2]
       num_conv_layers:
         type: integer
@@ -181,9 +229,13 @@ properties:
         description: |-
           Number of convolution layers for `ccgqa_attn` (0, 1, or 2). Same
           semantics as `cca_num_conv_layers`. Default: 2.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Número de capas de convolución para `ccgqa_attn` (0, 1 o 2).
           Mismas semánticas que `cca_num_conv_layers`. Por defecto: 2.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         enum: [0, 1, 2]
         examples: [2]
       conv_kernel_seq:
@@ -193,9 +245,13 @@ properties:
         description: |-
           Kernel size of the depth-wise causal sequence convolution in
           `ccgqa_attn`. Default: 4.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Tamaño de kernel de la convolución causal depth-wise de secuencia
           en `ccgqa_attn`. Por defecto: 4.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [4]
       conv_kernel_ch:
         type: integer
@@ -204,9 +260,13 @@ properties:
         description: |-
           Kernel size of the head-wise grouped channel convolution in
           `ccgqa_attn`. Default: 3.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Tamaño de kernel de la convolución agrupada de canales por cabeza
           en `ccgqa_attn`. Por defecto: 3.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [3]
       qk_mean:
         type: boolean
@@ -215,9 +275,13 @@ properties:
         description: |-
           Enable the q-k-mean bias with B_group/E_group for `ccgqa_attn`.
           Default: True.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Habilita el sesgo q-k-mean con B_group/E_group para `ccgqa_attn`.
           Por defecto: True.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [true]
       value_shift:
         type: boolean
@@ -227,8 +291,12 @@ properties:
           Enable value-shift for `ccgqa_attn`. Requires
           `ccgqa_kv_latent_rank` even (the split halves the KV latent width,
           not the KV heads). Default: True.
+
+          **References:** (paper: arxiv:2510.04476)
         description_es: |-
           Habilita value-shift para `ccgqa_attn`. Requiere
           `ccgqa_num_kv_heads` par y `ccgqa_kv_latent_rank` par.
           Por defecto: True.
+
+          **Referencias:** (paper: arxiv:2510.04476)
         examples: [true]
