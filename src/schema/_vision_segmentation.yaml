@@ -5,7 +5,7 @@ description: |-
   Task-specific configuration for `training.task: segmentation` (image
   segmentation). Supports per-pixel linear head (`seg_head_type: pixel`)
   for 1D grayscale or multicolor non-overlapping segmentation, or EoMT
-  query-based head (`seg_head_type: eomt` (paper: arxiv:2503.19108)) with Hungarian
+  query-based head (`seg_head_type: eomt` ) with Hungarian
   matching, BCE+Dice+CE loss, and mask annealing.
 
   General training fields (batch_size, num_epochs, optimizer, scheduler,

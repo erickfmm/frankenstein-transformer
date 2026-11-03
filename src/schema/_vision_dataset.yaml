@@ -66,11 +66,15 @@ properties:
       Fallback target (height, width) when the top-level `image.image_size`
       block is absent. For ViT configs `image.image_size` is required and takes
       precedence; keep this only for dataset-only consumers.
+
+      **References:** (paper: arxiv:2010.11929)
     description_es: |-
       Objetivo de respaldo (alto, ancho) cuando el bloque top-level
       `image.image_size` está ausente. Para configs ViT `image.image_size` es
       obligatorio y tiene precedencia; mantener esto solo para consumidores
       basados únicamente en el dataset.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     additionalProperties: false
     properties:
       height:
@@ -101,7 +105,12 @@ properties:
     description: |-
       Per-channel mean and std for normalization. Applied after rescaling.
       If omitted, no normalization is applied.
-    description_es: Media y desviación estándar por canal para normalización.
+
+      **References:** (paper: arxiv:2010.11929)
+    description_es: |-
+      Media y desviación estándar por canal para normalización.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     additionalProperties: false
     properties:
       mean:
@@ -136,8 +145,14 @@ properties:
     type: object
     title: Augmentations
     title_es: Aumentaciones
-    description: Data augmentation options applied during training.
-    description_es: Opciones de aumentación de datos aplicadas durante el entrenamiento.
+    description: |-
+      Data augmentation options applied during training.
+
+      **References:** (paper: arxiv:2010.11929)
+    description_es: |-
+      Opciones de aumentación de datos aplicadas durante el entrenamiento.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     additionalProperties: false
     properties:
       random_crop:

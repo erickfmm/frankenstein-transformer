@@ -114,6 +114,8 @@ properties:
           - `wordlevel`: simple word-level tokenization (small vocabularies).
           - `unigram`: subword language model (SentencePiece-style); `vocab_size`
             is optional (prunes automatically).
+
+          **References:** (paper: arxiv:1910.03771)
         description_es: |
           Algoritmo de entrenamiento del tokenizador:
 
@@ -123,6 +125,8 @@ properties:
           - `wordlevel`: tokenización a nivel de palabra (vocabularios pequeños).
           - `unigram`: sub-palabras estilo SentencePiece; `vocab_size` es opcional
             (poda automáticamente).
+
+          **Referencias:** (paper: arxiv:1910.03771)
         examples: [bpe]
         default: bpe
       vocab_size:
@@ -134,11 +138,15 @@ properties:
           optional for `unigram` (which prunes automatically). The trained tokenizer's
           actual vocabulary size (`len(tokenizer)`) is injected into
           `model.dims.vocab_size` so the embedding matrix matches.
+
+          **References:** (paper: arxiv:1910.03771)
         description_es: |
           Tamaño de vocabulario objetivo. Obligatorio para `bpe`, `wordpiece` y
           `wordlevel`; opcional para `unigram` (que poda automáticamente). El tamaño
           real (`len(tokenizer)`) se inyecta en `model.dims.vocab_size` para que la
           matriz de embedding coincida.
+
+          **Referencias:** (paper: arxiv:1910.03771)
         minimum: 1
         examples: [8000]
       min_frequency:
@@ -148,9 +156,13 @@ properties:
         description: |
           Minimum frequency (count) for a token/subword to be included in the vocabulary.
           Higher values produce smaller, cleaner vocabularies.
+
+          **References:** (paper: arxiv:1910.03771)
         description_es: |
           Frecuencia mínima (conteo) para que un token/sub-palabra entre al vocabulario.
           Valores altos producen vocabularios más pequeños y limpios.
+
+          **Referencias:** (paper: arxiv:1910.03771)
         minimum: 1
         default: 2
       special_tokens:
@@ -169,10 +181,14 @@ properties:
           Special tokens registered in the trained tokenizer. For MLM training with a
           custom model, include `[MASK]` (BERT-style masking). Defaults to the standard
           BERT set when omitted.
+
+          **References:** (paper: arxiv:1910.03771)
         description_es: |
           Tokens especiales registrados en el tokenizador entrenado. Para entrenamiento
           MLM con modelo personalizado, incluir `[MASK]` (enmascarado estilo BERT).
           Por defecto se usa el conjunto estándar BERT.
+
+          **Referencias:** (paper: arxiv:1910.03771)
         default: ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]
       save_dir:
         type: string
@@ -183,11 +199,15 @@ properties:
           The checkpoint loader automatically reloads from the checkpoint's
           `tokenizer/` subdirectory, so this is mainly useful to reuse the tokenizer
           for inference or to inspect the vocabulary.
+
+          **References:** (paper: arxiv:1910.03771)
         description_es: |
           Directorio donde se persiste el tokenizador entrenado vía `save_pretrained()`.
           El cargador de checkpoints recarga automáticamente desde el subdirectorio
           `tokenizer/`, así que esto es útil para reutilizar el tokenizador en inferencia
           o inspeccionar el vocabulario.
+
+          **Referencias:** (paper: arxiv:1910.03771)
       lowercase:
         type: boolean
         title: "Lowercase"
@@ -210,9 +230,13 @@ properties:
         description: |
           Strip diacritical accents (e.g. `á -> a`) before training. Common for
           multilingual or accented corpora to reduce vocabulary size.
+
+          **References:** (paper: arxiv:1910.03771)
         description_es: |
           Quitar signos diacríticos (p.ej. `á -> a`) antes de entrenar. Común para
           corpus multilingües o acentuados para reducir el vocabulario.
+
+          **Referencias:** (paper: arxiv:1910.03771)
         default: false
       pre_tokenizer:
         type: string
@@ -226,6 +250,8 @@ properties:
           - `bytelevel`: byte-level BPE splitting (GPT-2 exact); enables byte fallback.
           - `bert`: BERT-style pre-tokenizer (whitespace + punctuation splitting,
             pairs with `lowercase: true` for classic uncased BERT behavior).
+
+          **References:** (paper: arxiv:1910.03771)
         description_es: |
           Estrategia de pre-tokenización:
 
@@ -233,6 +259,8 @@ properties:
           - `bytelevel`: división byte-level BPE (GPT-2 exacto); habilita byte fallback.
           - `bert`: pre-tokenizador estilo BERT (espacios + puntuación; emparejar con
             `lowercase: true` para el comportamiento BERT-uncased).
+
+          **Referencias:** (paper: arxiv:1910.03771)
         default: whitespace
       max_token_length:
         type: integer
@@ -241,9 +269,13 @@ properties:
         description: |
           Optional cap on individual token length in characters (0 = no limit).
           Protects against degenerate very-long tokens on noisy corpora.
+
+          **References:** (paper: arxiv:1910.03771)
         description_es: |
           Límite opcional de longitud de token en caracteres (0 = sin límite).
           Protege contra tokens degenerados muy largos en corpora ruidosos.
+
+          **Referencias:** (paper: arxiv:1910.03771)
         minimum: 0
         default: 0
   name_or_path:
@@ -304,6 +336,8 @@ properties:
 
       **Impact:** `false` es seguro pero puede causar errores con modelos que requieren código custom.
       Solo activar con modelos de fuentes verificadas (HuggingFace oficial, repos propios).
+
+      **References:** (paper: arxiv:1910.03771)
     description_es: |
       Permite la ejecución de código personalizado desde el repositorio del modelo/tokenizador.
       Necesario para algunos modelos con lógica de tokenización personalizada (ej. T5, FLAN-T5).
@@ -311,4 +345,6 @@ properties:
 
       **Impacto:** `false` es seguro pero puede causar errores con modelos que requieren código custom.
       Solo activar con modelos de fuentes verificadas (HuggingFace oficial, repos propios).
+
+      **Referencias:** (paper: arxiv:1910.03771)
     examples: [false]

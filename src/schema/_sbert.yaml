@@ -181,8 +181,12 @@ properties:
     title_es: "Norma Máx de Gradiente"
     description: |
       Gradient clipping threshold for SBERT. Typical: 0.5–2.0 (often lower than MLM due to contrastive loss sensitivity). 0 = disabled.
+
+      **References:** (paper: arxiv:1905.11881)
     description_es: |
       Umbral de recorte de gradiente para SBERT. Típico: 0.5–2.0 (a menudo menor que MLM por sensibilidad de pérdida contrastiva). 0 = deshabilitado.
+
+      **Referencias:** (paper: arxiv:1905.11881)
     examples: [1.0]
   num_epochs:
     type: integer
@@ -199,8 +203,12 @@ properties:
     title_es: "Pasos de Calentamiento"
     description: |
       Steps for LR warmup in SBERT. Typical: 10–20% of total steps. Formula: `int(epochs × (dataset_size/batch_size) × warmup_ratio)`.
+
+      **References:** (paper: arxiv:1908.03265)
     description_es: |
       Pasos para calentamiento de LR en SBERT. Típico: 10–20% del total. Fórmula: `int(epochs × (dataset_size/batch_size) × warmup_ratio)`.
+
+      **Referencias:** (paper: arxiv:1908.03265)
     examples: [1000]
   evaluation_steps:
     type: integer
@@ -269,8 +277,12 @@ properties:
     title_es: "Longitud Máx de Secuencia"
     description: |
       Max token length for input texts. Typical: 128–512. SBERT often works with shorter sequences (128–256) than MLM. For retrieval: 256–512; classification: 128.
+
+      **References:** (paper: arxiv:1908.10084)
     description_es: |
       Longitud máxima de tokens para textos de entrada. Típico: 128–512. SBERT suele funcionar con secuencias más cortas (128–256) que MLM. Para recuperación: 256–512; clasificación: 128.
+
+      **Referencias:** (paper: arxiv:1908.10084)
     examples: [512]
   pooling_mode:
     type: string
@@ -302,8 +314,12 @@ properties:
     title_es: "Confiar en Código Remoto"
     description: |
       Allow custom code from model repo. Required for some custom models. Security risk for untrusted sources.
+
+      **References:** (paper: arxiv:1910.03771)
     description_es: |
       Permitir código personalizado del repo del modelo. Requerido para algunos modelos custom. Riesgo de seguridad para fuentes no confiables.
+
+      **Referencias:** (paper: arxiv:1910.03771)
     examples: [false]
   use_amp:
     type: boolean

@@ -180,12 +180,16 @@ properties:
       full-precision `nn.Linear` even when `use_bitnet` is true, avoiding
       ternary-quantisation noise on the small mHC coefficients. When false
       (and `use_bitnet` is true), `φ_l` uses `BitLinear`.
+
+      **References:** (paper: arxiv:2310.11453)
     description_es: |
       Cuando es true (por defecto), la proyección de coeficientes mHC `φ_l`
       se mantiene como `nn.Linear` de precisión completa incluso cuando
       `use_bitnet` es true, evitando ruido de cuantización ternaria en los
       pequeños coeficientes mHC. Cuando es false (y `use_bitnet` es true),
       `φ_l` usa `BitLinear`.
+
+      **Referencias:** (paper: arxiv:2310.11453)
     default: true
     examples: [true, false]
   hyperloop:

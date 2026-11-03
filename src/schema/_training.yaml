@@ -12,7 +12,7 @@ description: 'Training hyperparameters and runtime configuration. Includes task-
   task sub-blocks) are collected into the runtime dictionary consumed by
   ``main.py`` / ``engine.py``; ``TrainingConfig`` owns optimizer, scheduler,
   stability, checkpointing and telemetry fields.
-  **References:** (paper: arxiv:1810.04805)'
+    **References:** (paper: arxiv:1810.04805)'
 description_es: 'Hiperparámetros de entrenamiento y configuración de ejecución. Incluye configuraciones
   
   específicas de tarea (MLM/SBERT/Causal-LM), carga de datos, optimización, checkpointing, logging y gestión
@@ -24,7 +24,7 @@ description_es: 'Hiperparámetros de entrenamiento y configuración de ejecució
   sub-bloques de tareas de visión) se recopilan en el diccionario de runtime
   consumido por ``main.py`` / ``engine.py``; ``TrainingConfig`` posee los
   campos de optimizador, scheduler, estabilidad, checkpointing y telemetría.
-  **Referencias:** (paper: arxiv:1810.04805)'
+    **Referencias:** (paper: arxiv:1810.04805)'
 additionalProperties: false
 required:
 - task
@@ -38,16 +38,16 @@ properties:
       \ prediction (GPT-style pre-training).\n  Each token predicts the following token; cross-entropy loss is computed over all shifted positions\n  (no masking). Requires `model_class: frankenstein_text_decoder`\
       \ and `training.optimizer` configuration.\n- `text_classification`: Supervised sequence-level classification on tokenized text.\n  Uses the encoder's classification head (Strategy A); batches carry\n\
       \  `input_ids`, `attention_mask` and integer class `labels`. Requires `training.optimizer` configuration.\n- `asr`: Automatic speech recognition on raw audio (Conformer (paper: arxiv:2005.08100)).\n  Batches carry `waveform`, `labels` (character token ids), `input_lengths` and `target_lengths`;\n  the loss is CTC (`audio.asr_loss: ctc`) or RNN-Transducer (`audio.asr_loss: transducer`,\n  (paper: arxiv:1211.3711)). Requires `model_class: frankenstein_audio`, the `audio:` and\n  `audio_dataset:` blocks, and `training.optimizer` configuration.\n- `audio_classification`: Supervised audio/signal classification (audio events, EEG, EMG, ...).\n  Uses the audio classification head over a pooled representation (`audio.pooling_mode`);\n  batches carry `waveform` and integer class `labels`. Requires `model_class: frankenstein_audio`,\n  the `audio:` and `audio_dataset:` blocks, and `training.optimizer` configuration.\n\n**Impact:** Defines the training objective. `mlm` is for language understanding;\n`sbert`\
-            \ is for semantic similarity and retrieval; `causal_lm` is for autoregressive text generation;\n`text_classification` is for labelled text classification; `asr` is for speech transcription;\n`audio_classification` is for audio/sensor tagging.
-      **References:** `mlm` (paper: arxiv:1810.04805); `sbert` (paper: arxiv:1908.10084); `causal_lm` (paper: arxiv:1706.03762); `text_classification` (paper: arxiv:1810.04805); `asr` (paper: arxiv:2005.08100) (paper: https://doi.org/10.1145/1143844.1143891) (paper: arxiv:1211.3711); `audio_classification` (paper: arxiv:2005.08100); `patch_prediction` (paper: arxiv:2111.06377); `classification` (paper: arxiv:2010.11929); `segmentation` (paper: arxiv:2503.19108)"
+      \ is for semantic similarity and retrieval; `causal_lm` is for autoregressive text generation;\n`text_classification` is for labelled text classification; `asr` is for speech transcription;\n`audio_classification` is for audio/sensor tagging.
+            **References:** `mlm` (paper: arxiv:1810.04805); `sbert` (paper: arxiv:1908.10084); `causal_lm` (paper: arxiv:1706.03762); `text_classification` (paper: arxiv:1810.04805); `asr` (paper: arxiv:2005.08100) (paper: https://doi.org/10.1145/1143844.1143891) (paper: arxiv:1211.3711); `audio_classification` (paper: arxiv:2005.08100); `patch_prediction` (paper: arxiv:2111.06377); `classification` (paper: arxiv:2010.11929); `segmentation` (paper: arxiv:2503.19108)"
     description_es: "Tipo de tarea de entrenamiento.\n- `mlm`: Masked Language Modeling — los tokens se enmascaran y predicen (preentrenamiento estilo BERT).\n  Requiere configuración `training.optimizer`.\n\
       - `sbert`: Sentence-BERT fine-tuning — aprendizaje contrastivo en pares/tripletes para\n  embeddings semánticos. Requiere subsección `training.sbert`.\n- `causal_lm`: Causal Language Modeling — predicción\
       \ autorregresiva de siguiente token (preentrenamiento estilo GPT).\n  Cada token predice el siguiente; la pérdida de cross-entropy se calcula sobre todas las posiciones desplazadas\n  (sin enmascaramiento).\
       \ Requiere `model_class: frankenstein_text_decoder` y configuración `training.optimizer`.\n- `text_classification`: Clasificación supervisada a nivel de secuencia sobre texto tokenizado.\n  Usa la\
       \ cabeza de clasificación del encoder (Estrategia A); los batches llevan `input_ids`,\n  `attention_mask` y `labels` enteros. Requiere configuración `training.optimizer`.\n- `asr`: Reconocimiento automático del habla sobre audio crudo (Conformer (paper: arxiv:2005.08100)).\n  Los batches llevan `waveform`, `labels` (ids de caracteres), `input_lengths` y `target_lengths`;\n  la pérdida es CTC (`audio.asr_loss: ctc`) o RNN-Transducer (`audio.asr_loss: transducer`,\n  (paper: arxiv:1211.3711)). Requiere `model_class: frankenstein_audio`, los bloques `audio:` y\n  `audio_dataset:`, y configuración `training.optimizer`.\n- `audio_classification`: Clasificación supervisada de audio/señales (eventos de audio, EEG, EMG, ...).\n  Usa la cabeza de clasificación de audio sobre una representación agrupada (`audio.pooling_mode`);\n  los batches llevan `waveform` y `labels` enteros. Requiere `model_class: frankenstein_audio`,\n  los bloques `audio:` y `audio_dataset:`, y configuración `training.optimizer`.\n\n**Impacto:** Define\
       \ el objetivo de entrenamiento. `mlm` es para comprensión de lenguaje;\n`sbert` es para similitud semántica; `causal_lm` es para generación de texto autorregresiva;\n`text_classification` es para\
-            \ clasificación de texto etiquetado; `asr` es para transcripción de habla;\n`audio_classification` es para etiquetado de audio/sensores.
-      **Referencias:** `mlm` (paper: arxiv:1810.04805); `sbert` (paper: arxiv:1908.10084); `causal_lm` (paper: arxiv:1706.03762); `text_classification` (paper: arxiv:1810.04805); `asr` (paper: arxiv:2005.08100) (paper: https://doi.org/10.1145/1143844.1143891) (paper: arxiv:1211.3711); `audio_classification` (paper: arxiv:2005.08100); `patch_prediction` (paper: arxiv:2111.06377); `classification` (paper: arxiv:2010.11929); `segmentation` (paper: arxiv:2503.19108)"
+      \ clasificación de texto etiquetado; `asr` es para transcripción de habla;\n`audio_classification` es para etiquetado de audio/sensores.
+            **Referencias:** `mlm` (paper: arxiv:1810.04805); `sbert` (paper: arxiv:1908.10084); `causal_lm` (paper: arxiv:1706.03762); `text_classification` (paper: arxiv:1810.04805); `asr` (paper: arxiv:2005.08100) (paper: https://doi.org/10.1145/1143844.1143891) (paper: arxiv:1211.3711); `audio_classification` (paper: arxiv:2005.08100); `patch_prediction` (paper: arxiv:2111.06377); `classification` (paper: arxiv:2010.11929); `segmentation` (paper: arxiv:2503.19108)"
     enum:
     - mlm
     - sbert
@@ -83,13 +83,13 @@ properties:
       
       **Impact:** The same configuration, seed and data produce the same weight initialization, batch order and held-out split. Change it to explore a different random trajectory; keep it fixed to reproduce or debug a run.
       
-            '
+                  '
     description_es: 'Semilla de toda la ejecución de entrenamiento. Inicializa los generadores aleatorios de Python, NumPy, PyTorch y CUDA, la inicialización de pesos del modelo, el generador y los workers de mezcla de cada DataLoader, la permutación del conjunto de test reservado (`test_percentage`) y la mezcla del dataset de SBERT. Las ejecuciones en CUDA activan además cuDNN determinista (`cudnn.deterministic=true`, `cudnn.benchmark=false`), lo que puede costar algo de rendimiento pero hace reproducibles las ejecuciones repetidas con el mismo hardware y software.
       
       
       **Impacto:** La misma configuración, semilla y datos producen la misma inicialización de pesos, orden de lotes y partición reservada. Cámbiala para explorar una trayectoria aleatoria distinta; mantenla fija para reproducir o depurar una ejecución.
       
-            '
+                  '
     examples:
     - 42
   num_epochs:
@@ -102,14 +102,14 @@ properties:
       
       **Impact:** More epochs = better learning but risk of overfitting. Early stopping recommended.
       
-            '
+                  '
     description_es: 'Pasadas completas por el dataset de entrenamiento (solo MLM). Típico: 1–3 (datasets grandes, miles de millones de tokens), 5–10 (medios, millones), 10–20+ (pequeños). Monitorear pérdida
       de validación. Para SBERT, usar `sbert.num_epochs`.
       
       
       **Impacto:** Más épocas = mejor aprendizaje pero riesgo de sobreajuste. Early stopping recomendado.
       
-            '
+                  '
     examples:
     - 5
   batch_size:
@@ -133,7 +133,7 @@ properties:
       - `batch_size=1, gradient_accumulation_steps=32`: Effective batch = 32. For extremely memory-constrained scenarios. Single sample per micro-batch, many accumulation steps. Training is slower per epoch
       but uses minimal GPU memory.
       
-            - LR scaling rule: If you double the effective batch size, double the learning rate approximately. Start with a reference (e.g., batch=32, lr=1e-4) and scale linearly.'
+                  - LR scaling rule: If you double the effective batch size, double the learning rate approximately. Start with a reference (e.g., batch=32, lr=1e-4) and scale linearly.'
     description_es: 'Ejemplos por paso del optimizador (antes de acumulación de gradientes). Depende de memoria GPU:
       
       2–8 (8GB), 8–32 (16GB), 32–64 (40GB+). Lote efectivo = `batch_size × gradient_accumulation_steps`.
@@ -151,7 +151,7 @@ properties:
       - `batch_size=1, gradient_accumulation_steps=32`: Lote efectivo = 32. Para escenarios extremadamente limitados en memoria. Una sola muestra por micro-lote, muchos pasos de acumulación. Entrenamiento
       más lento por época pero usa memoria GPU mínima.
       
-            - Regla de escalado de LR: Si duplicas el tamaño de lote efectivo, duplica aproximadamente el learning rate. Empezar con una referencia (ej., batch=32, lr=1e-4) y escalar linealmente.'
+                  - Regla de escalado de LR: Si duplicas el tamaño de lote efectivo, duplica aproximadamente el learning rate. Empezar con una referencia (ej., batch=32, lr=1e-4) y escalar linealmente.'
     examples:
     - 4
   dataloader_workers:
@@ -164,14 +164,14 @@ properties:
       
       **Impact:** Increase until CPU is maxed out. Too many workers cause CPU contention.
       
-            '
+                  '
     description_es: 'Procesos worker paralelos para carga y preprocesamiento de datos. Típico: 0 (proceso principal), 2–4 (pequeño), 8–16 (grande). Más workers reducen cuellos de botella I/O. Limitado por
       núcleos de CPU.
       
       
       **Impacto:** Aumentar hasta que CPU llegue al límite. Demasiados workers causan contención de CPU.
       
-            '
+                  '
     examples:
     - 2
   max_length:
@@ -195,7 +195,8 @@ properties:
       - `max_length=1024`: Long documents. Use with sparse attention layers to manage memory. Without sparse attention, memory quadruples vs. 512. Good for QA over long contexts.
       
       - `max_length=2048+`: Very long contexts. Requires sparse attention (Longformer, BigBird) or recurrent/SSM layers (retnet, mamba) to keep memory manageable. Training is significantly slower. Consider
-            `join_temp_data_context_window` for proper sequence construction.'
+                  `join_temp_data_context_window` for proper sequence construction.
+      **References:** (paper: arxiv:1810.04805)'
     description_es: 'Longitud máxima de secuencia de tokens. 128 (corto), 256 (moderado), 512 (estándar BERT), 1024+ (documentos largos).
       
       Costo de memoria: O(seq_len²) para atención estándar. Para secuencias > 512, usar capas de atención dispersa
@@ -212,7 +213,8 @@ properties:
       - `max_length=1024`: Documentos largos. Usar con capas de atención dispersa para manejar memoria. Sin atención dispersa, la memoria se cuadruplica vs. 512. Bueno para QA sobre contextos largos.
       
       - `max_length=2048+`: Contextos muy largos. Requiere atención dispersa (Longformer, BigBird) o capas recurrentes/SSM (retnet, mamba) para mantener memoria manejable. Entrenamiento significativamente
-            más lento. Considerar `join_temp_data_context_window` para construcción adecuada de secuencias.'
+                  más lento. Considerar `join_temp_data_context_window` para construcción adecuada de secuencias.
+      **Referencias:** (paper: arxiv:1810.04805)'
     examples:
     - 512
   mlm_probability:
@@ -235,8 +237,8 @@ properties:
       
       - `0.10`: Lighter masking. Less pre-training signal per batch but preserves more original context. Can be useful for smaller models or fine-tuning stages.
       
-            - `0.30+`: Very aggressive. Generally not recommended — degrades quality as too many tokens are corrupted. The model struggles to learn meaningful representations.
-      **References:** (paper: arxiv:1810.04805)'
+      - `0.30+`: Very aggressive. Generally not recommended — degrades quality as too many tokens are corrupted. The model struggles to learn meaningful representations.
+            **References:** (paper: arxiv:1810.04805)'
     description_es: 'Fracción de tokens enmascarados para predicción MLM. Estándar: 0.15 (15%). Desglose de tokens enmascarados:
       
       80% → token [MASK], 10% → token aleatorio, 10% → sin cambio.
@@ -252,8 +254,8 @@ properties:
       
       - `0.10`: Enmascaramiento más ligero. Menos señal de preentrenamiento por lote pero preserva más contexto original. Puede ser útil para modelos más pequeños o etapas de fine-tuning.
       
-            - `0.30+`: Muy agresivo. Generalmente no recomendado — degrada calidad porque demasiados tokens están corruptos. El modelo tiene dificultad para aprender representaciones significativas.
-      **Referencias:** (paper: arxiv:1810.04805)'
+      - `0.30+`: Muy agresivo. Generalmente no recomendado — degrada calidad porque demasiados tokens están corruptos. El modelo tiene dificultad para aprender representaciones significativas.
+            **Referencias:** (paper: arxiv:1810.04805)'
     examples:
     - 0.15
   max_samples:
@@ -268,7 +270,7 @@ properties:
       
       **Impact:** Useful for controlled experiments or progressive training without clear epoch limits.
       
-            '
+                  '
     description_es: 'Total de muestras antes de detenerse, independiente de épocas. Limita entrenamiento en datasets grandes.
       
       Valor muy alto (ej., 100,000,000) para deshabilitar. Para en `min(num_epochs × dataset_size, max_samples)`.
@@ -276,7 +278,7 @@ properties:
       
       **Impacto:** Útil para experimentos controlados o entrenamiento progresivo sin límites de época claros.
       
-            '
+                  '
     examples:
     - 20000000
   test_percentage:
@@ -306,7 +308,7 @@ properties:
       Typical: 10–20. **Impact:** a held-out split costs training examples but
       gives an unbiased accuracy estimate without a separate evaluation run.
       
-            '
+                  '
     description_es: 'Porcentaje del dataset de la tarea reservado fuera del
       entrenamiento y usado para la evaluación al finalizar (``0`` desactiva
       la partición).
@@ -329,7 +331,7 @@ properties:
       entrenamiento pero ofrece una estimación de precisión insesgada sin una
       ejecución de evaluación separada.
       
-            '
+                  '
     examples:
     - 20
   dataset_batch_size:
@@ -344,7 +346,7 @@ properties:
       
       **Impact:** Should be a multiple of the training `batch_size` for efficiency.
       
-            '
+                  '
     description_es: 'Tamaño de lote interno para dataset de streaming. Típico: 10,000–50,000. Mayor = menos I/O, más memoria.
       
       Independiente del `batch_size` de entrenamiento. Ajustar según velocidad de almacenamiento.
@@ -352,7 +354,7 @@ properties:
       
       **Impacto:** Debe ser múltiplo del `batch_size` de entrenamiento para eficiencia.
       
-            '
+                  '
     examples:
     - 25000
   num_workers:
@@ -367,7 +369,7 @@ properties:
       
       **Impact:** Adjust based on available CPU cores. 0 = single-threaded loading.
       
-            '
+                  '
     description_es: 'Workers paralelos para pipeline de streaming de datos. Típico: 4–16. Más workers = menos latencia de carga,
       
       más CPU/memoria. Monitorear utilización de CPU; reducir si hay cuello de botella.
@@ -375,7 +377,7 @@ properties:
       
       **Impacto:** Ajustar según núcleos de CPU disponibles. 0 = carga single-threaded.
       
-            '
+                  '
     examples:
     - 8
   cache_dir:
@@ -390,7 +392,7 @@ properties:
       
       **Impact:** Speeds up subsequent runs. Requires sufficient disk space.
       
-            '
+                  '
     description_es: 'Directorio para cachear datasets procesados y evitar recómputo. SSD preferido. Ejemplo: `./temp_data/v2_dataset_cache`.
       
       Limpiar caché para forzar reprocesamiento ante cambios de esquema.
@@ -398,7 +400,7 @@ properties:
       
       **Impacto:** Acelera ejecuciones subsecuentes. Requiere suficiente espacio en disco.
       
-            '
+                  '
     examples:
     - ./temp_data/v2_dataset_cache
   local_parquet_dir:
@@ -410,13 +412,13 @@ properties:
       
       **Impact:** Faster training without network dependency.
       
-            '
+                  '
     description_es: 'Ruta a archivos parquet locales para streaming offline. Anula descarga remota. Requiere `stream_local_parquet=true`.
       
       
       **Impacto:** Entrenamiento más rápido sin dependencia de red.
       
-            '
+                  '
     examples:
     - /path/to/parquet
   prefer_local_cache:
@@ -429,13 +431,13 @@ properties:
       
       **Impact:** Recommended for development and debugging to avoid repeated downloads.
       
-            '
+                  '
     description_es: 'Verificar caché local primero antes de descarga remota. Acelera ejecuciones repetidas. Fallback a remoto si no hay caché.
       
       
       **Impacto:** Recomendado para desarrollo y debugging para evitar descargas repetidas.
       
-            '
+                  '
     examples:
     - true
   stream_local_parquet:
@@ -448,13 +450,13 @@ properties:
       
       **Impact:** `true` = local only (error if missing). Useful for consistent offline training.
       
-            '
+                  '
     description_es: 'Hacer streaming desde parquet local cuando `local_parquet_dir` está configurado. `false` puede usar remoto aunque exista local.
       
       
       **Impacto:** `true` = solo local (error si falta). Útil para entrenamiento offline consistente.
       
-            '
+                  '
     examples:
     - true
   join_temp_data_context_window:
@@ -469,7 +471,7 @@ properties:
       
       **Impact:** Useful when the cache contains short segments but longer sequences are needed.
       
-            '
+                  '
     description_es: 'Si >0, une fragmentos de tokens en caché en secuencias de esta longitud. Ejemplo: 2000 para secuencias de 2k tokens.
       
       0 = deshabilitado. Debe ser ≥ `max_length`.
@@ -477,7 +479,7 @@ properties:
       
       **Impacto:** Útil cuando la caché contiene segmentos cortos pero necesitas secuencias más largas.
       
-            '
+                  '
     examples:
     - 0
     - 2000
@@ -492,13 +494,13 @@ properties:
       
       **Impact:** Higher = less noise, possible data waste. Lower = more data, includes very short sequences.
       
-            '
+                  '
     description_es: 'Tokens mínimos en la última ventana parcial unida para conservarla. Típico: 64–256. Solo cuando `join_temp_data_context_window > 0`.
       
       
       **Impacto:** Mayor = menos ruido, posible desperdicio de datos. Menor = más datos, incluye secuencias muy cortas.
       
-            '
+                  '
     examples:
     - 128
   use_amp:
@@ -511,13 +513,13 @@ properties:
       
       **Impact:** Highly recommended for modern GPUs. Monitor for NaN; disable if problems occur.
       
-            '
+                  '
     description_es: 'Habilita precisión mixta FP16. ~50% menos memoria, más rápido en GPUs con Tensor Cores. Escalado automático de gradientes previene underflow.
       
       
       **Impacto:** Altamente recomendado para GPUs modernas. Monitorear NaN; deshabilitar si hay problemas.
       
-            '
+                  '
     examples:
     - false
   gradient_accumulation_steps:
@@ -532,7 +534,7 @@ properties:
       
       **Impact:** Enables large effective batches without increasing GPU memory. Increases time per epoch.
       
-            '
+                  '
     description_es: 'Acumular gradientes sobre N mini-lotes antes del paso del optimizador. Lote efectivo = `batch_size × N`.
       
       Ejemplo: batch_size=4, accumulation=4 → lote efectivo=16. LR debe escalar con lote efectivo.
@@ -540,7 +542,7 @@ properties:
       
       **Impacto:** Permite lotes efectivos grandes sin aumentar memoria GPU. Aumenta el tiempo por época.
       
-            '
+                  '
     examples:
     - 4
   scheduler_total_steps:
@@ -554,16 +556,14 @@ properties:
       
       
       **Impact:** Overestimate for dynamic duration. Warmup and decay are computed over this value.
-      
-            '
+      **References:** (paper: arxiv:2405.15682)'
     description_es: 'Pasos totales del optimizador para schedule de LR. Fórmula: `(num_epochs × dataset_size) / (batch_size × gradient_accumulation_steps)`.
       
       Muy corto: schedule termina temprano, LR constante; muy largo: nunca alcanza LR final.
       
       
       **Impacto:** Sobreestimar para duración dinámica. Warmup y decay se calculan sobre este valor.
-      
-            '
+      **Referencias:** (paper: arxiv:2405.15682)'
     examples:
     - 10000
   scheduler_warmup_ratio:
@@ -575,12 +575,12 @@ properties:
       
       
       **Impact:** Too much warmup = wasted time with suboptimal LR. Too little = unstable early training.
-      **References:** (paper: arxiv:1908.03265)'
+            **References:** (paper: arxiv:1908.03265)'
     description_es: 'Fracción de `scheduler_total_steps` para calentamiento de LR. Típico: 0.05–0.1. Modelos grandes necesitan más warmup (0.1), pequeños menos (0.05).
       
       
       **Impacto:** Demasiado warmup = tiempo perdido con LR subóptimo. Muy poco = entrenamiento temprano inestable.
-      **Referencias:** (paper: arxiv:1908.03265)'
+            **Referencias:** (paper: arxiv:1908.03265)'
     examples:
     - 0.1
   scheduler_type:
@@ -605,8 +605,8 @@ properties:
       - `linear_warmup_then_constant` with `scheduler_total_steps=10000, scheduler_warmup_ratio=0.1`: LR warms up for 1000 steps, then stays constant for the remaining 9000 steps. Good for fine-tuning a
       pretrained model where you don''t want large LR decay that could disrupt learned representations.
       
-            - `constant`: LR stays at initial value. Simplest option but rarely optimal — no warmup means early steps can be unstable, and no decay can lead to bouncing around the minimum.
-      **References:** (paper: arxiv:2405.15682)'
+      - `constant`: LR stays at initial value. Simplest option but rarely optimal — no warmup means early steps can be unstable, and no decay can lead to bouncing around the minimum.
+            **References:** (paper: arxiv:2405.15682)'
     description_es: 'Estrategia de decaimiento de LR.
       
       - `cosine`: decaimiento coseno suave a casi cero — **recomendado para preentrenamiento**.
@@ -625,8 +625,8 @@ properties:
       de un modelo preentrenado donde no se quiere un gran decaimiento de LR que pueda perturbar las representaciones aprendidas.
       
       - `constant`: LR se mantiene en el valor inicial. La opción más simple pero raramente óptima — sin warmup los pasos tempranos pueden ser inestables, y sin decaimiento se puede oscilar alrededor del
-            mínimo.
-      **Referencias:** (paper: arxiv:2405.15682)'
+      mínimo.
+            **Referencias:** (paper: arxiv:2405.15682)'
     enum:
     - cosine
     - constant
@@ -644,14 +644,14 @@ properties:
       
       
       **Impact:** Prevents exploding gradients. Monitor norms in logs to adjust.
-      **References:** (paper: arxiv:1905.11881)'
+            **References:** (paper: arxiv:1905.11881)'
     description_es: 'Norma máxima de gradiente permitida. Gradientes que excedan esto se escalan hacia abajo.
       
       Típico: 1.0–10.0. 0 para deshabilitar. Si se alcanza constantemente → aumentar; si diverge → disminuir.
       
       
       **Impacto:** Previene gradientes explosivos. Monitorear normas en logs para ajustar.
-      **Referencias:** (paper: arxiv:1905.11881)'
+            **Referencias:** (paper: arxiv:1905.11881)'
     examples:
     - 5.0
   inf_post_clip_threshold:
@@ -664,13 +664,13 @@ properties:
       
       **Impact:** Helps identify training problems without stopping.
       
-            '
+                  '
     description_es: 'Si alguna norma de gradiente excede esto después del recorte, marcarla. Típico: 50–200. Debe ser > `grad_clip_max_norm`. Solo logging.
       
       
       **Impacto:** Ayuda a identificar problemas de entrenamiento sin detenerlo.
       
-            '
+                  '
     examples:
     - 100.0
   max_nan_retries:
@@ -685,7 +685,7 @@ properties:
       
       **Impact:** Too low = stops on transient problems. Too high = wastes time on systematic issues.
       
-            '
+                  '
     description_es: 'Reintentos máximos ante gradientes NaN/Inf antes de detenerse. Típico: 3–10. Omite lotes corruptos.
       
       Si NaNs persisten, investigar calidad de datos, LR o estabilidad numérica.
@@ -693,7 +693,7 @@ properties:
       
       **Impacto:** Muy bajo = se detiene en problemas transitorios. Muy alto = pierde tiempo en problemas sistemáticos.
       
-            '
+                  '
     examples:
     - 3
   checkpoint_every_n_steps:
@@ -706,13 +706,13 @@ properties:
       
       **Impact:** Balance with disk speed. For long training runs (weeks) use shorter intervals.
       
-            '
+                  '
     description_es: 'Guardar checkpoint rodante cada N pasos. Típico: 500–5000. Más frecuente = menos pérdida de datos en crash, más I/O.
       
       
       **Impacto:** Balancear con velocidad de disco. Para entrenamientos largos (semanas) usar intervalos más cortos.
       
-            '
+                  '
     examples:
     - 500
   max_rolling_checkpoints:
@@ -725,13 +725,13 @@ properties:
       
       **Impact:** 1 = only the latest. Rolling checkpoints ≠ best checkpoints (not auto-deleted).
       
-            '
+                  '
     description_es: 'Máximo de checkpoints rodantes conservados. El más antiguo se elimina al exceder. Típico: 2–5. Espacio ≈ `checkpoint_size × max_rolling_checkpoints`.
       
       
       **Impacto:** 1 = solo el último. Checkpoints rodantes ≠ mejores checkpoints (no se eliminan automáticamente).
       
-            '
+                  '
     examples:
     - 3
   num_best_checkpoints:
@@ -744,13 +744,13 @@ properties:
       
       **Impact:** Useful for ensembling or selecting among models with similar performance.
       
-            '
+                  '
     description_es: 'Número de mejores checkpoints conservados permanentemente (por pérdida de validación). Típico: 1–3. No se eliminan automáticamente.
       
       
       **Impacto:** Útil para ensamblado o selección entre modelos con rendimiento similar.
       
-            '
+                  '
     examples:
     - 2
   nan_check_interval:
@@ -763,13 +763,13 @@ properties:
       
       **Impact:** More frequent = faster detection, small overhead.
       
-            '
+                  '
     description_es: 'Pasos entre verificaciones de NaN/Inf. Típico: 10–100. Crítico para precisión mixta. Combinado con `max_nan_retries` para recuperación.
       
       
       **Impacto:** Más frecuente = detección más rápida, pequeño overhead.
       
-            '
+                  '
     examples:
     - 10
   log_gradient_stats:
@@ -782,13 +782,13 @@ properties:
       
       **Impact:** Helps identify dead/exploding gradients in specific layers.
       
-            '
+                  '
     description_es: 'Registrar normas de gradiente por capa, min/max. `true` para debugging/ajuste, `false` para producción. Combinado con `enable_block_grad_norms`.
       
       
       **Impacto:** Ayuda a identificar gradientes muertos/explotando en capas específicas.
       
-            '
+                  '
     examples:
     - true
   gradient_log_interval:
@@ -798,10 +798,10 @@ properties:
     title_es: Intervalo de Log de Gradientes
     description: 'Steps between gradient stat logs (when `log_gradient_stats=true`). Typical: 10–100. Reduce once training is stable.
       
-            '
+                  '
     description_es: 'Pasos entre logs de estadísticas de gradiente (cuando `log_gradient_stats=true`). Típico: 10–100. Reducir una vez estable.
       
-            '
+                  '
     examples:
     - 10
   csv_log_path:
@@ -814,13 +814,13 @@ properties:
       
       **Impact:** Grows with long training runs. Compatible with `csv_rotate_on_schema_change`.
       
-            '
+                  '
     description_es: 'Ruta de archivo para métricas de entrenamiento por paso en formato CSV. Incluye loss, LR, normas de gradiente, métricas GPU, telemetría.
       
       
       **Impacto:** Crece con entrenamientos largos. Compatible con `csv_rotate_on_schema_change`.
       
-            '
+                  '
     examples:
     - training_metrics.csv
   csv_rotate_on_schema_change:
@@ -830,10 +830,10 @@ properties:
     title_es: Rotar CSV al Cambiar Esquema
     description: 'Rotate CSV file (backup + new) when schema changes. Prevents corruption from column mismatches.
       
-            '
+                  '
     description_es: 'Rotar archivo CSV (respaldo + nuevo) cuando el esquema cambia. Previene corrupción por desajuste de columnas.
       
-            '
+                  '
     examples:
     - true
   gpu_metrics_backend:
@@ -843,10 +843,10 @@ properties:
     title_es: Backend de Métricas GPU
     description: 'GPU telemetry backend. `nvml` = NVIDIA metrics (temp, memory, utilization). `none` = disabled. Required for `gpu_temp_guard_enabled`.
       
-            '
+                  '
     description_es: 'Backend de telemetría GPU. `nvml` = métricas NVIDIA (temp, memoria, utilización). `none` = deshabilitado. Requerido para `gpu_temp_guard_enabled`.
       
-            '
+                  '
     enum:
     - nvml
     - none
@@ -859,10 +859,10 @@ properties:
     title_es: Índice de Dispositivo NVML
     description: 'GPU index to monitor (0 = first GPU). Must match training device. Single GPU: always 0.
       
-            '
+                  '
     description_es: 'Índice de GPU a monitorear (0 = primera GPU). Debe coincidir con el dispositivo de entrenamiento. GPU única: siempre 0.
       
-            '
+                  '
     examples:
     - 0
   enable_block_grad_norms:
@@ -875,13 +875,13 @@ properties:
       
       **Impact:** Detailed insight into gradient flow through model components.
       
-            '
+                  '
     description_es: 'Registrar normas L2 de gradiente para cada bloque de parámetros — embeddings, pos, atención, ffn, norm, head, mhc, router, residual y other — en el log CSV, y en Weights & Biases como `grad_norm/<bloque>` cuando `wandb_project` está definido. Los bloques coinciden con el desglose del estimador de parámetros del sitio web. `true` para debugging, `false` para producción.
       
       
       **Impacto:** Insight detallado del flujo de gradientes a través de componentes del modelo.
       
-            '
+                  '
     examples:
     - true
   wandb_project:
@@ -894,13 +894,13 @@ properties:
       
       **Impact:** Remote experiment tracking; no effect on training when unset.
       
-            '
+                  '
     description_es: 'Nombre del proyecto de Weights & Biases. Cuando se define, las métricas por paso y las normas de gradiente por bloque (`grad_norm/<bloque>`, solo con `enable_block_grad_norms=true`) se registran en W&B. Requiere el extra opcional `wandb` (`pip install -e ".[wandb]"`); sin definir o `null` desactiva el registro en W&B.
       
       
       **Impacto:** Seguimiento remoto de experimentos; sin efecto en el entrenamiento cuando no se define.
       
-            '
+                  '
     examples:
     - my-experiment
   wandb_mode:
@@ -917,13 +917,13 @@ properties:
       
       **Impact:** Allows offline/air-gapped experiment tracking.
       
-            '
+                  '
     description_es: 'Modo de ejecución de W&B: `online` transmite al servicio de W&B, `offline` escribe un directorio local de la ejecución, `disabled` desactiva el registro aunque el paquete siga siendo necesario. Solo se usa cuando `wandb_project` está definido.
       
       
       **Impacto:** Permite seguimiento de experimentos sin conexión.
       
-            '
+                  '
     examples:
     - online
   telemetry_log_interval:
@@ -933,10 +933,10 @@ properties:
     title_es: Intervalo de Log de Telemetría
     description: 'Steps between heavy telemetry logs (GPU metrics, per-block gradient norms). Typical: 1–10. Set 1 for max visibility.
       
-            '
+                  '
     description_es: 'Pasos entre logs de telemetría pesada (métricas GPU, normas de gradiente por bloque). Típico: 1–10. 1 para máxima visibilidad.
       
-            '
+                  '
     examples:
     - 1
   gpu_temp_guard_enabled:
@@ -952,7 +952,7 @@ properties:
       
       **Impact:** Critical to prevent overheating under sustained loads. `true` for safety.
       
-            '
+                  '
     description_es: 'Habilita el supervisor de temperatura GPU en CPU (solo CUDA). Cuando la GPU
       alcanza `gpu_temp_pause_threshold_c` el supervisor hace checkpoint del subproceso
       de entrenamiento, lo mata para liberar VRAM, espera el enfriamiento y lo re-lanza
@@ -961,7 +961,7 @@ properties:
       
       **Impacto:** Crítico para prevenir sobrecalentamiento en cargas sostenidas. `true` para seguridad.
       
-            '
+                  '
     examples:
     - true
   switch_on_thermal:
@@ -978,7 +978,7 @@ properties:
       **Impact:** `true` keeps training progressing at CPU speed after a critical thermal
       event. `false` stops training immediately on critical temp.
       
-            '
+                  '
     description_es: 'Cuando se alcanza `gpu_temp_critical_threshold_c`: `true` = el supervisor hace
       checkpoint del hijo en GPU, lo mata y lo re-lanza en CPU (el entrenamiento continúa
       en CPU en lugar de abortar). `false` = el supervisor mata al hijo y aborta el
@@ -989,7 +989,7 @@ properties:
       térmico crítico. `false` detiene el entrenamiento inmediatamente al alcanzar la
       temperatura crítica.
       
-            '
+                  '
     examples:
     - false
     - true
@@ -1000,10 +1000,10 @@ properties:
     title_es: Temp de Pausa GPU (°C)
     description: 'Temp (°C) to pause training. Typical: 85–95. Set below GPU Tjmax (usually 100–110°C). Must be > `gpu_temp_resume_threshold_c`.
       
-            '
+                  '
     description_es: 'Temp (°C) para pausar entrenamiento. Típico: 85–95. Debajo del Tjmax de la GPU (usualmente 100–110°C). Debe ser > `gpu_temp_resume_threshold_c`.
       
-            '
+                  '
     examples:
     - 90.0
   gpu_temp_resume_threshold_c:
@@ -1013,10 +1013,10 @@ properties:
     title_es: Temp de Reanudación GPU (°C)
     description: 'Temp (°C) to resume training after pause. Typical: 70–85. Must be < `gpu_temp_pause_threshold_c` by ≥5–10°C (hysteresis).
       
-            '
+                  '
     description_es: 'Temp (°C) para reanudar entrenamiento tras pausa. Típico: 70–85. Debe ser < `gpu_temp_pause_threshold_c` por ≥5–10°C (histéresis).
       
-            '
+                  '
     examples:
     - 80.0
   gpu_temp_critical_threshold_c:
@@ -1027,10 +1027,10 @@ properties:
     description: 'Permanent-abort (or CPU-switch) threshold in Celsius. Behaviour depends on `switch_on_thermal`:
       `true` = re-launch the training child on CPU (continues training); `false` = kill the child and abort training permanently. Null = disabled (no critical action, pause-only). Must be > `gpu_temp_pause_threshold_c`.
       
-            '
+                  '
     description_es: 'Umbral en Celsius de aborto permanente (o cambio a CPU). El comportamiento depende de `switch_on_thermal`: `true` = re-lanza el hijo en CPU (continúa entrenando); `false` = mata al hijo y aborta permanentemente. Null = deshabilitado (solo pausa). Debe ser > `gpu_temp_pause_threshold_c`.
       
-            '
+                  '
     examples:
     - 95.0
   gpu_temp_poll_interval_seconds:
@@ -1040,10 +1040,10 @@ properties:
     title_es: Intervalo de Sondeo de Temp GPU (s)
     description: 'Seconds between temperature polls while the GPU child is running and during cooldown wait. Typical: 10–60. Shorter = faster reaction but more overhead.
       
-            '
+                  '
     description_es: 'Segundos entre verificaciones de temp mientras el hijo en GPU corre y durante la espera de enfriamiento. Típico: 10–60. Más corto = reacción más rápida pero más overhead.
       
-            '
+                  '
     examples:
     - 30.0
   gpu_temp_checkpoint_grace_seconds:
@@ -1053,10 +1053,10 @@ properties:
     title_es: Gracia de Checkpoint Térmico (s)
     description: 'Seconds the supervisor waits after sending SIGUSR1 to the training child for it to flush a rolling checkpoint before SIGKILL. Typical: 15–60. Must be > 0.
       
-            '
+                  '
     description_es: 'Segundos que el supervisor espera tras enviar SIGUSR1 al hijo de entrenamiento para que vacíe un checkpoint rodante antes de SIGKILL. Típico: 15–60. Debe ser > 0.
       
-            '
+                  '
     examples:
     - 30.0
   resume_from_checkpoint:
@@ -1066,10 +1066,10 @@ properties:
     title_es: Reanudar Desde Checkpoint
     description: 'Resume training from a checkpoint. `auto` = pick the latest rolling checkpoint in the checkpoints directory; an absolute/relative path = load that specific checkpoint. Null = start from scratch.
       
-            '
+                  '
     description_es: 'Reanuda el entrenamiento desde un checkpoint. `auto` = usa el último checkpoint rodante en el directorio de checkpoints; una ruta absoluta/relativa = carga ese checkpoint específico. Null = empieza desde cero.
       
-            '
+                  '
     examples:
     - auto
   use_galore:
@@ -1089,7 +1089,7 @@ properties:
       which composes with the per-parameter-group system and uses
       `optimizer.parameters["galore_adamw-rank"]`/`-update_proj_gap`. These
       trainer-side flags remain for backward compatibility.
-      **References:** (paper: arxiv:2403.03507)'
+            **References:** (paper: arxiv:2403.03507)'
     description_es: 'Proyección de Gradientes de Bajo Rango para entrenamiento eficiente de modelos grandes (>1B params).
       
       Proyecta estados del optimizador a subespacio de bajo rango. Requiere `galore_rank`, `galore_update_interval`, `galore_scale`, `galore_max_dim`.
@@ -1101,7 +1101,7 @@ properties:
       que se compone con el sistema de grupos de parámetros y usa
       `optimizer.parameters["galore_adamw-rank"]`/`-update_proj_gap`. Estas
       banderas del trainer se mantienen por compatibilidad.
-      **Referencias:** (paper: arxiv:2403.03507)'
+            **Referencias:** (paper: arxiv:2403.03507)'
     examples:
     - false
   galore_rank:
@@ -1110,9 +1110,9 @@ properties:
     title: GaLore Rank
     title_es: Rango de GaLore
     description: 'Low-rank projection dimension. Typical: 16–128. Memory savings ≈ `1 − (rank / param_dim)`. Start with `hidden_size/12`.
-      **References:** (paper: arxiv:2403.03507)'
+            **References:** (paper: arxiv:2403.03507)'
     description_es: 'Dimensión de proyección de bajo rango. Típico: 16–128. Ahorro ≈ `1 − (rank / param_dim)`. Empezar con `hidden_size/12`.
-      **Referencias:** (paper: arxiv:2403.03507)'
+            **Referencias:** (paper: arxiv:2403.03507)'
     examples:
     - 64
   galore_update_interval:
@@ -1124,12 +1124,12 @@ properties:
       
       
       **Impact:** Balance between optimization accuracy and speed.
-      **References:** (paper: arxiv:2403.03507)'
+            **References:** (paper: arxiv:2403.03507)'
     description_es: 'Pasos entre recómputo de matriz de proyección. Típico: 1–10. 1 = cada paso (preciso, lento), 10 = cada 10 pasos (rápido).
       
       
       **Impacto:** Balance entre precisión de optimización y velocidad.
-      **Referencias:** (paper: arxiv:2403.03507)'
+            **Referencias:** (paper: arxiv:2403.03507)'
     examples:
     - 1
   galore_scale:
@@ -1138,9 +1138,9 @@ properties:
     title: GaLore Gradient Scale
     title_es: Escala de Gradiente GaLore
     description: 'Scaling factor for projected gradients. Typical: 1.0. Scale down if unstable, scale up if too slow.
-      **References:** (paper: arxiv:2403.03507)'
+            **References:** (paper: arxiv:2403.03507)'
     description_es: 'Factor de escala para gradientes proyectados. Típico: 1.0. Reducir si inestable, aumentar si muy lento.
-      **Referencias:** (paper: arxiv:2403.03507)'
+            **Referencias:** (paper: arxiv:2403.03507)'
     examples:
     - 1.0
   galore_max_dim:
@@ -1152,12 +1152,12 @@ properties:
       
       
       **Impact:** Avoids overhead on small tensors where projection isn''t worth it.
-      **References:** (paper: arxiv:2403.03507)'
+            **References:** (paper: arxiv:2403.03507)'
     description_es: 'Dimensión máxima de tensor para proyección GaLore. Tensores más pequeños usan optimizador estándar. Típico: 4096 o `hidden_size`.
       
       
       **Impacto:** Evita overhead en tensores pequeños donde la proyección no vale la pena.
-      **Referencias:** (paper: arxiv:2403.03507)'
+            **Referencias:** (paper: arxiv:2403.03507)'
     examples:
     - 4096
   hf_output_dir:
@@ -1168,14 +1168,12 @@ properties:
       
       
       **Impact:** Only applies with `base_model`. For models from scratch, checkpoints are saved differently.
-      
-            '
+      **References:** (paper: arxiv:1910.03771)'
     description_es: 'Directorio para guardar modelo final con `save_pretrained()` cuando `base_model` está configurado. Formato HuggingFace: `config.json`, `pytorch_model.bin`, tokenizador.
       
       
       **Impacto:** Solo aplica con `base_model`. Para modelos desde cero, los checkpoints se guardan diferente.
-      
-            '
+      **Referencias:** (paper: arxiv:1910.03771)'
     examples:
     - checkpoints/hf_final
   optimizer:

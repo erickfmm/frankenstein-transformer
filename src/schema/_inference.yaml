@@ -6,14 +6,14 @@ description: 'Runtime inference configuration: autoregressive generation samplin
   overrides). This block is runtime configuration — it never affects training
   and is deliberately NOT part of the flat FrankensteinModelConfig. Precedence:
   CLI flags override YAML values, which override schema defaults.
-  **References:** (paper: arxiv:2309.06180)'
+    **References:** (paper: arxiv:2309.06180)'
 description_es: 'Configuración de runtime para inferencia: parámetros de muestreo
   de generación autorregresiva y la caché KV opcional (cuantización, compresión y
   anulaciones por mezclador). Este bloque es configuración de ejecución: nunca
   afecta al entrenamiento y deliberadamente NO forma parte del
   FrankensteinModelConfig plano. Precedencia: las banderas CLI sobrescriben los
   valores YAML, que a su vez sobrescriben los valores por defecto del esquema.
-  **Referencias:** (paper: arxiv:2309.06180)'
+    **Referencias:** (paper: arxiv:2309.06180)'
 additionalProperties: false
 properties:
   generation:
@@ -75,18 +75,18 @@ properties:
     title: KV cache
     title_es: Caché KV
     description: 'Opt-in KV-cache management for incremental decoding
-      ((paper: arxiv:2412.19442) survey). Disabled by default; when disabled, generation
+      (arXiv:2412.19442 survey). Disabled by default; when disabled, generation
       runs the legacy full-recompute loop bit-identically. Unsupported mixers
       (per the declarative CACHE_SPECS registry) silently fall back to the
       uncached path — inference never fails because of the cache.
-      **References:** (paper: arxiv:2309.06180)'
+            **References:** (paper: arxiv:2309.06180)'
     description_es: 'Gestión opcional de la caché KV para decodificación incremental
-      (encuesta (paper: arxiv:2412.19442)). Desactivada por defecto; al desactivarla, la
+      (encuesta arXiv:2412.19442). Desactivada por defecto; al desactivarla, la
       generación ejecuta el bucle de recomputación completa legado de forma
       bit-idéntica. Los mezcladores no compatibles (según el registro
       declarativo CACHE_SPECS) retroceden silenciosamente a la ruta sin caché:
       la inferencia nunca falla por la caché.
-      **Referencias:** (paper: arxiv:2309.06180)'
+            **Referencias:** (paper: arxiv:2309.06180)'
     additionalProperties: false
     properties:
       enabled:

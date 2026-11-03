@@ -3,7 +3,7 @@ title: Image Classification Task Configuration
 title_es: Configuración de Tarea Classification
 description: |-
   Task-specific configuration for `training.task: classification` (image
-  classification (paper: arxiv:2010.11929)). The model predicts a multiclass Y
+  classification ). The model predicts a multiclass Y
   objective via a classification head (Linear or MLP) applied to the pooled
   image representation ([CLS] token or GAP).
 

@@ -68,9 +68,17 @@ properties:
     description: |-
       Configuration parameters for each positional encoding method. Only the
       sub-object matching the selected `positional_encoding` is used; others are ignored.
+
+      **References:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805) (paper: arxiv:2104.09864)
+      (paper: arxiv:2509.05218) (paper: arxiv:2305.19466) (paper: arxiv:2108.12409) (paper:
+      arxiv:2505.22842) (paper: arxiv:2602.01418) (paper: arxiv:1906.08237)
     description_es: |-
       Parámetros de configuración para cada método de codificación posicional.
       Solo se usa el sub-objeto que coincide con el `positional_encoding` seleccionado.
+
+      **Referencias:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805) (paper: arxiv:2104.09864)
+      (paper: arxiv:2509.05218) (paper: arxiv:2305.19466) (paper: arxiv:2108.12409) (paper:
+      arxiv:2505.22842) (paper: arxiv:2602.01418) (paper: arxiv:1906.08237)
     properties:
       rope:
         type: object

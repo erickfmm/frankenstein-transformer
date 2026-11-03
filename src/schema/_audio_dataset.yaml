@@ -11,6 +11,8 @@ description: |-
   Required when `model_class: frankenstein_audio` is trained on a task that
   consumes data. For text/NLP use `text_dataset`; for images use
   `vision_dataset`.
+
+  **References:** (paper: arxiv:1910.03771)
 description_es: |-
   Configuración de dataset de audio para tareas de habla y señales de audio.
   Especifica la fuente de datos (dataset de HuggingFace o directorio local),
@@ -22,6 +24,8 @@ description_es: |-
   Obligatorio cuando `model_class: frankenstein_audio` se entrena en una
   tarea que consume datos. Para texto/NLP usa `text_dataset`; para imágenes
   usa `vision_dataset`.
+
+  **Referencias:** (paper: arxiv:1910.03771)
 additionalProperties: false
 properties:
   dataset_name:

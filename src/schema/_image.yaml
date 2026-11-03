@@ -109,7 +109,7 @@ properties:
     description: |-
       Positional encoding for the ViT. `learned_1d` adds a learnable
       `nn.Parameter` of shape `(1, N+cls, D)` after patch embedding
-      (faithful to the ViT paper (paper: arxiv:2010.11929)); it is a **deprecated**
+      (faithful to the ViT paper ); it is a **deprecated**
       alias for `learned_absolute` and will be removed in a future release.
       `none` disables the absolute positional embedding
       and relies on the existing RoPE/HoPE rotary positional encodings applied
@@ -239,7 +239,7 @@ properties:
       (512-way CE, ViT paper best) predicts the 3-bit mean color of each
       corrupted patch. `downsampled_3bit` predicts a 4×4 downsampled 3-bit
       patch (16 predictions of 512 colors). `full_patch_l2` reconstructs raw
-      patch pixels via MSE (MAE-style (paper: arxiv:2111.06377)).
+      patch pixels via MSE (MAE-style ).
 
       **References:** (paper: arxiv:2111.06377)
     description_es: |-
@@ -260,7 +260,7 @@ properties:
       a per-pixel linear head that reshapes patch tokens back to H×W and
       upsamples — directly supports 1D grayscale and multicolor
       non-overlapping segmentation. `eomt` uses the Encoder-only Mask
-      Transformer (paper: arxiv:2503.19108) with learnable queries, Hungarian
+      Transformer with learnable queries, Hungarian
       matching, and mask annealing.
 
       **References:** (paper: arxiv:2503.19108)
@@ -337,7 +337,7 @@ properties:
     title: Segmentation Mask Annealing
     title_es: Recocido de Máscara de Segmentación
     description: |-
-      If true, apply mask annealing (paper: arxiv:2503.19108) during EoMT training:
+      If true, apply mask annealing during EoMT training:
       the probability of masked query-to-patch attention decays polynomially
       (factor 0.9) to 0 by end of training, so inference uses plain ViT with
       zero masking overhead.

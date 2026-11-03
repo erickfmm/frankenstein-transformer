@@ -165,11 +165,15 @@ properties:
       Number of input channels for `feature: raw` (1 for a mono waveform,
       N for N-channel physiological or sensor signals). Ignored by the
       `logmel`/`spectrogram` frontends, which mix the input to mono.
+
+      **References:** (paper: arxiv:2005.08100)
     description_es: |-
       Número de canales de entrada para `feature: raw` (1 para una forma de
       onda mono, N para señales fisiológicas o de sensores de N canales).
       Ignorado por los frontends `logmel`/`spectrogram`, que mezclan la
       entrada a mono.
+
+      **Referencias:** (paper: arxiv:2005.08100)
     default: 1
     examples: [1, 4, 19]
   conv_channels:
@@ -200,10 +204,14 @@ properties:
       Number of classes for audio classification (`task:
       audio_classification`). No implicit task default is applied by the
       schema beyond the documented `2`.
+
+      **References:** (paper: arxiv:2010.11929)
     description_es: |-
       Número de clases para clasificación de audio (`task:
       audio_classification`). El esquema no aplica más valor por defecto que
       el `2` documentado.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     default: 2
     examples: [2, 10, 35]
   pooling_mode:
@@ -215,12 +223,16 @@ properties:
       Pooling) averages the encoder frames; `cls` prepends a learnable [CLS]
       token and reads its output. The token is only added for the pooled
       classification path, so ASR frame alignment is unaffected.
+
+      **References:** (paper: arxiv:2010.11929)
     description_es: |-
       Estrategia de pooling para clasificación de audio. `gap` (Global
       Average Pooling) promedia las tramas del encoder; `cls` antepone un
       token [CLS] aprendible y lee su salida. El token solo se añade en la ruta
       de clasificación con pooling, por lo que la alineación de tramas ASR no
       se ve afectada.
+
+      **Referencias:** (paper: arxiv:2010.11929)
     enum:
       - gap
       - cls

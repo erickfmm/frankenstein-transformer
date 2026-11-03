@@ -9,6 +9,8 @@ description: |-
   training DataLoader from this spec instead of the legacy fixed RedPajama
   streaming corpus — used by embedding hosts (e.g. DashAI) when the run
   dataset is not the data source.
+
+  **References:** (paper: arxiv:1910.03771)
 description_es: |-
   Configuración de dataset de texto para tareas NLP (`mlm`, `causal_lm`,
   `text_classification`). Especifica la fuente de datos (id de dataset de
@@ -17,6 +19,8 @@ description_es: |-
   engine construye el DataLoader de entrenamiento a partir de esta
   especificación en lugar del corpus fijo legacy de RedPajama — usado por
   hosts de embedding (p.ej. DashAI) cuando el dataset del run no es la fuente.
+
+  **Referencias:** (paper: arxiv:1910.03771)
 additionalProperties: false
 properties:
   dataset_name:
