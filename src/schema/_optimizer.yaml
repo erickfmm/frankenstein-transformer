@@ -53,6 +53,7 @@ properties:
       | `apollo` | Low-rank scaling | Projected gradient scaling (SGD-like memory) |
       | `apollo_mini` | Rank-1 APOLLO | Tensor-wise scaled, extreme memory savings |
       | `q_apollo` | Quantized APOLLO | Quantized optimizer states |
+      | `dion3` | Faster orthogonal updates | Fractional Gram-Newton-Schulz Muon with error feedback (arXiv:2608.11612) |
 
       **Examples explained:**
       - `adamw`: Start here. Most reliable for transformer training. Works well with default hyperparameters (lr=2e-4, betas=[0.9,0.95], wd=0.01). Best general-purpose choice.
@@ -90,6 +91,7 @@ properties:
       | `apollo` | Escalado de bajo rango | Escalado de gradiente proyectado |
       | `apollo_mini` | APOLLO rango-1 | Proyección mínima tensorial |
       | `q_apollo` | APOLLO cuantizado | Estados cuantizados |
+      | `dion3` | Ortogonalización acelerada | Muon fraccional con Gram-Newton-Schulz y retroalimentación de error (arXiv:2608.11612) |
       **Ejemplos explicados:**
       - `adamw`: Empezar aquí. El más confiable para entrenamiento de transformers. Funciona bien con hiperparámetros por defecto (lr=2e-4, betas=[0.9,0.95], wd=0.01). Mejor opción de propósito general.
       - `sgd_momentum`: Usar para líneas base o cuando se necesita máxima simplicidad y reproducibilidad. Generalmente requiere LR más alto (1e-2 a 1e-1) y ajuste cuidadoso de momentum.
@@ -124,6 +126,7 @@ properties:
       - apollo
       - apollo_mini
       - q_apollo
+      - dion3
     examples: [adamw]
   parameters:
     type: object
@@ -153,6 +156,7 @@ properties:
       - `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
       - `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
       - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
+      - `dion3`: `fraction`, `momentum`, `ns_steps`, `ns_eps`, `normuon`
       - Others: no specific suffixes (only shared ones)
 
       **Impact:** Fine-grained per-group control. Example: lower LR for embeddings (2e-6),
@@ -189,6 +193,7 @@ properties:
       - `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
       - `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
       - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
+      - `dion3`: `fraction`, `momentum`, `ns_steps`, `ns_eps`, `normuon`
       - Otros: sin sufijos específicos (solo los compartidos)
     minProperties: 0
     additionalProperties: true
@@ -335,3 +340,7 @@ properties:
           prefix: "q_apollo-"
           supports_shared_per_group_suffixes: true
           specific_global_suffixes: [rank, update_proj_gap, scale, scale_type, proj_type, scale_front, disable_nl, quant_bits]
+        dion3:
+          prefix: "dion3-"
+          supports_shared_per_group_suffixes: true
+          specific_global_suffixes: [fraction, momentum, ns_steps, ns_eps, normuon]

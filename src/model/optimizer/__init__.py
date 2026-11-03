@@ -8,6 +8,7 @@ from .af_muon import AFMuon
 from .apollo import Apollo
 from .apollo_mini import ApolloMini
 from .cautious_adamw import CautiousAdamW
+from .dion3 import Dion3
 from .factory import OPTIMIZER_REGISTRY, build_optimizer
 from .galore_adamw import GaLoreAdamW
 from .lamb import LAMB
@@ -35,6 +36,7 @@ __all__ = [
     "AdamWOptimizer",
     "AdaMuon",
     "CautiousAdamW",
+    "Dion3",
     "GaLoreAdamW",
     "LAMB",
     "Lion",

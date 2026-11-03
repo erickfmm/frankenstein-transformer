@@ -26,7 +26,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo"}
+        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -540,6 +540,132 @@ class BuildOptimizerAdaMuonTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             build_optimizer("ada_muon", _param_groups(), {"ada_muon-lr_bogus": 1.0})
         self.assertIn("lr_bogus", str(ctx.exception))
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerDion3Tests(unittest.TestCase):
+    """Dion3 defaults, fractional selection and error feedback."""
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("dion3", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 8))
+        groups = [{"params": [p], "lr": 1e-2, "name": "attention"}]
+        opt = build_optimizer("dion3", groups, {})
+        p.square().mean().backward()
+        opt.step()
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_step_runs_normuon_flavor(self):
+        p = nn.Parameter(torch.randn(4, 8))
+        groups = [{"params": [p], "lr": 1e-2, "name": "attention"}]
+        opt = build_optimizer(
+            "dion3",
+            groups,
+            {"dion3-normuon": True, "dion3-fraction": 0.5},
+        )
+        p.square().mean().backward()
+        opt.step()
+        self.assertIn("row_second_moment", opt.state[p])
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_defaults_match_paper(self):
+        opt = build_optimizer("dion3", _param_groups(), {})
+        self.assertAlmostEqual(opt.defaults["fraction"], 0.25)
+        self.assertAlmostEqual(opt.defaults["momentum"], 0.95)
+        self.assertEqual(opt.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-7)
+        self.assertFalse(opt.defaults["normuon"])
+
+    def test_custom_fraction_suffix(self):
+        opt = build_optimizer("dion3", _param_groups(), {"dion3-fraction": 0.5})
+        self.assertAlmostEqual(opt.defaults["fraction"], 0.5)
+
+    def test_unselected_rows_unchanged(self):
+        p = nn.Parameter(torch.randn(4, 8))
+        groups = [{"params": [p], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("dion3", groups, {"dion3-fraction": 0.5})
+        before = p.detach().clone()
+        p.square().mean().backward()
+        grad = p.grad.detach().clone()
+        opt.step()
+        selected = torch.topk(grad.abs().sum(dim=1), 2).indices
+        mask = torch.ones(4, dtype=torch.bool)
+        mask[selected] = False
+        self.assertTrue(torch.equal(p.detach()[mask], before[mask]))
+
+    def test_tall_matrix_updates_only_selected_columns(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("dion3", groups, {"dion3-fraction": 0.5})
+        before = p.detach().clone()
+        p.square().mean().backward()
+        grad = p.grad.detach().clone()
+        opt.step()
+        selected = torch.topk(grad.abs().sum(dim=0), 2).indices
+        mask = torch.ones(4, dtype=torch.bool)
+        mask[selected] = False
+        self.assertTrue(torch.equal(p.detach()[:, mask], before[:, mask]))
+
+    def test_error_feedback_decays_only_selected_rows(self):
+        p = nn.Parameter(torch.randn(4, 8))
+        groups = [{"params": [p], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("dion3", groups, {"dion3-fraction": 0.5})
+        p.square().mean().backward()
+        grad = p.grad.detach().clone()
+        opt.step()
+        momentum = opt.state[p]["momentum_buffer"]
+        selected = torch.topk(grad.abs().sum(dim=1), 2).indices
+        mask = torch.ones(4, dtype=torch.bool)
+        mask[selected] = False
+        self.assertTrue(
+            torch.allclose(momentum[selected], grad[selected] * 0.95, atol=1e-6)
+        )
+        self.assertTrue(torch.allclose(momentum[mask], grad[mask], atol=1e-6))
+
+    def test_fraction_one_update_norm(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("dion3", groups, {"dion3-fraction": 1.0})
+        before = p.detach().clone()
+        p.square().mean().backward()
+        opt.step()
+        delta = (p.detach() - before).norm().item()
+        expected = 1e-2 * math.sqrt(4)
+        self.assertAlmostEqual(delta / expected, 1.0, delta=0.05)
+
+    def test_string_coercion_and_invalid_fallback(self):
+        opt = build_optimizer(
+            "dion3",
+            _param_groups(),
+            {"dion3-fraction": "0.5", "dion3-ns_steps": "4"},
+        )
+        self.assertAlmostEqual(opt.defaults["fraction"], 0.5)
+        self.assertEqual(opt.defaults["ns_steps"], 4)
+
+        opt_bad = build_optimizer(
+            "dion3",
+            _param_groups(),
+            {"dion3-fraction": "bad", "dion3-ns_steps": "bad"},
+        )
+        self.assertAlmostEqual(opt_bad.defaults["fraction"], 0.25)
+        self.assertEqual(opt_bad.defaults["ns_steps"], 5)
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("dion3", _param_groups(), {"dion3-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
+
+    def test_vector_params_skipped(self):
+        p = nn.Parameter(torch.randn(8))
+        groups = [{"params": [p], "lr": 1e-2, "name": "norms"}]
+        opt = build_optimizer("dion3", groups, {})
+        before = p.detach().clone()
+        p.square().mean().backward()
+        opt.step()
+        self.assertTrue(torch.equal(p.detach(), before))
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ from .base import (
     with_named_groups,
 )
 from .cautious_adamw import CautiousAdamW
+from .dion3 import Dion3
 from .galore_adamw import GaLoreAdamW
 from .lamb import LAMB
 from .lion import Lion
@@ -74,6 +75,7 @@ OPTIMIZER_REGISTRY = {
     "apollo": Apollo,
     "apollo_mini": ApolloMini,
     "q_apollo": QApollo,
+    "dion3": Dion3,
 }
 """Mapping from YAML optimizer class names to concrete Optimizer subclasses.
 
@@ -132,6 +134,7 @@ OPTIMIZER_ALLOWED_KEYS = {
     "apollo_mini": _COMMON_PER_GROUP_KEYS | {"update_proj_gap", "scale", "proj_type", "scale_front", "disable_nl"},
     "anon": _COMMON_PER_GROUP_KEYS | {"gamma"},
     "q_apollo": _COMMON_PER_GROUP_KEYS | {"rank", "update_proj_gap", "scale", "scale_type", "proj_type", "scale_front", "disable_nl", "quant_bits"},
+    "dion3": _COMMON_PER_GROUP_KEYS | {"fraction", "momentum", "ns_steps", "ns_eps", "normuon"},
 }
 
 
@@ -366,6 +369,21 @@ def build_optimizer(
             proj_type=proj_type,
             scale_front=scale_front,
             disable_nl=disable_nl,
+        )
+
+    if optimizer_name == "dion3":
+        fraction = to_float(scoped.get("fraction"), 0.25)
+        momentum = to_float(scoped.get("momentum"), 0.95)
+        ns_steps = to_int(scoped.get("ns_steps"), 5)
+        ns_eps = to_float(scoped.get("ns_eps"), 1e-7)
+        normuon = bool(scoped.get("normuon", False))
+        return optimizer_cls(
+            converted_groups,
+            fraction=fraction,
+            momentum=momentum,
+            ns_steps=ns_steps,
+            ns_eps=ns_eps,
+            normuon=normuon,
         )
 
     return optimizer_cls(converted_groups)

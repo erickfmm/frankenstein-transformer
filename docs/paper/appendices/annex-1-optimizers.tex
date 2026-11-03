@@ -1201,6 +1201,60 @@ The Newton--Schulz map uses $X_0 = \operatorname{sign}(M_t)/\|\operatorname{sign
 \item RMS alignment matches Adam's update scale, allowing direct reuse of learning-rate schedules; the authors report up to roughly 40\% training-efficiency gains over AdamW and consistent wins over Muon on GPT-2 (125M--1.5B) and Qwen2.5 (1.5B, 7B).
 \end{itemize}
 
+\paragraph{Dion3 (Fractional Gram-Newton-Schulz Orthogonalization).}
+Dion3~\citep{amsel_dion3_2026} is a \textbf{revision of Muon} that reduces the cost of the orthogonalization step at the algorithmic level. It replaces standard Newton--Schulz with \emph{Gram Newton--Schulz}, a mathematically equivalent iteration that runs on the small symmetric Gram matrix $XX^{\mathsf T}$, and it orthogonalizes only a fraction $f \in (0,1]$ of the momentum rows at each step, updating only those rows of the weight matrix. \emph{Error feedback} decays only the selected rows of the momentum buffer, so rows that were not selected keep accumulating and are eventually chosen. At $f = 1$ the update reduces to Muon in exact arithmetic (or to NorMuon with the optional row-wise normalization). For a weight $W \in \mathbb{R}^{n \times m}$ (operating on the smaller dimension, $n \le m$), fraction $f$, $k = \lceil f n \rceil$, momentum $\mu$, learning rate $\eta$ and weight decay $\lambda$:
+\begin{align}
+M_t &= M_{t-1} + G_t \quad\text{(momentum accumulation; damping deferred)} \\
+S_t &= \operatorname{topk}_{i}\bigl(\lVert M_{t,i,:}\rVert_1,\ k\bigr) \quad\text{(select the } k \text{ largest rows)} \\
+O_t &= \operatorname{GramNS}\bigl(M_t[S_t,:]\bigr) \quad\text{(orthogonalize the } k \times m \text{ submatrix)} \\
+W_t &= (1 - \eta\lambda)\, W_{t-1}, \qquad W_t[S_t,:] \gets W_t[S_t,:] - \eta\, O_t \\
+M_t[S_t,:] &\gets \mu\, M_t[S_t,:] \quad\text{(error feedback: decay only selected rows)}
+\end{align}
+Gram Newton--Schulz normalizes $X \gets M_t[S_t,:]/(\lVert M_t[S_t,:]\rVert_F + \epsilon)$ with $\epsilon = 10^{-7}$, casts to \texttt{float16}, forms $R_0 = X X^{\mathsf T}$ and $Q_0 = I$, and runs $T$ iterations
+\begin{align}
+Z_t &= b_t R_{t-1} + c_t R_{t-1}^2, &
+Q_t &= Q_{t-1} Z_t + a_t Q_{t-1}, \\
+(RZ)_t &= R_{t-1} Z_t + a_t R_{t-1}, &
+R_t &= Z_t (RZ)_t + a_t (RZ)_t,
+\end{align}
+returning $Q_T X$. A \emph{restart} after iteration~2 ($X \gets Q_2 X$, $R_2 \gets X X^{\mathsf T}$, $Q_2 \gets I$) removes the spurious negative eigenvalues that half precision introduces in the Gram matrix; the coefficients $(a_t,b_t,c_t)$ are the Polar Express five-step triples~\citep{amsel_polar_express_2026}. The cost falls from $T(3\alpha+1)n^3$ FLOPs for standard Newton--Schulz to $(4T+3\alpha-3)n^3$ for Gram Newton--Schulz ($\alpha = m/n$), and selecting $k = \lceil f n \rceil$ rows both shrinks the iteration and raises the aspect ratio by $1/f$. The optional NorMuon flavor adds a row-wise second moment $v_i \gets \beta_2 v_i + (1-\beta_2)\,\operatorname{mean}_j(O_{ij}^2)$ for $i \in S$, rescales $\tilde O_{ij} = O_{ij}/(\sqrt{v_i}+\epsilon)$, and renormalizes $\tilde O \gets \tilde O\,\lVert O\rVert_F/\lVert\tilde O\rVert_F$ in \texttt{float32} before the update.
+
+\begin{algorithm}[H]
+\caption{Dion3 (Fractional Orthogonalization with Error Feedback)}
+\label{alg:dion3}
+\begin{algorithmic}[1]
+\Require Matrices $W$, learning rate $\eta$, momentum $\mu$, fraction $f$, Gram Newton--Schulz steps $T$, $\epsilon$, weight decay $\lambda$
+\Ensure Updated matrices $W_T$
+\For{each 2D parameter matrix $W$ with gradient $G$}
+    \State $M \gets M + G$ \Comment{Momentum accumulation}
+    \State $S \gets$ indices of the $k = \lceil f n \rceil$ rows of $M$ with largest $\ell_1$ norm \Comment{Selection}
+    \State $O \gets \operatorname{GramNS}_T(M[S,:])$ \Comment{Orthogonalize the selected submatrix}
+    \If{NorMuon}
+        \State $v_i \gets \beta_2 v_i + (1-\beta_2)\operatorname{mean}_j(O_{ij}^2)$ for $i \in S$
+        \State $\tilde O_{ij} \gets O_{ij}/(\sqrt{v_i}+\epsilon)$; \quad $\tilde O \gets \tilde O\,\lVert O\rVert_F/\lVert\tilde O\rVert_F$
+    \EndIf
+    \State $W \gets (1 - \eta\lambda) W$ \Comment{Weight decay on all rows}
+    \State $W[S,:] \gets W[S,:] - \eta\,\tilde O$ \Comment{Update selected rows only}
+    \State $M[S,:] \gets \mu\, M[S,:]$ \Comment{Error feedback}
+\EndFor
+\Return $W_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item Each step updates only a fraction of the rows, so the optimization trajectory differs from Muon; the paper reports the change is benign (Section~8.1 of the Dion3 report).
+\item Row selection and error feedback add top-$k$ bookkeeping and a row-wise momentum decay per step.
+\item The largest wall-clock gains in the paper come from symmetric GEMM kernels and megabatched communication, which are hardware- and cluster-specific; only the algorithmic reduction and the single first-moment buffer apply here.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Gram Newton--Schulz is mathematically equivalent to Newton--Schulz and cuts orthogonalization FLOPs by about 55\% at typical transformer aspect ratios with five iterations.
+\item Fractional row selection reduces the orthogonalized submatrix to $k \times m$ and raises its aspect ratio by $1/f$, compounding the Gram savings; the paper reports up to $6\times$ faster optimizer steps at matched loss.
+\item At $f = 1$ the update reduces to Muon (or NorMuon), and a single momentum buffer per matrix parameter suffices; error feedback lets ignored rows participate eventually.
+\end{itemize}
+
 \small
 \begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
 \toprule
@@ -1212,7 +1266,7 @@ Momentum redesign & Adan, AdEMAMix, MARS, Cautious AdamW & faster or safer first
 Large-batch and schedule simplification & LAMB, Schedule-Free AdamW & operational robustness at scale & Reduce brittleness from batch-size growth or schedule engineering. \\
 Memory-efficient & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & optimizer-state reduction & Most useful when VRAM is dominated by optimizer state rather than activations; APOLLO-family methods replace dense AdamW moments with projected or quantized structured scaling. \\
 Curvature-aware & Shampoo, SOAP, Sophia & better conditioning & Prefer when richer geometry is worth implementation and compute overhead. \\
-Geometry-oriented & Muon, Turbo-Muon, AF-Muon, AdaMuon & orthogonalized update structure & Specialized options for matrix geometry and representation shaping; AdaMuon adds an element-wise second moment on the orthogonalized direction with RMS-aligned updates; AF-Muon assigns the tied vocabulary table a capped-row table geometry and one-dimensional parameters an RMS update, with no AdamW auxiliary state. \\
+Geometry-oriented & Muon, Turbo-Muon, AF-Muon, AdaMuon, Dion3 & orthogonalized update structure & Specialized options for matrix geometry and representation shaping; AdaMuon adds an element-wise second moment on the orthogonalized direction with RMS-aligned updates; AF-Muon assigns the tied vocabulary table a capped-row table geometry and one-dimensional parameters an RMS update, with no AdamW auxiliary state; Dion3 keeps the spectral update but orthogonalizes only a fraction of the momentum rows per step with Gram Newton--Schulz and error feedback. \\
 \bottomrule
 \end{longtable}
 \normalsize

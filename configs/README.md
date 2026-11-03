@@ -154,6 +154,7 @@ training:
 - `apollo`
 - `apollo_mini`
 - `q_apollo`
+- `dion3`
 
 `training.optimizer.parameters` must use the selected optimizer prefix. Example: when `optimizer_class: adamw`, all keys must start with `adamw-`.
 
@@ -199,6 +200,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
 - `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
 - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
+- `dion3`: `fraction`, `momentum`, `ns_steps`, `ns_eps`, `normuon`
 
 Examples:
 - `adafactor-beta2_decay: 0.8`
@@ -207,6 +209,7 @@ Examples:
 - `muon-ns_steps: 5`
 - `af_muon-tied_cap: 3.0`
 - `ada_muon-ns_steps: 5`
+- `dion3-fraction: 0.25`
 
 ## Available Fields (Detailed)
 
