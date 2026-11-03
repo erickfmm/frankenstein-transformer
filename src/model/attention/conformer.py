@@ -39,6 +39,7 @@ import torch.nn.functional as F
 from ..activation_function import get_activation
 from ..norm import get_norm
 from ..numerics import module_softmax
+from ..norm import attach_qk_norm, record_qk_max_logits
 from .common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
 __all__ = ["ConformerAttention", "ConformerConvModule"]
@@ -229,6 +230,7 @@ class ConformerAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "conformer_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
         # Set by HybridLayer (transversal fixed-numerics opt-in). Standalone
         # use keeps the classic softmax.
         self.use_fixed_softmax = False
@@ -304,6 +306,8 @@ class ConformerAttention(nn.Module):
         k = self.k_proj(x).view(
             bsz, seq_len, self.num_kv_heads, self.head_dim
         ).transpose(1, 2)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
         v = self.v_proj(x).view(
             bsz, seq_len, self.num_kv_heads, self.head_dim
         ).transpose(1, 2)
@@ -327,6 +331,7 @@ class ConformerAttention(nn.Module):
             attn_scores = attn_scores.masked_fill(
                 causal_mask.unsqueeze(0).unsqueeze(0), float("-inf")
             )
+        record_qk_max_logits(self, attn_scores)
         attn_weights = module_softmax(self, attn_scores, dim=-1)
         attn_weights = self.dropout(attn_weights)
 

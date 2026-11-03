@@ -44,6 +44,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...numerics import module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 from ..common import BitLinear, apply_pe_to_qk
 
@@ -114,6 +115,7 @@ class MSAAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "msa_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def _block_max_scores(self, q_idx: torch.Tensor, k_idx: torch.Tensor, num_blocks: int) -> torch.Tensor:
         """Compute per-block max-pooled index scores (causal).
@@ -223,6 +225,7 @@ class MSAAttention(nn.Module):
                 scores_visible = scores_visible.masked_fill(
                     causal_mask.view(1, 1, seq_len, end - start), float("-inf")
                 )
+            record_qk_max_logits(self, scores_visible)
             attn = module_softmax(self, scores_visible, dim=-1)
             attn = self.dropout(attn)
             out_blk = attn @ v_blk
@@ -251,6 +254,8 @@ class MSAAttention(nn.Module):
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
         v = self.v_proj(x).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
 
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)

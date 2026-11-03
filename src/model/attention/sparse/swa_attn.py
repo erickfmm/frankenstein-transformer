@@ -29,6 +29,7 @@ import torch.nn.functional as F
 from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 
 class SlidingWindowAttention(nn.Module):
@@ -123,6 +124,7 @@ class SlidingWindowAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "swa_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def _build_mask(self, seq_len: int, device: torch.device) -> torch.Tensor:
         """Build the sliding-window plus attention-sink mask.
@@ -212,6 +214,9 @@ class SlidingWindowAttention(nn.Module):
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
+
         slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
         if slot is not None:
             import torch.nn.functional as _F
@@ -247,6 +252,7 @@ class SlidingWindowAttention(nn.Module):
                 q_offset=0 if offset is None else int(offset),
                 kv_positions=kv_positions,
             )
+            record_qk_max_logits(self, scores)
             attn = module_softmax(self, scores, dim=-1)
             attn = self.dropout(attn)
             out = (attn @ V).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
@@ -259,6 +265,7 @@ class SlidingWindowAttention(nn.Module):
         scores = scores.masked_fill(~mask.unsqueeze(0).unsqueeze(0), float("-inf"))
 
         scores = apply_pe_to_scores(pe, self.pe_type, scores, q, self.use_pe)
+        record_qk_max_logits(self, scores)
         attn = module_softmax(self, scores, dim=-1)
         attn = self.dropout(attn)
         out = (attn @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)

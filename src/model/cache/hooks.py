@@ -301,7 +301,28 @@ def cached_latent_attention(
         kv_positions = positions
 
     k, v = expand_fn(c_all)
-    q, k = apply_pe_to_qk(pe, pe_type, q, k, x_for_pe, logical_layer_idx, use_pe, position_offset=offset)
+    # The expanded keys cover the whole history (the latent cache re-expands
+    # every step), so they always rotate from position 0. Only the incoming
+    # queries carry the absolute decode offset. Passing ``offset`` for keys
+    # here would shift every cached position and break full-vs-cached parity.
+    if use_pe and pe is not None and str(pe_type).lower() in (
+        "rope",
+        "hope",
+        "sinusoidal_rotary",
+    ):
+        q = pe(q, logical_layer_idx=logical_layer_idx, position_offset=offset)
+        k = pe(k, logical_layer_idx=logical_layer_idx, position_offset=None)
+    else:
+        q, k = apply_pe_to_qk(
+            pe,
+            pe_type,
+            q,
+            k,
+            x_for_pe,
+            logical_layer_idx,
+            use_pe,
+            position_offset=offset,
+        )
 
     attn_scores = (q @ k.transpose(-2, -1)) * scale
     attn_scores = apply_pe_to_scores(

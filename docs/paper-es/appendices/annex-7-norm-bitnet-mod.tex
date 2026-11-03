@@ -143,6 +143,78 @@ FlashNorm & $x_i/\sqrt{\frac{1}{d}\sum_j x_j^2+\epsilon}$ (sin pesos) & Solo RMS
 \end{longtable}
 \normalsize
 
+\subsection{Normalización Query--Key y Control de Logits de Atención}
+\label{sec:annex-qk-norm-es}
+
+Los logits de atención $\ell_{i,t,h} = \mathbf{q}_{i,h}^\top \mathbf{k}_{t,g(h)} / \sqrt{d_h}$ son la entrada del softmax. Su crecimiento descontrolado es una fuente clásica de inestabilidad de entrenamiento: saturación de la atención, colapso de entropía, picos de pérdida y, a escala, divergencia \citep{henry2020querykey,kimi2025k2}. Este repositorio expone cinco mecanismos bajo \texttt{norm.qk\_norm.method}; tres actúan en el forward y dos sobre el estado del optimizador. Son mutuamente excluyentes por configuración.
+
+\paragraph{Normalización QK en el forward.}
+La normalización QK \citep{henry2020querykey} normaliza queries y keys a lo largo de la dimensión de características por cabeza antes del producto punto. En forma RMSNorm,
+\[
+\hat{\mathbf{q}}_{i,h} = \frac{\mathbf{q}'_{i,h}\odot\boldsymbol{\gamma}_q}{S_q(\mathbf{q}'_{i,h})},\qquad
+S_q(\mathbf{q}) = \sqrt{\frac{1}{d_h}\sum_{j=1}^{d_h} q_j^2 + \epsilon},
+\]
+e idénticamente para $\hat{\mathbf{k}}$ con $\boldsymbol{\gamma}_k$. Los pesos afines se comparten entre cabezas y se difunden por el eje de cabezas, por lo que el coste paramétrico es $2d_h$ (\texttt{rms\_norm}) o $2\cdot 2d_h$ con sesgo (\texttt{layer\_norm}); \texttt{l2\_norm} no tiene pesos. Dado que las normas normalizadas cumplen $\|\hat{\mathbf{q}}\|_2 \approx \|\boldsymbol{\gamma}_q\|_2$ salvo dirección y $\epsilon$, el crecimiento residual de los logits queda mediado por el producto afín aprendido $\boldsymbol{\gamma}_q\odot\boldsymbol{\gamma}_k$ en lugar de por normas crudas de query/key sin control.
+
+\paragraph{Normalización QK con Multi-Head Latent Attention.}
+MLA cachea un latente de bajo rango $\mathbf{c}_t$ y reconstruye las keys por up-proyección, por lo que la QK RMSNorm post-proyección parecería requerir las keys completas que MLA evita cachear. \citet{han2026qknormed} muestran que la incompatibilidad es un artefacto de implementación: RMSNorm se descompone en un peso afín estático y una estadística escalar dinámica,
+\[
+\hat{\mathbf{k}}^c_{t,g}=\frac{(\mathbf{c}_t\mathbf{W}^K_g)\odot\boldsymbol{\gamma}^c_k}{S^c_k(\mathbf{c}_t\mathbf{W}^K_g)},\qquad
+\ell^c_{i,t,h}=\big((\mathbf{q}'^{c}_{i,h}\odot\boldsymbol{\gamma}^c_q\odot\boldsymbol{\gamma}^c_k)(\mathbf{W}^K_{g(h)})^\top\big)\cdot\mathbf{c}_t\;\alpha^q_{i,h}\alpha^k_{t,g(h)},
+\]
+donde $\alpha^q=1/S_q$ y $\alpha^k=1/S_k$ son escalares. El peso estático se absorbe en la proyección del lado de la query y solo se cachea un escalar de RMS inverso por token y grupo KV ($T\times G$ escalares frente a $T\times G\times d_c$ keys de contenido completas), preservando la ruta latente de decodificación; el paper reporta menor pérdida que QK-Clip y $<2\%$ de sobrecarga de decodificación hasta 256k tokens. En este repositorio la variante MLA de \citet{mehta_mla_2025} ya re-expande las keys desde el latente cacheado en cada paso, de modo que la normalización explícita por cabeza de $\mathbf{q}$ y $\mathbf{k}$ descomprimidos es \emph{exactamente} equivalente a la formulación absorbida tanto en entrenamiento como en decodificación con caché; no se necesita un caché escalar. Los bloques de contenido y RoPE se normalizan por bloques, siguiendo la frontera natural entre la ruta latente de contenido y la ruta rotatoria materializada.
+
+\paragraph{QK-Clip.}
+MuonClip de Kimi K2 \citep{kimi2025k2} ataca el mismo modo de fallo después del producto punto. Para cada cabeza $h$ define el logit pre-softmax máximo por cabeza sobre el lote,
+\[
+S^h_{\max}=\frac{1}{\sqrt{d}}\max_{\mathbf{X}\in\mathcal{B}}\max_{i,j}\mathbf{Q}^h_i{\mathbf{K}^h_j}^\top,
+\]
+y, tras cada paso del optimizador, reescala los pesos de proyección con
+\[
+\gamma_h=\min\!\left(1,\frac{\tau}{S^h_{\max}}\right),\qquad
+\mathbf{W}^h_q\leftarrow\gamma_h^{\alpha}\mathbf{W}^h_q,\qquad
+\mathbf{W}^h_k\leftarrow\gamma_h^{1-\alpha}\mathbf{W}^h_k .
+\]
+La intervención nunca altera el forward/backward del paso actual; las cabezas ya por debajo de $\tau$ reciben $\gamma_h=1$, por lo que el mecanismo se autodesactiva cuando el entrenamiento se estabiliza (K2 usó $\tau=100$ y observó todas las cabezas por debajo del umbral tras aproximadamente el 30\% de los pasos). Se aplica por cabeza a los bloques de filas de \texttt{q\_proj} y \texttt{k\_proj}; para atención latente el lado de la key es \texttt{uk\_proj}, y para grouped-query attention cada cabeza KV recibe el menor $\gamma_h$ de las cabezas de query que la leen, lo que acota todos los logits del grupo. \texttt{clip\_alpha} vale $0.5$ por defecto (es decir, $\sqrt{\gamma_h}$ en cada lado, la elección balanceada de K2).
+
+\paragraph{QuacK.}
+En lugar de una intervención en el forward o en los pesos, QuacK \citep{anson2025controlling} asigna learning rates dependientes del parámetro a los pesos de query y key. Guardando las normas de Frobenius en la inicialización, antes de cada paso fija
+\[
+\eta_{W_Q}=\tau\,\eta\,\frac{\|\mathbf{W}_K\|_{\mathrm{init}}}{\|\mathbf{W}_K\|},\qquad
+\eta_{W_K}=\tau\,\eta\,\frac{\|\mathbf{W}_Q\|_{\mathrm{init}}}{\|\mathbf{W}_Q\|},
+\]
+lo que se sigue de controlar el cambio de primer orden $\Delta\ell\approx(\mathbf{q}\,\Delta\mathbf{k}^\top+\Delta\mathbf{q}\,\mathbf{k}^\top)/\sqrt{d}$: cuando un lado crece, el learning rate del otro decrece. Las normas de Frobenius y espectral se comportaron de forma indistinguible en el paper, por lo que se usa Frobenius. La tasa relativa $\tau$ vale $1.0$ por defecto; el paper reporta una estabilidad comparable a QK-norm con learning rates base altos y alrededor de un 10\% de aceleración porque desaparecen dos reducciones RMS por bloque. Aquí el mecanismo es independiente del optimizador: el trainer separa los pesos de query/key en grupos de parámetros dedicados, de modo que cualquiera de los optimizadores registrados puede soportarlo.
+
+\paragraph{Contrato de esquema y validación.}
+\texttt{norm.qk\_norm} es un sub-objeto con \texttt{enabled}, \texttt{method} $\in$ \{\texttt{rms\_norm}, \texttt{layer\_norm}, \texttt{l2\_norm}, \texttt{qk\_clip}, \texttt{quack}\}, \texttt{clip\_tau}, \texttt{clip\_alpha}, \texttt{quack\_tau} y \texttt{eps}. El mecanismo requiere proyecciones explícitas de query/key por cabeza: activarlo para un patrón de capas que contenga un mixer recurrente o de espacio de estados se rechaza al cargar (\texttt{QK\_NORM\_MIXERS}); \texttt{qk\_clip} requiere además logits de producto punto por cabeza y por tanto excluye el router de mezcla Gaussiana (\texttt{QK\_CLIP\_MIXERS}).
+
+\paragraph{Pseudocódigo PyTorch (QK-Clip).}
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} modelo, umbral $\tau$, exponente $\alpha$, $S^h_{\max}$ por cabeza cacheado
+\For{cada cabeza de atención $h$ con $S^h_{\max}>\tau$}
+    \State $\gamma_h\gets\tau/S^h_{\max}$
+    \State $\mathbf{W}^h_q\gets\gamma_h^{\alpha}\mathbf{W}^h_q$ \Comment{bloque de filas $[h d_h:(h+1)d_h]$}
+    \State $\mathbf{W}^h_k\gets\gamma_h^{1-\alpha}\mathbf{W}^h_k$ \Comment{\texttt{k\_proj} o \texttt{uk\_proj}; mínimo sobre el grupo GQA}
+\EndFor
+\State limpiar $S^h_{\max}$ \Comment{evitar reaplicar una estadística obsoleta}
+\end{algorithmic}
+
+\paragraph{Comparación.}
+\scriptsize
+\begin{longtable}{L{2.1cm}L{3.5cm}L{2.4cm}L{4.3cm}}
+\toprule
+\textbf{Método} & \textbf{Intervención} & \textbf{Estado extra} & \textbf{Notas} \\
+\midrule
+\endhead
+\texttt{rms\_norm} & RMSNorm por cabeza en el forward & $2d_h$ & QK-norm estándar; exacta con el MLA re-expansivo de este repo \citep{henry2020querykey,han2026qknormed}. \\
+\texttt{layer\_norm} & LayerNorm por cabeza en el forward & $4d_h$ & Variante con centrado de media (SAN); algo más costosa. \\
+\texttt{l2\_norm} & L2 por cabeza en el forward & ninguno & Ablación sin pesos. \\
+\texttt{qk\_clip} & reescalado de pesos post-paso & $S_{\max}$ por cabeza & Se autodesactiva; necesita logits por cabeza \citep{kimi2025k2}. \\
+\texttt{quack} & learning rates de query/key por paso & normas iniciales & Independiente del optimizador; $\sim$10\% más barato que QK-norm \citep{anson2025controlling}. \\
+\bottomrule
+\end{longtable}
+\normalsize
+
 \subsection{Ruta de Cuantización Ternaria BitNet}
 
 Cuando \texttt{use\_bitnet=true}, las capas BitLinear reemplazan a \texttt{nn.Linear} estándar con cuantización ternaria de pesos ($-1, 0, +1$) siguiendo BitNet \citep{wang_bitnet_2023}. Dado el tensor de pesos $W$, un escalado práctico es:

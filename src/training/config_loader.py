@@ -179,6 +179,40 @@ def _validate_bitnet_flags(model_data: Dict[str, Any]) -> None:
         )
 
 
+def _validate_qk_norm(model_data: Dict[str, Any]) -> None:
+    """Validate QK stabilization support for the configured layer pattern.
+
+    The forward-time QK normalization methods and QuacK need explicit per-head
+    query/key projections; QK-Clip additionally needs per-head dot-product
+    logits. JSON Schema cannot express "every element of ``layer_pattern``
+    belongs to this capability set", so it is enforced here.
+
+    Args:
+        model_data: Flattened ``model`` block (after
+            :func:`flatten_model_dict`).
+
+    Raises:
+        ValueError: If QK stabilization is enabled and any mixer in
+            ``layer_pattern`` is unsupported for the selected method.
+    """
+    if not bool(model_data.get("use_qk_norm", False)):
+        return
+    try:
+        from ..model.norm.qk import QK_CLIP_MIXERS, QK_NORM_MIXERS
+    except ImportError:  # pragma: no cover - legacy package layout
+        from model.norm.qk import QK_CLIP_MIXERS, QK_NORM_MIXERS
+
+    method = str(model_data.get("qk_norm_method", "rms_norm")).lower()
+    supported = QK_CLIP_MIXERS if method == "qk_clip" else QK_NORM_MIXERS
+    pattern = model_data.get("layer_pattern") or []
+    unsupported = sorted({str(mixer) for mixer in pattern if str(mixer) not in supported})
+    if unsupported:
+        raise ValueError(
+            f"model.norm.qk_norm.method={method!r} is not supported by mixer(s) "
+            f"{unsupported}; supported mixers are {sorted(supported)}"
+        )
+
+
 @dataclass
 class LoadedTrainingConfig:
     """Structured result of loading and validating a training YAML config.
@@ -504,6 +538,7 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
                 model_data["asr_loss"] = asr_loss_override
         _validate_bitnet_flags(model_data)
         _validate_ffn_activation(model_data)
+        _validate_qk_norm(model_data)
         model_config = FrankensteinModelConfig(**model_data)
         if not model_class:
             model_class = "frankenstein_text_encoder"

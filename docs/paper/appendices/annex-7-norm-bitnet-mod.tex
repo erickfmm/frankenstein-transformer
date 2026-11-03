@@ -143,6 +143,78 @@ FlashNorm & $x_i/\sqrt{\frac{1}{d}\sum_j x_j^2+\epsilon}$ (weightless) & RMS onl
 \end{longtable}
 \normalsize
 
+\subsection{Query--Key Normalization and Attention-Logit Control}
+\label{sec:annex-qk-norm}
+
+Attention logits $\ell_{i,t,h} = \mathbf{q}_{i,h}^\top \mathbf{k}_{t,g(h)} / \sqrt{d_h}$ are the input to the softmax. Their unbounded growth is a canonical source of training instability: saturated attention, entropy collapse, loss spikes and, at scale, divergence \citep{henry2020querykey,kimi2025k2}. This repository exposes five mechanisms under \texttt{norm.qk\_norm.method}; three act in the forward pass and two act on the optimizer state. They are mutually exclusive per configuration.
+
+\paragraph{Forward-time QK normalization.}
+QK normalization \citep{henry2020querykey} normalizes queries and keys along the per-head feature dimension before the dot product. In RMSNorm form,
+\[
+\hat{\mathbf{q}}_{i,h} = \frac{\mathbf{q}'_{i,h}\odot\boldsymbol{\gamma}_q}{S_q(\mathbf{q}'_{i,h})},\qquad
+S_q(\mathbf{q}) = \sqrt{\frac{1}{d_h}\sum_{j=1}^{d_h} q_j^2 + \epsilon},
+\]
+and identically for $\hat{\mathbf{k}}$ with $\boldsymbol{\gamma}_k$. The affine weights are shared across heads and broadcast over the head axis, so the parameter cost is $2d_h$ (\texttt{rms\_norm}) or $2\cdot 2d_h$ with bias (\texttt{layer\_norm}); \texttt{l2\_norm} is weightless. Because the normalized norms satisfy $\|\hat{\mathbf{q}}\|_2 \approx \|\boldsymbol{\gamma}_q\|_2$ up to direction and $\epsilon$, the residual logit growth is mediated by the learned affine product $\boldsymbol{\gamma}_q\odot\boldsymbol{\gamma}_k$ rather than by uncontrolled raw query/key norms.
+
+\paragraph{QK normalization with Multi-Head Latent Attention.}
+MLA caches a low-rank latent $\mathbf{c}_t$ and reconstructs keys by up-projection, so post-projection QK RMSNorm appears to require the full keys that MLA avoids caching. \citet{han2026qknormed} show the incompatibility is an implementation artifact: RMSNorm decomposes into a static affine weight and a dynamic scalar statistic,
+\[
+\hat{\mathbf{k}}^c_{t,g}=\frac{(\mathbf{c}_t\mathbf{W}^K_g)\odot\boldsymbol{\gamma}^c_k}{S^c_k(\mathbf{c}_t\mathbf{W}^K_g)},\qquad
+\ell^c_{i,t,h}=\big((\mathbf{q}'^{c}_{i,h}\odot\boldsymbol{\gamma}^c_q\odot\boldsymbol{\gamma}^c_k)(\mathbf{W}^K_{g(h)})^\top\big)\cdot\mathbf{c}_t\;\alpha^q_{i,h}\alpha^k_{t,g(h)},
+\]
+where $\alpha^q=1/S_q$ and $\alpha^k=1/S_k$ are scalars. The static weight is absorbed into the query-side projection and only one inverse-RMS scalar per token and KV group is cached ($T\times G$ scalars versus $T\times G\times d_c$ full content keys), which keeps MLA's latent decode path intact; the paper reports lower loss than QK-Clip and $<2\%$ decode overhead up to 256k tokens. In this repository the MLA variant of \citet{mehta_mla_2025} already re-expands keys from the cached latent on every step, so explicit per-head normalization of the decompressed $\mathbf{q}$ and $\mathbf{k}$ is \emph{exactly} equivalent to the absorbed formulation in both training and cached decoding; no scalar cache is required. Content and RoPE blocks are normalized blockwise, matching the natural boundary between the latent content path and the small materialized rotary path.
+
+\paragraph{QK-Clip.}
+Kimi K2's MuonClip \citep{kimi2025k2} targets the same failure mode after the dot product. For each head $h$ it defines the per-head maximum pre-softmax logit over the batch,
+\[
+S^h_{\max}=\frac{1}{\sqrt{d}}\max_{\mathbf{X}\in\mathcal{B}}\max_{i,j}\mathbf{Q}^h_i{\mathbf{K}^h_j}^\top,
+\]
+and, after every optimizer step, rescales the projection weights with
+\[
+\gamma_h=\min\!\left(1,\frac{\tau}{S^h_{\max}}\right),\qquad
+\mathbf{W}^h_q\leftarrow\gamma_h^{\alpha}\mathbf{W}^h_q,\qquad
+\mathbf{W}^h_k\leftarrow\gamma_h^{1-\alpha}\mathbf{W}^h_k .
+\]
+The intervention never alters the current forward/backward pass; heads already below $\tau$ receive $\gamma_h=1$, so the mechanism self-deactivates once training stabilizes (K2 used $\tau=100$ and observed all heads below threshold after roughly 30\% of steps). We apply it per head to the row blocks of \texttt{q\_proj} and \texttt{k\_proj}; for latent attention the key side is \texttt{uk\_proj}, and for grouped-query attention each KV head receives the smallest $\gamma_h$ of the query heads that read it, which bounds every logit in the group. \texttt{clip\_alpha} defaults to $0.5$ (i.e.\ $\sqrt{\gamma_h}$ on each side, the balanced K2 choice).
+
+\paragraph{QuacK.}
+Instead of a forward or weight intervention, QuacK \citep{anson2025controlling} assigns parameter-dependent learning rates to the query and key weights. Storing the Frobenius norms at initialization, before each step it sets
+\[
+\eta_{W_Q}=\tau\,\eta\,\frac{\|\mathbf{W}_K\|_{\mathrm{init}}}{\|\mathbf{W}_K\|},\qquad
+\eta_{W_K}=\tau\,\eta\,\frac{\|\mathbf{W}_Q\|_{\mathrm{init}}}{\|\mathbf{W}_Q\|},
+\]
+which follows from controlling the first-order change $\Delta\ell\approx(\mathbf{q}\,\Delta\mathbf{k}^\top+\Delta\mathbf{q}\,\mathbf{k}^\top)/\sqrt{d}$: when one side grows, the learning rate of the other decreases. Frobenius and spectral norms performed indistinguishably in the paper, so Frobenius is used. The relative rate $\tau$ defaults to $1.0$; the paper reports stability comparable to QK-norm at high base learning rates and about a 10\% speedup because two RMS reductions per block disappear. The mechanism is optimizer-agnostic here: the trainer splits the query/key weights into dedicated parameter groups, so any registered optimizer can carry it.
+
+\paragraph{Schema contract and validation.}
+\texttt{norm.qk\_norm} is a sub-object with \texttt{enabled}, \texttt{method} $\in$ \{\texttt{rms\_norm}, \texttt{layer\_norm}, \texttt{l2\_norm}, \texttt{qk\_clip}, \texttt{quack}\}, \texttt{clip\_tau}, \texttt{clip\_alpha}, \texttt{quack\_tau} and \texttt{eps}. The mechanism requires explicit per-head query/key projections: enabling it for a layer pattern containing a recurrent or state-space mixer is rejected at load time (\texttt{QK\_NORM\_MIXERS}); \texttt{qk\_clip} additionally requires per-head dot-product logits and therefore excludes the Gaussian-mixture router (\texttt{QK\_CLIP\_MIXERS}).
+
+\paragraph{PyTorch pseudocode (QK-Clip).}
+\begin{algorithmic}[1]
+\State \textbf{Input:} model, threshold $\tau$, exponent $\alpha$, cached per-head $S^h_{\max}$
+\For{each attention head $h$ with $S^h_{\max}>\tau$}
+    \State $\gamma_h\gets\tau/S^h_{\max}$
+    \State $\mathbf{W}^h_q\gets\gamma_h^{\alpha}\mathbf{W}^h_q$ \Comment{row block $[h d_h:(h+1)d_h]$}
+    \State $\mathbf{W}^h_k\gets\gamma_h^{1-\alpha}\mathbf{W}^h_k$ \Comment{\texttt{k\_proj} or \texttt{uk\_proj}; min over GQA group}
+\EndFor
+\State clear $S^h_{\max}$ \Comment{avoid reapplying a stale statistic}
+\end{algorithmic}
+
+\paragraph{Comparison.}
+\scriptsize
+\begin{longtable}{L{2.1cm}L{3.5cm}L{2.4cm}L{4.3cm}}
+\toprule
+\textbf{Method} & \textbf{Intervention} & \textbf{Extra state} & \textbf{Notes} \\
+\midrule
+\endhead
+\texttt{rms\_norm} & per-head forward RMSNorm & $2d_h$ & Standard QK-norm; exact with this repo's re-expanding MLA \citep{henry2020querykey,han2026qknormed}. \\
+\texttt{layer\_norm} & per-head forward LayerNorm & $4d_h$ & Mean-centering variant (SAN); slightly heavier. \\
+\texttt{l2\_norm} & per-head forward L2 & none & Weightless ablation. \\
+\texttt{qk\_clip} & post-step weight rescale & per-head $S_{\max}$ & Self-deactivating; needs per-head logits \citep{kimi2025k2}. \\
+\texttt{quack} & per-step query/key learning rates & init norms & Optimizer-agnostic; $\sim$10\% cheaper than QK-norm \citep{anson2025controlling}. \\
+\bottomrule
+\end{longtable}
+\normalsize
+
 \subsection{BitNet Ternary Quantization Path}
 
 When \texttt{use\_bitnet=true}, BitLinear layers replace standard \texttt{nn.Linear} with ternary weight quantization ($-1, 0, +1$) following BitNet \citep{wang_bitnet_2023}. Given weight tensor $W$, a practical scaling is:

@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...numerics import module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 from ..common import BitLinear, apply_pe_to_qk
 
@@ -175,6 +176,7 @@ class SparseKAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "sparsek_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute SparseK attention with differentiable top-k selection.
@@ -204,6 +206,8 @@ class SparseKAttention(nn.Module):
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
@@ -224,6 +228,7 @@ class SparseKAttention(nn.Module):
             q_pos = torch.arange(seq_len, device=x.device).view(1, 1, seq_len, 1)
             k_pos = top_idx.unsqueeze(2).expand_as(scores)
             scores = scores.masked_fill(k_pos > q_pos, float("-inf"))
+        record_qk_max_logits(self, scores)
         attn = module_softmax(self, scores, dim=-1)
         attn = self.dropout(attn)
 

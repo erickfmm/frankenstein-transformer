@@ -33,6 +33,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...numerics import module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 from ..common import BitLinear
 
@@ -99,6 +100,7 @@ class GTAAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "gta_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def make_cache_slot(self, meta, cache):
         """Heterogeneous slot: grouped (post-RoPE) keys + latent values."""
@@ -149,6 +151,8 @@ class GTAAttention(nn.Module):
             positions = positions_for(offset, seq_len, x.device)
             q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
             k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            if self.qk_norm is not None:
+                q, k = self.qk_norm(q, k)
             v_lat = self.dv_proj(x)
             # Rotate per-head keys with the absolute offset, then group-mean
             # (rotation is head-independent at a fixed position).
@@ -187,6 +191,7 @@ class GTAAttention(nn.Module):
             )
             mask = causal_mask_from_positions(positions, kv_positions)
             attn_scores = attn_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+            record_qk_max_logits(self, attn_scores)
             attn_weights = module_softmax(self, attn_scores, dim=-1)
             attn_weights = (
                 attn_weights.unsqueeze(2)
@@ -200,6 +205,8 @@ class GTAAttention(nn.Module):
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
         v_lat = self.dv_proj(x)
         v = F.silu(self.uv_proj(v_lat)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
@@ -217,6 +224,7 @@ class GTAAttention(nn.Module):
             attn_scores = attn_scores.masked_fill(
                 causal_mask.unsqueeze(0).unsqueeze(0), float("-inf")
             )
+        record_qk_max_logits(self, attn_scores)
         attn_weights = module_softmax(self, attn_scores, dim=-1)
         attn_weights = attn_weights.unsqueeze(2).expand(bsz, G, S, seq_len, seq_len).reshape(
             bsz, self.num_heads, seq_len, seq_len

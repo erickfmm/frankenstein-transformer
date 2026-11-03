@@ -25,6 +25,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...numerics import module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 from ..common import BitLinear, apply_pe_to_qk
 
@@ -134,6 +135,7 @@ class NSAAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "nsa_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def _compress(self, k: torch.Tensor, v: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Compress keys and values into coarse-grained blocks.
@@ -217,6 +219,8 @@ class NSAAttention(nn.Module):
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
@@ -227,6 +231,7 @@ class NSAAttention(nn.Module):
             c_len = comp_k.shape[2]
             causal_c = torch.triu(torch.ones(seq_len, c_len, device=x.device, dtype=torch.bool), diagonal=1)
             comp_scores = comp_scores.masked_fill(causal_c.unsqueeze(0).unsqueeze(0), float("-inf"))
+        record_qk_max_logits(self, comp_scores)
         comp_attn = module_softmax(self, comp_scores, dim=-1)
         out_comp = torch.matmul(comp_attn, comp_v)
 
@@ -246,6 +251,7 @@ class NSAAttention(nn.Module):
         v_sel = v.gather(2, sel_idx)
 
         sel_scores = torch.matmul(q, k_sel.transpose(-2, -1)) * self.scale
+        record_qk_max_logits(self, sel_scores)
         sel_attn = module_softmax(self, sel_scores, dim=-1)
         out_sel = torch.matmul(sel_attn, v_sel)
 
@@ -253,6 +259,7 @@ class NSAAttention(nn.Module):
         k_win = k[:, :, -win_size:, :]
         v_win = v[:, :, -win_size:, :]
         win_scores = torch.matmul(q, k_win.transpose(-2, -1)) * self.scale
+        record_qk_max_logits(self, win_scores)
         win_attn = module_softmax(self, win_scores, dim=-1)
         out_win = torch.matmul(win_attn, v_win)
 

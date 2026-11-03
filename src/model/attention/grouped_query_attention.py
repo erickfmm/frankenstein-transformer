@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ..numerics import module_softmax
+from ..norm import attach_qk_norm, record_qk_max_logits
 
 from .common import BitLinear
 
@@ -68,6 +69,7 @@ class GroupedQueryAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "gqa_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def forward(
         self,
@@ -97,6 +99,10 @@ class GroupedQueryAttention(nn.Module):
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
 
+        if self.qk_norm is not None:
+            q = self.qk_norm.normalize_q(q)
+            k = self.qk_norm.normalize_k(k)
+
         idx = logical_layer_idx or 0
         from .common import apply_pe_to_qk, apply_pe_to_scores
 
@@ -125,6 +131,7 @@ class GroupedQueryAttention(nn.Module):
                 q_offset=0 if offset is None else int(offset),
                 kv_positions=kv_positions,
             )
+            record_qk_max_logits(self, attn_scores)
             mask = causal_mask_from_positions(positions, kv_positions)
             attn_scores = attn_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
             attn_weights = module_softmax(self, attn_scores, dim=-1)
@@ -141,6 +148,7 @@ class GroupedQueryAttention(nn.Module):
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
         attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
+        record_qk_max_logits(self, attn_scores)
         if self.mode == "decoder":
             causal_mask = torch.triu(
                 torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1

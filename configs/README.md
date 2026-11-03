@@ -265,6 +265,26 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - `type`: `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`.
 - `partial_ratio`: fraction of dims for pRMSNorm (default 0.0625).
 - `flashnorm_partial_ratio`: partial-RMS composition for FlashNorm (default 0.0).
+- `qk_norm.enabled`: enable query–key attention-logit stabilization (default `false`).
+- `qk_norm.method`: one of `rms_norm` (default), `layer_norm`, `l2_norm` — forward-time
+  per-head QK normalization (arXiv:2010.04245, arXiv:2606.16310); `qk_clip` —
+  per-head post-step weight rescaling with `gamma_h = min(1, tau/S_max^h)`
+  (arXiv:2507.20534); or `quack` — parameter-dependent query/key learning rates
+  (arXiv:2511.21377).
+- `qk_norm.clip_tau`: QK-Clip logit threshold (default 100.0; Kimi K2).
+- `qk_norm.clip_alpha`: QK-Clip query/key balancing exponent (default 0.5).
+- `qk_norm.quack_tau`: QuacK initial relative learning rate (default 1.0).
+- `qk_norm.eps`: RMS/L2 stabilizer for the forward methods (default 1e-6).
+
+  QK stabilization requires every mixer in `dims.layer_pattern` to be one of
+  `standard_attn`, `sigmoid_attn`, `gqa_attn`, `mla_attn`, `swa_attn`,
+  `longformer_attn`, `bigbird_attn`, `sparse_transformer_attn`, `gta_attn`,
+  `iha_attn`, `mtla_attn`, `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`,
+  `sparda_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
+  `titan_attn`, `gqla_attn`, `mlra_attn`; `qk_clip` additionally excludes
+  `gma_attn`. Recurrent/state-space mixers (`retnet`, `gla_attn`, `mamba`, …)
+  are rejected at load time. Examples: `norm_qknorm_rms.yaml`,
+  `norm_qknorm_clip_mla.yaml`, `norm_qknorm_quack.yaml`.
 
 #### model.embedding
 

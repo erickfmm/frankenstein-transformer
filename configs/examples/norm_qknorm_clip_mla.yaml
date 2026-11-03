@@ -1,0 +1,65 @@
+# Kimi K2 / MuonClip QK-Clip on an MLA decoder (arXiv:2507.20534, §2.1 and
+# Algorithm 1). After every optimizer step, query/key projection weights are
+# rescaled per head by gamma_h = min(1, tau / S_max^h) with tau = 100; heads
+# below the threshold are untouched, so the mechanism deactivates itself.
+model_class: frankenstein_text_decoder
+model:
+  dims:
+    vocab_size: 50000
+    hidden_size: 768
+    num_layers: 12
+    num_loops: 1
+    num_heads: 12
+    layer_pattern:
+    - mla_attn
+    mode: decoder
+  norm:
+    type: rms_norm
+    qk_norm:
+      enabled: true
+      method: qk_clip
+      clip_tau: 100.0
+      clip_alpha: 0.5
+  embedding:
+    conv:
+      enabled: false
+  attention:
+    mla:
+      latent_rank: 384
+    retnet:
+      heads: 12
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+    activation: silu
+  positional_encoding: rope
+training:
+  task: causal_lm
+  seed: 42
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 512
+  max_samples: 2000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: ./temp_data/qknorm_clip_mla_cache
+  optimizer:
+    optimizer_class: muon
+    parameters:
+      muon-lr_embeddings: 1e-3
+      muon-lr_norms: 1e-3
+      muon-lr_attention: 2e-3
+      muon-lr_other: 1e-3
+      muon-wd_embeddings: 0.01
+      muon-wd_norms: 0.001
+      muon-wd_attention: 0.01
+      muon-wd_other: 0.01
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_qknorm_clip_mla.csv
+  telemetry_log_interval: 5

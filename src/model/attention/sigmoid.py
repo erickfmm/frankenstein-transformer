@@ -20,6 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .common import BitLinear
+from ..norm import attach_qk_norm, record_qk_max_logits
 
 
 class SigmoidAttention(nn.Module):
@@ -80,6 +81,7 @@ class SigmoidAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "sigmoid_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def forward(
         self,
@@ -110,6 +112,9 @@ class SigmoidAttention(nn.Module):
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
 
         from .common import apply_pe_to_qk, apply_pe_to_scores
 
@@ -147,6 +152,7 @@ class SigmoidAttention(nn.Module):
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
         attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
+        record_qk_max_logits(self, attn_scores)
         if self.mode == "decoder":
             causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1)
             attn_scores = attn_scores.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))

@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ..numerics import module_softmax
+from ..norm import attach_qk_norm, record_qk_max_logits
 
 from .common import BitLinear
 
@@ -78,6 +79,7 @@ class StandardAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "standard_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def forward(
         self,
@@ -111,6 +113,9 @@ class StandardAttention(nn.Module):
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
+
         idx = logical_layer_idx or 0
         from .common import apply_pe_to_qk, apply_pe_to_scores
 
@@ -135,6 +140,7 @@ class StandardAttention(nn.Module):
                 q_offset=0 if offset is None else int(offset),
                 kv_positions=kv_positions,
             )
+            record_qk_max_logits(self, attn_scores)
             # Cached attention is causal by construction (decode); a mask is
             # still built for multi-token (prefill) chunks from positions,
             # which reproduces the classic triu mask exactly when the cache
@@ -150,6 +156,7 @@ class StandardAttention(nn.Module):
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
         attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
+        record_qk_max_logits(self, attn_scores)
         if self.mode == "decoder":
             causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1)
             attn_scores = attn_scores.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))

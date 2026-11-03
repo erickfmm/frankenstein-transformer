@@ -42,6 +42,7 @@ try:
         categorize_param_groups,
     )
     from ..model.optimizer.factory import build_optimizer
+    from ..model.norm.qk import QuacKController, apply_qk_clip
     from ..model.numerics import fixed_cross_entropy, fixed_softmax
     from .rnnt import (
         character_error_rate,
@@ -59,6 +60,7 @@ except ImportError:
     )
     from utils.param_categories import BLOCK_CATEGORIES, categorize_param
     from model.optimizer.factory import build_optimizer
+    from model.norm.qk import QuacKController, apply_qk_clip
     from model.numerics import fixed_cross_entropy, fixed_softmax
     from training.rnnt import (
         character_error_rate,
@@ -262,6 +264,27 @@ class TitanTrainer:
         
         # Specialized optimizer for hybrid architecture
         self.optimizer = self._setup_optimizer()
+
+        # Query–key logit stabilization (model.norm.qk_norm):
+        # * QuacK splits the query/key weights into dedicated parameter groups,
+        #   so it runs before the scheduler initializes ``initial_lr``.
+        # * QK-Clip rescales query/key weights after every optimizer step.
+        qk_method = str(getattr(self.config, "qk_norm_method", "rms_norm")).lower()
+        qk_enabled = bool(getattr(self.config, "use_qk_norm", False))
+        self._qk_clip_active = qk_enabled and qk_method == "qk_clip"
+        self._qk_clip_tau = float(getattr(self.config, "qk_clip_tau", 100.0))
+        self._qk_clip_alpha = float(getattr(self.config, "qk_clip_alpha", 0.5))
+        self._quack = None
+        if qk_enabled and qk_method == "quack":
+            self._quack = QuacKController(
+                self.model,
+                self.optimizer,
+                tau=float(getattr(self.config, "quack_tau", 1.0)),
+            )
+            logging.info(
+                "QuacK: modulating query/key learning rates for %d weight pairs",
+                self._quack.num_pairs,
+            )
         
         # Mixed precision with aggressive scaling for BitNet
         self.scaler = GradScaler(
@@ -2000,11 +2023,20 @@ class TitanTrainer:
                             continue
 
                         # Normal optimizer step
+                        if self._quack is not None:
+                            self._quack.step()
                         if amp_enabled:
                             self.scaler.step(self.optimizer)
                             self.scaler.update()
                         else:
                             self.optimizer.step()
+
+                        if self._qk_clip_active:
+                            apply_qk_clip(
+                                self.model,
+                                tau=self._qk_clip_tau,
+                                alpha=self._qk_clip_alpha,
+                            )
 
                         self.scheduler.step()
                         self.optimizer.zero_grad(set_to_none=True)

@@ -36,6 +36,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...numerics import module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 from ..common import BitLinear
 
@@ -95,6 +96,7 @@ class IHAAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "iha_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def forward(
         self,
@@ -129,6 +131,8 @@ class IHAAttention(nn.Module):
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder
         q = self.q_proj(x).view(bsz, seq_len, H, d).transpose(1, 2)
         k = self.k_proj(x).view(bsz, seq_len, H, d).transpose(1, 2)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
         v = self.v_proj(x).view(bsz, seq_len, H, d).transpose(1, 2)
 
         from ..common import apply_pe_to_qk, apply_pe_to_scores
@@ -185,6 +189,7 @@ class IHAAttention(nn.Module):
             attn_scores = attn_scores.masked_fill(
                 causal_mask.unsqueeze(0).unsqueeze(0), float("-inf")
             )
+        record_qk_max_logits(self, attn_scores)
         attn_weights = module_softmax(self, attn_scores, dim=-1)
         attn_weights = self.dropout(attn_weights)
         out_p = attn_weights @ v_p

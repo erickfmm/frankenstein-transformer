@@ -32,6 +32,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...numerics import module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 from ..common import BitLinear
 
@@ -97,6 +98,7 @@ class MTLAAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "mtla_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def _merge_temporal(self, latents: torch.Tensor) -> torch.Tensor:
         """Merge temporally adjacent latent vectors via hyper-network gating.
@@ -143,12 +145,15 @@ class MTLAAttention(nn.Module):
         k = self.uk_proj(c_kv_merged).view(bsz, kv_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.uv_proj(c_kv_merged).view(bsz, kv_len, self.num_heads, self.head_dim).transpose(1, 2)
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
 
         from ..common import apply_pe_to_qk, apply_pe_to_scores
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
         attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
+        record_qk_max_logits(self, attn_scores)
         if self.mode == "decoder":
             m, s = self.merge_factor, self.stride
             mask = torch.ones(seq_len, kv_len, device=x.device, dtype=torch.bool)

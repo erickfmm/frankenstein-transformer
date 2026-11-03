@@ -28,6 +28,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...numerics import module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
 
@@ -113,6 +114,7 @@ class ForgettingAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "fox_attn_use_pe", False))
+        attach_qk_norm(self, config, self.head_dim)
 
     def forward(
         self,
@@ -154,6 +156,8 @@ class ForgettingAttention(nn.Module):
 
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
         f = torch.sigmoid(self.f_proj(x)).permute(0, 2, 1)
@@ -193,6 +197,7 @@ class ForgettingAttention(nn.Module):
                 q_offset=0 if offset is None else int(offset),
                 kv_positions=kv_positions,
             )
+            record_qk_max_logits(self, attn)
             attn = module_softmax(self, attn, dim=-1)
             attn = self.dropout(attn)
             out = (attn @ V).permute(0, 2, 1, 3).reshape(bsz, seq_len, self.total_dim)
@@ -209,6 +214,7 @@ class ForgettingAttention(nn.Module):
 
         attn = (q @ k.transpose(-2, -1)) * self.scale + bias
         attn = apply_pe_to_scores(pe, self.pe_type, attn, q, self.use_pe)
+        record_qk_max_logits(self, attn)
         attn = module_softmax(self, attn, dim=-1)
         attn = self.dropout(attn)
 

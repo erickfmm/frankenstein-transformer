@@ -172,6 +172,24 @@ class FrankensteinModelConfig:
             pRMSNorm trick with Prop. 1 of FlashNorm). Must be in
             ``[0, 1]``. Ignored for other ``norm_type`` values.
             Default: ``0.0``.
+        use_qk_norm: Enable query–key attention-logit stabilization
+            (``model.norm.qk_norm.enabled``). Default: False.
+        qk_norm_method: QK stabilization mechanism, one of ``"rms_norm"``,
+            ``"layer_norm"``, ``"l2_norm"`` (forward-time per-head QK
+            normalization; arXiv:2010.04245, arXiv:2606.16310), ``"qk_clip"``
+            (per-head post-step weight rescaling; arXiv:2507.20534) or
+            ``"quack"`` (query/key learning-rate modulation;
+            arXiv:2511.21377). Default: ``"rms_norm"``.
+        qk_clip_tau: Per-head maximum pre-softmax logit threshold for
+            ``qk_norm_method="qk_clip"``. Must be ``> 0``.
+            Default: ``100.0`` (Kimi K2).
+        qk_clip_alpha: Balancing exponent splitting the QK-Clip rescaling
+            between queries (``γ^α``) and keys (``γ^(1−α)``). Must be in
+            ``[0, 1]``. Default: ``0.5``.
+        quack_tau: Initial relative learning rate for query/key weights when
+            ``qk_norm_method="quack"``. Must be ``> 0``. Default: ``1.0``.
+        qk_norm_eps: Numerical stabilizer for the forward-time QK
+            normalization methods. Must be ``> 0``. Default: ``1e-6``.
         use_factorized_embedding: If True, use :class:`FactorizedEmbedding`
             with reduced embedding dimension + projection. Default: False.
         factorized_embedding_dim: Embedding dimension when factorization is
@@ -487,6 +505,12 @@ class FrankensteinModelConfig:
     norm_type: str = "dynamic_tanh"
     prms_partial_ratio: float = 0.0625
     flashnorm_partial_ratio: float = 0.0
+    use_qk_norm: bool = False
+    qk_norm_method: str = "rms_norm"
+    qk_clip_tau: float = 100.0
+    qk_clip_alpha: float = 0.5
+    quack_tau: float = 1.0
+    qk_norm_eps: float = 1e-6
     use_factorized_embedding: bool = False
     factorized_embedding_dim: int = 128
     use_embedding_conv: bool = True
@@ -1119,6 +1143,28 @@ class FrankensteinModelConfig:
 
         if not 0.0 <= float(self.flashnorm_partial_ratio) <= 1.0:
             raise ValueError("flashnorm_partial_ratio must be in the range [0, 1]")
+
+        # ---- Validate QK normalization / logit control (QK-Norm, QK-Clip, QuacK) ----
+        self.qk_norm_method = str(self.qk_norm_method).lower()
+        if self.qk_norm_method not in {
+            "rms_norm",
+            "layer_norm",
+            "l2_norm",
+            "qk_clip",
+            "quack",
+        }:
+            raise ValueError(
+                "qk_norm_method must be one of {'rms_norm', 'layer_norm', 'l2_norm', "
+                f"'qk_clip', 'quack'}}, got {self.qk_norm_method!r}"
+            )
+        if float(self.qk_clip_tau) <= 0.0:
+            raise ValueError("qk_clip_tau must be > 0")
+        if not 0.0 <= float(self.qk_clip_alpha) <= 1.0:
+            raise ValueError("qk_clip_alpha must be in the range [0, 1]")
+        if float(self.quack_tau) <= 0.0:
+            raise ValueError("quack_tau must be > 0")
+        if float(self.qk_norm_eps) <= 0.0:
+            raise ValueError("qk_norm_eps must be > 0")
 
         # ---- Validate mHC (Manifold-Constrained Hyper-Connections) ----
         if int(self.mhc_expansion_rate) < 1:

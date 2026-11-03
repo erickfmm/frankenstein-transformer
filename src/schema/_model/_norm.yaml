@@ -122,3 +122,295 @@ properties:
     maximum: 1
     default: 0.0
     examples: [0.0]
+  qk_norm:
+    type: object
+    title: "Query–Key Normalization & Logit Control"
+    title_es: "Normalización Query–Key y Control de Logits"
+    description: |-
+      Query–key (QK) attention-logit stabilization. Uncontrolled growth of the
+      pre-softmax scores `QKᵀ/√d` is a well-known source of training instability
+      (logit blow-up, attention entropy collapse, loss spikes). This block
+      selects one of five mechanisms, all of which bound the logit scale but act
+      at different points:
+
+      - `rms_norm`: forward-time per-head QK RMSNorm — normalizes each query and
+        key head along its feature dimension before the dot product, with a
+        learnable per-dimension scale shared across heads. This is the standard
+        QK-norm of Henry et al. (paper: arxiv:2010.04245) and the exact
+        formulation analyzed for MLA by Han et al. (paper: arxiv:2606.16310).
+        **Recommended** when every mixer in `dims.layer_pattern` materializes
+        explicit per-head Q/K (see `norm.qk_norm` support below).
+      - `layer_norm`: forward-time per-head QK LayerNorm (Henry et al.
+        (paper: arxiv:2010.04245), the “SAN” variant): mean-centers and
+        rescales each head, with learnable gain and bias. Slightly heavier than
+        `rms_norm`; useful when mean drift matters.
+      - `l2_norm`: forward-time weightless L2 normalization of each head
+        (`q/‖q‖`, `k/‖k‖`). The lowest-parameter variant (no learnable scale),
+        as in Henry et al. (paper: arxiv:2010.04245).
+      - `qk_clip`: Kimi K2's QK-Clip (paper: arxiv:2507.20534, §2.1 and
+        Algorithm 1). After every optimizer step, the query and key projection
+        weights are rescaled per attention head by
+        `γ_h = min(1, τ/S_max^h)`, where `S_max^h` is the maximum pre-softmax
+        logit of head `h` observed in the step: content Q/K weights by
+        `γ_h^α`/`γ_h^(1−α)` (`α = norm.qk_norm.clip_alpha`, default 0.5 ⇒
+        `√γ_h` each). It is a post-hoc weight intervention that leaves the
+        forward/backward pass untouched and self-deactivates once every head is
+        below `τ`. The QK-Clip alternative to QK-norm for architectures such as
+        MLA that do not cache full keys.
+      - `quack`: QuacK (paper: arxiv:2511.21377) — parameter-dependent
+        learning rates for the query/key weights instead of a forward or weight
+        intervention. The Frobenius norms `‖W_Q‖`, `‖W_K‖` are recorded at
+        initialization and, before every step,
+        `lr(W_Q) = τ·η·‖W_K‖_init/‖W_K‖` and
+        `lr(W_K) = τ·η·‖W_Q‖_init/‖W_Q‖` (`τ = norm.qk_norm.quack_tau`). This
+        bounds the *change* in logits per step and is ≈10% cheaper than QK-norm
+        because it removes two RMS reductions per block.
+
+      **Supported mixers.** The forward methods and QuacK require explicit
+      per-head Q/K projections; QK-Clip additionally requires per-head
+      dot-product logits. Supported mixers: `standard_attn`, `sigmoid_attn`,
+      `gqa_attn`, `mla_attn`, `swa_attn`, `longformer_attn`, `bigbird_attn`,
+      `sparse_transformer_attn`, `gta_attn`, `iha_attn`, `mtla_attn`,
+      `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`, `sparda_attn`,
+      `conformer_attn`, `fox_attn`, `gated_softmax_attn`, `titan_attn`,
+      `gqla_attn`, `mlra_attn`. `gma_attn` supports every method except
+      `qk_clip` (it routes through Gaussian mixture responsibilities instead
+      of a QK dot product). Enabling this block while `dims.layer_pattern`
+      contains any other mixer is rejected at load time; for `qk_clip` the
+      pattern must also exclude `gma_attn`.
+
+      **Examples explained:**
+      - `rms_norm` on a standard-attention stack: the common ViT-22B/Gemma-style
+        recipe; cheapest effective stabilizer when keys are materialized.
+      - `qk_clip` with `clip_tau: 100` on an `mla_attn` decoder: reproduces the
+        Kimi K2 / MuonClip recipe, the reference stabilization used at
+        trillion-parameter scale with MLA.
+      - `quack` with `quack_tau: 1.0`: enables higher base learning rates
+        without a normalization op in the attention block; a drop-in,
+        optimizer-agnostic alternative.
+
+      **References:** (paper: arxiv:2010.04245) (paper: arxiv:2606.16310)
+      (paper: arxiv:2507.20534) (paper: arxiv:2511.21377)
+    description_es: |-
+      Estabilización de los logits de atención query–key (QK). El crecimiento
+      descontrolado de las puntuaciones pre-softmax `QKᵀ/√d` es una fuente
+      conocida de inestabilidad de entrenamiento (explosión de logits, colapso
+      de la entropía de atención, picos de pérdida). Este bloque selecciona uno
+      de cinco mecanismos; todos acotan la escala de los logits pero actúan en
+      puntos distintos:
+
+      - `rms_norm`: QK RMSNorm por cabeza en el forward — normaliza cada cabeza
+        de query y key a lo largo de su dimensión de características antes del
+        producto punto, con una escala aprendible por dimensión compartida entre
+        cabezas. Es la QK-norm estándar de Henry et al.
+        (paper: arxiv:2010.04245) y la formulación exacta analizada para MLA
+        por Han et al. (paper: arxiv:2606.16310). **Recomendada** cuando cada
+        mixer de `dims.layer_pattern` materializa Q/K explícitos por cabeza
+        (ver soporte de `norm.qk_norm` abajo).
+      - `layer_norm`: QK LayerNorm por cabeza en el forward (Henry et al.
+        (paper: arxiv:2010.04245), variante “SAN”): centra la media y reescala
+        cada cabeza, con ganancia y sesgo aprendibles. Algo más costosa que
+        `rms_norm`; útil cuando importa la deriva de la media.
+      - `l2_norm`: normalización L2 sin pesos de cada cabeza en el forward
+        (`q/‖q‖`, `k/‖k‖`). La variante con menos parámetros (sin escala
+        aprendible), como en Henry et al. (paper: arxiv:2010.04245).
+      - `qk_clip`: QK-Clip de Kimi K2 (paper: arxiv:2507.20534, §2.1 y
+        Algoritmo 1). Tras cada paso del optimizador, los pesos de proyección
+        de query y key se reescalan por cabeza de atención con
+        `γ_h = min(1, τ/S_max^h)`, donde `S_max^h` es el logit pre-softmax
+        máximo de la cabeza `h` observado en el paso: los pesos de contenido
+        Q/K por `γ_h^α`/`γ_h^(1−α)` (`α = norm.qk_norm.clip_alpha`, por defecto
+        0.5 ⇒ `√γ_h` en cada uno). Es una intervención posterior sobre los
+        pesos que no altera el forward/backward y se autodesactiva cuando todas
+        las cabezas quedan por debajo de `τ`. La alternativa a QK-norm para
+        arquitecturas como MLA que no cachean las keys completas.
+      - `quack`: QuacK (paper: arxiv:2511.21377) — learning rates dependientes
+        del parámetro para los pesos de query/key en lugar de una intervención
+        en el forward o en los pesos. Las normas de Frobenius `‖W_Q‖`, `‖W_K‖`
+        se registran en la inicialización y, antes de cada paso,
+        `lr(W_Q) = τ·η·‖W_K‖_init/‖W_K‖` y
+        `lr(W_K) = τ·η·‖W_Q‖_init/‖W_Q‖` (`τ = norm.qk_norm.quack_tau`). Acota
+        el *cambio* de logits por paso y es ≈10% más barato que QK-norm porque
+        elimina dos reducciones RMS por bloque.
+
+      **Mixers soportados.** Los métodos de forward y QuacK requieren
+      proyecciones Q/K explícitas por cabeza; QK-Clip requiere además logits de
+      producto punto por cabeza. Mixers soportados: `standard_attn`,
+      `sigmoid_attn`, `gqa_attn`, `mla_attn`, `swa_attn`, `longformer_attn`,
+      `bigbird_attn`, `sparse_transformer_attn`, `gta_attn`, `iha_attn`,
+      `mtla_attn`, `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`,
+      `sparda_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
+      `titan_attn`, `gqla_attn`, `mlra_attn`. `gma_attn` soporta todos los
+      métodos excepto `qk_clip` (enruta mediante responsabilidades de mezcla
+      Gaussiana en lugar de un producto punto QK). Activar este bloque con
+      cualquier otro mixer en `dims.layer_pattern` se rechaza al cargar la
+      configuración; para `qk_clip` el patrón tampoco puede incluir
+      `gma_attn`.
+
+      **Ejemplos explicados:**
+      - `rms_norm` en una pila de atención estándar: la receta habitual estilo
+        ViT-22B/Gemma; el estabilizador efectivo más barato cuando las keys se
+        materializan.
+      - `qk_clip` con `clip_tau: 100` en un decoder `mla_attn`: reproduce la
+        receta Kimi K2 / MuonClip, la estabilización de referencia usada a
+        escala de billones de parámetros con MLA.
+      - `quack` con `quack_tau: 1.0`: permite learning rates base más altos sin
+        una operación de normalización en el bloque de atención; una alternativa
+        directa e independiente del optimizador.
+
+      **Referencias:** (paper: arxiv:2010.04245) (paper: arxiv:2606.16310)
+      (paper: arxiv:2507.20534) (paper: arxiv:2511.21377)
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        title: "Enable QK Normalization / Logit Control"
+        title_es: "Activar Normalización QK / Control de Logits"
+        description: |-
+          Master switch for query–key attention-logit stabilization. When
+          `false` (default) every mixer runs its unmodified attention path and
+          `norm.qk_norm.*` has no effect. When `true`, `method` selects the
+          mechanism and every mixer in `dims.layer_pattern` must be one of the
+          supported mixers listed above (validated at load time).
+        description_es: |-
+          Interruptor maestro de la estabilización de logits query–key. Con
+          `false` (por defecto) cada mixer ejecuta su ruta de atención sin
+          modificar y `norm.qk_norm.*` no tiene efecto. Con `true`, `method`
+          selecciona el mecanismo y cada mixer de `dims.layer_pattern` debe ser
+          uno de los mixers soportados listados arriba (validado al cargar).
+        default: false
+        examples: [true]
+      method:
+        type: string
+        title: "QK Stabilization Method"
+        title_es: "Método de Estabilización QK"
+        description: |-
+          Selects the QK stabilization mechanism (see the block description for
+          the full comparison):
+
+          - `rms_norm` (default): per-head QK RMSNorm applied to queries and
+            keys before the dot product (paper: arxiv:2010.04245,
+            paper: arxiv:2606.16310).
+          - `layer_norm`: per-head QK LayerNorm with learnable gain and bias
+            (paper: arxiv:2010.04245).
+          - `l2_norm`: weightless per-head L2 normalization
+            (paper: arxiv:2010.04245).
+          - `qk_clip`: post-optimizer-step per-head weight rescaling with
+            threshold `norm.qk_norm.clip_tau` (paper: arxiv:2507.20534).
+          - `quack`: per-parameter query/key learning rates with relative rate
+            `norm.qk_norm.quack_tau` (paper: arxiv:2511.21377).
+
+          `rms_norm`, `layer_norm` and `l2_norm` add a forward-time module (and
+          parameters only for the first two); `qk_clip` and `quack` add no
+          parameters and act during training steps.
+        description_es: |-
+          Selecciona el mecanismo de estabilización QK (ver la descripción del
+          bloque para la comparación completa):
+
+          - `rms_norm` (por defecto): QK RMSNorm por cabeza aplicada a queries
+            y keys antes del producto punto (paper: arxiv:2010.04245,
+            paper: arxiv:2606.16310).
+          - `layer_norm`: QK LayerNorm por cabeza con ganancia y sesgo
+            aprendibles (paper: arxiv:2010.04245).
+          - `l2_norm`: normalización L2 por cabeza sin pesos
+            (paper: arxiv:2010.04245).
+          - `qk_clip`: reescalado de pesos por cabeza tras el paso del
+            optimizador con umbral `norm.qk_norm.clip_tau`
+            (paper: arxiv:2507.20534).
+          - `quack`: learning rates por parámetro para query/key con tasa
+            relativa `norm.qk_norm.quack_tau` (paper: arxiv:2511.21377).
+
+          `rms_norm`, `layer_norm` y `l2_norm` añaden un módulo en el forward
+          (y parámetros solo los dos primeros); `qk_clip` y `quack` no añaden
+          parámetros y actúan durante los pasos de entrenamiento.
+        enum: [rms_norm, layer_norm, l2_norm, qk_clip, quack]
+        default: rms_norm
+        examples: [rms_norm, qk_clip]
+      clip_tau:
+        type: number
+        title: "QK-Clip Threshold (τ)"
+        title_es: "Umbral de QK-Clip (τ)"
+        description: |-
+          Maximum allowed per-head pre-softmax logit when
+          `method=qk_clip`. Every step, each head is rescaled by
+          `γ_h = min(1, τ/S_max^h)`; heads already below `τ` are untouched, so
+          the mechanism self-deactivates once stabilization is no longer
+          needed. The Kimi K2 report uses `τ = 100` (paper: arxiv:2507.20534);
+          smaller values (e.g. 30) clip more aggressively. Must be `> 0`.
+          Ignored when `method` is not `qk_clip`.
+        description_es: |-
+          Logit pre-softmax máximo permitido por cabeza cuando
+          `method=qk_clip`. En cada paso, cada cabeza se reescala con
+          `γ_h = min(1, τ/S_max^h)`; las cabezas ya por debajo de `τ` no se
+          tocan, por lo que el mecanismo se autodesactiva cuando la
+          estabilización deja de ser necesaria. El informe de Kimi K2 usa
+          `τ = 100` (paper: arxiv:2507.20534); valores menores (p. ej. 30)
+          recortan más agresivamente. Debe ser `> 0`. Se ignora cuando `method`
+          no es `qk_clip`.
+        exclusiveMinimum: 0
+        default: 100.0
+        examples: [100.0, 30.0]
+      clip_alpha:
+        type: number
+        title: "QK-Clip Balancing Exponent (α)"
+        title_es: "Exponente de Balance de QK-Clip (α)"
+        description: |-
+          Splits the per-head rescaling between queries and keys when
+          `method=qk_clip`: `W_Q ← γ_h^α W_Q` and `W_K ← γ_h^(1−α) W_K`.
+          `0.5` (default) applies `√γ_h` to each, the balanced choice used by
+          Kimi K2; `0` clips only keys and `1` only queries. Must be in
+          `[0, 1]`. Ignored when `method` is not `qk_clip`.
+        description_es: |-
+          Reparte el reescalado por cabeza entre queries y keys cuando
+          `method=qk_clip`: `W_Q ← γ_h^α W_Q` y `W_K ← γ_h^(1−α) W_K`.
+          `0.5` (por defecto) aplica `√γ_h` a cada uno, la elección balanceada
+          usada por Kimi K2; `0` recorta solo las keys y `1` solo las queries.
+          Debe estar en `[0, 1]`. Se ignora cuando `method` no es `qk_clip`.
+        minimum: 0
+        maximum: 1
+        default: 0.5
+        examples: [0.5]
+      quack_tau:
+        type: number
+        title: "QuacK Relative Learning Rate (τ)"
+        title_es: "Learning Rate Relativa de QuacK (τ)"
+        description: |-
+          Initial relative learning rate for query/key weights when
+          `method=quack` (paper: arxiv:2511.21377). Each step uses
+          `lr(W_Q) = τ·η·‖W_K‖_init/‖W_K‖` and
+          `lr(W_K) = τ·η·‖W_Q‖_init/‖W_Q‖`, where `η` is the scheduler's base
+          learning rate for the attention group and the norms are Frobenius.
+          The paper sweeps `τ ∈ {1e-2, 1e-1, 1, 10}`; `1.0` (default) keeps the
+          base learning rate at initialization and only down-weights the side
+          whose counterpart grows. Must be `> 0`. Ignored when `method` is not
+          `quack`.
+        description_es: |-
+          Learning rate relativa inicial para los pesos de query/key cuando
+          `method=quack` (paper: arxiv:2511.21377). Cada paso usa
+          `lr(W_Q) = τ·η·‖W_K‖_init/‖W_K‖` y
+          `lr(W_K) = τ·η·‖W_Q‖_init/‖W_Q‖`, donde `η` es el learning rate base
+          del scheduler para el grupo de atención y las normas son de
+          Frobenius. El paper barre `τ ∈ {1e-2, 1e-1, 1, 10}`; `1.0` (por
+          defecto) mantiene el learning rate base en la inicialización y solo
+          reduce el lado cuyo contraparte crece. Debe ser `> 0`. Se ignora
+          cuando `method` no es `quack`.
+        exclusiveMinimum: 0
+        default: 1.0
+        examples: [1.0, 0.1]
+      eps:
+        type: number
+        title: "QK-Norm Epsilon"
+        title_es: "Epsilon de QK-Norm"
+        description: |-
+          Numerical stabilizer added under the RMS/mean-square reduction (and
+          used as the L2 denominator floor) for the forward-time methods
+          (`rms_norm`, `layer_norm`, `l2_norm`). Must be `> 0`. Ignored for
+          `qk_clip` and `quack`.
+        description_es: |-
+          Estabilizador numérico sumado bajo la reducción RMS/cuadrática media
+          (y usado como piso del denominador L2) para los métodos de forward
+          (`rms_norm`, `layer_norm`, `l2_norm`). Debe ser `> 0`. Se ignora para
+          `qk_clip` y `quack`.
+        exclusiveMinimum: 0
+        default: 1.0e-6
+        examples: [1.0e-6]

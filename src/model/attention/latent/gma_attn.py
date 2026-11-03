@@ -76,6 +76,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...numerics import module_log_softmax, module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 from ..common import BitLinear
 
@@ -210,6 +211,7 @@ class GaussianMixtureAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "gma_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     # ------------------------------------------------------------------
     # Core GMA primitives
@@ -301,6 +303,8 @@ class GaussianMixtureAttention(nn.Module):
         # --- Projections ---------------------------------------------------
         q = self.q_proj(x).view(bsz, seq_len, H, d_r)          # (B, N, H, d_r)
         k = self.k_proj(x).view(bsz, seq_len, H, d_r)          # (B, N, H, d_r)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
         v = self.v_proj(x).view(bsz, seq_len, H, d_v)          # (B, N, H, d_v)
 
         # --- Positional encoding on routing tensors (rotation only) -------

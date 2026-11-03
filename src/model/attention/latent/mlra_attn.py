@@ -30,6 +30,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...numerics import module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
 
 from ..common import BitLinear
 from ...cache.hooks import cached_latent_attention
@@ -101,6 +102,7 @@ class MLRAAttention(nn.Module):
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(getattr(config, "mlra_attn_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
 
     def make_cache_slot(self, meta, cache):
         """Cache the joint latent ``c_kv`` (per-token axis)."""
@@ -142,6 +144,8 @@ class MLRAAttention(nn.Module):
 
             c_kv = self.dkv_proj(x)
             q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            if self.qk_norm is not None:
+                q = self.qk_norm.normalize_q(q)
 
             def _expand(c_all):
                 c = c_all["c_kv"]
@@ -156,6 +160,8 @@ class MLRAAttention(nn.Module):
                     for i, uv in enumerate(self.uv_projs)
                 ]
                 k = torch.cat(k_parts, dim=2).view(bsz, t, self.num_heads, self.head_dim).transpose(1, 2)
+                if self.qk_norm is not None:
+                    k = self.qk_norm.normalize_k(k)
                 v = torch.cat(v_parts, dim=2).view(bsz, t, self.num_heads, self.head_dim).transpose(1, 2)
                 return k, v
 
@@ -191,12 +197,15 @@ class MLRAAttention(nn.Module):
         k = torch.cat(k_parts, dim=2).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = torch.cat(v_parts, dim=2).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
 
         from ..common import apply_pe_to_qk, apply_pe_to_scores
         q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
         attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
+        record_qk_max_logits(self, attn_scores)
         if self.mode == "decoder":
             causal_mask = torch.triu(
                 torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1

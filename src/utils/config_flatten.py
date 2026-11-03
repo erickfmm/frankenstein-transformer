@@ -11,7 +11,9 @@ The hierarchical schema groups keys as:
     model:
       dims:        {vocab_size, hidden_size, num_layers, num_loops, num_heads,
                     num_kv_heads, dropout, layer_pattern, mode}
-      norm:        {type, partial_ratio, flashnorm_partial_ratio}
+      norm:        {type, partial_ratio, flashnorm_partial_ratio,
+                    qk_norm: {enabled, method, clip_tau, clip_alpha,
+                              quack_tau, eps}}
       embedding:
         factorized: {enabled, dim}
         conv:       {enabled, kernel}
@@ -478,6 +480,20 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
             out["prms_partial_ratio"] = norm["partial_ratio"]
         if "flashnorm_partial_ratio" in norm:
             out["flashnorm_partial_ratio"] = norm["flashnorm_partial_ratio"]
+        qk = norm.get("qk_norm")
+        if isinstance(qk, dict):
+            if "enabled" in qk:
+                out["use_qk_norm"] = qk["enabled"]
+            if "method" in qk:
+                out["qk_norm_method"] = qk["method"]
+            if "clip_tau" in qk:
+                out["qk_clip_tau"] = qk["clip_tau"]
+            if "clip_alpha" in qk:
+                out["qk_clip_alpha"] = qk["clip_alpha"]
+            if "quack_tau" in qk:
+                out["quack_tau"] = qk["quack_tau"]
+            if "eps" in qk:
+                out["qk_norm_eps"] = qk["eps"]
 
     # embedding.factorized.* + embedding.conv.* — leaf renames.
     embedding = model_data.get("embedding")

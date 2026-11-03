@@ -150,6 +150,12 @@ skipped, and `_ATTENTION_MIXER_RENAMES` maps each per-mixer leaf to its flat key
 | `model.norm.type` | `norm_type` |
 | `model.norm.partial_ratio` | `prms_partial_ratio` |
 | `model.norm.flashnorm_partial_ratio` | `flashnorm_partial_ratio` |
+| `model.norm.qk_norm.enabled` | `use_qk_norm` |
+| `model.norm.qk_norm.method` | `qk_norm_method` |
+| `model.norm.qk_norm.clip_tau` | `qk_clip_tau` |
+| `model.norm.qk_norm.clip_alpha` | `qk_clip_alpha` |
+| `model.norm.qk_norm.quack_tau` | `quack_tau` |
+| `model.norm.qk_norm.eps` | `qk_norm_eps` |
 | `model.embedding.factorized.enabled/dim` | `use_factorized_embedding`, `factorized_embedding_dim` |
 | `model.embedding.conv.enabled/kernel` | `use_embedding_conv`, `embedding_conv_kernel` |
 | `model.attention.<mixer>.<leaf>` | `_ATTENTION_MIXER_RENAMES` (e.g. `mla.latent_rank` → `mla_latent_rank`) |
@@ -246,6 +252,7 @@ Cross-field rules enforced in `config_loader.py` and
 - `base_model` requires `training` and (for MLM/causal LM) `tokenizer.name_or_path`.
 - `mlm` requires `training.optimizer`; `sbert` requires `training.sbert`.
 - `bitnet.routers: true` ⇒ `bitnet.enabled: true`; `bitnet.conv` only applies when BitNet and `embedding.conv.enabled` are both true.
+- `norm.qk_norm.enabled: true` ⇒ every mixer in `layer_pattern` must be QK-capable (`QK_NORM_MIXERS`); `method: qk_clip` additionally requires per-head dot-product logits (`QK_CLIP_MIXERS`, excludes `gma_attn`). Enforced in `config_loader._validate_qk_norm`.
 
 ## 7. Component reference
 
@@ -276,6 +283,30 @@ Cross-field rules enforced in `config_loader.py` and
 
 `get_norm()` in `src/model/norm/factory.py` dispatches; `prms_norm` reuses
 `RMSNorm(partial_ratio=…)`, `flash_norm` uses `FlashNorm`.
+
+**QK normalization and attention-logit control** (`model.norm.qk_norm.*`,
+`src/model/norm/qk.py`) is orthogonal to `norm.type`: it stabilizes the
+pre-softmax scores `QKᵀ/√d` and is selected by `qk_norm.method`.
+
+| `method` | Mechanism | Params | Actuation point |
+|---|---|---|---|
+| `rms_norm` | per-head `q̂ = γ_q·q/√(mean(q²)+ε)` (same for `k`) | `γ_q, γ_k ∈ R^d_head` | forward, before dot product |
+| `layer_norm` | per-head LayerNorm with gain and bias | `γ, β` per q/k | forward |
+| `l2_norm` | weightless `q/‖q‖`, `k/‖k‖` | none | forward |
+| `qk_clip` | per head `γ_h = min(1, τ/S_max^h)`; `W_q ← γ_h^α W_q`, `W_k ← γ_h^(1-α) W_k` | none | after every optimizer step |
+| `quack` | `lr(W_q) = τ·η·‖W_k‖_init/‖W_k‖`, symmetric for `W_k` | none | before every optimizer step |
+
+References: arXiv:2010.04245 (QK-norm), arXiv:2606.16310 (QK-norm with MLA;
+this repo's MLA re-expands keys from the latent each step, so explicit QK-norm
+is exact for training and cached decode), arXiv:2507.20534 (QK-Clip/MuonClip),
+arXiv:2511.21377 (QuacK). The forward module is attached to each mixer that
+calls `attach_qk_norm`; the training-time methods are driven by
+`Trainer._qk_clip_active` / `Trainer._quack` around `optimizer.step()`.
+
+Because the latent cache re-expands every key from the stored latent,
+`cached_latent_attention` rotates the expanded key history from position 0
+(only queries carry the decode offset), which keeps full-vs-cached parity
+exact with QK normalization enabled.
 
 ### 7.3 Embeddings (`model.embedding.*`)
 
@@ -874,6 +905,14 @@ last. Every step below ends with the gates in §12.
    `tests/test_common_modules.py`.
 7. If the norm can be fused into a projection (FlashNorm pattern), wire it in
    `HybridLayer` and cover the fused path in `tests/test_hybrid_layer.py`.
+
+**QK normalization / logit control** is a separate axis (it does not add a
+`norm.type`). Adding a mixer to the supported set means: call
+`attach_qk_norm(self, config, head_dim)` in the mixer `__init__`, normalize
+`q`/`k` after the head split and before positional encoding, call
+`record_qk_max_logits(self, scores)` before softmax, and add the mixer name to
+`QK_NORM_MIXERS` (and `QK_CLIP_MIXERS` when it forms per-head logits) in
+`src/model/norm/qk.py`. Cover it in `tests/test_qk_norm.py`.
 
 ### 11.4 Add a positional encoding
 
