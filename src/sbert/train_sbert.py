@@ -1452,13 +1452,20 @@ class SBERTTrainer:
             train_objectives=[(train_dataloader, train_loss)],
             epochs=self.epochs,
             warmup_steps=self.warmup_steps,
-            evaluation_steps=self.evaluation_steps,
             output_path=self.output_dir,
             save_best_model=True,
             optimizer_params={'lr': self.learning_rate},
             use_amp=self.use_amp,
             show_progress_bar=True
         )
+        # sentence-transformers >= 4 maps `evaluation_steps` to
+        # TrainingArguments.eval_strategy=STEPS and then refuses to build the
+        # Trainer without an evaluator/eval_dataset, so the kwarg is only
+        # valid for the dataset types that actually build one
+        # (paired_similarity). Triplet/pair losses would otherwise crash at
+        # startup on every current sentence-transformers release.
+        if self.evaluator is not None:
+            fit_kwargs["evaluation_steps"] = self.evaluation_steps
         # Override optimizer if custom optimizer is specified
         if custom_optimizer_cls is not None:
             fit_kwargs["optimizer_params"] = custom_optimizer_kwargs

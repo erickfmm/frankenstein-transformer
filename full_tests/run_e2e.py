@@ -80,6 +80,12 @@ To resume from existing tmp/results directory (skip cleanup):
 
     uv run --extra cu118 --extra train python full_tests/run_e2e.py --resume
 
+To validate every generated config WITHOUT training anything (real config
+loader, dims invariants, SSOG grid vs max_length, optimizer parameter keys;
+exits non-zero on any invalid combo — run this before a multi-hour sweep):
+
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --dry-run
+
 To run the training and deploy combos with N parallel workers (default is 1,
 i.e. fully sequential):
 
@@ -103,7 +109,9 @@ Artifact retention is selected with ``--save-to`` (default ``disk``):
 * ``delete`` — each combo's run directory, models and data are deleted right
   after its pipeline finishes; only the results (metrics CSVs,
   ``inference.csv``, ``param_metrics.json``, ``results.json|md``) survive. The
-  whole scratch tree is dropped when the run ends.
+  whole scratch tree is dropped when the run ends. Combos whose pipeline
+  failed keep their artifacts unless ``--no-keep-failed`` is passed (default:
+  ``--keep-failed``, so failures can be reproduced).
 * ``memory`` — the run directory and deployed models live on a RAM-backed
   tmpfs (``/dev/shm/frankenstein-full-tests-<pid>``) and no harness artifact
   touches the disk; results still go to ``tmp/results/``. The tmpfs tree is
@@ -364,13 +372,19 @@ def _base_config(vocab_size: int, num_layers: int, num_loops: int) -> Tuple[dict
     return model, training
 
 
-def _ensure_ssog_grid(model: dict, training: dict) -> dict:
+def _ensure_ssog_grid(model: dict, training: dict, *, force: bool = False) -> dict:
     """Give ``ssog_attn`` layers a 1D grid matching the training ``max_length``.
 
     SSOG requires ``seq_len == grid_h * grid_w``. The toy MLM corpus is padded
     and truncated to exactly ``max_length`` tokens, so a degenerate
     ``1 x max_length`` grid fits the NLP runs (vision runs derive the patch
     grid automatically and must NOT call this).
+
+    With ``force=True`` an already-present auto-derived grid is *overwritten*
+    with the current ``max_length``. :func:`apply_realonall` raises
+    ``max_length`` from 32 to 64 after the config makers ran, so the plain
+    ``setdefault`` pass would leave a stale 1x32 grid behind and every SSOG
+    run would crash at the first forward.
     """
     pattern = model.get("dims", {}).get("layer_pattern", [])
     if "ssog_attn" not in pattern:
@@ -378,8 +392,10 @@ def _ensure_ssog_grid(model: dict, training: dict) -> dict:
     max_length = int(training.get("max_length", 32))
     attention = dict(model.get("attention") or {})
     ssog_block = dict(attention.get("ssog") or {})
-    ssog_block.setdefault("grid_h", 1)
-    ssog_block.setdefault("grid_w", max_length)
+    if force or "grid_h" not in ssog_block:
+        ssog_block["grid_h"] = 1
+    if force or "grid_w" not in ssog_block:
+        ssog_block["grid_w"] = max_length
     attention["ssog"] = ssog_block
     model = dict(model)
     model["attention"] = attention
@@ -430,7 +446,11 @@ def apply_realonall(combo_id: str, config: dict, real_text_dir: Optional[Path]) 
                 int(training.get("max_length", 0) or 0), REAL_TEXT_MAX_LENGTH
             )
         config["training"] = training
-        config["model"] = _ensure_ssog_grid(config.get("model") or {}, training)
+        # max_length may have just grown (32 -> 64): re-sync the SSOG grid so
+        # grid_h * grid_w still equals the padded sequence length.
+        config["model"] = _ensure_ssog_grid(
+            config.get("model") or {}, training, force=True
+        )
         logging.debug(
             "realonall: %s -> text data (%s)",
             combo_id,
@@ -595,7 +615,14 @@ def apply_global_overrides(
 
 
 def _with_optimizer(training: dict, optimizer_class: str) -> dict:
-    """Build a minimal per-group parameter block for the given optimizer class."""
+    """Build a minimal per-group parameter block for the given optimizer class.
+
+    The generated keys are filtered against the factory's
+    ``OPTIMIZER_ALLOWED_KEYS`` (the same source of truth the CLI enforces), so
+    an unsupported key can never turn into a run failure — e.g. ``rank`` is
+    valid for ``apollo``/``q_apollo`` but not for ``apollo_mini``, which is
+    rank-1 by construction.
+    """
     prefix = f"{optimizer_class}-"
     params: Dict[str, Any] = {
         f"{prefix}lr_embeddings": 1e-4,
@@ -641,6 +668,30 @@ def _with_optimizer(training: dict, optimizer_class: str) -> dict:
         params[f"{prefix}update_proj_gap"] = 50
         params[f"{prefix}scale"] = 1.0
         params[f"{prefix}proj_type"] = "std"
+
+    # Drop keys this optimizer family does not accept (e.g. `rank` for
+    # apollo_mini). The factory is the contract; an unknown key would fail
+    # the whole training run with `ValueError: Unknown parameters`.
+    try:
+        from src.model.optimizer.factory import OPTIMIZER_ALLOWED_KEYS
+
+        allowed = OPTIMIZER_ALLOWED_KEYS.get(optimizer_class)
+        if allowed is not None:
+            dropped = [
+                key for key in params if key[len(prefix):] not in allowed
+            ]
+            for key in dropped:
+                params.pop(key)
+            if dropped:
+                logging.debug(
+                    "opt %s: dropped unsupported parameters %s",
+                    optimizer_class,
+                    [key[len(prefix):] for key in dropped],
+                )
+    except Exception as exc:  # noqa: BLE001
+        logging.debug(
+            "Could not validate optimizer keys for %s: %s", optimizer_class, exc
+        )
 
     training = training.copy()
     training["optimizer"] = {
@@ -1414,6 +1465,114 @@ def _combo_vocab_size(combo_id: str, fallback: int) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Pre-flight validation (fail fast before hours of training)
+# ---------------------------------------------------------------------------
+def validate_combos(combos: List[Tuple[str, dict]], *, deep: bool = True) -> List[str]:
+    """Statically validate every generated combo before launching training.
+
+    Catches the config classes of bugs that cost experiment 2 ~14h of wasted
+    runs (a stale SSOG grid after ``--realonall`` raised ``max_length``, and
+    optimizer keys the factory rejects), without building any model. Checks
+    per combo:
+
+    * dict level: ``dims`` invariants (``hidden_size % num_heads == 0``,
+      non-empty ``layer_pattern`` — it is tiled to ``num_layers`` when
+      shorter —, ``num_kv_heads`` divides ``num_heads``), ``ssog_attn`` grid
+      equals ``training.max_length`` (text
+      model classes only; ViT derives it), and every
+      ``<optimizer>-<param>`` key is accepted by the factory's
+      ``OPTIMIZER_ALLOWED_KEYS``;
+    * loader level (``deep=True``): the config is written to
+      ``tmp/preflight/<combo>.yaml`` and run through the real
+      :func:`src.training.config_loader.load_training_config` — the exact
+      validation the CLI performs before training (enums, task/model-class
+      rules, tokenizer blocks, flattening of the harness' flat model keys).
+
+    Args:
+        combos: List of ``(combo_id, config)`` pairs as built by ``main``.
+        deep: Also run the config-loader validation (imports torch).
+
+    Returns:
+        List of human-readable error strings (empty when everything passes).
+    """
+    errors: List[str] = []
+
+    try:
+        from src.model.optimizer.factory import (
+            OPTIMIZER_ALLOWED_KEYS as _ALLOWED,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Optimizer key validation unavailable: %s", exc)
+        _ALLOWED = {}
+
+    load_training_config = None
+    if deep:
+        try:
+            from src.training.config_loader import load_training_config
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("Config-loader validation unavailable: %s", exc)
+
+    for combo_id, config in combos:
+        dims = (config.get("model") or {}).get("dims") or {}
+        hidden = int(dims.get("hidden_size") or 0)
+        heads = int(dims.get("num_heads") or 0)
+        pattern = dims.get("layer_pattern") or []
+        num_layers = int(dims.get("num_layers") or 0)
+        if hidden and heads and hidden % heads != 0:
+            errors.append(f"{combo_id}: hidden_size {hidden} % num_heads {heads} != 0")
+        if num_layers and not pattern:
+            # The pattern is tiled (i % len) when shorter than num_layers, but
+            # an empty pattern has nothing to tile.
+            errors.append(f"{combo_id}: layer_pattern is empty")
+        kv_heads = dims.get("num_kv_heads")
+        if kv_heads and heads and heads % int(kv_heads) != 0:
+            errors.append(
+                f"{combo_id}: num_kv_heads {kv_heads} does not divide num_heads {heads}"
+            )
+
+        model_class = str(config.get("model_class") or "").strip().lower()
+        training = config.get("training") or {}
+        if model_class in TEXT_MODEL_CLASSES and "ssog_attn" in pattern:
+            ssog = ((config.get("model") or {}).get("attention") or {}).get("ssog") or {}
+            grid = int(ssog.get("grid_h") or 0) * int(ssog.get("grid_w") or 0)
+            max_length = int(training.get("max_length") or 32)
+            if grid != max_length:
+                errors.append(
+                    f"{combo_id}: ssog grid {ssog.get('grid_h')}x{ssog.get('grid_w')} "
+                    f"({grid} tokens) != training.max_length ({max_length})"
+                )
+
+        optimizer = training.get("optimizer") or {}
+        optimizer_class = str(optimizer.get("optimizer_class") or "")
+        allowed = _ALLOWED.get(optimizer_class)
+        if optimizer_class and allowed is not None:
+            prefix = f"{optimizer_class}-"
+            unknown = [
+                key
+                for key in (optimizer.get("parameters") or {})
+                if key.startswith(prefix) and key[len(prefix):] not in allowed
+            ]
+            if unknown:
+                errors.append(f"{combo_id}: optimizer {optimizer_class} rejects {unknown}")
+
+        if load_training_config is not None:
+            try:
+                preflight_dir = helpers.TMP_DIR / "preflight"
+                preflight_dir.mkdir(parents=True, exist_ok=True)
+                yaml_path = helpers.write_yaml(
+                    config, preflight_dir / f"{combo_id}.yaml"
+                )
+                load_training_config(str(yaml_path))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(
+                    f"{combo_id}: load_training_config failed: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # CLI / main
 # ---------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
@@ -1607,6 +1766,28 @@ def build_parser() -> argparse.ArgumentParser:
             "results/inference.csv (default: 4)."
         ),
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Build every combo, apply --realonall/global overrides and "
+            "validate the configs (real config loader, dims invariants, "
+            "SSOG grid vs max_length, optimizer parameter keys) WITHOUT "
+            "training, deploying or exporting anything. Exits non-zero if "
+            "any combo is invalid. Run this before any multi-hour sweep."
+        ),
+    )
+    parser.add_argument(
+        "--keep-failed",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Keep a combo's scratch artifacts (run dir, checkpoints, models, "
+            "data) when any of its stages fails, even under --save-to "
+            "delete|memory, so failures can be reproduced (default: on). "
+            "Pass --no-keep-failed to restore the strict cleanup contract."
+        ),
+    )
     return parser
 
 
@@ -1790,6 +1971,30 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.limit is not None:
         combos = combos[: args.limit]
 
+    # Pre-flight: fail fast on invalid configs instead of burning hours of
+    # training on combos that crash at build time (experiment 2 lost 164 runs
+    # to exactly this class of error).
+    validation_errors = validate_combos(combos)
+    if validation_errors:
+        for error in validation_errors[:20]:
+            logging.error("preflight: %s", error)
+        if len(validation_errors) > 20:
+            logging.error("preflight: ... and %d more", len(validation_errors) - 20)
+    if args.dry_run:
+        logging.info(
+            "Dry run complete: %d combos validated, %d error(s)",
+            len(combos),
+            len(validation_errors),
+        )
+        return 2 if validation_errors else 0
+    if validation_errors:
+        logging.error(
+            "Aborting: %d combo config(s) failed pre-flight validation. "
+            "Fix them (or run with --dry-run to inspect) before a long sweep.",
+            len(validation_errors),
+        )
+        return 2
+
     logging.info("Planning to run %d training combos", len(combos))
     logging.debug("Category=%s limit=%s skip_attn_pairs=%s skip_singles=%s skip_deploy=%s",
                   args.category, args.limit, args.skip_attn_pairs, args.skip_singles, args.skip_deploy)
@@ -1906,6 +2111,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 fmt=fmt,
                 timeout=timeout_secs,
                 device=args.device,
+                task=task,
             )
             produced.append(deploy_result)
             logging.info(
@@ -2040,7 +2246,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             rows.extend(eval_rows)
 
         if args.save_to in {"delete", "memory"}:
-            helpers.cleanup_combo_artifacts(combo_id)
+            combo_failed = any(result.status != "OK" for result in produced)
+            if combo_failed and args.keep_failed:
+                logging.warning(
+                    "%s: keeping scratch artifacts for post-mortem "
+                    "(--save-to %s, --keep-failed on)",
+                    combo_id,
+                    args.save_to,
+                )
+            else:
+                helpers.cleanup_combo_artifacts(combo_id)
 
         return produced, rows, param_counts
 
@@ -2184,7 +2399,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                 timeout=timeout_secs,
             ))
         if args.save_to in {"delete", "memory"}:
-            helpers.cleanup_combo_artifacts(bitnet_id)
+            if any(result.status != "OK" for result in produced) and args.keep_failed:
+                logging.warning(
+                    "%s: keeping scratch artifacts for post-mortem "
+                    "(--save-to %s, --keep-failed on)",
+                    bitnet_id,
+                    args.save_to,
+                )
+            else:
+                helpers.cleanup_combo_artifacts(bitnet_id)
         persist_pipeline(bitnet_id, produced, [], bitnet_counts)
         log_pipeline_result(bitnet_id, produced)
 

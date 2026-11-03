@@ -12,7 +12,11 @@ requires-python = ">=3.10"  # CI matrix: 3.10/3.11/3.12; DashAI uv tool: 3.12. U
 dependencies = [
     "torch>=2.0",                              # unpinned: DashAI/CI bring their own (cpu/cuda) torch
     "transformers>=4.45.0,<6.0.0",             # 4.45+ baseline; <6 co-installs with dashai's transformers 5 / hub 1.x / diffusers 0.40 stack
-    "datasets>=3.0.0",                         # HuggingFace streaming dataset for MLM + SBERT
+    # <4: datasets>=4 dropped soundfile and requires torchcodec for every
+    # Audio encode/decode (breaks real-audio training on torch builds with no
+    # matching torchcodec wheel). Keep the soundfile backend; add soundfile
+    # via the `train` extra when training on audio.
+    "datasets>=3.0.0,<4.0.0",                  # HuggingFace streaming dataset for MLM + SBERT
     "tqdm>=4.66.0",
     "numpy>=1.26.0,<3.0",                      # last 1.x series (still Py 3.9 friendly); transformers caps it
     "psutil>=5.9.0",                           # optional — startup disk-usage log in training main
@@ -50,6 +54,10 @@ sbert = [
     "sentence-transformers>=5.2.0; python_version >= '3.10'",
     "sentence-transformers>=3.3.0,<5.2.0; python_version < '3.10'",
     "sentencepiece>=0.2.0",                    # Spanish SPM tokenizer (spm_spa_redpajama35)
+    # SentenceTransformer.fit() drives HF Trainer, which refuses to start
+    # without accelerate (ImportError: Using the `Trainer` with `PyTorch`
+    # requires `accelerate>=0.26.0`).
+    "accelerate>=0.26.0",
 ]
 # Streamlit web builder:                      pip install -e ".[web]"
 web = [
@@ -67,6 +75,9 @@ train = [
     "sentence-transformers>=3.3.0,<5.2.0; python_version < '3.10'",
     "sentencepiece>=0.2.0",
     "streamlit>=1.39.0",
+    "accelerate>=0.26.0",                      # SBERT Trainer backend
+    "soundfile>=0.12.1",                       # datasets<4 Audio decode (wav/flac)
+    "librosa>=0.11.0",                         # datasets<4 Audio decode (mp3/opus/ogg...)
 ]
 
 # Dev/test tooling (uv dependency-groups, PEP 735). Synced by default — no

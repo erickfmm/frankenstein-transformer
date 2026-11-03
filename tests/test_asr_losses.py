@@ -155,6 +155,42 @@ class TestRnntLoss:
                 backend="warp",
             )
 
+    def test_asr_sized_batch_completes_quickly(self):
+        """Regression: the scalar (t, u) DP could not finish ONE real batch.
+
+        Experiment 2's follow-up verification showed a single transducer
+        batch (~250 frames x ~100 labels x 16 samples) exceeding the
+        harness' 900 s timeout with zero optimizer steps, because the DP ran
+        a Python loop over every cell with two ``.item()`` syncs each. The
+        vectorized-over-u DP must complete the same shape in seconds.
+        """
+        import time
+
+        generator = torch.Generator().manual_seed(13)
+        batch, frames, labels, vocab = 4, 250, 100, 32
+        logits = torch.randn(
+            batch, frames, labels + 1, vocab, generator=generator,
+            requires_grad=True,
+        )
+        targets = torch.randint(1, vocab, (batch, labels), generator=generator)
+        input_lengths = torch.tensor([frames] * batch)
+        target_lengths = torch.tensor([labels] * batch)
+
+        start = time.perf_counter()
+        loss = rnnt_loss(
+            logits, targets, input_lengths, target_lengths,
+            backend="torch",
+        )
+        loss.backward()
+        elapsed = time.perf_counter() - start
+
+        assert torch.isfinite(loss)
+        assert logits.grad is not None
+        assert torch.isfinite(logits.grad).all()
+        assert float(logits.grad.abs().sum()) > 0.0
+        # CI CPUs vary; 60 s is still ~15x faster than one old-style batch.
+        assert elapsed < 60.0, f"rnnt_loss took {elapsed:.1f}s"
+
 
 class TestCtcGreedyDecode:
     @staticmethod

@@ -69,6 +69,7 @@ class ModelDeployer:
         config: FrankensteinModelConfig,
         device: str = "cpu",
         inference_config=None,
+        task: Optional[str] = None,
     ):
         """Initialize the deployer.
 
@@ -78,11 +79,20 @@ class ModelDeployer:
             inference_config: Optional resolved
                 :class:`~src.deploy.inference_config.InferenceConfig` to
                 embed in the artifacts.
+            task: Optional training task name (``mlm``, ``causal_lm``,
+                ``text_classification``, ``classification``,
+                ``patch_prediction``, ``segmentation``, ``asr``,
+                ``audio_classification``). Used by
+                :meth:`validate_deployment` to build a task-appropriate
+                forward-pass input; when ``None`` the task recorded in the
+                checkpoint (``training_task``) is used, falling back to a
+                per-model-class default.
         """
         self.config = config
         self.device = device
         self.model = None
         self.inference_config = inference_config
+        self.task = str(task).strip().lower() if task else None
 
     @staticmethod
     def _build_model(config: FrankensteinModelConfig) -> "FrankensteinEncoder":
@@ -130,6 +140,10 @@ class ModelDeployer:
         logger.info(f"Loading training checkpoint: {checkpoint_path}")
         
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        
+        # Record the training task so validation can exercise the right head.
+        if self.task is None and checkpoint.get('training_task'):
+            self.task = str(checkpoint['training_task']).strip().lower()
         
         # Extract config if saved with checkpoint
         if 'config' in checkpoint:
@@ -264,6 +278,7 @@ class ModelDeployer:
         info = {
             'format': save_format,
             'model_class': self.model.__class__.__name__,
+            'training_task': self.task,
             'config_file': 'config.json',
             'model_file': model_path.name,
             'use_bitnet': use_bitnet,
@@ -282,6 +297,65 @@ class ModelDeployer:
         logger.info(f"   - {model_path.name}")
         logger.info(f"   - deployment_info.json")
     
+    def _build_validation_input(self):
+        """Build a forward-pass input for the deployed model class and task.
+
+        Dispatches on the model class recorded in the config:
+
+        * ``frankenstein_vit`` — float pixel values ``(2, C, H, W)`` and the
+          configured task (default ``classification``; every ViT builds all
+          three heads).
+        * ``frankenstein_audio`` — a waveform: ``(2, T, C)`` for
+          ``feature: raw`` multichannel signals, ``(2, T)`` for mel/STFT
+          frontends; the transducer ASR path additionally gets dummy
+          ``target_ids``.
+        * anything else (text encoder/decoder) — token ids ``(2, 64)``.
+
+        Returns:
+            Tuple ``(input_tensor, forward_kwargs)``.
+        """
+        cfg = self.config
+        model_class = str(getattr(cfg, "model_class", None) or "").strip().lower()
+        task = self.task or ""
+
+        if model_class == "frankenstein_vit":
+            pixels = torch.rand(
+                2,
+                int(getattr(cfg, "in_channels", 3)),
+                int(getattr(cfg, "image_height", 224)),
+                int(getattr(cfg, "image_width", 224)),
+                device=self.device,
+            )
+            vit_task = task if task in ("classification", "patch_prediction", "segmentation") else "classification"
+            return pixels, {"task": vit_task}
+
+        if model_class == "frankenstein_audio":
+            length = int(getattr(cfg, "audio_sample_rate", 16000))
+            if str(getattr(cfg, "audio_feature", "logmel")).lower() == "raw":
+                waveform = torch.randn(
+                    2, length, int(getattr(cfg, "audio_in_channels", 1)),
+                    device=self.device,
+                )
+            else:
+                waveform = torch.randn(2, length, device=self.device)
+            audio_task = task if task in ("asr", "audio_classification", "mlm") else "audio_classification"
+            kwargs = {"task": audio_task}
+            if audio_task == "asr" and str(getattr(cfg, "asr_loss", "ctc")).lower() == "transducer":
+                kwargs["target_ids"] = torch.zeros((2, 4), dtype=torch.long, device=self.device)
+            return waveform, kwargs
+
+        # Text encoder/decoder: token ids. SSOG requires seq_len == grid_h *
+        # grid_w, so honor the configured raster instead of the default 64.
+        seq_len = 64
+        if "ssog_attn" in (getattr(cfg, "layer_pattern", None) or []):
+            seq_len = int(getattr(cfg, "ssog_grid_h", 1)) * int(
+                getattr(cfg, "ssog_grid_w", seq_len)
+            )
+        ids = torch.randint(
+            0, max(2, int(cfg.vocab_size)), (2, seq_len), device=self.device
+        )
+        return ids, {}
+
     def validate_deployment(self, deployment_dir: str) -> bool:
         """
         Validate that deployed model can be loaded and used.
@@ -327,15 +401,13 @@ class ModelDeployer:
             logger.info("Testing forward pass...")
             model.eval()
             with torch.no_grad():
-                if str(getattr(config, "model_class", "") or "").lower() == "frankenstein_audio":
-                    test_input = torch.randn(
-                        2, int(config.audio_sample_rate), device=self.device
-                    )
-                    output = model(test_input, task="audio_classification")
+                test_input, forward_kwargs = self._build_validation_input()
+                output = model(test_input, **forward_kwargs)
+                if isinstance(output, dict):
+                    # Transducer ASR returns {encoder, decoder, joint}.
+                    logger.info(f"Output keys: {sorted(output)}")
                 else:
-                    test_input = torch.randint(0, config.vocab_size, (2, 64), device=self.device)
-                    output = model(test_input)
-                logger.info(f"Output shape: {output.shape}")
+                    logger.info(f"Output shape: {output.shape}")
             
             logger.info("✅ Validation successful")
             return True
@@ -381,6 +453,22 @@ def main(argv=None):
         help='Optional: Path to config JSON (if not in checkpoint)'
     )
     parser.add_argument(
+        '--task',
+        type=str,
+        default=None,
+        choices=[
+            'mlm', 'causal_lm', 'text_classification',
+            'classification', 'patch_prediction', 'segmentation',
+            'asr', 'audio_classification',
+        ],
+        help=(
+            'Optional: training task used by --validate to build a '
+            'task-appropriate forward-pass input. Defaults to the task '
+            "recorded in the checkpoint ('training_task'), then to a "
+            'per-model-class default.'
+        )
+    )
+    parser.add_argument(
         '--device',
         type=str,
         choices=SUPPORTED_DEVICE_CHOICES,
@@ -402,7 +490,7 @@ def main(argv=None):
         config = FrankensteinModelConfig()
     
     # Create deployer
-    deployer = ModelDeployer(config, device=resolved_device)
+    deployer = ModelDeployer(config, device=resolved_device, task=args.task)
     
     # Load training checkpoint
     deployer.load_training_checkpoint(args.checkpoint)

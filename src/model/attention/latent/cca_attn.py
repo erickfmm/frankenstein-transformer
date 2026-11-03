@@ -48,6 +48,7 @@ Reference:
 
 from __future__ import annotations
 
+import copy
 import math
 from typing import Optional
 
@@ -57,6 +58,70 @@ import torch.nn.functional as F
 from ...numerics import module_softmax
 
 from ..common import BitLinear, apply_pe_to_qk, apply_pe_to_scores
+
+#: PE types whose q/k rotation depends on the per-head dimension and is
+#: therefore applied through a latent-sized encoder in CCA/CCGQA.
+_ROTARY_PE_TYPES = frozenset({"rope", "hope", "sinusoidal_rotary"})
+
+#: PE types that augment q/k from the full-width hidden state and cannot be
+#: expressed inside the compressed latent.
+_UNSUPPORTED_LATENT_PE_TYPES = frozenset({"pape", "pape_efficient", "pape_ri"})
+
+
+def _build_latent_pos_encoder(
+    config,
+    latent_head_dim: int,
+    num_heads: int,
+    use_pe: bool,
+) -> Optional[nn.Module]:
+    """Build a positional encoder sized for the compressed latent space.
+
+    CCA/CCGQA apply rotary PEs directly inside the compressed latent, whose
+    per-head dimension (``latent_rank / num_heads``) differs from the
+    model-wide ``hidden_size / num_heads`` the shared encoder is built for.
+    Feeding latent q/k through the shared encoder rotates the wrong number of
+    dimension pairs (e.g. ``pair_dim=6`` against a latent head of width 3).
+    This helper rebuilds the rotary PE at the latent head width. RoPE, HoPE
+    and SinusoidalRotary hold no persistent buffers or parameters, so the
+    state dict is unchanged; SSMax is disabled on the local copy because the
+    transversal rescale keeps flowing through the shared encoder in
+    :func:`apply_pe_to_scores`.
+
+    Args:
+        config: Model configuration (base/damping/max-len keys preserved).
+        latent_head_dim: Per-head latent dimensionality ``d_h``.
+        num_heads: Number of latent heads (the model's ``num_heads``).
+        use_pe: Whether the mixer consumes the positional encoding at all.
+
+    Returns:
+        The latent-sized PE module, or ``None`` when the PE type needs no q/k
+        rotation (``alibi``/``bam``/``none``/... inject via score biases) or
+        the mixer has PE disabled.
+
+    Raises:
+        ValueError: For PaPE-family encodings, whose content-dependent q/k
+            augmentation is defined on the full-width hidden state and cannot
+            be expressed in the compressed latent.
+    """
+    if not use_pe:
+        return None
+    pe_type = str(getattr(config, "positional_encoding", "rope") or "rope").lower()
+    if pe_type in _UNSUPPORTED_LATENT_PE_TYPES:
+        raise ValueError(
+            f"positional_encoding={pe_type!r} is not supported with cca_attn / "
+            "ccgqa_attn: PaPE augments q/k from the full-width hidden state, "
+            "but CCA/CCGQA attend inside a compressed latent. Use rope, hope, "
+            "sinusoidal_rotary, alibi, bam, nope or none, or disable the PE "
+            "for these layers (cca_attn_use_pe / ccgqa_attn_use_pe)."
+        )
+    if pe_type not in _ROTARY_PE_TYPES:
+        return None
+    proxy = copy.copy(config)
+    proxy.hidden_size = max(1, int(latent_head_dim) * int(num_heads))
+    proxy.use_ssmax = False
+    from ...embeddings.factory import build_pos_encoder
+
+    return build_pos_encoder(proxy)
 
 
 def _apply_causal_convs(
@@ -169,13 +234,23 @@ class CCAAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for CCAAttention")
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "cca_attn_use_pe", True))
 
         self.latent_dim = int(getattr(config, "cca_latent_rank", max(1, self.hidden_size // 4)))
         if self.latent_dim % self.num_heads != 0:
-            raise ValueError("cca_latent_rank must be divisible by num_heads for CCAAttention")
+            raise ValueError(
+                "cca_latent_rank must be divisible by num_heads for CCAAttention "
+                f"(got {self.latent_dim} with num_heads={self.num_heads})"
+            )
         self.latent_head_dim = self.latent_dim // self.num_heads
-        if self.latent_head_dim % 2 != 0:
-            raise ValueError("cca_latent_rank / num_heads must be even for RoPE (got odd latent_head_dim)")
+        if self.use_pe and self.pe_type in _ROTARY_PE_TYPES and self.latent_head_dim % 2 != 0:
+            raise ValueError(
+                "cca_latent_rank / num_heads must be even for rotary positional "
+                f"encodings; got {self.latent_head_dim}. Set attention.cca.latent_rank "
+                f"to a multiple of {2 * self.num_heads} (or use a non-rotary "
+                "positional_encoding, or disable it with cca_attn_use_pe)."
+            )
 
         self.num_conv_layers = int(getattr(config, "cca_num_conv_layers", 2))
         if self.num_conv_layers not in (0, 1, 2):
@@ -186,8 +261,9 @@ class CCAAttention(nn.Module):
         self.qk_mean = bool(getattr(config, "cca_qk_mean", True))
         self.value_shift = bool(getattr(config, "cca_value_shift", True))
         if self.value_shift:
-            if self.num_heads % 2 != 0:
-                raise ValueError("cca_value_shift requires num_heads to be even")
+            # Value-shift halves the latent WIDTH (val_proj1/2 -> latent/2),
+            # so only the latent rank must be even; the number of heads is
+            # irrelevant to the split.
             if self.latent_dim % 2 != 0:
                 raise ValueError("cca_value_shift requires cca_latent_rank to be even")
 
@@ -228,8 +304,11 @@ class CCAAttention(nn.Module):
         self.mode = getattr(config, "mode", "encoder")
         self.scale = self.latent_head_dim ** -0.5
         self.pos_encoder = pos_encoder
-        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "cca_attn_use_pe", True))
+        # Rotary PEs rotate q/k inside the latent, so they need an encoder
+        # sized to latent_head_dim (see _build_latent_pos_encoder).
+        self.latent_pe = _build_latent_pos_encoder(
+            config, self.latent_head_dim, self.num_heads, self.use_pe
+        )
 
     def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute Compressed Convolutional Attention.
@@ -295,8 +374,11 @@ class CCAAttention(nn.Module):
         q = q * (sqrt_dh / q_norm)
         k = k * (sqrt_dh / k_norm) * torch.exp(self.temp)
 
-        # ---- RoPE applied directly in the latent ----
-        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+        # ---- RoPE applied directly in the latent (latent-sized encoder) ----
+        q, k = apply_pe_to_qk(
+            self.latent_pe if self.latent_pe is not None else pe,
+            self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe,
+        )
 
         # ---- Standard softmax attention ----
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
@@ -422,8 +504,15 @@ class CCGQAAttention(nn.Module):
                 "ccgqa_kv_latent_rank / ccgqa_num_kv_heads"
             )
         self.latent_head_dim = q_dh
-        if self.latent_head_dim % 2 != 0:
-            raise ValueError("latent_head_dim must be even for RoPE (got odd)")
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "ccgqa_attn_use_pe", True))
+        if self.use_pe and self.pe_type in _ROTARY_PE_TYPES and self.latent_head_dim % 2 != 0:
+            raise ValueError(
+                "latent_head_dim must be even for rotary positional encodings "
+                f"(got {self.latent_head_dim}). Set ccgqa_query_latent_rank to a "
+                f"multiple of {2 * self.num_heads} (or use a non-rotary "
+                "positional_encoding, or disable it with ccgqa_attn_use_pe)."
+            )
 
         self.num_conv_layers = int(getattr(config, "ccgqa_num_conv_layers", 2))
         if self.num_conv_layers not in (0, 1, 2):
@@ -434,8 +523,8 @@ class CCGQAAttention(nn.Module):
         self.qk_mean = bool(getattr(config, "ccgqa_qk_mean", True))
         self.value_shift = bool(getattr(config, "ccgqa_value_shift", True))
         if self.value_shift:
-            if self.num_kv_heads % 2 != 0:
-                raise ValueError("ccgqa_value_shift requires ccgqa_num_kv_heads to be even")
+            # Value-shift halves the KV latent WIDTH, so only the KV latent
+            # rank must be even; the number of KV heads is irrelevant.
             if self.kv_latent_dim % 2 != 0:
                 raise ValueError("ccgqa_value_shift requires ccgqa_kv_latent_rank to be even")
 
@@ -479,8 +568,11 @@ class CCGQAAttention(nn.Module):
         self.mode = getattr(config, "mode", "encoder")
         self.scale = self.latent_head_dim ** -0.5
         self.pos_encoder = pos_encoder
-        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "ccgqa_attn_use_pe", True))
+        # Rotary PEs rotate q/k inside the latent, so they need an encoder
+        # sized to latent_head_dim (see _build_latent_pos_encoder).
+        self.latent_pe = _build_latent_pos_encoder(
+            config, self.latent_head_dim, self.num_heads, self.use_pe
+        )
 
     def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None) -> torch.Tensor:
         """Compute Compressed Convolutional Grouped Query Attention.
@@ -555,8 +647,11 @@ class CCGQAAttention(nn.Module):
         q = q * (sqrt_dh / q_norm)
         k = k * (sqrt_dh / k_norm) * torch.exp(self.temp)
 
-        # ---- RoPE applied directly in the latent ----
-        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+        # ---- RoPE applied directly in the latent (latent-sized encoder) ----
+        q, k = apply_pe_to_qk(
+            self.latent_pe if self.latent_pe is not None else pe,
+            self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe,
+        )
 
         # ---- Standard softmax attention ----
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale

@@ -341,21 +341,51 @@ class AudioDataset(Dataset):
             self.tokenizer = CharacterTokenizer(texts)
 
     def _load_items(self) -> None:
-        """Load the dataset rows via ``datasets`` (hub id or saved dir)."""
+        """Load the dataset rows via ``datasets`` (hub id or saved dir).
+
+        Raises:
+            ImportError: With an actionable message when the installed
+                ``datasets`` needs ``torchcodec`` to encode/decode the audio
+                column and it is missing (datasets>=4). Install ``soundfile``
+                and pin ``datasets<4`` (see ``requirements.txt``), or install
+                a torch build with a matching ``torchcodec`` wheel.
+        """
         from datasets import load_dataset, load_from_disk
 
-        if self.dataset_name:
-            loaded = load_dataset(self.dataset_name, split=self.split)
-        else:
-            loaded = load_from_disk(self.dataset_dir)
-            if hasattr(loaded, "column_names") and isinstance(
-                loaded.column_names, dict
-            ):
-                # A DatasetDict: pick the requested split (or the first one).
-                key = self.split if self.split in loaded else next(iter(loaded))
-                loaded = loaded[key]
-        for row in loaded:
-            self.items.append(dict(row))
+        def _mentions_torchcodec(exc: BaseException) -> bool:
+            seen = set()
+            cause = exc
+            while cause is not None and id(cause) not in seen:
+                seen.add(id(cause))
+                if "torchcodec" in str(cause).lower():
+                    return True
+                cause = cause.__cause__ or cause.__context__
+            return False
+
+        try:
+            if self.dataset_name:
+                loaded = load_dataset(self.dataset_name, split=self.split)
+            else:
+                loaded = load_from_disk(self.dataset_dir)
+                if hasattr(loaded, "column_names") and isinstance(
+                    loaded.column_names, dict
+                ):
+                    # A DatasetDict: pick the requested split (or the first).
+                    key = self.split if self.split in loaded else next(iter(loaded))
+                    loaded = loaded[key]
+            for row in loaded:
+                self.items.append(dict(row))
+        except Exception as exc:  # noqa: BLE001
+            if _mentions_torchcodec(exc):
+                raise ImportError(
+                    f"Dataset {self.dataset_name or self.dataset_dir!r} has an "
+                    "audio column, but the installed `datasets` needs "
+                    "`torchcodec` to encode/decode it and it is not available. "
+                    "Either pin `datasets>=3.0,<4` and `pip install soundfile` "
+                    "(recommended, see requirements.txt), or `pip install "
+                    "torchcodec` matching your torch build."
+                ) from exc
+            raise
 
     def __len__(self) -> int:
         """Number of examples."""

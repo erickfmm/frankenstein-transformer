@@ -2215,9 +2215,10 @@ class TitanTrainer:
             'scaler_state_dict': self.scaler.state_dict(),
             'config': self.config,
             'best_loss': self.best_loss,
-            'model_class': self.model.__class__.__name__
+            'model_class': self.model.__class__.__name__,
+            'training_task': self.task,
         }
-        
+
         torch.save(checkpoint, checkpoint_path)
         logging.info(f"💾 Rolling checkpoint saved: {checkpoint_path}")
         
@@ -2262,7 +2263,8 @@ class TitanTrainer:
                 'scaler_state_dict': self.scaler.state_dict(),
                 'config': self.config,
                 'best_loss': current_loss,
-                'model_class': self.model.__class__.__name__
+                'model_class': self.model.__class__.__name__,
+                'training_task': self.task,
             }
             
             torch.save(checkpoint, checkpoint_path)
@@ -2318,9 +2320,10 @@ class TitanTrainer:
             'scaler_state_dict': self.scaler.state_dict(),
             'config': self.config,
             'best_loss': self.best_loss,
-            'model_class': self.model.__class__.__name__
+            'model_class': self.model.__class__.__name__,
+            'training_task': self.task,
         }
-        
+
         filename = f"titan_checkpoint_epoch_{epoch}{suffix}.pt"
         checkpoint_path = os.path.join(path, filename)
         

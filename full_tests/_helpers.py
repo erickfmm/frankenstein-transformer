@@ -139,6 +139,27 @@ class RunResult:
         return {k: v for k, v in dataclasses.asdict(self).items()}
 
 
+def _as_text(value) -> str:
+    """Coerce captured subprocess output to ``str``.
+
+    ``subprocess.TimeoutExpired.stdout`` is delivered as raw ``bytes`` even
+    under ``text=True`` (the partial output is captured before decoding), and
+    a ``bytes`` payload inside :class:`RunResult` later crashes
+    ``json.dumps`` in :func:`write_results`.
+
+    Args:
+        value: Captured output (``str``, ``bytes`` or ``None``).
+
+    Returns:
+        The decoded text; undecodable bytes become U+FFFD.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
 # ---------------------------------------------------------------------------
 # Environment detection
 # ---------------------------------------------------------------------------
@@ -155,7 +176,7 @@ def _run_silent(cmd: Sequence[str], cwd: Optional[Path] = None, env: Optional[di
         )
         return proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired as exc:
-        return -1, exc.stdout or "", exc.stderr or ""
+        return -1, _as_text(exc.stdout), _as_text(exc.stderr)
     except Exception as exc:
         return -2, "", str(exc)
 
@@ -197,7 +218,14 @@ def resolve_runner() -> Tuple[List[str], dict]:
     if venv_python.exists():
         rc, _, _ = _run_silent([str(venv_python), "-m", "src.cli", "--help"], env=env_module)
         if rc == 0:
-            logging.info("Using runner: .venv python -m src.cli")
+            logging.warning(
+                "Using runner: .venv python -m src.cli — the uv extras "
+                "(--extra cpu|cuXXX --extra train) are NOT guaranteed in this "
+                "environment. Experiment 2 silently trained without the "
+                "`train` extra (no accelerate/soundfile/librosa) because of "
+                "this fallback; prefer `uv run --extra <torch> --extra train "
+                "python full_tests/run_e2e.py` or sync the venv first."
+            )
             return [str(venv_python), "-m", "src.cli"], env_extra
 
     # 4) current interpreter
@@ -698,7 +726,7 @@ def run_training(
         output = proc.stdout or ""
         duration = time.time() - start
     except subprocess.TimeoutExpired as exc:
-        output = exc.stdout or ""
+        output = _as_text(exc.stdout)
         duration = time.time() - start
         return RunResult(
             category="training",
@@ -837,13 +865,27 @@ def run_deploy(
     fmt: str = "standard",
     timeout: Optional[int] = 300,
     device: str = "cpu",
+    task: Optional[str] = None,
 ) -> RunResult:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
-    env["PYTHONPATH"] = str(TMP_DIR) + os.pathsep + str(PROJECT_ROOT)
-    if os.environ.get("PYTHONPATH"):
-        env["PYTHONPATH"] += os.pathsep + os.environ["PYTHONPATH"]
+    """Deploy a checkpoint via the CLI with post-deploy validation.
 
+    Args:
+        checkpoint_path: Training checkpoint to convert.
+        output_dir: Destination for the deployment artifacts.
+        combo_id: Unique combo id (used in result rows).
+        runner: CLI command prefix.
+        env_extra: Extra environment variables for the subprocess.
+        fmt: ``standard`` or ``quantized``.
+        timeout: Subprocess timeout in seconds (``None`` waits forever).
+        device: Torch device (``cpu``/``cuda``/``mps``/``auto``).
+        task: Optional training task forwarded as ``deploy --task`` so the
+            post-deploy validator builds a task-appropriate input (ViT and
+            audio heads need float images / correctly shaped waveforms).
+
+    Returns:
+        The deploy :class:`RunResult`.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
     env["PYTHONPATH"] = str(TMP_DIR) + os.pathsep + str(PROJECT_ROOT)
     if os.environ.get("PYTHONPATH"):
@@ -857,6 +899,8 @@ def run_deploy(
         "--validate",
         "--device", device,
     ]
+    if task:
+        cmd += ["--task", str(task)]
     start = time.time()
     try:
         proc = subprocess.run(
@@ -871,7 +915,7 @@ def run_deploy(
         output = proc.stdout or ""
         duration = time.time() - start
     except subprocess.TimeoutExpired as exc:
-        output = exc.stdout or ""
+        output = _as_text(exc.stdout)
         return RunResult(
             category="deploy",
             combo_id=combo_id,
@@ -953,7 +997,7 @@ def run_infer(
             combo_id=combo_id,
             status="TIMEOUT",
             duration_sec=time.time() - start,
-            stdout=exc.stdout or "",
+            stdout=_as_text(exc.stdout),
             stderr="",
             returncode=-1,
             notes="infer timeout",
@@ -1212,7 +1256,7 @@ def run_inference_eval(
                 combo_id=f"{combo_id}_eval_{deploy_format}",
                 status="TIMEOUT",
                 duration_sec=time.time() - start,
-                stdout=exc.stdout or "",
+                stdout=_as_text(exc.stdout),
                 stderr="",
                 returncode=-1,
                 notes=f"inference eval timeout ({deploy_format})",

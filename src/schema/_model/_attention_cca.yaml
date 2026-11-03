@@ -15,22 +15,30 @@ properties:
           arXiv:2510.04476). CCA down-projects q/k/v into this shared latent
           and performs attention entirely inside it (no up-projections),
           reducing parameters, KV-cache, AND FLOPs by the compression factor
-          C = hidden_size / cca_latent_rank. `null` defaults to
-          `hidden_size // 4` (C=4). Must be divisible by `num_heads`.
+          C = hidden_size / cca_latent_rank. Must be divisible by
+          `num_heads` with an even per-head quotient (RoPE is applied directly
+          in the latent). `null` defaults to `hidden_size // 4` rounded UP to
+          a multiple of `2 * num_heads` so the default is always buildable
+          (e.g. hidden_size=96, num_heads=8 → 24 is invalid, resolves to 32).
 
           **Examples explained:**
           - `cca_latent_rank=128` with `hidden_size=512`: C=4 compression.
             Latent head dim = 128/8 = 16 (with num_heads=8).
           - `cca_latent_rank=64` with `hidden_size=512`: C=8 compression.
             More aggressive; ~8x fewer attention FLOPs and KV-cache.
-          - `cca_latent_rank=null`: defaults to `hidden_size // 4`.
+          - `cca_latent_rank=null`: `hidden_size // 4` rounded up to a
+            multiple of `2 * num_heads`.
         description_es: |-
           Ancho latente ẽ para `cca_attn` (Compressed Convolutional Attention,
           arXiv:2510.04476). CCA proyecta q/k/v a este latente compartido y
           realiza la atención enteramente en él (sin up-proyecciones),
           reduciendo parámetros, caché KV Y FLOPs por el factor de compresión
-          C = hidden_size / cca_latent_rank. `null` por defecto es
-          `hidden_size // 4` (C=4). Debe ser divisible por `num_heads`.
+          C = hidden_size / cca_latent_rank. Debe ser divisible por
+          `num_heads` con cociente por cabeza par (RoPE se aplica directamente
+          en el latente). `null` por defecto es `hidden_size // 4` redondeado
+          HACIA ARRIBA a un múltiplo de `2 * num_heads` para que el default
+          siempre sea construible (p.ej. hidden_size=96, num_heads=8 → 24 es
+          inválido, resuelve a 32).
         examples: [128]
       num_conv_layers:
         type: integer
@@ -101,8 +109,8 @@ properties:
           Enable value-shift in `cca_attn`: each attention head receives half
           its values from the current token and half from the *previous* token
           (a token-shift inductive bias borrowed from RWKV), implemented via
-          two independent value projections. Requires `num_heads` even and
-          `cca_latent_rank` even. Default: True.
+          two independent value projections. Requires `cca_latent_rank` even
+          (the split halves the latent width, not the heads). Default: True.
         description_es: |-
           Habilita value-shift en `cca_attn`: cada cabeza de atención recibe
           la mitad de sus valores del token actual y la mitad del token
@@ -217,8 +225,8 @@ properties:
         title_es: "Value-Shift CCGQA"
         description: |-
           Enable value-shift for `ccgqa_attn`. Requires
-          `ccgqa_num_kv_heads` even and `ccgqa_kv_latent_rank` even.
-          Default: True.
+          `ccgqa_kv_latent_rank` even (the split halves the KV latent width,
+          not the KV heads). Default: True.
         description_es: |-
           Habilita value-shift para `ccgqa_attn`. Requiere
           `ccgqa_num_kv_heads` par y `ccgqa_kv_latent_rank` par.

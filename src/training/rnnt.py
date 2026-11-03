@@ -116,28 +116,46 @@ def _pure_torch_rnnt(
             )
             continue
 
+        num_labels = int(num_labels)
         label_ids = targets[b, :num_labels].to(device=device, dtype=torch.long)
+
+        # Precompute the two transition log-probability tables once:
+        # blank_row[t, u] = log p(blank | t, u)                     (T, U+1)
+        # emit[t, u]      = log p(label_ids[u] | t, u)              (T, U)
+        blank_row = log_probs[b, :num_frames, : num_labels + 1, blank]
+        frame_idx = torch.arange(num_frames, device=device).unsqueeze(1)
+        label_idx = torch.arange(num_labels, device=device).unsqueeze(0)
+        emit = log_probs[b, :num_frames, :num_labels, :]
+        emit = emit[frame_idx, label_idx, label_ids.unsqueeze(0)]
+
         # alpha[t, u] with t in [0, num_frames) covering the first t frames.
+        # Row t = 0: no frame has been processed yet, so only u = 0 is
+        # reachable (the -inf init keeps unreachable cells unreachable: a
+        # -inf alpha plus a finite log-probability stays -inf).
         alpha = log_probs.new_full((num_frames, num_labels + 1), float("-inf"))
         alpha[0, 0] = torch.zeros((), dtype=alpha.dtype, device=device)
-        # Row t = 0: no frame has been processed yet, so only u = 0 is reachable.
 
+        # Vectorized over u (the DP is only sequential in t): one tensor op
+        # per frame instead of a Python loop over every (t, u) cell. The
+        # scalar loop is what made CPU training of the transducer take
+        # longer than the harness timeout for a single batch. Cells with
+        # u > t are left at -inf exactly like the scalar reference: writing
+        # them would evaluate logaddexp(-inf, -inf), whose backward pass is
+        # NaN and would poison the logits' gradients.
         for t in range(1, num_frames):
-            alpha[t, 0] = alpha[t - 1, 0] + log_probs[b, t - 1, 0, blank]
-            # At most ``t`` labels can have been emitted after ``t`` frames.
-            for u in range(1, min(num_labels, t) + 1):
-                stay_blank = alpha[t - 1, u] + log_probs[b, t - 1, u, blank]
-                emit_label = alpha[t - 1, u - 1] + log_probs[
-                    b, t - 1, u - 1, int(label_ids[u - 1].item())
-                ]
-                alpha[t, u] = torch.logaddexp(stay_blank, emit_label)
+            stay = alpha[t - 1] + blank_row[t - 1]
+            alpha[t, 0] = stay[0]
+            if num_labels:
+                uu = min(num_labels, t)
+                alpha[t, 1 : uu + 1] = torch.logaddexp(
+                    stay[1 : uu + 1],
+                    alpha[t - 1, :uu] + emit[t - 1, :uu],
+                )
 
         last = num_frames - 1
-        blank_term = alpha[last, num_labels] + log_probs[b, last, num_labels, blank]
+        blank_term = alpha[last, num_labels] + blank_row[last, num_labels]
         if num_labels > 0:
-            label_term = alpha[last, num_labels - 1] + log_probs[
-                b, last, num_labels - 1, int(label_ids[num_labels - 1].item())
-            ]
+            label_term = alpha[last, num_labels - 1] + emit[last, num_labels - 1]
             log_prob = torch.logaddexp(blank_term, label_term)
         else:
             log_prob = blank_term

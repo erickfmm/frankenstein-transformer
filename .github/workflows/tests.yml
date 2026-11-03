@@ -52,11 +52,12 @@ jobs:
 
       # Only on the legacy leg: downgrade transformers to the 4.x series
       # (sentence-transformers>=5.2 still allows transformers>=4.41). Pin
-      # huggingface_hub <1 too (transformers 4.x requires it) and datasets <5:
-      # datasets 5 imports BucketNotFoundError, a symbol hub <1 does not export.
+      # huggingface_hub <1 too (transformers 4.x requires it) and datasets <4:
+      # hub <1 does not export BucketNotFoundError, and datasets 4+ would also
+      # drag torchcodec into every Audio path.
       - name: Pin transformers 4.x (legacy leg)
         if: matrix.transformers-pin == '<5'
-        run: pip install "transformers<5" "huggingface_hub<1" "datasets<5"
+        run: pip install "transformers<5" "huggingface_hub<1" "datasets<4"
 
       # Install the package itself without pulling in deps (torch already
       # installed as CPU above; --no-deps avoids overriding it with cu118).

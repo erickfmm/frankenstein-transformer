@@ -85,6 +85,8 @@ def _run_deploy(args: argparse.Namespace) -> int:
             argv.extend(["--config", args.config])
         if args.validate:
             argv.append("--validate")
+        if args.task:
+            argv.extend(["--task", args.task])
         result = deploy_main(argv)
         return int(result) if isinstance(result, int) else 0
 
@@ -300,6 +302,21 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_parser.add_argument("--validate", action="store_true", help="Validate artifact after creation (standard/quantized)")
     deploy_parser.add_argument("--check", action="store_true", help="Only run the GGUF compatibility check and exit (gguf only)")
     deploy_parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
+    deploy_parser.add_argument(
+        "--task",
+        type=str,
+        default=None,
+        choices=[
+            "mlm", "causal_lm", "text_classification",
+            "classification", "patch_prediction", "segmentation",
+            "asr", "audio_classification",
+        ],
+        help=(
+            "Training task used by --validate to build a task-appropriate "
+            "forward-pass input (defaults to the task recorded in the "
+            "checkpoint, then to a per-model-class default)"
+        ),
+    )
     deploy_parser.set_defaults(func=_run_deploy)
 
     infer_parser = subparsers.add_parser("infer", help="Run inference with a deployed model or a trained SBERT model")

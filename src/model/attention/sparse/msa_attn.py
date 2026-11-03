@@ -157,7 +157,10 @@ class MSAAttention(nn.Module):
             ``(B, S, H_kv, k)`` selected block indices.
         """
         bsz, seq_len, h_kv, num_blocks = block_scores.shape
-        k = self.topk_blocks
+        # Short sequences may have fewer blocks than msa_topk_blocks (e.g.
+        # seq_len=64 with the default block_size=128 yields a single block):
+        # clamp k to the available blocks instead of crashing in torch.topk.
+        k = max(1, min(self.topk_blocks, num_blocks))
         positions = torch.arange(seq_len, device=block_scores.device)
         local_block = (positions // self.block_size).view(1, seq_len, 1)
         bs_local = block_scores.clone()

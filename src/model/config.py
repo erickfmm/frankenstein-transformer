@@ -956,14 +956,39 @@ class FrankensteinModelConfig:
             self.mtla_stride = self.mtla_merge_factor
 
         # ---- Resolve CCA / CCGQA defaults ----
+        # Rotary PEs are applied directly inside the compressed latent
+        # (arXiv:2510.04476), so the per-head latent dim must be even and the
+        # latent rank a multiple of num_heads. Round the paper defaults up so
+        # every default combination is buildable (e.g. hidden_size=96 with
+        # num_heads=8 gives latent 24 -> 3 per head, which RoPE cannot pair;
+        # it resolves to 32 -> 4 per head).
+        def _round_up_to(value: int, unit: int) -> int:
+            return max(unit, ((value + unit - 1) // unit) * unit)
+
+        heads = max(1, self.num_heads)
         if self.cca_latent_rank is None:
-            self.cca_latent_rank = max(1, self.hidden_size // 4)
-        if self.ccgqa_query_latent_rank is None:
-            self.ccgqa_query_latent_rank = half
-        if self.ccgqa_kv_latent_rank is None:
-            self.ccgqa_kv_latent_rank = max(1, self.hidden_size // 8)
+            self.cca_latent_rank = _round_up_to(
+                max(1, self.hidden_size // 4), 2 * heads
+            )
         if self.ccgqa_num_kv_heads is None:
-            self.ccgqa_num_kv_heads = max(1, self.num_heads // 4)
+            kv_heads = max(1, heads // 4)
+            while heads % kv_heads != 0:
+                kv_heads -= 1
+            self.ccgqa_num_kv_heads = kv_heads
+        kv_heads = max(1, int(self.ccgqa_num_kv_heads))
+        if self.ccgqa_query_latent_rank is None and self.ccgqa_kv_latent_rank is None:
+            # Both default: keep q_dh == kv_dh (GQA constraint) and q_dh even
+            # (RoPE constraint). Default compression C1 = 2 -> E // 2.
+            q_dh = _round_up_to(max(2, self.hidden_size // (2 * heads)), 2)
+            self.ccgqa_query_latent_rank = q_dh * heads
+            self.ccgqa_kv_latent_rank = q_dh * kv_heads
+        elif self.ccgqa_query_latent_rank is None:
+            # Derive from the explicit KV rank so q_dh == kv_dh holds.
+            kv_dh = max(1, int(self.ccgqa_kv_latent_rank) // kv_heads)
+            self.ccgqa_query_latent_rank = kv_dh * heads
+        elif self.ccgqa_kv_latent_rank is None:
+            q_dh = max(1, int(self.ccgqa_query_latent_rank) // heads)
+            self.ccgqa_kv_latent_rank = q_dh * kv_heads
 
         # ---- Resolve GMA / Gaussian Mixture Attention defaults ----
         # routing_dim d_r defaults to the per-head dimension.
