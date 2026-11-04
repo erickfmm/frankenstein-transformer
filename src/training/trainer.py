@@ -1788,6 +1788,31 @@ class TitanTrainer:
             batch["input_ids"], batch["attention_mask"], batch["labels"]
         )
 
+    def _make_step_closure(self, batch: Dict[str, Any]):
+        """Build a loss closure for closure-based optimizers (e.g. ``Eve``).
+
+        Closure-based optimizers follow the ``torch.optim`` LBFGS convention:
+        they call the closure several times per ``step()``, each time at
+        different (candidate) parameter values, and read the freshly populated
+        gradients afterwards.  The returned callable zeroes gradients, runs the
+        task forward and backward pass on ``batch`` at the *live* parameter
+        values, and returns the loss as a float.
+
+        Args:
+            batch: Task batch already moved to ``self.device``.
+
+        Returns:
+            Zero-argument closure returning the current-batch loss as a float.
+        """
+
+        def _closure() -> float:
+            self.optimizer.zero_grad(set_to_none=True)
+            loss, _ = self._compute_task_loss(batch)
+            loss.backward()
+            return float(loss.detach().item())
+
+        return _closure
+
     def evaluate(self, dataloader: DataLoader) -> Dict[str, float]:
         """Evaluate the current weights over ``dataloader`` without gradients.
 
@@ -2025,7 +2050,20 @@ class TitanTrainer:
                         # Normal optimizer step
                         if self._quack is not None:
                             self._quack.step()
-                        if amp_enabled:
+                        if getattr(self.optimizer, "requires_closure", False):
+                            # Closure-based optimizers (EvE) score several
+                            # candidate points per iteration, so they need the
+                            # batch re-evaluated inside ``step()``; AMP is not
+                            # supported on this path (the closure would fight
+                            # the GradScaler's unscale accounting).
+                            if amp_enabled:
+                                raise RuntimeError(
+                                    "The configured optimizer requires a closure-based "
+                                    "step and does not support AMP (use_amp); disable "
+                                    "mixed precision for this run"
+                                )
+                            self.optimizer.step(self._make_step_closure(batch))
+                        elif amp_enabled:
                             self.scaler.step(self.optimizer)
                             self.scaler.update()
                         else:

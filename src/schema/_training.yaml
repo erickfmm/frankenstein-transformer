@@ -1551,3 +1551,17 @@ allOf:
             additionalProperties: false
             patternProperties:
               ^dion3-: { type: [number, boolean, array, string] }
+- if:
+    properties:
+      optimizer:
+        properties:
+          optimizer_class:
+            const: eve
+  then:
+    properties:
+      optimizer:
+        properties:
+          parameters:
+            additionalProperties: false
+            patternProperties:
+              ^eve-: { type: [number, boolean, array, string] }

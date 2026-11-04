@@ -155,8 +155,11 @@ training:
 - `apollo_mini`
 - `q_apollo`
 - `dion3`
+- `eve`
 
 `training.optimizer.parameters` must use the selected optimizer prefix. Example: when `optimizer_class: adamw`, all keys must start with `adamw-`.
+
+`eve` requires `gradient_accumulation_steps: 1` and is not available for SBERT (closure-based step: the trainer re-evaluates the current batch on several candidate points inside `optimizer.step()`).
 
 ### Optimizer Parameters Reference
 
@@ -201,6 +204,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
 - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
 - `dion3`: `fraction`, `momentum`, `ns_steps`, `ns_eps`, `normuon`
+- `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed` (population-of-4 differential evolution with a targeted Adam fallback; the shared `lr_*`/`wd_*`/`betas_*`/`eps_*` configure the fallback per group, with `wd` folded into the fallback gradient as L2; requires `gradient_accumulation_steps: 1`, not available for SBERT)
 
 Examples:
 - `adafactor-beta2_decay: 0.8`
@@ -210,6 +214,7 @@ Examples:
 - `af_muon-tied_cap: 3.0`
 - `ada_muon-ns_steps: 5`
 - `dion3-fraction: 0.25`
+- `eve-adam_steps: 3`
 
 ## Available Fields (Detailed)
 

@@ -26,7 +26,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3"}
+        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -787,6 +787,115 @@ class BuildOptimizerDion3Tests(unittest.TestCase):
         p.square().mean().backward()
         opt.step()
         self.assertTrue(torch.equal(p.detach(), before))
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerEveTests(unittest.TestCase):
+    """EvE defaults, closure contract, population state and selection rules."""
+
+    @staticmethod
+    def _closure_for(p):
+        """Deterministic quadratic closure: optimum 0.25 is box-interior."""
+        def closure():
+            p.grad = None
+            loss = ((p - 0.25) ** 2).sum()
+            loss.backward()
+            return float(loss.detach())
+
+        return closure
+
+    @staticmethod
+    def _tiny_param():
+        return nn.Parameter(torch.linspace(-0.5, 0.5, 16).reshape(4, 4))
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("eve", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_requires_closure(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer("eve", groups, {})
+        with self.assertRaises(RuntimeError) as ctx:
+            opt.step()
+        self.assertIn("closure", str(ctx.exception))
+
+    def test_step_runs_with_closure(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer("eve", groups, {"eve-seed": 7})
+        closure = self._closure_for(p)
+        history = [opt.step(closure)]
+        for _ in range(7):
+            history.append(opt.step(closure))
+        self.assertTrue(all(math.isfinite(v) for v in history))
+        # Proposition 1: greedy selection keeps the best-so-far monotone.
+        for prev, curr in zip(history, history[1:]):
+            self.assertLessEqual(curr, prev + 1e-12)
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_defaults_match_paper(self):
+        opt = build_optimizer("eve", _param_groups(), {})
+        self.assertAlmostEqual(opt.defaults["de_weight"], 0.5)
+        self.assertAlmostEqual(opt.defaults["de_jitter"], 1e-4)
+        self.assertAlmostEqual(opt.defaults["init_sigma"], 0.1)
+        self.assertEqual(opt.defaults["adam_steps"], 3)
+        self.assertFalse(opt.defaults["use_pm"])
+        self.assertAlmostEqual(opt.defaults["pm_eta"], 20.0)
+
+    def test_custom_suffixes_and_coercion(self):
+        opt = build_optimizer(
+            "eve",
+            _param_groups(),
+            {"eve-adam_steps": "5", "eve-de_weight": "0.7"},
+        )
+        self.assertEqual(opt.defaults["adam_steps"], 5)
+        self.assertAlmostEqual(opt.defaults["de_weight"], 0.7)
+
+        opt_bad = build_optimizer(
+            "eve",
+            _param_groups(),
+            {"eve-adam_steps": "bad", "eve-de_weight": "bad"},
+        )
+        self.assertEqual(opt_bad.defaults["adam_steps"], 3)
+        self.assertAlmostEqual(opt_bad.defaults["de_weight"], 0.5)
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("eve", _param_groups(), {"eve-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
+
+    def test_per_group_lr_routes(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 1e-3, "name": "attention"}]
+        opt = build_optimizer("eve", groups, {"eve-lr_attention": 0.02})
+        self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
+
+    def test_population_state_layout(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer("eve", groups, {"eve-seed": 3})
+        opt.step(self._closure_for(p))
+        state = opt.state[p]
+        self.assertEqual(state["slots"].shape[0], 4)
+        self.assertEqual(state["m"].shape, state["slots"].shape)
+        self.assertEqual(state["v"].shape, state["slots"].shape)
+        self.assertIn("slot_losses", state)
+        self.assertEqual(len(state["slot_losses"]), 4)
+        self.assertTrue(all(math.isfinite(v) for v in state["slot_losses"]))
+
+    def test_use_pm_flavor_runs(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer("eve", groups, {"eve-use_pm": True, "eve-seed": 11})
+        closure = self._closure_for(p)
+        history = [opt.step(closure)]
+        for _ in range(3):
+            history.append(opt.step(closure))
+        self.assertTrue(all(math.isfinite(v) for v in history))
+        for prev, curr in zip(history, history[1:]):
+            self.assertLessEqual(curr, prev + 1e-12)
+        self.assertFalse(torch.isnan(p).any())
 
 
 if __name__ == "__main__":

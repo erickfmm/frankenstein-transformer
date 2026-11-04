@@ -1265,6 +1265,92 @@ y devuelve $Q_T X$. Un \emph{reinicio} tras la iteración~2 ($X \gets Q_2 X$, $R
 \item Con $f = 1$ la actualización se reduce a Muon (o NorMuon), y basta un único búfer de momentum por parámetro matricial; el error feedback permite que las filas ignoradas participen eventualmente.
 \end{itemize}
 
+\subsection{Híbridos Evolutivos y Poblacionales}
+
+\paragraph{EvE (Evolutionary Explorer).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/eve.pdf}}
+\caption{Flujo de paso de EvE: una población en régimen estable de cuatro candidatos desafía una ranura por iteración (round-robin) con un hijo de evolución diferencial; una ráfaga de Adam con estado persistente rescata al hijo solo cuando no mejora, y la selección voraz con números aleatorios comunes mantiene el mejor-observado monótono.}
+\label{fig:opt-eve}
+\end{figure}
+EvE~\citep{raj_eve_2026} es una \textbf{alternativa poblacional a Adam} orientada al régimen con abundante búsqueda y presupuesto restringido, un nivel por encima del entrenamiento final: rankear o podar configuraciones candidatas dentro de la búsqueda de hiperparámetros y arquitecturas. En lugar de refinar un único punto, EvE mantiene una población en régimen estable de cuatro candidatos y desafía una ranura por iteración (round-robin) con un hijo de evolución diferencial \emph{rand-to-pbest/1}; solo cuando el hijo no logra mejorar al incumbente de la ranura, EvE ejecuta una ráfaga corta de Adam estándar sobre el mismo minilote, conservando el punto refinado solo si supera al hijo. La selección es voraz, de modo que el mejor-observado es monótono no creciente en objetivos deterministas, y como los gradientes se usan solo como un rescate dirigido, el costo por iteración se mantiene dentro de un factor constante de un paso de Adam sin importar la dimensión.
+
+Toda la búsqueda interna ocurre en el cubo unitario $z \in [0,1]^n$ mediante la aplicación afín $\mathbf{x} = \mathbf{x}_l + \mathbf{z} \odot (\mathbf{x}_u - \mathbf{x}_l)$, de modo que un paso de tamaño fijo nunca sobrepasa las coordenadas de rango estrecho ni se queda corto en las de rango amplio. La población se inicializa por proximidad — un ancla con tres perturbaciones gaussianas, $\sigma = 0.1$ — anclada en los pesos iniciales del propio modelo (el precedente LoRA del artículo), con la caja de búsqueda por tensor centrada en el ancla con la semianchura Kaiming $\sqrt{6/\mathrm{fan\_in}}$. Cada iteración extrae tres donantes distintos $a, b, c \ne i$ y construye el hijo con un peso de diferencia perturbado (el jitter se aplica solo al término de diferencia; la atracción hacia pbest usa el $F$ sin perturbar):
+\begin{align}
+z_{\text{hijo}} &= \operatorname{clamp}\big(z_a + F_t (z_b - z_c) + F (z_{\text{pbest}} - z_a),\ 0,\ 1\big), &
+F_t &= F\big(1 + \gamma (u - \tfrac{1}{2})\big), \quad u \sim U(0,1),
+\end{align}
+con $F = 0.5$ y $\gamma = 10^{-4}$. Una mutación polinomial opcional (PM; desactivada por defecto para el entrenamiento de redes, ya que un empujón de una sola coordenada esencialmente nunca gana su compuerta de aceptación/rechazo a escala de red) perturba exactamente un gen con tasa $p = 1/n$ e índice de distribución $\eta = 20$, con la perturbación acotada y autoescalada a la distancia a cada frontera:
+\begin{align}
+z_d &\leftarrow z_d + \delta_q (z_u - z_l)_d, &
+\delta_q &=
+\begin{cases}
+\bigl[2r + (1 - 2r)(1 - \delta_1)^{\frac{1}{\eta+1}}\bigr]^{\frac{1}{\eta+1}} - 1, & r \le 0.5,\\[2pt]
+1 - \bigl[2(1 - r) + 2(r - 0.5)(1 - \delta_2)^{\frac{1}{\eta+1}}\bigr]^{\frac{1}{\eta+1}}, & r > 0.5,
+\end{cases}
+\end{align}
+con $\delta_1 = (z_d - z_l)/(z_u - z_l)$, $\delta_2 = (z_u - z_d)/(z_u - z_l)$ y $r \sim U(0,1)$. Cuando el hijo (posiblemente mutado) no supera el valor de la ranura, EvE ejecuta $n_{\text{adam}}$ pasos de Adam estándar sobre él \emph{en coordenadas reales}, con el weight decay L2 clásico plegado en el gradiente antes de la actualización de momentos (el Adam estándar de PyTorch, no la regla desacoplada de AdamW) y cada iterado reclampado a la caja:
+\begin{align}
+g_t &= \nabla_{\mathbf{x}} f(\mathbf{x}_{t-1}; B_t) + \lambda \mathbf{x}_{t-1}, &
+m_t &= \beta_1 m_{t-1} + (1 - \beta_1) g_t, &
+v_t &= \beta_2 v_{t-1} + (1 - \beta_2) g_t^2, \\
+\widehat{m}_t &= \frac{m_t}{1 - \beta_1^t}, &
+\widehat{v}_t &= \frac{v_t}{1 - \beta_2^t}, &
+\mathbf{x}_t &= \operatorname{clamp}\Big(\mathbf{x}_{t-1} - \eta_{lr} \frac{\widehat{m}_t}{\sqrt{\widehat{v}_t} + \epsilon},\ \mathbf{x}_l,\ \mathbf{x}_u\Big),
+\end{align}
+con $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$. Cada ranura de la población conserva su propio estado persistente $(m, v, t)$ durante toda la ejecución, de modo que las ráfagas de respaldo forman una trayectoria de Adam continua en lugar de arranques en frío repetidos. Cada evaluación de una iteración — la actualización de la ranura, el hijo y toda la ráfaga de respaldo — se puntúa sobre un único minilote recién extraído $B_t$ (números aleatorios comunes), y un candidato reemplaza al incumbente solo si es estrictamente mejor en ese mismo lote. En esta implementación, los sufijos compartidos por grupo \texttt{lr\_*}, \texttt{wd\_*}, \texttt{betas\_*} y \texttt{eps\_*} configuran el respaldo Adam por grupo de parámetros (\texttt{wd\_*} es el término L2 $\lambda$ dentro de $g_t$), los parámetros vivos del modelo contienen siempre la mejor ranura entre pasos, y el paso se basa en closure: el trainer reevalúa el lote actual sobre cada punto candidato dentro de \texttt{optimizer.step()}, razón por la cual EvE requiere \texttt{gradient\_accumulation\_steps: 1} y no está disponible para SBERT.
+
+\begin{algorithm}[H]
+\caption{EvE (Evolutionary Explorer)}
+\label{alg:eve}
+\begin{algorithmic}[1]
+\Require Objetivo $f$ con cotas $\mathbf{x}_l, \mathbf{x}_u$, iteraciones $T$, peso DE $F$, jitter $\gamma$, jitter de inicialización $\sigma$, índice PM $\eta$, pasos de respaldo $n_{\text{adam}}$, LR del respaldo $\eta_{lr}$, decaimiento L2 $\lambda$, semilla $s$, USE\_PM
+\Ensure Mejor punto $\arg\min_k z_k$ y valor $\min_k f_k$
+\State $z_1 \sim U(0,1)^n$ (ancla: los pesos iniciales); $z_k \gets \operatorname{clamp}(z_1 + \sigma\epsilon_k, 0, 1)$, $\epsilon_k \sim \mathcal{N}(0, I_n)$, $k = 2,3,4$ \Comment{Inicialización por proximidad}
+\State $f_k \gets f(\mathbf{x}_l + z_k \odot (\mathbf{x}_u - \mathbf{x}_l))$ para $k = 1,\dots,4$; $\text{estado}_k \gets (\mathbf{0}, \mathbf{0}, 0)$ \Comment{Momentos de Adam persistentes}
+\For{$t = 1, \ldots, T$}
+    \State $i \gets ((t - 1) \bmod 4) + 1$ \Comment{Ranura objetivo round-robin}
+    \State extraer minilote $B_t$; $f_i \gets f(\mathbf{x}_i; B_t)$ \Comment{Números aleatorios comunes}
+    \State extraer $a, b, c$ distintos en $\{1,\dots,4\} \setminus \{i\}$; $F_t \gets F(1 + \gamma(u - 0.5))$, $u \sim U(0,1)$
+    \State $z_{\text{hijo}} \gets \operatorname{clamp}(z_a + F_t(z_b - z_c) + F(z_{\text{pbest}} - z_a), 0, 1)$
+    \State $f_{\text{hijo}} \gets f(z_{\text{hijo}}; B_t)$
+    \If{USE\_PM} \Comment{Compuerta de aceptación/rechazo propia de PM}
+        \State $z_{\text{mut}} \gets \operatorname{PM}(z_{\text{hijo}}, \eta)$; $f_{\text{mut}} \gets f(z_{\text{mut}}; B_t)$
+        \If{$f_{\text{mut}} < f_{\text{hijo}}$} $z_{\text{hijo}}, f_{\text{hijo}} \gets z_{\text{mut}}, f_{\text{mut}}$ \EndIf
+    \EndIf
+    \If{$f_{\text{hijo}} < f_i$}
+        \State $z_{\text{cand}}, f_{\text{cand}} \gets z_{\text{hijo}}, f_{\text{hijo}}$
+    \Else
+        \State $\mathbf{x} \gets \mathbf{x}_l + z_{\text{hijo}} \odot (\mathbf{x}_u - \mathbf{x}_l)$
+        \For{$n = 1, \ldots, n_{\text{adam}}$} \Comment{Respaldo Adam dirigido}
+            \State $\mathbf{x} \gets \operatorname{AdamStep}(\mathbf{x}, \nabla_{\mathbf{x}} f(\mathbf{x}; B_t), \eta_{lr}, \lambda, \text{estado}_i)$; \quad $\mathbf{x} \gets \operatorname{clamp}(\mathbf{x}, \mathbf{x}_l, \mathbf{x}_u)$
+        \EndFor
+        \State $z_{\text{adam}} \gets (\mathbf{x} - \mathbf{x}_l)/(\mathbf{x}_u - \mathbf{x}_l)$; \quad $f_{\text{adam}} \gets f(z_{\text{adam}}; B_t)$
+        \State $(z_{\text{cand}}, f_{\text{cand}}) \gets \arg\min_{(z, f) \in \{(z_{\text{hijo}}, f_{\text{hijo}}),\, (z_{\text{adam}}, f_{\text{adam}})\}} f$
+    \EndIf
+    \If{$f_{\text{cand}} < f_i$} $z_i \gets z_{\text{cand}}$; \quad $f_i \gets f_{\text{cand}}$ \Comment{Selección voraz} \EndIf
+\EndFor
+\State \Return $\arg\min_k z_k$, $\min_k f_k$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Quedan aproximadamente un punto de exactitud (MNIST) y 9--11\% de pérdida relativa (ajuste fino LoRA) por detrás de Adam a presupuesto de evaluación igualado; el artículo no reclama superioridad en la etapa final.
+\item 13$\times$ el conteo de parámetros vivos en almacenamiento total (cuatro copias de población más ocho copias de momentos persistentes) frente al 4$\times$ de Adam; el multiplicador pico medido en GPU es menor (2,95$\times$) pero fijo e independiente de la dimensión.
+\item Su tasa de aprendizaje no se transfiere desde la de Adam y requiere su propia búsqueda (3--100$\times$ mayor según la tarea); la población de cuatro miembros muestra la mayor varianza entre semillas de los nueve métodos comparados.
+\item Paso basado en closure: el trainer reevalúa el lote dentro de \texttt{optimizer.step()}, por lo que la acumulación de gradientes no está soportada y el bucle SBERT (\texttt{fit} de sentence-transformers) no puede alojarlo; la mutación polinomial es un costo puro a escala de red y está desactivada por defecto.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Mejor-observado monótono por construcción en objetivos deterministas (selección voraz de aceptar solo si es estrictamente mejor), con costo por iteración dentro de un factor constante de un paso de Adam sin importar la dimensión.
+\item Gana o empata con Adam en el 76\% de las 70 celdas (problema, dimensión) de los siete problemas sintéticos escalables hasta $10^6$ variables, de forma más decisiva en los multimodales.
+\item Termina presupuestos de evaluación igualados 1,7--3,9$\times$ más rápido en tiempo de reloj en entrenamiento real (una MLP sobre MNIST y ajuste fino LoRA de un modelo de 1.500 millones de parámetros), intercambiando una cantidad modesta de calidad final por velocidad.
+\item Dentro de successive halving, completa búsquedas de hiperparámetros y arquitecturas 3,1--3,5$\times$ más rápido mientras rankea configuraciones candidatas con una consistencia con Adam comparable a la que Adam tiene consigo mismo entre semillas ($\tau$ de Kendall de 0,66--0,69).
+\end{itemize}
+
 \small
 \begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
 \toprule
@@ -1277,6 +1363,7 @@ Simplificación de lotes grandes y programación & LAMB, Schedule-Free AdamW & r
 Eficiencia de memoria & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & reducción del estado del optimizador & Más útil cuando la VRAM está dominada por el estado del optimizador en lugar de las activaciones; los métodos de la familia APOLLO reemplazan los momentos densos de AdamW con escalado estructurado proyectado o cuantizado. \\
 Consciente de curvatura & Shampoo, SOAP, Sophia & mejor condicionamiento & Preferir cuando una geometría más rica justifica la sobrecarga de implementación y cómputo. \\
 Orientado a geometría & Muon, Turbo-Muon, AF-Muon, AdaMuon, Dion3 & estructura de actualización ortogonalizada & Opciones especializadas para geometría matricial y modelado de representaciones; AdaMuon añade un segundo momento por elemento sobre la dirección ortogonalizada con actualizaciones alineadas por RMS; AF-Muon asigna a la tabla de vocabulario atada una geometría de tabla con tope por fila y a los parámetros unidimensionales una actualización RMS, sin estado auxiliar de AdamW; Dion3 conserva la actualización espectral pero ortogonaliza solo una fracción de las filas del momentum por paso con Gram Newton--Schulz y error feedback. \\
+Híbrido evolutivo & EvE & ranking rápido y monótono de candidatos para bucles de búsqueda & Una población de evolución diferencial en régimen estable con un rescate dirigido de Adam intercambia calidad final por velocidad de reloj; es mejor como optimizador interno de búsqueda de hiperparámetros o arquitecturas. \\
 \bottomrule
 \end{longtable}
 \normalsize

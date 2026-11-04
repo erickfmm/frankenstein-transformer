@@ -1,0 +1,23 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  i["iteration t: slot i = ((t−1) mod 4) + 1"]
+  refresh["fᵢ ← f(xᵢ; Bₜ) — common random numbers"]
+  de["z_child = clamp(zₐ + Fₜ(z_b − z_c) + F(z_best − zₐ), 0, 1)"]
+  fc["f_child ← f(z_child; Bₜ)"]
+  pm{"use_pm?"}
+  mut["polynomial mutation: mutant kept only if strictly better"]
+  c1{"f_child < fᵢ?"}
+  burst["n_adam Adam steps on the child (persistent per-slot m, v) + clamp to box"]
+  fa["f_adam ← f(x; Bₜ)"]
+  c2{"min(f_child, f_adam) < fᵢ?"}
+  acc["slot i ← candidate"]
+  keep["slot untouched"]
+  best["live params ← best slot (argmin fₖ)"]
+
+  i --> refresh --> de --> fc --> pm
+  pm -- "yes" --> mut --> c1
+  pm -- "no" --> c1
+  c1 -- "yes" --> c2
+  c1 -- "no" --> burst --> fa --> c2
+  c2 -- "yes" --> acc --> best
+  c2 -- "no" --> keep --> best

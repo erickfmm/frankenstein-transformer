@@ -247,7 +247,7 @@ OPTIMIZERS = [
     "sgd_momentum", "adamw", "adafactor", "galore_adamw", "prodigy", "lion",
     "sophia", "muon", "turbo_muon", "ada_muon", "radam", "adan", "adopt", "ademamix",
     "mars_adamw", "cautious_adamw", "lamb", "schedulefree_adamw", "shampoo",
-    "soap", "anon", "apollo", "apollo_mini", "q_apollo", "dion3",
+    "soap", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve",
 ]
 
 NORMS = ["layer_norm", "dynamic_tanh", "derf", "rms_norm", "prms_norm", "flash_norm"]
@@ -672,6 +672,9 @@ def _with_optimizer(training: dict, optimizer_class: str) -> dict:
         params[f"{prefix}momentum"] = 0.9
         params[f"{prefix}fraction"] = 0.25
         params[f"{prefix}ns_steps"] = 5
+    if optimizer_class == "eve":
+        params[f"{prefix}adam_steps"] = 3
+        params[f"{prefix}de_weight"] = 0.5
 
     # Drop keys this optimizer family does not accept (e.g. `rank` for
     # apollo_mini). The factory is the contract; an unknown key would fail

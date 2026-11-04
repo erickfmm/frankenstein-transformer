@@ -9,6 +9,7 @@ from .apollo import Apollo
 from .apollo_mini import ApolloMini
 from .cautious_adamw import CautiousAdamW
 from .dion3 import Dion3
+from .eve import Eve
 from .factory import OPTIMIZER_REGISTRY, build_optimizer
 from .galore_adamw import GaLoreAdamW
 from .lamb import LAMB
@@ -37,6 +38,7 @@ __all__ = [
     "AdaMuon",
     "CautiousAdamW",
     "Dion3",
+    "Eve",
     "GaLoreAdamW",
     "LAMB",
     "Lion",

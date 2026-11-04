@@ -58,6 +58,7 @@ properties:
       | `apollo_mini` | Rank-1 APOLLO | Tensor-wise scaled, extreme memory savings |
       | `q_apollo` | Quantized APOLLO | Quantized optimizer states |
       | `dion3` | Faster orthogonal updates | Fractional Gram-Newton-Schulz Muon with error feedback (paper: arxiv:2608.11612) |
+      | `eve` | Fast proxy training, search loops | Population-of-4 differential evolution with targeted Adam fallback; monotone best-so-far; needs its own LR search (paper: arxiv:2609.35614) |
 
       **Examples explained:**
       - `adamw`: Start here. Most reliable for transformer training. Works well with default hyperparameters (lr=2e-4, betas=[0.9,0.95], wd=0.01). Best general-purpose choice.
@@ -77,7 +78,7 @@ properties:
       arxiv:2411.16085); `lamb` (paper: arxiv:1904.00962); `schedulefree_adamw` (paper: arxiv:2405.15682);
       `shampoo` (paper: arxiv:1802.09568); `soap` (paper: arxiv:2409.11321); `anon` (paper:
       arxiv:2605.02317); `apollo`/`apollo_mini`/`q_apollo` (paper: arxiv:2412.05270); `dion3` (paper:
-      arxiv:2608.11612)
+      arxiv:2608.11612); `eve` (paper: arxiv:2609.35614)
     description_es: |-
       Algoritmo optimizador. Resumen por caso de uso:
 
@@ -109,6 +110,7 @@ properties:
       | `apollo_mini` | APOLLO rango-1 | Proyección mínima tensorial |
       | `q_apollo` | APOLLO cuantizado | Estados cuantizados |
       | `dion3` | Ortogonalización acelerada | Muon fraccional con Gram-Newton-Schulz y retroalimentación de error (paper: arxiv:2608.11612) |
+      | `eve` | Entrenamiento proxy rápido, bucles de búsqueda | Evolución diferencial con población de 4 y respaldo Adam dirigido; mejor-observado monótono; requiere su propia búsqueda de LR (paper: arxiv:2609.35614) |
       **Ejemplos explicados:**
       - `adamw`: Empezar aquí. El más confiable para entrenamiento de transformers. Funciona bien con hiperparámetros por defecto (lr=2e-4, betas=[0.9,0.95], wd=0.01). Mejor opción de propósito general.
       - `sgd_momentum`: Usar para líneas base o cuando se necesita máxima simplicidad y reproducibilidad. Generalmente requiere LR más alto (1e-2 a 1e-1) y ajuste cuidadoso de momentum.
@@ -129,7 +131,7 @@ properties:
       arxiv:2411.16085); `lamb` (paper: arxiv:1904.00962); `schedulefree_adamw` (paper: arxiv:2405.15682);
       `shampoo` (paper: arxiv:1802.09568); `soap` (paper: arxiv:2409.11321); `anon` (paper:
       arxiv:2605.02317); `apollo`/`apollo_mini`/`q_apollo` (paper: arxiv:2412.05270); `dion3` (paper:
-      arxiv:2608.11612)
+      arxiv:2608.11612); `eve` (paper: arxiv:2609.35614)
     enum:
       - sgd_momentum
       - adamw
@@ -157,6 +159,7 @@ properties:
       - apollo_mini
       - q_apollo
       - dion3
+      - eve
     examples: [adamw]
   parameters:
     type: object
@@ -187,6 +190,7 @@ properties:
       - `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
       - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
       - `dion3`: `fraction`, `momentum`, `ns_steps`, `ns_eps`, `normuon`
+      - `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed`. Population-of-4 differential evolution over the unit cube with a targeted Adam fallback; the shared `lr_*`, `wd_*`, `betas_*`, `eps_*` configure the fallback per group (`wd` is L2 folded into the fallback gradient, not decoupled). Requires `gradient_accumulation_steps: 1`; not available for SBERT; closure-based step supplied by the trainer
       - Others: no specific suffixes (only shared ones)
 
       **Impact:** Fine-grained per-group control. Example: lower LR for embeddings (2e-6),
@@ -226,6 +230,7 @@ properties:
       - `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
       - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
       - `dion3`: `fraction`, `momentum`, `ns_steps`, `ns_eps`, `normuon`
+      - `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed`. Evolución diferencial con población de 4 sobre el cubo unitario y respaldo Adam dirigido; los sufijos compartidos `lr_*`, `wd_*`, `betas_*`, `eps_*` configuran el respaldo por grupo (`wd` es L2 plegado en el gradiente del respaldo, no desacoplado). Requiere `gradient_accumulation_steps: 1`; no disponible para SBERT; paso basado en closure que aporta el trainer
       - Otros: sin sufijos específicos (solo los compartidos)
 
       **Referencias:** (paper: arxiv:1412.6980) (paper: arxiv:1711.05101)
@@ -378,3 +383,7 @@ properties:
           prefix: "dion3-"
           supports_shared_per_group_suffixes: true
           specific_global_suffixes: [fraction, momentum, ns_steps, ns_eps, normuon]
+        eve:
+          prefix: "eve-"
+          supports_shared_per_group_suffixes: true
+          specific_global_suffixes: [de_weight, de_jitter, init_sigma, adam_steps, use_pm, pm_eta, seed]

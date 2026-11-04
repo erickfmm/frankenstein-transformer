@@ -34,6 +34,7 @@ from .base import (
 )
 from .cautious_adamw import CautiousAdamW
 from .dion3 import Dion3
+from .eve import Eve
 from .galore_adamw import GaLoreAdamW
 from .lamb import LAMB
 from .lion import Lion
@@ -76,6 +77,7 @@ OPTIMIZER_REGISTRY = {
     "apollo_mini": ApolloMini,
     "q_apollo": QApollo,
     "dion3": Dion3,
+    "eve": Eve,
 }
 """Mapping from YAML optimizer class names to concrete Optimizer subclasses.
 
@@ -135,6 +137,8 @@ OPTIMIZER_ALLOWED_KEYS = {
     "anon": _COMMON_PER_GROUP_KEYS | {"gamma"},
     "q_apollo": _COMMON_PER_GROUP_KEYS | {"rank", "update_proj_gap", "scale", "scale_type", "proj_type", "scale_front", "disable_nl", "quant_bits"},
     "dion3": _COMMON_PER_GROUP_KEYS | {"fraction", "momentum", "ns_steps", "ns_eps", "normuon"},
+    "eve": _COMMON_PER_GROUP_KEYS
+    | {"de_weight", "de_jitter", "init_sigma", "adam_steps", "use_pm", "pm_eta", "seed"},
 }
 
 
@@ -384,6 +388,26 @@ def build_optimizer(
             ns_steps=ns_steps,
             ns_eps=ns_eps,
             normuon=normuon,
+        )
+
+    if optimizer_name == "eve":
+        de_weight = to_float(scoped.get("de_weight"), 0.5)
+        de_jitter = to_float(scoped.get("de_jitter"), 1e-4)
+        init_sigma = to_float(scoped.get("init_sigma"), 0.1)
+        adam_steps = to_int(scoped.get("adam_steps"), 3)
+        use_pm = bool(scoped.get("use_pm", False))
+        pm_eta = to_float(scoped.get("pm_eta"), 20.0)
+        seed_value = scoped.get("seed")
+        seed = to_int(seed_value, 0) if seed_value is not None else None
+        return optimizer_cls(
+            converted_groups,
+            de_weight=de_weight,
+            de_jitter=de_jitter,
+            init_sigma=init_sigma,
+            adam_steps=adam_steps,
+            use_pm=use_pm,
+            pm_eta=pm_eta,
+            seed=seed,
         )
 
     return optimizer_cls(converted_groups)
