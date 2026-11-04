@@ -15,6 +15,15 @@ the paper-body figures, including `audio_frontend.mmd` (audio model class).
 of each optimizer's entry in the optimizer annexes. Sources and labels are in
 English; the Spanish paper reuses the same PDF/SVG set.
 
+`experiments/` holds the figures of the empirical-evaluation section and its
+appendices. `experiments/round2/*.pdf` and `*.svg` are matplotlib charts
+exported by `experimentos/2/report/make_paper_figures.py`, which imports the
+chart builders from the Experiment 2 web report and re-renders a curated subset
+in the light theme at paper size; the PDFs go to LaTeX and the SVGs to the web
+render. They are not Mermaid sources; only the two top-level
+`experiment-pipeline.mmd` and `experiment-reporting.mmd` diagrams belong to the
+build script, and they use `mermaid-paper.json` for legible SVG-text labels.
+
 ## Rebuild
 
 One diagram at a time (low-resource friendly), through the Mermaid CLI via

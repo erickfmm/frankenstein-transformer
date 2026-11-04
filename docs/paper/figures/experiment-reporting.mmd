@@ -1,0 +1,9 @@
+flowchart LR
+  R1["per-step training log<br/>2.66 M rows"] --> C["to_csv.py"]
+  R2["parameter census<br/>one row per module"] --> C
+  R3["pipeline ledger<br/>5,271 stage records"] --> C
+  C --> B["build_data.py<br/>master.csv"]
+  B --> G["make_charts.py<br/>figures"]
+  B --> P["make_report.py<br/>bilingual page"]
+  G --> P
+  P --> W["publish.sh<br/>GitHub Pages"]

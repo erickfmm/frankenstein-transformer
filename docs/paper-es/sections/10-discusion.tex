@@ -3,6 +3,8 @@
 
 Las decisiones de diseño en Frankenstein Transformer reflejan varias tensiones de ingeniería e investigación en las herramientas modernas de aprendizaje profundo.
 
+La campaña reportada en la Sección~\ref{sec:empirical-evaluation} convierte varias de esas tensiones en mediciones en lugar de opiniones. El esquema estricto rindió operativamente: 868 configuraciones se entrenaron, desplegaron y evaluaron a través del mismo contrato, y los fallos que quedaron se concentraron en cuatro mezcladores y en la serialización de checkpoints, no en la deriva de configuración. El sistema de optimizadores prefijados resultó expresivo pero, a 100 épocas, indeciso---una docena de optimizadores convergió a la misma pérdida---lo que es en sí mismo un argumento a favor del esquema: solo una barrida controlada puede mostrar que una dimensión de diseño no importa a una escala dada.
+
 \subsection{Compromisos de Diseño Basado en Esquemas}
 
 El enfoque basado en esquemas proporciona beneficios significativos de reproducibilidad al imponer contratos explícitos y fallar rápidamente ante configuraciones inválidas. Sin embargo, este enfoque también introduce rigidez: agregar nuevas arquitecturas u optimizadores requiere extensiones del esquema en lugar de argumentos de línea de comandos flexibles. El sistema de hiperparámetros prefijados permite un control detallado pero aumenta la complejidad de configuración para usuarios acostumbrados a interfaces más simples.

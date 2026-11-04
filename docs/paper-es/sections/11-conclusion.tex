@@ -29,7 +29,7 @@ Varias limitaciones y direcciones prometedoras para trabajo futuro surgen del di
     
     \item \textbf{Despliegue en Producción}: La interfaz web mejora la usabilidad pero puede no ser apropiada para todos los entornos de despliegue. Modos de configuración sin interfaz gráfica, gestión de configuración basada en API o ergonomía CLI mejorada podrían servir a flujos de trabajo HPC y de producción.
     
-    \item \textbf{Evaluación Comparativa}: Si bien el sistema permite entrenamiento con diversas arquitecturas, una evaluación comparativa exhaustiva que compare el rendimiento entre mezcladores y optimizadores en tareas estandarizadas proporcionaría orientación valiosa para la selección de configuraciones.
+    \item \textbf{Evaluación Comparativa}: La ronda~2 (Sección~\ref{sec:empirical-evaluation}) aporta el primer atlas comparativo de la lista de mezcladores, pero es una medición de 32 tokens, una semilla y 100 épocas. Las rondas futuras deberían extenderla a contexto más largo, más frases de validación y múltiples semillas antes de leer los rankings como conclusiones arquitectónicas.
     
     \item \textbf{Garantías de Estabilidad de Entrenamiento}: La implementación actual incluye guardas contra NaN/Inf y recorte de gradiente, pero el análisis formal de condiciones de estabilidad para diferentes combinaciones mezclador-optimizador, particularmente con bloques en bucle y cuantización agresiva, sigue abierto.
     

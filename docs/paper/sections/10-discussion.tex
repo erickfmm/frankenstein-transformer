@@ -3,6 +3,8 @@
 
 The design choices in Frankenstein Transformer reflect several engineering and research tensions in modern deep learning tooling.
 
+The campaign reported in Section~\ref{sec:empirical-evaluation} turns several of those tensions into measurements rather than opinions. The strict schema paid off operationally: 868 configurations trained, deployed and were evaluated through the same contract, and the failures that remained were concentrated in four mixers and in checkpoint serialisation, not in configuration drift. The prefixed optimizer system proved expressive but, at 100 epochs, undecisive---a dozen optimizers converged to the same loss---which is itself an argument for the schema: only a controlled sweep can show that a design dimension does not matter at a given scale.
+
 \subsection{Schema-Driven Design Trade-offs}
 
 The schema-first approach provides significant reproducibility benefits by enforcing explicit contracts and failing fast on invalid configurations. However, this approach also introduces rigidity: adding new architectures or optimizers requires schema extensions rather than loose command-line arguments. The prefixed hyperparameter system enables fine-grained control but increases configuration complexity for users accustomed to simpler interfaces.

@@ -1,0 +1,91 @@
+\section{El arnés de experimentación}
+\label{sec:annex-experiment-harness}
+
+Este apéndice documenta la maquinaria detrás de la Sección~\ref{sec:empirical-evaluation}. Su propósito es la reproducibilidad entre rondas: un experimento nuevo es una carpeta nueva bajo \texttt{experimentos/}, y los mismos scripts de consolidación, reporte y publicación operan sobre ella sin cambios. El arnés está deliberadamente separado del código del modelo---solo lee lo que entrenamiento y despliegue escriben---así que un experimento nunca depende de la versión de la biblioteca que lo produjo, y la biblioteca nunca se entera de la campaña que la usó.
+
+\subsection{Etapas y registros}
+
+Cada configuración es un archivo YAML y un slug. El slug codifica la familia y los mezcladores: \texttt{attn\_nsa\_attn\_\_engram\_attn} es un par híbrido, \texttt{attn\_single\_mamba} una línea base de un solo mezclador, y las ablaciones llevan sus propios prefijos (\texttt{opt\_}, \texttt{norm\_}, \texttt{pe\_}, \texttt{trans\_}, \texttt{vit\_}, \texttt{task\_}, \texttt{tokenizer\_}, \texttt{batch\_}, \texttt{realdata\_}, \texttt{audio\_}, \texttt{bitnet\_}). Todas las corridas ejecutan las mismas cinco etapas: entrenar, exportar el checkpoint, desplegar en formato estándar y cuantizado, evaluar cuatro consignas enmascaradas reservadas por formato y exportar el paquete de Hugging Face. Un fallo en una etapa se registra, no aborta la tanda y aparece después como una fila ausente en lugar de como un cero silencioso.
+
+Tres registradores escriben de forma independiente y se unen solo al momento del reporte:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{El log de entrenamiento paso a paso.} Un CSV por corrida con una fila por paso de optimización: pérdida, precisión, learning rate, normas de gradiente por grupo de parámetros, razón de recorte, tiempo por paso y rendimiento. La ronda~2 registró 2{,}656{,}372 filas, que se procesan en streaming y se reducen a medias por época antes de dibujar cualquier gráfico.
+    \item \textbf{El censo de parámetros.} Para cada configuración, el número de parámetros de cada grupo de módulos (atención, embeddings, FFN, cabeza, normalización, codificación posicional, mHC, router, residual). Esto es lo que separa ``el modelo es más grande'' de ``el bloque de atención es más grande''.
+    \item \textbf{El libro del pipeline.} Una fila por ejecución de etapa con categoría, estado, duración y código de retorno. Es el único registro de los fallos y, por tanto, la única fuente para el análisis de fiabilidad.
+\end{enumerate}
+
+\begin{figure}[tbp]
+\centering
+\fitfigure{\includegraphics{../paper/figures/experiment-reporting.pdf}}
+\caption{La cadena de reporte offline. Los tres registradores se consolidan en archivos CSV, se unen por configuración en \texttt{master.csv}, se grafican en ambos temas y se renderizan en una página estática bilingüe con los datasets unidos publicados al lado. Nada de esta cadena necesita GPU.}
+\label{fig:experiment-reporting}
+\end{figure}
+
+\subsection{El libro de etapas de la ronda~2}
+
+La Tabla~\ref{tab:stage-ledger} reproduce el libro. El entrenamiento domina tanto el conteo de registros como el coste: 1{,}039 intentos, 868 éxitos y 171 fallos, una mediana de 68 minutos y un P90 de 84 minutos por corrida exitosa, para 906 horas de GPU en total. El despliegue es la otra etapa que falla (104 veces de 1{,}734), y los fallos son simétricos: una configuración cuyo export estándar falla también falla en el cuantizado, lo que apunta a la serialización del checkpoint o de la configuración y no a la cuantización. La evaluación y el export a Hugging Face nunca fallaron en la población analizada.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Libro de etapas del pipeline para la ronda~2. Las duraciones están en segundos; los totales son horas de reloj de toda la campaña.}
+\label{tab:stage-ledger}
+\begin{tabular}{lrrrrrr}
+\toprule
+Etapa & Registros & OK & Fallos & Mediana (s) & P90 (s) & Total (h) \\
+\midrule
+Entrenamiento          & 1{,}039 & 868  & 171 & 4{,}101,45 & 5{,}037,3 & 906,0 \\
+Export a HF            & 867     & 867  & 0   & 17,41      & 44,7      & 5,4   \\
+Evaluación de inferencia & 1{,}630 & 1{,}630 & 0 & 10,37     & 13,1      & 4,9   \\
+Despliegue             & 1{,}734 & 1{,}630 & 104 & 8,64     & 38,0      & 8,8   \\
+BitNet GGUF            & 1       & 1    & 0   & 3,32       & 3,3       & 0,0   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Los 275 fallos son informativos y no solo inconvenientes. Los 171 fallos de entrenamiento quedan fuera de las 868 configuraciones analizadas, que se eligieron precisamente porque entrenaron; los 104 fallos de despliegue ocurren en pares. La distribución de fallos por familia y el análisis de huellas idénticas de los cuatro mezcladores que colapsan con 32 tokens se grafican en el Apéndice~\ref{sec:annex-experiment-2}.
+
+\subsection{Datasets consolidados}
+
+La cadena de reporte parte de las carpetas crudas y produce un conjunto pequeño de tablas unidas. Se publican con el informe para que cualquier figura se pueda reconstruir sin los 702\,MB de logs paso a paso, y los CSV crudos por corrida se publican aparte, comprimidos con gzip, para quien necesite datos a nivel de paso.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Archivos publicados con una ronda. \texttt{master.csv} es la clave de unión: una fila por configuración con parámetros, entrenamiento, pipeline e inferencia.}
+\label{tab:round-datasets}
+\begin{tabularx}{\linewidth}{L{5.2cm}L{9.4cm}}
+\toprule
+Archivo & Contenido \\
+\midrule
+\texttt{master.csv} & Una fila por configuración; parámetros por grupo, métricas de entrenamiento finales y promediadas, duraciones y estados de etapa, puntuaciones de inferencia por formato. \\
+\texttt{training\_per\_epoch.csv} & Medias por corrida y época de pérdida, precisión, learning rate, normas de gradiente y rendimiento (2,66\,M de pasos reducidos a 86{,}274 filas). \\
+\texttt{inference\_samples.csv} & Cada registro de inferencia: cuatro muestras, dos formatos, una fila por muestra. \\
+\texttt{pipeline\_stages.csv} & El libro de etapas completo (5{,}271 filas). \\
+\texttt{param\_metrics.csv} & El censo crudo de parámetros por grupo de módulos. \\
+\texttt{training\_metrics\_avg.csv} & Promedios por corrida de las 34 métricas registradas. \\
+\texttt{training\_metrics\_final.csv} & Instantánea del último paso de cada corrida. \\
+\texttt{training\_metrics\_std.csv} & Desviaciones estándar muestrales por corrida. \\
+\texttt{results.md.csv} & Resumen legible de los resultados del pipeline. \\
+\texttt{data/raw/*.csv.gz} & Los 868 logs de paso por corrida, un archivo por configuración. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Reconstruir una ronda}
+
+El pipeline son tres scripts y un publicador, todos de biblioteca estándar o solo pandas/numpy/matplotlib:
+
+\begin{enumerate}[leftmargin=*]
+    \item \texttt{python experimentos/to\_csv.py N} lee \texttt{experimentos/N/} sin modificarlo y escribe CSVs consolidados en \texttt{experimentos/N/csvs/}: la tabla de inferencia con la columna \texttt{notes} expandida en una columna por cada par \texttt{key=value}, el censo de parámetros como una fila por configuración, el libro de resultados como tabla plana y los CSV de entrenamiento por corrida concatenados más su media, desviación estándar y última fila por corrida.
+    \item \texttt{python experimentos/N/report/build\_data.py} procesa los logs crudos en streaming, une los tres registradores por slug y escribe \texttt{master.csv} y las tablas derivadas.
+    \item \texttt{python experimentos/N/report/make\_charts.py} renderiza cada figura dos veces (oscura y clara) y registra los pies en \texttt{registry.json}; \texttt{make\_report.py} consume ambos para emitir la página estática bilingüe.
+    \item \texttt{bash experimentos/N/report/publish.sh} copia la página, las figuras y los datasets al espejo de GitHub Pages. Nunca hace commit ni push por sí mismo.
+\end{enumerate}
+
+Las figuras del artículo son un subconjunto curado de los mismos constructores de gráficos, exportado como PDF vectorial por \texttt{make\_paper\_figures.py}. Toda la cadena es solo CPU y reproduce cada número de este apéndice a partir de los datasets publicados.
+
+\subsection{Ronda 1: el piloto}
+
+La ronda~1 ejercitó el mismo arnés de extremo a extremo a escala de humo: 5{,}129 registros de etapas, corridas de entrenamiento de aproximadamente medio minuto y la misma secuencia de cinco etapas. Su propósito era validar la generación de slugs, la contabilidad del libro, la simetría del despliegue y las uniones del reporte antes de comprometer tiempo de GPU. No se analiza más aquí porque las corridas eran demasiado cortas para separar arquitecturas; su valor es que la ronda~2 heredó un arnés en el que cada modo de fallo ya se había visto una vez.

@@ -53,6 +53,7 @@ render_width() { # render_width relative_mmd_path
   case "$1" in
     mixer-taxonomy.mmd) echo 2600 ;;
     latent-map.mmd) echo 1200 ;;
+    experiment-*.mmd) echo 1400 ;;
     mixers/*|optimizers/*) echo 1400 ;;
     *) echo 1600 ;;
   esac
@@ -73,6 +74,11 @@ render() { # render relative_mmd_path pdf|svg
   if [[ "$fmt" == "svg" ]]; then
     extra=(-C web-theme.css)
   fi
+  # Experiment diagrams use the paper Mermaid config (SVG <text> labels and
+  # tighter spacing) so the PDF stays legible at \linewidth.
+  case "$src" in
+    experiment-*.mmd) extra+=(-c mermaid-paper.json) ;;
+  esac
   pnpm dlx @mermaid-js/mermaid-cli \
     -i "$src" -o "$out" \
     -p "$PUPPETEER_CONFIG" \

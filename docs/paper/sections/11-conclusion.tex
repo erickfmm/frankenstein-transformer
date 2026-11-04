@@ -29,7 +29,7 @@ Several limitations and promising directions for future work emerge from this sy
     
     \item \textbf{Production Deployment}: The web interface improves usability but may not be appropriate for all deployment environments. Headless configuration modes, API-based configuration management, or improved CLI ergonomics could serve HPC and production workflows.
     
-    \item \textbf{Evaluation Benchmarking}: While the system enables training with diverse architectures, comprehensive benchmarking comparing performance across mixers and optimizers on standardized tasks would provide valuable guidance for configuration selection.
+    \item \textbf{Evaluation Benchmarking}: Round~2 (Section~\ref{sec:empirical-evaluation}) provides the first comparative atlas across the mixer list, but it is a 32-token, single-seed, 100-epoch measurement. Future rounds should extend it to longer context, more held-out sentences and multiple seeds before the rankings are read as architectural conclusions.
     
     \item \textbf{Training Stability Guarantees}: Current implementation includes NaN/Inf guards and gradient clipping, but formal analysis of stability conditions for different mixer-optimizer combinations, particularly with looped blocks and aggressive quantization, remains open.
     

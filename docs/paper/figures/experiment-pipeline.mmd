@@ -1,0 +1,11 @@
+flowchart LR
+  A["configs/*.yaml"] --> T["train<br/>100 epochs"]
+  T --> ED["export checkpoint + deploy<br/>standard | quantized"]
+  ED --> V["evaluate<br/>4 prompts x 2 formats"]
+  V --> H["HF export"]
+
+  T -.-> R1["per-step<br/>training log"]
+  ED -.-> R2["parameter<br/>census"]
+  ED -.-> R3["pipeline<br/>ledger"]
+  V -.-> R3
+  H -.-> R3

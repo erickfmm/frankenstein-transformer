@@ -1,0 +1,13 @@
+{
+  "theme": "base",
+  "themeVariables": {
+    "fontSize": "15px",
+    "fontFamily": "DejaVu Sans, Helvetica, Arial, sans-serif"
+  },
+  "flowchart": {
+    "htmlLabels": false,
+    "nodeSpacing": 20,
+    "rankSpacing": 34,
+    "padding": 8
+  }
+}
