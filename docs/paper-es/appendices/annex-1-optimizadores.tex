@@ -1018,21 +1018,27 @@ W_{t+1} &= W_t - \eta X_K \quad\text{(actualización con dirección ortogonaliza
 \end{align}
 Muon realiza 5 iteraciones de Newton-Schulz para producir una dirección aproximadamente ortogonal, asegurando que las actualizaciones respeten restricciones geométricas. La justificación: las actualizaciones ortogonales preservan las normas durante el entrenamiento, evitando la deriva de norma observada en métodos basados en momento.
 
+Siguiendo la receta híbrida de \citet{shen_convergence_2025}, la actualización ortogonalizada se reserva para las matrices de pesos de capas ocultas (grupos $\mathtt{attention}$, $\mathtt{ffn}$ y otros bloques ocultos). Las tablas de embeddings, los encodings posicionales aprendidos, los heads de salida y todo parámetro no matricial (sesgos, escalas de normalización, kernels de convolución) se entrenan con AdamW desacoplado en lugar de omitirse, usando los valores por grupo de tasa de aprendizaje, weight decay, $\beta_1, \beta_2$ y $\epsilon$ de la configuración.
+
 \begin{algorithm}[H]
 \caption{Muon (Ortogonalización de Newton-Schulz)}
 \label{alg:muon}
 \begin{algorithmic}[1]
-\Require Parámetros iniciales $\theta$ (matrices), tasa de aprendizaje $\eta$, iteraciones Newton-Schulz $K$
+\Require Parámetros iniciales $\theta$, tasa de aprendizaje $\eta$, iteraciones Newton-Schulz $K$
 \Ensure Parámetros actualizados $\theta_T$
-\For{cada matriz de parámetros 2D $W$}
-    \State $G \gets \nabla f(W)$ \Comment{Gradiente}
-    \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalizar gradiente por norma de Frobenius}
-    \For{$k = 0, 1, \ldots, K-1$}
-        \State $A_k \gets X_k X_k^\top$ \Comment{Gramiana (costo: $O(mn^2)$ o $O(m^2n)$ para matrices altas/anchas)}
-        \State $B_k \gets (3/2) A_k - (1/2) A_k^2$ \Comment{Coeficientes de Newton-Schulz}
-        \State $X_{k+1} \gets B_k X_k$ \Comment{Paso polinomial}
-    \EndFor
-    \State $W \gets W - \eta X_K$ \Comment{Actualizar con dirección ortogonalizada}
+\For{cada parámetro $P$}
+    \If{$P$ es una matriz 2D de capa oculta $W$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradiente}
+        \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalizar gradiente por norma de Frobenius}
+        \For{$k = 0, 1, \ldots, K-1$}
+            \State $A_k \gets X_k X_k^\top$ \Comment{Gramiana (costo: $O(mn^2)$ o $O(m^2n)$ para matrices altas/anchas)}
+            \State $B_k \gets (3/2) A_k - (1/2) A_k^2$ \Comment{Coeficientes de Newton-Schulz}
+            \State $X_{k+1} \gets B_k X_k$ \Comment{Paso polinomial}
+        \EndFor
+        \State $W \gets W - \eta X_K$ \Comment{Actualizar con dirección ortogonalizada}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Respaldo híbrido: embeddings, pos, heads, no matriciales}
+    \EndIf
 \EndFor
 \Return $\theta_T$
 \end{algorithmic}
@@ -1041,7 +1047,7 @@ Muon realiza 5 iteraciones de Newton-Schulz para producir una dirección aproxim
 \paragraph{Contras.}
 \begin{itemize}[leftmargin=*]
 \item Varias multiplicaciones de matrices por iteración de Newton-Schulz; se requieren kernels personalizados eficientes.
-\item Definido solo para matrices de parámetros 2D.
+\item La construcción ortogonalizada está definida solo para matrices 2D; las clases de parámetros restantes dependen del respaldo AdamW y de su calibración de tasa de aprendizaje por grupo.
 \end{itemize}
 
 \paragraph{Ventajas.}
@@ -1057,26 +1063,30 @@ Muon realiza 5 iteraciones de Newton-Schulz para producir una dirección aproxim
 \caption{Flujo por paso de Turbo-Muon: precondicionamiento casi ortogonal (AOL) antes de las iteraciones de Newton-Schulz, reduciendo su número.}
 \label{fig:opt-turbo-muon}
 \end{figure}
-Turbo-Muon añade un paso de \textbf{precondicionamiento casi-ortogonal} (AOL) antes de las iteraciones de Newton-Schulz. El precondicionador $P = 1.5I - 0.5X_0X_0^\top$ se aplica al gradiente normalizado, reduciendo el número de pasos de ortogonalización requeridos a cuatro mientras preserva la geometría de actualización ortogonalizada.
+Turbo-Muon añade un paso de \textbf{precondicionamiento casi-ortogonal} (AOL) antes de las iteraciones de Newton-Schulz. El precondicionador $P = 1.5I - 0.5X_0X_0^\top$ se aplica al gradiente normalizado, reduciendo el número de pasos de ortogonalización requeridos a cuatro mientras preserva la geometría de actualización ortogonalizada. Hereda el enrutamiento híbrido de Muon: solo se ortogonalizan las matrices 2D de capas ocultas, mientras que las tablas de embeddings, los encodings posicionales aprendidos, los heads de salida y los parámetros no matriciales reciben actualizaciones AdamW desacopladas.
 
 \begin{algorithm}[H]
 \caption{Turbo-Muon (Ortogonalización Precondicionada con AOL)}
 \label{alg:turbo-muon}
 \begin{algorithmic}[1]
-\Require Parámetros iniciales $\theta$ (matrices), tasa de aprendizaje $\eta$, iteraciones Newton-Schulz $K'$ (típicamente 4)
+\Require Parámetros iniciales $\theta$, tasa de aprendizaje $\eta$, iteraciones Newton-Schulz $K'$ (típicamente 4)
 \Ensure Parámetros actualizados $\theta_T$
-\For{cada matriz de parámetros 2D $W$}
-    \State $G \gets \nabla f(W)$ \Comment{Gradiente}
-    \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalizar gradiente}
-    \State \textbf{AOL (Almost-Orthogonal preconditioner):} \Comment{Paso de precondicionamiento}
-    \State $P \gets (1.5 I - 0.5 X_0 X_0^\top)$ \Comment{Matriz de precondicionamiento}
-    \State $X_0 \gets P X_0$ \Comment{Inicio precondicionado}
-    \For{$k = 0, 1, \ldots, K'-1$}
-        \State $A_k \gets X_k X_k^\top$
-        \State $B_k \gets (3/2) A_k - (1/2) A_k^2$
-        \State $X_{k+1} \gets B_k X_k$ \Comment{Iteraciones reducidas gracias al precondicionamiento AOL}
-    \EndFor
-    \State $W \gets W - \eta X_{K'}$ \Comment{Actualizar con dirección ortogonalizada precondicionada}
+\For{cada parámetro $P$}
+    \If{$P$ es una matriz 2D de capa oculta $W$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradiente}
+        \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalizar gradiente}
+        \State \textbf{AOL (Almost-Orthogonal preconditioner):} \Comment{Paso de precondicionamiento}
+        \State $P \gets (1.5 I - 0.5 X_0 X_0^\top)$ \Comment{Matriz de precondicionamiento}
+        \State $X_0 \gets P X_0$ \Comment{Inicio precondicionado}
+        \For{$k = 0, 1, \ldots, K'-1$}
+            \State $A_k \gets X_k X_k^\top$
+            \State $B_k \gets (3/2) A_k - (1/2) A_k^2$
+            \State $X_{k+1} \gets B_k X_k$ \Comment{Iteraciones reducidas gracias al precondicionamiento AOL}
+        \EndFor
+        \State $W \gets W - \eta X_{K'}$ \Comment{Actualizar con dirección ortogonalizada precondicionada}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Respaldo híbrido: embeddings, pos, heads, no matriciales}
+    \EndIf
 \EndFor
 \Return $\theta_T$
 \end{algorithmic}
@@ -1085,7 +1095,7 @@ Turbo-Muon añade un paso de \textbf{precondicionamiento casi-ortogonal} (AOL) a
 \paragraph{Contras.}
 \begin{itemize}[leftmargin=*]
 \item Sigue siendo intensivo en cómputo; AOL añade una multiplicación de matrices de precondicionamiento.
-\item Requiere el mismo soporte de kernels personalizados que Muon.
+\item Requiere el mismo soporte de kernels personalizados que Muon, y comparte su dependencia del respaldo AdamW para las clases de parámetros no ocultas.
 \end{itemize}
 
 \paragraph{Ventajas.}

@@ -726,7 +726,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 | Auto-LR | `prodigy`, `schedulefree_adamw` | Remove LR tuning/scheduling |
 | Adaptive | `radam`, `adan`, `adopt`, `ademamix`, `mars_adamw`, `cautious_adamw`, `lamb` | Rectification, Nesterov, dual EMA, variance reduction, masking, layer-wise scaling |
 | Second-order | `sophia`, `shampoo`, `soap` | Diagonal Hessian / Kronecker / eigenbasis |
-| Orthogonalized | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3` | Momentum orthogonalization; `ada_muon` adds an element-wise second moment on the orthogonalized direction with RMS-aligned Adam-scale updates; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer); `dion3` orthogonalizes only a fraction of the momentum rows with Gram Newton-Schulz and error feedback (single momentum buffer, optional NorMuon row moments) |
+| Orthogonalized | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3` | Momentum orthogonalization; `muon`/`turbo_muon` follow the hybrid recipe (Newton-Schulz on hidden-layer 2-D matrices, decoupled AdamW on the `embeddings`/`pos`/`head` groups and on every non-2-D parameter, using the group `betas`/`eps`); `ada_muon` adds an element-wise second moment on the orthogonalized direction with RMS-aligned Adam-scale updates; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer); `dion3` orthogonalizes only a fraction of the momentum rows with Gram Newton-Schulz and error feedback (single momentum buffer, optional NorMuon row moments) |
 | Tunable | `anon` | `gamma` adaptivity |
 
 **Parameter groups:** `embeddings`, `pos`, `attention`, `ffn`, `norms`,

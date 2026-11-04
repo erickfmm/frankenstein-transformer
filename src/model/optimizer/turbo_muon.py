@@ -6,6 +6,10 @@ Newton-Schulz iterations.  The AOL step scales rows by the inverse square
 root of the row-wise absolute sum of the Gram matrix, accelerating convergence
 and reducing the number of Newton-Schulz iterations from 5 to 4.
 
+As in Muon, the orthogonalized path is reserved for hidden-layer matrices;
+embedding tables, learned positional encodings, output heads and every
+non-matrix tensor receive decoupled AdamW updates instead of being skipped.
+
 Reference:
     Boissin, T., Fournier, L., & Gidel, G. (2025). Turbo-Muon: Accelerating
     Muon with AOL Preconditioning. arXiv:2512.04632.
@@ -16,14 +20,18 @@ from __future__ import annotations
 import torch
 from torch.optim import Optimizer
 
+from .base import ADAMW_FALLBACK_GROUPS, adamw_fallback_update
+
 
 class TurboMuon(Optimizer):
     """Turbo-Muon optimizer with AOL-preconditioned orthogonalization.
 
     Applies momentum to matrix-shaped gradients, preconditions with AOL
     (row-wise absolute-sum scaling of the Gram matrix), then orthogonalizes
-    via Newton-Schulz iterations.  Only parameters with ``ndim >= 2`` are
-    processed.
+    via Newton-Schulz iterations.  Hidden-layer 2-D parameters take the
+    orthogonalized path; parameters in the embedding, positional-encoding and
+    head groups, as well as any parameter that is not a 2-D matrix, take a
+    decoupled AdamW update using the group's ``betas`` and ``eps``.
 
     Reference:
         Boissin, T., Fournier, L., & Gidel, G. (2025). Turbo-Muon:
@@ -40,12 +48,16 @@ class TurboMuon(Optimizer):
         ns_eps: Epsilon for numerical stability in AOL scaling and
             normalization (default: 1e-7).
         weight_decay: Decoupled weight decay coefficient (default: 0.0).
+        betas: ``(beta1, beta2)`` coefficients of the AdamW fallback
+            (default: ``(0.9, 0.95)``).
+        eps: Epsilon of the AdamW fallback (default: 1e-8).
 
     Attributes:
         defaults (dict): Default hyper-parameter values for each parameter
             group.
         param_groups (list): Parameter groups tracked by the optimizer.
-        state (dict): Per-parameter optimizer state (momentum buffer).
+        state (dict): Per-parameter optimizer state (momentum buffer for
+            matrix parameters; first/second moments for the AdamW fallback).
     """
 
     def __init__(
@@ -57,6 +69,8 @@ class TurboMuon(Optimizer):
         ns_steps=4,
         ns_eps=1e-7,
         weight_decay=0.0,
+        betas=(0.9, 0.95),
+        eps=1e-8,
     ):
         """Initializes the Turbo-Muon optimizer.
 
@@ -69,6 +83,8 @@ class TurboMuon(Optimizer):
             ns_steps: Newton-Schulz iteration count (default: 4).
             ns_eps: Numerical stability epsilon (default: 1e-7).
             weight_decay: Decoupled weight decay coefficient (default: 0.0).
+            betas: AdamW-fallback moment coefficients (default: ``(0.9, 0.95)``).
+            eps: AdamW-fallback epsilon (default: 1e-8).
         """
         defaults = dict(
             lr=lr,
@@ -77,6 +93,8 @@ class TurboMuon(Optimizer):
             ns_steps=ns_steps,
             ns_eps=ns_eps,
             weight_decay=weight_decay,
+            betas=betas,
+            eps=eps,
         )
         super().__init__(params, defaults)
 
@@ -97,8 +115,24 @@ class TurboMuon(Optimizer):
                 loss = closure()
 
         for group in self.param_groups:
+            use_adamw = str(group.get("name", "other")) in ADAMW_FALLBACK_GROUPS
             for p in group["params"]:
-                if p.grad is None or p.ndim < 2:
+                if p.grad is None:
+                    continue
+
+                # Paper hybrid recipe: embeddings, positional encodings,
+                # output heads and every non-matrix tensor take AdamW; only
+                # hidden-layer 2-D matrices are orthogonalized.
+                if use_adamw or p.ndim != 2:
+                    adamw_fallback_update(
+                        p,
+                        p.grad,
+                        self.state[p],
+                        lr=group["lr"],
+                        betas=group.get("betas", (0.9, 0.95)),
+                        eps=group.get("eps", 1e-8),
+                        weight_decay=group["weight_decay"],
+                    )
                     continue
 
                 grad = p.grad

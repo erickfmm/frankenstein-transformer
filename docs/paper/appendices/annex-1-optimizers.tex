@@ -1018,21 +1018,27 @@ W_{t+1} &= W_t - \eta X_K \quad\text{(update with orthogonalized direction)}
 \end{align}
 Muon performs 5 Newton-Schulz iterations to produce an approximately orthogonal direction, ensuring updates respect geometric constraints. The rationale: orthogonal updates preserve norms during training, avoiding the norm creep observed in momentum-based methods.
 
+Following the hybrid recipe of \citet{shen_convergence_2025}, the orthogonalized update is reserved for hidden-layer weight matrices ($\mathtt{attention}$, $\mathtt{ffn}$ and other hidden-block groups). Embedding tables, learned positional encodings, output heads and every non-matrix parameter (biases, normalization scales, convolution kernels) are trained with decoupled AdamW instead of being skipped, using the group-level learning rate, weight decay, $\beta_1, \beta_2$ and $\epsilon$ settings exposed by the per-group configuration.
+
 \begin{algorithm}[H]
 \caption{Muon (Newton-Schulz Orthogonalization)}
 \label{alg:muon}
 \begin{algorithmic}[1]
-\Require Initial parameters $\theta$ (matrices), learning rate $\eta$, Newton-Schulz iters $K$
+\Require Initial parameters $\theta$, learning rate $\eta$, Newton-Schulz iters $K$
 \Ensure Updated parameters $\theta_T$
-\For{each 2D parameter matrix $W$}
-    \State $G \gets \nabla f(W)$ \Comment{Gradient}
-    \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalize gradient by Frobenius norm}
-    \For{$k = 0, 1, \ldots, K-1$}
-        \State $A_k \gets X_k X_k^\top$ \Comment{Gramian (cost: $O(mn^2)$ or $O(m^2n)$ for tall/wide)}
-        \State $B_k \gets (3/2) A_k - (1/2) A_k^2$ \Comment{Newton-Schulz coefficients}
-        \State $X_{k+1} \gets B_k X_k$ \Comment{Polynomial step}
-    \EndFor
-    \State $W \gets W - \eta X_K$ \Comment{Update with orthogonalized direction}
+\For{each parameter $P$}
+    \If{$P$ is a hidden-layer 2D matrix $W$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradient}
+        \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalize gradient by Frobenius norm}
+        \For{$k = 0, 1, \ldots, K-1$}
+            \State $A_k \gets X_k X_k^\top$ \Comment{Gramian (cost: $O(mn^2)$ or $O(m^2n)$ for tall/wide)}
+            \State $B_k \gets (3/2) A_k - (1/2) A_k^2$ \Comment{Newton-Schulz coefficients}
+            \State $X_{k+1} \gets B_k X_k$ \Comment{Polynomial step}
+        \EndFor
+        \State $W \gets W - \eta X_K$ \Comment{Update with orthogonalized direction}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Hybrid fallback: embeddings, pos, heads, non-matrices}
+    \EndIf
 \EndFor
 \Return $\theta_T$
 \end{algorithmic}
@@ -1041,7 +1047,7 @@ Muon performs 5 Newton-Schulz iterations to produce an approximately orthogonal 
 \paragraph{Cons.}
 \begin{itemize}[leftmargin=*]
 \item Several matrix multiplications per Newton-Schulz iteration; efficient custom kernels are required.
-\item Defined only for 2D parameter matrices.
+\item The orthogonalized construction is defined only for 2D matrices; the remaining parameter classes depend on the AdamW fallback and its per-group learning-rate calibration.
 \end{itemize}
 
 \paragraph{Pros.}
@@ -1057,26 +1063,30 @@ Muon performs 5 Newton-Schulz iterations to produce an approximately orthogonal 
 \caption{Step flow of Turbo-Muon: almost-orthogonal preconditioning (AOL) before the Newton-Schulz iterations, reducing their count.}
 \label{fig:opt-turbo-muon}
 \end{figure}
-Turbo-Muon adds an \textbf{almost-orthogonal preconditioning} (AOL) step before the Newton-Schulz iterations. The preconditioner $P = 1.5I - 0.5X_0X_0^\top$ is applied to the normalized gradient, reducing the number of required orthogonalization steps to four while preserving the orthogonalized update geometry.
+Turbo-Muon adds an \textbf{almost-orthogonal preconditioning} (AOL) step before the Newton-Schulz iterations. The preconditioner $P = 1.5I - 0.5X_0X_0^\top$ is applied to the normalized gradient, reducing the number of required orthogonalization steps to four while preserving the orthogonalized update geometry. It inherits Muon's hybrid routing: only hidden-layer 2D matrices are orthogonalized, while embedding tables, learned positional encodings, output heads and non-matrix parameters take decoupled AdamW updates.
 
 \begin{algorithm}[H]
 \caption{Turbo-Muon (AOL-Preconditioned Orthogonalization)}
 \label{alg:turbo-muon}
 \begin{algorithmic}[1]
-\Require Initial parameters $\theta$ (matrices), learning rate $\eta$, Newton-Schulz iters $K'$ (typically 4)
+\Require Initial parameters $\theta$, learning rate $\eta$, Newton-Schulz iters $K'$ (typically 4)
 \Ensure Updated parameters $\theta_T$
-\For{each 2D parameter matrix $W$}
-    \State $G \gets \nabla f(W)$ \Comment{Gradient}
-    \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalize gradient}
-    \State \textbf{AOL (Almost-Orthogonal preconditioner):} \Comment{Preconditioning step}
-    \State $P \gets (1.5 I - 0.5 X_0 X_0^\top)$ \Comment{Preconditioning matrix}
-    \State $X_0 \gets P X_0$ \Comment{Preconditioned start}
-    \For{$k = 0, 1, \ldots, K'-1$}
-        \State $A_k \gets X_k X_k^\top$
-        \State $B_k \gets (3/2) A_k - (1/2) A_k^2$
-        \State $X_{k+1} \gets B_k X_k$ \Comment{Reduced iterations due to AOL preconditioning}
-    \EndFor
-    \State $W \gets W - \eta X_{K'}$ \Comment{Update with preconditioned orthogonalized direction}
+\For{each parameter $P$}
+    \If{$P$ is a hidden-layer 2D matrix $W$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradient}
+        \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalize gradient}
+        \State \textbf{AOL (Almost-Orthogonal preconditioner):} \Comment{Preconditioning step}
+        \State $P \gets (1.5 I - 0.5 X_0 X_0^\top)$ \Comment{Preconditioning matrix}
+        \State $X_0 \gets P X_0$ \Comment{Preconditioned start}
+        \For{$k = 0, 1, \ldots, K'-1$}
+            \State $A_k \gets X_k X_k^\top$
+            \State $B_k \gets (3/2) A_k - (1/2) A_k^2$
+            \State $X_{k+1} \gets B_k X_k$ \Comment{Reduced iterations due to AOL preconditioning}
+        \EndFor
+        \State $W \gets W - \eta X_{K'}$ \Comment{Update with preconditioned orthogonalized direction}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Hybrid fallback: embeddings, pos, heads, non-matrices}
+    \EndIf
 \EndFor
 \Return $\theta_T$
 \end{algorithmic}
@@ -1085,7 +1095,7 @@ Turbo-Muon adds an \textbf{almost-orthogonal preconditioning} (AOL) step before 
 \paragraph{Cons.}
 \begin{itemize}[leftmargin=*]
 \item Still compute-heavy; AOL adds a preconditioning matrix multiplication.
-\item Requires the same custom-kernel support as Muon.
+\item Requires the same custom-kernel support as Muon, and shares its dependence on the AdamW fallback for non-hidden parameter classes.
 \end{itemize}
 
 \paragraph{Pros.}

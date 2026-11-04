@@ -110,6 +110,127 @@ class BuildOptimizerMuonTests(unittest.TestCase):
         opt = build_optimizer("muon", _param_groups(), {})
         self.assertIsNotNone(opt)
 
+    def test_default_betas_and_eps_present(self):
+        opt = build_optimizer("muon", _param_groups(), {})
+        self.assertEqual(opt.defaults["betas"], (0.9, 0.95))
+        self.assertEqual(opt.defaults["eps"], 1e-8)
+
+    def test_hidden_matrix_uses_muon_state(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 0.02, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("muon", groups, {})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("momentum_buffer", state)
+        self.assertNotIn("exp_avg", state)
+
+    def test_embedding_group_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "embeddings"}]
+        opt = build_optimizer("muon", groups, {})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("exp_avg", state)
+        self.assertIn("exp_avg_sq", state)
+        self.assertNotIn("momentum_buffer", state)
+
+    def test_head_group_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "head"}]
+        opt = build_optimizer("muon", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("exp_avg", opt.state[p])
+
+    def test_vector_param_is_not_frozen(self):
+        p = nn.Parameter(torch.ones(6))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "norms"}]
+        opt = build_optimizer("muon", groups, {})
+        before = p.detach().clone()
+        p.sum().backward()
+        opt.step()
+        self.assertFalse(torch.equal(before, p.detach()))
+        self.assertIn("exp_avg", opt.state[p])
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_high_rank_param_uses_adamw_fallback(self):
+        kernel = nn.Parameter(torch.randn(4, 4, 3, 3))
+        groups = [{"params": [kernel], "lr": 1e-3, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("muon", groups, {})
+        kernel.sum().backward()
+        opt.step()
+        self.assertIn("exp_avg", opt.state[kernel])
+        self.assertFalse(torch.isnan(kernel).any())
+
+    def test_fallback_matches_reference_adamw(self):
+        gen = torch.Generator().manual_seed(0)
+        ref = nn.Parameter(torch.randn(6, generator=gen))
+        ours = nn.Parameter(ref.detach().clone())
+        grad = torch.randn(6, generator=gen)
+
+        ref.grad = grad.clone()
+        ours.grad = grad.clone()
+        reference = torch.optim.AdamW(
+            [ref], lr=1e-3, betas=(0.9, 0.95), eps=1e-8, weight_decay=0.01
+        )
+        groups = [{"params": [ours], "lr": 1e-3, "weight_decay": 0.01, "name": "norms"}]
+        opt = build_optimizer("muon", groups, {})
+
+        reference.step()
+        opt.step()
+        # First step has bias correction; both implementations must agree.
+        self.assertTrue(torch.allclose(ours, ref, atol=1e-6, rtol=1e-5))
+
+    def test_weight_decay_still_applies_to_muon_path(self):
+        p = nn.Parameter(torch.ones(4, 4))
+        groups = [{"params": [p], "lr": 0.02, "weight_decay": 0.1, "name": "ffn"}]
+        opt = build_optimizer("muon", groups, {})
+        opt.zero_grad()
+        p.grad = torch.zeros_like(p)
+        opt.step()
+        self.assertTrue(torch.all(p < 1.0))
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerTurboMuonTests(unittest.TestCase):
+    def test_builds_without_error(self):
+        opt = build_optimizer("turbo_muon", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_default_ns_steps_is_four(self):
+        opt = build_optimizer("turbo_muon", _param_groups(), {})
+        self.assertEqual(opt.defaults["ns_steps"], 4)
+
+    def test_hidden_matrix_uses_muon_state(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 0.02, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("turbo_muon", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("momentum_buffer", opt.state[p])
+        self.assertNotIn("exp_avg", opt.state[p])
+
+    def test_embedding_group_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "embeddings"}]
+        opt = build_optimizer("turbo_muon", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("exp_avg", opt.state[p])
+        self.assertNotIn("momentum_buffer", opt.state[p])
+
+    def test_vector_param_is_not_frozen(self):
+        p = nn.Parameter(torch.ones(6))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "norms"}]
+        opt = build_optimizer("turbo_muon", groups, {})
+        before = p.detach().clone()
+        p.sum().backward()
+        opt.step()
+        self.assertFalse(torch.equal(before, p.detach()))
+        self.assertFalse(torch.isnan(p).any())
+
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class BuildOptimizerRAdamTests(unittest.TestCase):

@@ -148,8 +148,8 @@ Lion & Momentum de signo & 1 ($m$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$
 Shampoo & Segundo orden & $2d$ ($L_i$, $R_i$) & $\mathcal{O}(n^{1+2/d})$ & lr, eps, wd & \citep{gupta_shampoo_2018} \\
 SOAP & Segundo orden & $2d + 2$ ($m$, $v$) & $\mathcal{O}(n^{1+1/d})$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{vyas_soap_2024} \\
 Sophia & Consciente de curvatura & 3 ($m$, $v$, $h$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd, $k$ & \citep{liu_sophia_2023} \\
-Muon & Ortogonalidad & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, pasos NS $k$ & \citep{shen_convergence_2025} \\
-Turbo-Muon & Ortogonalidad & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, pasos NS $k$ & \citep{boissin_turbo-muon_2025} \\
+Muon & Ortogonalidad (híbrida) & 1 ($m$); + $v$ en el respaldo AdamW & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, pasos NS $k$; $\beta$, eps para embeddings/pos/heads/vectores & \citep{shen_convergence_2025} \\
+Turbo-Muon & Ortogonalidad (híbrida) & 1 ($m$); + $v$ en el respaldo AdamW & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, pasos NS $k$; $\beta$, eps para embeddings/pos/heads/vectores & \citep{boissin_turbo-muon_2025} \\
 AF-Muon & Tabla atada sin AdamW & 1 ($m$) & $\mathcal{O}(n \cdot k + V d\, I)$ & lr, momentum, wd, tope $c$, escala de tabla $s$, $\rho_{out}/\rho_{hid}$, pasos NS $k$ & \citep{lagzian_afmuon_2026} \\
 AdaMuon & Ortogonalidad + adaptativo & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, eps, wd, pasos NS $k$ & \citep{si_adamuon_2025} \\
 Dion3 & Ortogonalidad fraccional & 1 ($m$); + $v$ por filas con NorMuon & $\mathcal{O}(r^2(m+r))$, $r=\lceil f n\rceil$ & lr, momentum, wd, fracción $f$, pasos NS $k$, $\beta_2$ (NorMuon) & \citep{amsel_dion3_2026} \\

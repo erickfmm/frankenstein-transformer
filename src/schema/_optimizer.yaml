@@ -39,8 +39,8 @@ properties:
       | `prodigy` | Minimal LR tuning | Adaptive, auto-LR |
       | `lion` | Memory-efficient | Sign-based updates, reduced state |
       | `sophia` | Robust training | Hessian-aware with diagonal preconditioning |
-      | `muon` | Stable training | Layer-wise momentum with orthogonalization |
-      | `turbo_muon` | Faster muon | Accelerated with Nesterov-spectral |
+      | `muon` | Stable training | Newton-Schulz orthogonalization for hidden matrices; AdamW fallback for embeddings, pos, heads and non-matrix params |
+      | `turbo_muon` | Faster muon | AOL-preconditioned orthogonalization for hidden matrices; AdamW fallback for embeddings, pos, heads and non-matrix params |
       | `af_muon` | AdamW-free tied-vocab models | Spectral matrices + capped-row LMO table + RMS vectors |
       | `ada_muon` | Adaptive orthogonal updates | Element-wise second moment on orthogonalized directions + sign stabilization + RMS-aligned scaling (paper: arxiv:2507.11005) |
       | `radam` | Adaptive warmup | Rectified Adam, automatic warmup |
@@ -90,8 +90,8 @@ properties:
       | `prodigy` | Mínimo ajuste de LR | Adaptativo, LR automático |
       | `lion` | Eficiencia de memoria | Actualizaciones basadas en signo |
       | `sophia` | Entrenamiento robusto | Consciente del Hessiano |
-      | `muon` | Entrenamiento estable | Momentum por capa |
-      | `turbo_muon` | Muon acelerado | Acelerado con Nesterov-espectral |
+      | `muon` | Entrenamiento estable | Ortogonalización Newton-Schulz para matrices ocultas; respaldo AdamW para embeddings, pos, heads y parámetros no matriciales |
+      | `turbo_muon` | Muon acelerado | Ortogonalización precondicionada con AOL para matrices ocultas; respaldo AdamW para embeddings, pos, heads y parámetros no matriciales |
       | `af_muon` | Modelos con vocabulario atado sin AdamW | Matrices espectrales + LMO por fila con tope + vectores RMS |
       | `ada_muon` | Actualizaciones ortogonales adaptativas | Segundo momento por elemento sobre direcciones ortogonalizadas + estabilización por signo + escalado alineado por RMS (paper: arxiv:2507.11005) |
       | `radam` | Warmup adaptativo | Rectified Adam |
@@ -178,7 +178,7 @@ properties:
       - `galore_adamw`: `rank`, `update_proj_gap`
       - `prodigy`: `d_coef`
       - `sophia`: `rho`, `update_k`
-      - `muon`/`turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
+      - `muon`/`turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`. Only hidden-layer 2-D matrices are orthogonalized; the `embeddings`, `pos` and `head` groups, plus every non-2-D parameter, use a decoupled AdamW fallback configured by the shared `lr_*`, `wd_*`, `betas_*` and `eps_*` suffixes
       - `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
       - `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
       - `cautious_adamw`: `cautious_clip`
@@ -217,7 +217,7 @@ properties:
       - `galore_adamw`: `rank`, `update_proj_gap`
       - `prodigy`: `d_coef`
       - `sophia`: `rho`, `update_k`
-      - `muon`/`turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
+      - `muon`/`turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`. Solo se ortogonalizan las matrices 2-D de capas ocultas; los grupos `embeddings`, `pos` y `head`, más todo parámetro que no sea 2-D, usan un respaldo AdamW desacoplado configurado por los sufijos compartidos `lr_*`, `wd_*`, `betas_*` y `eps_*`
       - `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
       - `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
       - `cautious_adamw`: `cautious_clip`

@@ -182,8 +182,8 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `prodigy`: `d_coef`
 - `lion`: none
 - `sophia`: `rho`, `update_k`
-- `muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
-- `turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
+- `muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps` (orthogonalizes hidden-layer 2-D matrices only; `embeddings`, `pos`, `head` and non-2-D params use a decoupled AdamW fallback driven by the shared `lr_*`, `wd_*`, `betas_*`, `eps_*` keys)
+- `turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps` (same hybrid routing as `muon`)
 - `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
 - `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
 - `radam`: none

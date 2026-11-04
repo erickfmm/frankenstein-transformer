@@ -9,7 +9,10 @@ produced by the routines defined here.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, Iterable, List, Tuple
+
+import torch
 
 from src.utils.param_categories import categorize_param
 
@@ -101,6 +104,71 @@ DEFAULT_GROUP_WD: Dict[str, float] = {
     "other": 0.01,
 }
 """Default weight decay per group, used when no scoped override is given."""
+
+ADAMW_FALLBACK_GROUPS: frozenset[str] = frozenset({"embeddings", "pos", "head"})
+"""Groups routed to the AdamW fallback by the Muon-family optimizers.
+
+The Muon recipe applies orthogonalized updates only to the hidden-layer
+matrices; embedding tables, learned positional encodings and output heads
+are trained with AdamW instead. These groups therefore bypass the
+Newton-Schulz path in :class:`~src.model.optimizer.muon.Muon` and
+:class:`~src.model.optimizer.turbo_muon.TurboMuon` and receive decoupled
+AdamW updates. Parameters outside these groups that are not 2-D matrices
+(biases, norm scales, convolution kernels) also take the fallback.
+"""
+
+
+def adamw_fallback_update(
+    param: torch.Tensor,
+    grad: torch.Tensor,
+    state: Dict[str, Any],
+    *,
+    lr: float,
+    betas: Tuple[float, float],
+    eps: float,
+    weight_decay: float,
+) -> None:
+    """Apply one decoupled-AdamW step to a single parameter.
+
+    Mirrors :class:`torch.optim.AdamW`: first/second-moment EMAs with bias
+    correction, a decoupled decay applied to the parameter before the
+    adaptive update, and the epsilon added after the bias correction of the
+    second moment. Used by the Muon-family optimizers as the fallback for
+    parameters that are not hidden-layer 2-D matrices.
+
+    Args:
+        param: The parameter tensor to update in place.
+        grad: The parameter's gradient.
+        state: The optimizer's per-parameter state dictionary. Populated
+            with ``exp_avg``, ``exp_avg_sq`` and ``step`` on first use.
+        lr: Learning rate for this parameter group.
+        betas: ``(beta1, beta2)`` moment coefficients.
+        eps: Numerical-stability term for the adaptive denominator.
+        weight_decay: Decoupled weight-decay coefficient.
+    """
+    beta1, beta2 = float(betas[0]), float(betas[1])
+
+    if "exp_avg" not in state:
+        state["exp_avg"] = torch.zeros_like(param)
+        state["exp_avg_sq"] = torch.zeros_like(param)
+        state["step"] = 0
+
+    exp_avg = state["exp_avg"]
+    exp_avg_sq = state["exp_avg_sq"]
+    state["step"] += 1
+    step = state["step"]
+
+    exp_avg.mul_(beta1).add_(grad, alpha=1.0 - beta1)
+    exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
+
+    bias_correction1 = 1.0 - beta1**step
+    bias_correction2_sqrt = math.sqrt(1.0 - beta2**step)
+
+    if weight_decay > 0:
+        param.mul_(1.0 - lr * weight_decay)
+
+    denom = exp_avg_sq.sqrt() / bias_correction2_sqrt + eps
+    param.addcdiv_(exp_avg, denom, value=-lr / bias_correction1)
 
 
 def to_float(value: Any, default: float) -> float:
