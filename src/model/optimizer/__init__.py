@@ -17,6 +17,7 @@ from .lamb import LAMB
 from .lion import Lion
 from .mars_adamw import MARSAdamW
 from .muon import Muon
+from .muon2 import Muon2
 from .prodigy import Prodigy
 from .q_apollo import QApollo
 from .radam import RAdamOptimizer
@@ -47,6 +48,7 @@ __all__ = [
     "Lion",
     "MARSAdamW",
     "Muon",
+    "Muon2",
     "OPTIMIZER_REGISTRY",
     "Prodigy",
     "QApollo",

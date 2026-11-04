@@ -61,6 +61,7 @@ properties:
       | `eve` | Fast proxy training, search loops | Population-of-4 differential evolution with targeted Adam fallback; monotone best-so-far; needs its own LR search (paper: arxiv:2609.35614) |
       | `ea4llm` | Gradient-free training, memory-constrained regimes | Zeroth-order evolution strategies on the token-level log-likelihood fitness; Gaussian perturbations with z-score/rank shaping; no optimizer state, N forward evaluations per step (paper: arxiv:2510.10603) |
       | `root` | Robust orthogonal updates | Dimension-calibrated Newton-Schulz coefficients + soft-threshold outlier suppression on the momentum; AdamW fallback for embeddings, pos, heads and non-matrix params (paper: arxiv:2511.20626) |
+      | `muon2` | Adaptive orthogonal updates | Adam-style second-moment preconditioning of the momentum before Newton-Schulz; 40% fewer NS iterations; optional factored moments (Muon²-F); AdamW fallback for embeddings, pos, heads and non-matrix params (paper: arxiv:2604.09967) |
 
       **Examples explained:**
       - `adamw`: Start here. Most reliable for transformer training. Works well with default hyperparameters (lr=2e-4, betas=[0.9,0.95], wd=0.01). Best general-purpose choice.
@@ -81,7 +82,7 @@ properties:
       `shampoo` (paper: arxiv:1802.09568); `soap` (paper: arxiv:2409.11321); `anon` (paper:
       arxiv:2605.02317); `apollo`/`apollo_mini`/`q_apollo` (paper: arxiv:2412.05270); `dion3` (paper:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
-      `root` (paper: arxiv:2511.20626)
+      `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967)
     description_es: |-
       Algoritmo optimizador. Resumen por caso de uso:
 
@@ -116,6 +117,7 @@ properties:
       | `eve` | Entrenamiento proxy rápido, bucles de búsqueda | Evolución diferencial con población de 4 y respaldo Adam dirigido; mejor-observado monótono; requiere su propia búsqueda de LR (paper: arxiv:2609.35614) |
       | `ea4llm` | Entrenamiento sin gradientes, regímenes con memoria limitada | Estrategias evolutivas de orden cero sobre la aptitud de log-verosimilitud por token; perturbaciones gaussianas con z-score/shaping por rangos; sin estado del optimizador, N evaluaciones forward por paso (paper: arxiv:2510.10603) |
       | `root` | Ortogonalización robusta | Coeficientes Newton-Schulz calibrados por dimensión + supresión de atípicos por soft-threshold sobre el momentum; respaldo AdamW para embeddings, pos, heads y parámetros no matriciales (paper: arxiv:2511.20626) |
+      | `muon2` | Ortogonalización adaptativa | Precondicionamiento del momentum con segundo momento estilo Adam antes de Newton-Schulz; 40% menos iteraciones NS; momentos factorizados opcionales (Muon²-F); respaldo AdamW para embeddings, pos, heads y parámetros no matriciales (paper: arxiv:2604.09967) |
       **Ejemplos explicados:**
       - `adamw`: Empezar aquí. El más confiable para entrenamiento de transformers. Funciona bien con hiperparámetros por defecto (lr=2e-4, betas=[0.9,0.95], wd=0.01). Mejor opción de propósito general.
       - `sgd_momentum`: Usar para líneas base o cuando se necesita máxima simplicidad y reproducibilidad. Generalmente requiere LR más alto (1e-2 a 1e-1) y ajuste cuidadoso de momentum.
@@ -137,7 +139,7 @@ properties:
       `shampoo` (paper: arxiv:1802.09568); `soap` (paper: arxiv:2409.11321); `anon` (paper:
       arxiv:2605.02317); `apollo`/`apollo_mini`/`q_apollo` (paper: arxiv:2412.05270); `dion3` (paper:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
-      `root` (paper: arxiv:2511.20626)
+      `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967)
     enum:
       - sgd_momentum
       - adamw
@@ -168,6 +170,7 @@ properties:
       - eve
       - ea4llm
       - root
+      - muon2
     examples: [adamw]
   parameters:
     type: object
@@ -199,6 +202,7 @@ properties:
       - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
       - `dion3`: `fraction`, `momentum`, `ns_steps`, `ns_eps`, `normuon`
       - `root`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `quantile`, `softthresh`, `ada_newton`. Same hybrid routing as `muon`: only hidden-layer 2-D matrices are orthogonalized, using per-shape calibrated Newton-Schulz coefficients when `ada_newton` is on; `quantile` is the percentile `p` defining the dynamic soft-threshold `ε_t = Quantile(|M_t|, p)` (default 0.90); `softthresh: false` disables outlier suppression; the `embeddings`, `pos` and `head` groups plus every non-2-D parameter use a decoupled AdamW fallback configured by the shared suffixes
+      - `muon2`: `ns_steps`, `ns_eps`, `factored`. Adam-style second-moment preconditioning of the momentum before Newton-Schulz (β₁, β₂ from the shared `betas_*`; the Eq. 4 epsilon is the shared `eps_*`); the update scales by η√(m/n); `factored: true` switches to the memory-efficient row/column-factored second moment (Muon²-F). Same hybrid routing as `muon`: only hidden-layer 2-D matrices take the Muon² path; the `embeddings`, `pos` and `head` groups plus every non-2-D parameter use a decoupled AdamW fallback configured by the shared suffixes
       - `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed`. Population-of-4 differential evolution over the unit cube with a targeted Adam fallback; the shared `lr_*`, `wd_*`, `betas_*`, `eps_*` configure the fallback per group (`wd` is L2 folded into the fallback gradient, not decoupled). Requires `gradient_accumulation_steps: 1`; not available for SBERT; closure-based step supplied by the trainer
       - `ea4llm`: `population`, `sigma`, `antithetic`, `rank_shaping`, `nes_scaling`, `seed`. Gradient-free (zeroth-order) evolution strategies scoring the token-level log-likelihood fitness on the current minibatch; the shared `lr_*` is the per-group step size and `wd_*` a decoupled decay extension (the paper defines no weight decay); `betas_*`/`eps_*` are accepted but unused because no moment buffers exist. Requires `gradient_accumulation_steps: 1`; not available for SBERT; closure-based step supplied by the trainer
       - Others: no specific suffixes (only shared ones)
@@ -241,6 +245,7 @@ properties:
       - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
       - `dion3`: `fraction`, `momentum`, `ns_steps`, `ns_eps`, `normuon`
       - `root`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `quantile`, `softthresh`, `ada_newton`. Mismo enrutamiento híbrido que `muon`: solo se ortogonalizan las matrices 2-D de capas ocultas, con coeficientes Newton-Schulz calibrados por forma cuando `ada_newton` está activo; `quantile` es el percentil `p` del umbral dinámico `ε_t = Quantile(|M_t|, p)` (por defecto 0.90); `softthresh: false` desactiva la supresión de atípicos; los grupos `embeddings`, `pos` y `head` más todo parámetro no 2-D usan un respaldo AdamW desacoplado configurado por los sufijos compartidos
+      - `muon2`: `ns_steps`, `ns_eps`, `factored`. Precondicionamiento del momentum con segundo momento estilo Adam antes de Newton-Schulz (β₁, β₂ de los `betas_*` compartidos; el épsilon de la Ec. 4 es el `eps_*` compartido); la actualización escala por η√(m/n); `factored: true` activa el segundo momento factorizado por filas/columnas (Muon²-F). Mismo enrutamiento híbrido que `muon`: solo las matrices 2-D de capas ocultas toman la ruta Muon²; los grupos `embeddings`, `pos` y `head` más todo parámetro no 2-D usan un respaldo AdamW desacoplado configurado por los sufijos compartidos
       - `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed`. Evolución diferencial con población de 4 sobre el cubo unitario y respaldo Adam dirigido; los sufijos compartidos `lr_*`, `wd_*`, `betas_*`, `eps_*` configuran el respaldo por grupo (`wd` es L2 plegado en el gradiente del respaldo, no desacoplado). Requiere `gradient_accumulation_steps: 1`; no disponible para SBERT; paso basado en closure que aporta el trainer
       - `ea4llm`: `population`, `sigma`, `antithetic`, `rank_shaping`, `nes_scaling`, `seed`. Estrategias evolutivas sin gradientes (orden cero) que puntúan la aptitud de log-verosimilitud por token sobre el minilote actual; el `lr_*` compartido es el tamaño de paso por grupo y `wd_*` un decaimiento desacoplado como extensión (el paper no define weight decay); `betas_*`/`eps_*` se aceptan pero no se usan porque no hay búferes de momentos. Requiere `gradient_accumulation_steps: 1`; no disponible para SBERT; paso basado en closure que aporta el trainer
       - Otros: sin sufijos específicos (solo los compartidos)
@@ -407,3 +412,7 @@ properties:
           prefix: "root-"
           supports_shared_per_group_suffixes: true
           specific_global_suffixes: [momentum, nesterov, ns_steps, ns_eps, quantile, softthresh, ada_newton]
+        muon2:
+          prefix: "muon2-"
+          supports_shared_per_group_suffixes: true
+          specific_global_suffixes: [ns_steps, ns_eps, factored]

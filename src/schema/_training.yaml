@@ -1593,3 +1593,17 @@ allOf:
             additionalProperties: false
             patternProperties:
               ^root-: { type: [number, boolean, array, string] }
+- if:
+    properties:
+      optimizer:
+        properties:
+          optimizer_class:
+            const: muon2
+  then:
+    properties:
+      optimizer:
+        properties:
+          parameters:
+            additionalProperties: false
+            patternProperties:
+              ^muon2-: { type: [number, boolean, array, string] }

@@ -97,7 +97,7 @@ ssog\_attn & Campo geométrico & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\ma
 
 \subsection{Resumen de Optimizadores}
 
-La Tabla~\ref{tab:all-optimizers} cataloga los 29 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
+La Tabla~\ref{tab:all-optimizers} cataloga los 30 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -154,6 +154,7 @@ AF-Muon & Tabla atada sin AdamW & 1 ($m$) & $\mathcal{O}(n \cdot k + V d\, I)$ &
 AdaMuon & Ortogonalidad + adaptativo & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, eps, wd, pasos NS $k$ & \citep{si_adamuon_2025} \\
 Dion3 & Ortogonalidad fraccional & 1 ($m$); + $v$ por filas con NorMuon & $\mathcal{O}(r^2(m+r))$, $r=\lceil f n\rceil$ & lr, momentum, wd, fracción $f$, pasos NS $k$, $\beta_2$ (NorMuon) & \citep{amsel_dion3_2026} \\
 ROOT & Ortogonalidad (robusta) & 1 ($m$); + $v$ en el respaldo AdamW & $\mathcal{O}(n \cdot k)$ + ordenamiento por cuantil & lr, momentum, wd, pasos NS $k$, cuantil $p$; $\beta$, eps para embeddings/pos/heads/vectores & \citep{he_root_2025} \\
+Muon² & Ortogonalidad + adaptativa & 2 ($m$, $v$); factorizado: 1 ($m$) + fila/col; + $v$ en el respaldo AdamW & $\mathcal{O}(n \cdot k)$ & lr, $\beta_1$, $\beta_2$, eps, wd, pasos NS $k$, factored & \citep{liu_muon2_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Adaptativos de Bajo Rango y Adaptividad Ajustable}} \\

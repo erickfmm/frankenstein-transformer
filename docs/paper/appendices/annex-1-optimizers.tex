@@ -1346,6 +1346,90 @@ Following the hybrid recipe of Muon, only hidden-layer 2-D matrices take the ROO
 \item Same single momentum buffer per matrix parameter as Muon, and the \texttt{softthresh}/\texttt{ada\_newton} toggles expose the paper's ablations directly.
 \end{itemize}
 
+\paragraph{Muon² (Second-Moment Preconditioned Orthogonalization).}
+Muon$^2$~\citep{liu_muon2_2026} generalizes Muon by preconditioning the momentum with an
+\textbf{Adam-style second-moment EMA before the Newton--Schulz orthogonalization}. The
+paper shows that the practical bottleneck of Muon's polar approximation is the
+ill-conditioned momentum matrix (early-training spectra span $10^{-4}$--$1$ with roughly
+half the singular values in the NS ``dead zone''); dividing by $\sqrt{V_t}$ tightens the
+spectrum, so every NS step aligns better with the true orthogonalized update (cosine
+similarity $0.916$ at $K{=}3$ vs Muon's $0.931$ at $K{=}5$, rising to $0.975$ at
+$K{=}5$). For a hidden-layer weight matrix $W \in \mathbb{R}^{n \times m}$ with learning
+rate $\eta$:
+\begin{align}
+M_t &= \beta_1 M_{t-1} + (1-\beta_1) G_t && \text{(momentum EMA, Eq.~2)} \\
+V_t &= \beta_2 V_{t-1} + (1-\beta_2)\, (G_t \odot G_t) && \text{(second-moment EMA, Eq.~3)} \\
+\widetilde{M}_t &= M_t \oslash \big(\sqrt{V_t} + \epsilon \mathbf{1}\big) && \text{(preconditioning, Eq.~4)} \\
+X_0 &= \frac{\widetilde{M}_t}{\|\widetilde{M}_t\|_F + \epsilon}, \qquad
+X_{k+1} = aX_k + b\, X_k X_k^\top X_k + c\, X_k (X_k X_k^\top)^2 X_k && \text{(NS, Eq.~5)} \\
+W_{t+1} &= W_t - \eta \sqrt{m/n}\, X_K && \text{(update, Eq.~6)}
+\end{align}
+with the same quintic coefficients $(a,b,c)=(3.4445,-4.7750,2.0315)$ as Muon and the
+$\sqrt{m/n}$ learning-rate factor proposed by Bernstein (2025). The memory-efficient
+variant \textbf{Muon$^2$-F} replaces $V_t$ with Adafactor-style row/column statistics:
+\begin{align}
+r_t &= \beta_2 r_{t-1} + (1-\beta_2)\,\mathrm{sum}_{\mathrm{col}}(G_t \odot G_t), \qquad
+c_t = \beta_2 c_{t-1} + (1-\beta_2)\,\mathrm{sum}_{\mathrm{row}}(G_t \odot G_t), \\
+\widehat{V}_t &= \frac{r_t\, c_t^\top}{\mathrm{sum}(r_t)},
+\end{align}
+keeping memory within $\sim$0.3\% of Muon at 7B scale (47.53 vs 47.29 GB) while retaining
+most of Muon$^2$'s benefit. Across GPT, LLaMA and Mixture-of-Experts pre-training up to
+13B parameters, Muon$^2$ outperforms Muon at equal NS iterations and matches it with
+$K{=}3$ instead of $5$ (a 40\% reduction), saving up to a quarter of training time at
+equal loss.
+
+\begin{algorithm}[H]
+\caption{Muon² (Second-Moment Preconditioned Orthogonalization)}
+\label{alg:muon2}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta$, learning rate $\eta$, $\beta_1, \beta_2$, NS iters $K$, preconditioner $\epsilon$
+\Ensure Updated parameters $\theta_T$
+\For{each parameter $P$}
+    \If{$P$ is a hidden-layer 2D matrix $W \in \mathbb{R}^{n\times m}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradient}
+        \State $M \gets \beta_1 M + (1-\beta_1) G$ \Comment{Momentum EMA (Eq.~2)}
+        \State $V \gets \beta_2 V + (1-\beta_2) (G \odot G)$ \Comment{Second-moment EMA (Eq.~3); factored variant keeps row/col sums only}
+        \State $\widetilde{M} \gets M \oslash (\sqrt{V} + \epsilon\mathbf{1})$ \Comment{Precondition (Eq.~4)}
+        \State $X_0 \gets \widetilde{M} / (\|\widetilde{M}\|_F + \epsilon)$ \Comment{Frobenius normalization}
+        \For{$k = 0, 1, \ldots, K-1$}
+            \State $A_k \gets X_k X_k^\top$ \Comment{Gramian}
+            \State $X_{k+1} \gets 3.4445\,X_k - 4.7750\,A_k X_k + 2.0315\,A_k^2 X_k$ \Comment{Quintic NS step}
+        \EndFor
+        \State $W \gets W - \eta \sqrt{m/n}\, X_K$ \Comment{Scaled update (Eq.~6)}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Hybrid fallback: embeddings, pos, heads, non-matrices}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+Following the hybrid recipe of Muon, only hidden-layer 2-D matrices take the Muon$^2$
+path; embedding tables, learned positional encodings, output heads and every non-matrix
+parameter are trained with decoupled AdamW using the group-level learning rate, weight
+decay, $\beta_1, \beta_2$ and $\epsilon$ settings --- the same $\beta_1, \beta_2, \epsilon$
+also parameterize Eqs.~2--4, so one per-group knob set configures both paths.
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item One extra full-size state buffer over Muon (two moment EMAs per matrix), doubling
+optimizer memory on the orthogonalized path unless the factored variant is enabled.
+\item The $\sqrt{m/n}$ update scale differs from this repository's plain \texttt{muon}
+path, so learning rates do not transfer one-to-one between the two registry entries.
+\item $\beta_1, \beta_2$ defaults are not fixed by the paper; this implementation inherits
+the shared per-group defaults $(0.9, 0.95)$.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Better orthogonalization at equal NS iterations and equal quality with 40\% fewer
+iterations (3 instead of 5), cutting NS compute and communication.
+\item Consistent gains over Muon across GPT, LLaMA and Mixture-of-Experts pre-training up
+to 13B parameters, with up to a quarter of training time saved at matched loss.
+\item The \texttt{factored} toggle exposes Muon$^2$-F, which keeps memory within
+$\sim$0.3\% of Muon while preserving most of the benefit.
+\end{itemize}
+
 \subsection{Evolutionary and Population-Based Hybrids}
 
 \paragraph{EvE (Evolutionary Explorer).}

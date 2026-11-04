@@ -60,6 +60,15 @@ To run only a subset:
 
     uv run --extra cu118 --extra train python full_tests/run_e2e.py --category opt --limit 3
 
+To run one specific combo (ids look like ``opt_muon2``; comma-separated
+patterns are matched case-insensitively as substrings, exact ids included):
+
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --only opt_muon2
+
+To discover the combo ids without training anything:
+
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --category opt --list-combos
+
 To restore the fully-offline synthetic data path:
 
     uv run --extra cu118 --extra train python full_tests/run_e2e.py --no-realonall
@@ -248,7 +257,7 @@ OPTIMIZERS = [
     "sophia", "muon", "turbo_muon", "af_muon", "ada_muon", "radam", "adan", "adopt", "ademamix",
     "mars_adamw", "cautious_adamw", "lamb", "schedulefree_adamw", "shampoo",
     "soap", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm",
-    "root",
+    "root", "muon2",
 ]
 
 NORMS = ["layer_norm", "dynamic_tanh", "derf", "rms_norm", "prms_norm", "flash_norm"]
@@ -683,6 +692,9 @@ def _with_optimizer(training: dict, optimizer_class: str) -> dict:
         params[f"{prefix}momentum"] = 0.9
         params[f"{prefix}ns_steps"] = 5
         params[f"{prefix}quantile"] = 0.9
+    if optimizer_class == "muon2":
+        params[f"{prefix}ns_steps"] = 5
+        params[f"{prefix}ns_eps"] = 1e-7
 
     # Drop keys this optimizer family does not accept (e.g. `rank` for
     # apollo_mini). The factory is the contract; an unknown key would fail
@@ -1635,6 +1647,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Stop after N training combos (useful for a quick smoke run).",
     )
     parser.add_argument(
+        "--only",
+        default=None,
+        metavar="PATTERN[,PATTERN...]",
+        help=(
+            "Run only the combos whose id matches one of the comma-separated "
+            "patterns (case-insensitive substring; an exact id also matches). "
+            "Example: --only opt_muon2 or --only muon2,apollo. Applied before "
+            "--limit, --realonall and the global overrides."
+        ),
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=600,
@@ -1815,6 +1838,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--list-combos",
+        action="store_true",
+        help=(
+            "Print the ids of the combos that would run (after --category, "
+            "--only and --limit) and exit without training or validating."
+        ),
+    )
+    parser.add_argument(
         "--keep-failed",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -1966,6 +1997,32 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "Hub; consider --timeout 1800 (current: %ds)", args.timeout,
             )
 
+    if args.only:
+        patterns = [p.strip().lower() for p in args.only.split(",") if p.strip()]
+        if not patterns:
+            parser.error("--only requires at least one non-empty pattern")
+        selected = [
+            (combo_id, config)
+            for combo_id, config in combos
+            if any(pattern in combo_id.lower() for pattern in patterns)
+        ]
+        if not selected:
+            available = ", ".join(combo_id for combo_id, _ in combos[:20])
+            if len(combos) > 20:
+                available += f", ... (+{len(combos) - 20} more)"
+            parser.error(
+                f"--only matched none of the {len(combos)} combos built for "
+                f"category '{args.category}'. Patterns: {patterns}. "
+                f"Available ids: {available}"
+            )
+        logging.info(
+            "--only: selected %d of %d combos (%s)",
+            len(selected),
+            len(combos),
+            ", ".join(patterns),
+        )
+        combos = selected
+
     if args.realonall:
         logging.info(
             "Binding every combo to real data: text=%s, vision=%s, audio=%s",
@@ -2007,6 +2064,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.limit is not None:
         combos = combos[: args.limit]
+
+    if args.list_combos:
+        for combo_id, _ in combos:
+            print(combo_id)
+        return 0
 
     # Pre-flight: fail fast on invalid configs instead of burning hours of
     # training on combos that crash at build time (experiment 2 lost 164 runs

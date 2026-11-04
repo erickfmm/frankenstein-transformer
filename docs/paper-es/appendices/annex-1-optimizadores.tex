@@ -1346,6 +1346,96 @@ Siguiendo la receta híbrida de Muon, solo las matrices 2-D de capas ocultas tom
 \item El mismo único búfer de momentum por parámetro matricial que Muon, y los interruptores \texttt{softthresh}/\texttt{ada\_newton} exponen directamente las ablaciones del artículo.
 \end{itemize}
 
+\paragraph{Muon² (Ortogonalización con Precondicionamiento de Segundo Momento).}
+Muon$^2$~\citep{liu_muon2_2026} generaliza Muon al precondicionar el momentum con un
+\textbf{EMA de segundo momento estilo Adam antes de la ortogonalización de
+Newton--Schulz}. El artículo muestra que el cuello de botella práctico de la aproximación
+polar de Muon es la matriz de momentum mal condicionada (los espectros al inicio del
+entrenamiento abarcan $10^{-4}$--$1$ y cerca de la mitad de los valores singulares caen en
+la ``zona muerta'' de NS); dividir por $\sqrt{V_t}$ estrecha el espectro, de modo que cada
+paso de NS se alinea mejor con la actualización ortogonalizada verdadera (similitud coseno
+$0.916$ con $K{=}3$ frente a $0.931$ de Muon con $K{=}5$, y $0.975$ con $K{=}5$). Para una
+matriz de pesos de capa oculta $W \in \mathbb{R}^{n \times m}$ con tasa de aprendizaje
+$\eta$:
+\begin{align}
+M_t &= \beta_1 M_{t-1} + (1-\beta_1) G_t && \text{(EMA de momentum, Ec.~2)} \\
+V_t &= \beta_2 V_{t-1} + (1-\beta_2)\, (G_t \odot G_t) && \text{(EMA de segundo momento, Ec.~3)} \\
+\widetilde{M}_t &= M_t \oslash \big(\sqrt{V_t} + \epsilon \mathbf{1}\big) && \text{(precondicionamiento, Ec.~4)} \\
+X_0 &= \frac{\widetilde{M}_t}{\|\widetilde{M}_t\|_F + \epsilon}, \qquad
+X_{k+1} = aX_k + b\, X_k X_k^\top X_k + c\, X_k (X_k X_k^\top)^2 X_k && \text{(NS, Ec.~5)} \\
+W_{t+1} &= W_t - \eta \sqrt{m/n}\, X_K && \text{(actualización, Ec.~6)}
+\end{align}
+con los mismos coeficientes quínticos $(a,b,c)=(3.4445,-4.7750,2.0315)$ que Muon y el
+factor de tasa de aprendizaje $\sqrt{m/n}$ propuesto por Bernstein (2025). La variante
+eficiente en memoria \textbf{Muon$^2$-F} reemplaza $V_t$ por estadísticas de fila/columna
+estilo Adafactor:
+\begin{align}
+r_t &= \beta_2 r_{t-1} + (1-\beta_2)\,\mathrm{sum}_{\mathrm{col}}(G_t \odot G_t), \qquad
+c_t = \beta_2 c_{t-1} + (1-\beta_2)\,\mathrm{sum}_{\mathrm{row}}(G_t \odot G_t), \\
+\widehat{V}_t &= \frac{r_t\, c_t^\top}{\mathrm{sum}(r_t)},
+\end{align}
+manteniendo la memoria dentro de $\sim$0.3\% de Muon a escala 7B (47.53 vs 47.29 GB) y
+conservando la mayor parte del beneficio de Muon$^2$. En preentrenamiento de GPT, LLaMA y
+Mezcla de Expertos hasta 13B parámetros, Muon$^2$ supera a Muon con igual número de
+iteraciones NS y lo iguala con $K{=}3$ en lugar de $5$ (una reducción del 40\%), ahorrando
+hasta un cuarto del tiempo de entrenamiento con la misma pérdida.
+
+\begin{algorithm}[H]
+\caption{Muon² (Ortogonalización con Precondicionamiento de Segundo Momento)}
+\label{alg:muon2}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta$, tasa de aprendizaje $\eta$, $\beta_1, \beta_2$, iteraciones NS $K$, precondicionador $\epsilon$
+\Ensure Parámetros actualizados $\theta_T$
+\For{cada parámetro $P$}
+    \If{$P$ es una matriz 2D de capa oculta $W \in \mathbb{R}^{n\times m}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradiente}
+        \State $M \gets \beta_1 M + (1-\beta_1) G$ \Comment{EMA de momentum (Ec.~2)}
+        \State $V \gets \beta_2 V + (1-\beta_2) (G \odot G)$ \Comment{EMA de segundo momento (Ec.~3); la variante factorizada solo guarda sumas por fila/columna}
+        \State $\widetilde{M} \gets M \oslash (\sqrt{V} + \epsilon\mathbf{1})$ \Comment{Precondicionar (Ec.~4)}
+        \State $X_0 \gets \widetilde{M} / (\|\widetilde{M}\|_F + \epsilon)$ \Comment{Normalización por norma de Frobenius}
+        \For{$k = 0, 1, \ldots, K-1$}
+            \State $A_k \gets X_k X_k^\top$ \Comment{Gramiana}
+            \State $X_{k+1} \gets 3.4445\,X_k - 4.7750\,A_k X_k + 2.0315\,A_k^2 X_k$ \Comment{Paso NS quíntico}
+        \EndFor
+        \State $W \gets W - \eta \sqrt{m/n}\, X_K$ \Comment{Actualización escalada (Ec.~6)}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Respaldo híbrido: embeddings, pos, heads, no matriciales}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+Siguiendo la receta híbrida de Muon, solo las matrices 2-D de capas ocultas toman la ruta
+Muon$^2$; las tablas de embeddings, los encodings posicionales aprendidos, las cabezas de
+salida y todo parámetro no matricial se entrenan con AdamW desacoplado usando la tasa de
+aprendizaje, el weight decay, $\beta_1, \beta_2$ y $\epsilon$ del grupo --- los mismos
+$\beta_1, \beta_2, \epsilon$ que parametrizan las Ecs.~2--4, de modo que un único conjunto
+de hiperparámetros por grupo configura ambas rutas.
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Un búfer de estado completo adicional respecto de Muon (dos EMAs de momentos por
+matriz), que duplica la memoria del optimizador en la ruta ortogonalizada salvo que se
+active la variante factorizada.
+\item La escala de actualización $\sqrt{m/n}$ difiere de la ruta \texttt{muon} simple de
+este repositorio, por lo que las tasas de aprendizaje no se transfieren uno a uno entre
+las dos entradas del registro.
+\item El artículo no fija valores por defecto para $\beta_1, \beta_2$; esta implementación
+hereda los valores compartidos por grupo $(0.9, 0.95)$.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Mejor ortogonalización con igual número de iteraciones NS y la misma calidad con un
+40\% menos de iteraciones (3 en lugar de 5), recortando cómputo y comunicación de NS.
+\item Ganancias consistentes sobre Muon en preentrenamiento de GPT, LLaMA y Mezcla de
+Expertos hasta 13B parámetros, con hasta un cuarto del tiempo de entrenamiento ahorrado
+con la misma pérdida.
+\item El interruptor \texttt{factored} expone Muon$^2$-F, que mantiene la memoria dentro de
+$\sim$0.3\% de Muon conservando la mayor parte del beneficio.
+\end{itemize}
+
 \subsection{Híbridos Evolutivos y Poblacionales}
 
 \paragraph{EvE (Evolutionary Explorer).}

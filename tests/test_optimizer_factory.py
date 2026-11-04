@@ -27,7 +27,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root"}
+        required = {"adamw", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -291,6 +291,119 @@ class BuildOptimizerROOTTests(unittest.TestCase):
         self.assertEqual(_shape_coefficients(8192, 2048, True), (2.5925, -3.0010, 1.4138))
         self.assertEqual(_shape_coefficients(64, 64, False), (3.4445, -4.7750, 2.0315))
         self.assertEqual(_shape_coefficients(64, 64, True), (3.4445, -4.7750, 2.0315))
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerMuon2Tests(unittest.TestCase):
+    """Muon2 defaults, paper invariants and hybrid routing (arXiv:2604.09967)."""
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("muon2", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("muon2", groups, {})
+        p.square().mean().backward()
+        opt.step()
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_step_runs_factored_flavor(self):
+        p = nn.Parameter(torch.randn(4, 8))
+        groups = [{"params": [p], "lr": 1e-2, "name": "attention"}]
+        opt = build_optimizer("muon2", groups, {"muon2-factored": True})
+        p.square().mean().backward()
+        opt.step()
+        self.assertIn("row_stats", opt.state[p])
+        self.assertIn("col_stats", opt.state[p])
+        self.assertNotIn("exp_avg_sq", opt.state[p])
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_defaults_match_paper(self):
+        opt = build_optimizer("muon2", _param_groups(), {})
+        self.assertEqual(opt.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-7)
+        self.assertFalse(opt.defaults["factored"])
+        self.assertEqual(opt.defaults["betas"], (0.9, 0.95))
+
+    def test_hidden_matrix_uses_muon2_state(self):
+        # Eqs. 2-3: exp_avg (M) and exp_avg_sq (V); no plain momentum_buffer.
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 0.02, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("muon2", groups, {})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("exp_avg", state)
+        self.assertIn("exp_avg_sq", state)
+        self.assertNotIn("momentum_buffer", state)
+
+    def test_embedding_group_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "embeddings"}]
+        opt = build_optimizer("muon2", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("exp_avg", opt.state[p])
+        self.assertIn("exp_avg_sq", opt.state[p])
+
+    def test_update_scale_uses_sqrt_m_over_n(self):
+        """Eq. 6: transposed shapes differ only by the eta*sqrt(m/n) scale."""
+        gen = torch.Generator().manual_seed(0)
+        tall = nn.Parameter(torch.randn(8, 2, generator=gen))
+        grad = torch.randn(8, 2, generator=gen)
+        wide = nn.Parameter(tall.detach().t().contiguous().clone())
+        tall.grad = grad.clone()
+        wide.grad = grad.t().contiguous().clone()
+
+        groups_tall = [
+            {"params": [tall], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}
+        ]
+        groups_wide = [
+            {"params": [wide], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}
+        ]
+        opt_tall = build_optimizer("muon2", groups_tall, {})
+        opt_wide = build_optimizer("muon2", groups_wide, {})
+
+        before_tall = tall.detach().clone()
+        before_wide = wide.detach().clone()
+        opt_tall.step()
+        opt_wide.step()
+
+        delta_tall = (tall.detach() - before_tall).norm().item()
+        delta_wide = (wide.detach() - before_wide).norm().item()
+        # scale(tall) = sqrt(2/8), scale(wide) = sqrt(8/2); their ratio is 1/4.
+        self.assertAlmostEqual(delta_tall / delta_wide, 0.25, delta=0.02)
+
+    def test_specific_suffixes_parsed(self):
+        opt = build_optimizer(
+            "muon2",
+            _param_groups(),
+            {"muon2-ns_steps": "3", "muon2-ns_eps": "1e-6", "muon2-factored": True},
+        )
+        self.assertEqual(opt.defaults["ns_steps"], 3)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-6)
+        self.assertTrue(opt.defaults["factored"])
+
+        opt_bad = build_optimizer(
+            "muon2",
+            _param_groups(),
+            {"muon2-ns_steps": "bad", "muon2-ns_eps": "bad"},
+        )
+        self.assertEqual(opt_bad.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt_bad.defaults["ns_eps"], 1e-7)
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("muon2", _param_groups(), {"muon2-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
+
+    def test_per_group_lr_routes(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "ffn"}]
+        opt = build_optimizer("muon2", groups, {"muon2-lr_ffn": 0.02})
+        self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

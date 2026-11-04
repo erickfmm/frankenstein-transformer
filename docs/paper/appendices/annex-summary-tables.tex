@@ -97,7 +97,7 @@ ssog\_attn & Geometric field & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\math
 
 \subsection{Optimizer Summary}
 
-Table~\ref{tab:all-optimizers} catalogs all 29 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
+Table~\ref{tab:all-optimizers} catalogs all 30 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -154,6 +154,7 @@ AF-Muon & AdamW-free tied table & 1 ($m$) & $\mathcal{O}(n \cdot k + V d\, I)$ &
 AdaMuon & Orthogonality + adaptive & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, eps, wd, NS steps $k$ & \citep{si_adamuon_2025} \\
 Dion3 & Orthogonality (fractional) & 1 ($m$); + $v$ rows if NorMuon & $\mathcal{O}(r^2(m+r))$, $r=\lceil f n\rceil$ & lr, momentum, wd, fraction $f$, NS steps $k$, $\beta_2$ (NorMuon) & \citep{amsel_dion3_2026} \\
 ROOT & Orthogonality (robust) & 1 ($m$); + $v$ on the AdamW fallback & $\mathcal{O}(n \cdot k)$ + quantile sort & lr, momentum, wd, NS steps $k$, quantile $p$; $\beta$, eps for embeddings/pos/heads/vectors & \citep{he_root_2025} \\
+Muon² & Orthogonality + adaptive & 2 ($m$, $v$); factored: 1 ($m$) + row/col; + $v$ on the AdamW fallback & $\mathcal{O}(n \cdot k)$ & lr, $\beta_1$, $\beta_2$, eps, wd, NS steps $k$, factored & \citep{liu_muon2_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Low-Rank Adaptive \& Tunable Adaptivity}} \\
