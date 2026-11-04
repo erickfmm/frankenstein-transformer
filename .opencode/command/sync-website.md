@@ -40,10 +40,11 @@ bash .opencode/command/sync-website-state.sh
 | `docs/paper-es/{paper-es.tex,paper-es.bbl,paper-es.pdf}` | `paper/es/…` | + `sections/*.tex`, `appendices/*.tex` |
 | `docs/bibliography/**` | `paper/bibliography/**` | `.bib` only |
 | `docs/architecture.md` | `paper/specs/architecture.md` | canonical implementation spec |
+| `docs/paper/figures/**` (`*.mmd`, `*.pdf`, `*.svg`) | `paper/figures/**` | Mermaid sources + compiled PDF (LaTeX) and SVG (web) |
 | `src/streamlit_gui/{app.py,__init__.py}` | `streamlit_gui/` | |
 | `src/utils/schema_loader.py` | `utils/schema_loader.py` | |
 
-Site-only infrastructure (**never delete or overwrite**): `index.html`, `ft-param-estimator.js`, `ft-diagram.js`, `paper/flatten_tex.py`, `paper/README.md`, generated `paper/paper-en.html`, `paper/paper-es.html`, `paper/en.pdf`, `paper/es.pdf`.
+Site-only infrastructure (**never delete or overwrite**): `index.html`, `ft-param-estimator.js`, `ft-diagram.js`, `paper/flatten_tex.py`, `paper/postprocess_html.py`, `paper/README.md`, generated `paper/paper-en.html`, `paper/paper-es.html`, `paper/en.pdf`, `paper/es.pdf`.
 
 ## Workflow
 
@@ -89,11 +90,35 @@ After syncing paper sources:
 
 ```bash
 cd erickfmm.github.io/frankenstein-transformer/paper
-python3 flatten_tex.py en/paper.tex    en/paper.bbl    /tmp/paper-en-flat.tex
-python3 flatten_tex.py es/paper-es.tex es/paper-es.bbl /tmp/paper-es-flat.tex
+python3 flatten_tex.py en/paper.tex    en/paper.bbl    /tmp/paper-en-flat.tex --web
+python3 flatten_tex.py es/paper-es.tex es/paper-es.bbl /tmp/paper-es-flat.tex --web
 pandoc /tmp/paper-en-flat.tex -f latex -t html5 --standalone --mathjax --toc --toc-depth=3 -V lang=en -o paper-en.html
 pandoc /tmp/paper-es-flat.tex -f latex -t html5 --standalone --mathjax --toc --toc-depth=3 -V lang=es -o paper-es.html
+python3 postprocess_html.py paper-en.html paper-es.html
 ```
+
+`--web` is required: it unwraps `\fitfigure` (pandoc drops the unknown
+`\adjustbox` and leaves caption-only figures) and rewrites every
+`\includegraphics{...figures/<name>.pdf}` to
+`/frankenstein-transformer/paper/figures/<name>.svg`.
+
+4. **Figures (SVG)** — the paper HTML embeds `paper/figures/**/*.svg`. If any
+   `docs/paper/figures/**/*.mmd` changed (or the mirror SVGs are missing),
+   rebuild and copy:
+
+```bash
+( cd "$REPO_ROOT/docs/paper/figures" && ./build-figures.sh svg )
+cd "$REPO_ROOT/docs/paper/figures"
+find . -name '*.svg' -print0 | while IFS= read -r -d '' f; do
+  mkdir -p "$SITE/paper/figures/$(dirname "$f")"
+  cp "$f" "$SITE/paper/figures/$f"
+done
+```
+
+   The script auto-detects Chrome/Chromium (override with
+   `PUPPETEER_EXECUTABLE=/path/to/chrome`), takes a few minutes for all 77
+   diagrams, and writes the SVGs next to the `.mmd`/`.pdf` sources so they are
+   versioned in the main repo too.
 
 ### 4. Fix `[probes]` failures in `index.html`
 
@@ -201,4 +226,4 @@ Run in order; each step must pass before continuing. On failure, fix the root ca
 - Read state first, write second; re-run the state script after each major step to verify progress.
 - Minimal diffs in `index.html` — fix exactly what a probe flags; do not reformat or refactor the page.
 - Never delete files without explicit user confirmation, except the pre-authorized `paper/specs/` and `paper/bibliography/*.md` orphans above; never rewrite git history in either repo.
-- The main repo is the source of truth for content; the mirror is the source of truth only for `index.html`, `ft-param-estimator.js`, `ft-diagram.js` and the paper build pipeline (`flatten_tex.py`, HTML outputs).
+- The main repo is the source of truth for content; the mirror is the source of truth only for `index.html`, `ft-param-estimator.js`, `ft-diagram.js` and the paper build pipeline (`flatten_tex.py`, `postprocess_html.py`, HTML outputs).

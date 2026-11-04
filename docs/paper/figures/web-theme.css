@@ -1,0 +1,16 @@
+/* Web-only Mermaid theme overrides (Paper tab).
+ *
+ * The neutral theme draws node/cluster outlines at 1px, which all but
+ * disappears once the SVG is scaled down inside the paper column. The
+ * `!important` flag is required to beat mermaid's id-scoped rules
+ * (`#my-svg .node rect { stroke-width: 1px; }`).
+ */
+.node rect,
+.node circle,
+.node ellipse,
+.node polygon,
+.node path,
+.cluster rect,
+.cluster polygon {
+  stroke-width: 2px !important;
+}

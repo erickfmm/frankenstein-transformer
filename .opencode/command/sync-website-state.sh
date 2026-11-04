@@ -125,6 +125,9 @@ pair_file "$PE/paper-es.pdf" "$SITE/paper/es/paper-es.pdf" "docs/paper-es/paper-
 pair_tree "$PE/sections" "$SITE/paper/es/sections" "docs/paper-es/sections" "paper/es/sections" -type f -name "*.tex"
 pair_tree "$PE/appendices" "$SITE/paper/es/appendices" "docs/paper-es/appendices" "paper/es/appendices" -type f -name "*.tex"
 
+# paper figures: SVG set embedded by the Paper tab (sources/PDFs stay in the main repo)
+pair_tree "$P/figures" "$SITE/paper/figures" "docs/paper/figures" "paper/figures" -type f -name "*.svg"
+
 # bibliography + canonical implementation spec
 pair_tree "$REPO_ROOT/docs/bibliography" "$SITE/paper/bibliography" "docs/bibliography" "paper/bibliography" -type f
 pair_file "$REPO_ROOT/docs/architecture.md" "$SITE/paper/specs/architecture.md" "docs/architecture.md" "paper/specs/architecture.md"
@@ -286,6 +289,30 @@ if [[ -f "$SITE/paper/es.pdf" && -f "$SITE/paper/es/paper-es.pdf" ]] && ! cmp -s
 else
   probe PASS paper-es-copy "es.pdf in sync with es/paper-es.pdf"
 fi
+
+# 9) Paper tab figures: every inline SVG referenced by the HTML must exist.
+for lang in en es; do
+  html="$SITE/paper/paper-$lang.html"
+  if [[ ! -f "$html" ]]; then
+    probe FAIL "paper-figures-$lang" "missing paper/paper-$lang.html"
+    continue
+  fi
+  mapfile -t fig_refs < <(
+    grep -o 'src="/frankenstein-transformer/paper/figures/[^"]*\.svg"' "$html" \
+      | sed 's|^src="||; s|"$||' | sort -u
+  )
+  fig_missing=0
+  for u in "${fig_refs[@]}"; do
+    [[ -f "$SITE${u#/frankenstein-transformer}" ]] || fig_missing=$((fig_missing + 1))
+  done
+  if [[ ${#fig_refs[@]} -eq 0 ]]; then
+    probe FAIL "paper-figures-$lang" "no inline SVG figures in paper-$lang.html (rebuild with flatten_tex.py --web)"
+  elif [[ "$fig_missing" -gt 0 ]]; then
+    probe FAIL "paper-figures-$lang" "$fig_missing of ${#fig_refs[@]} figure SVGs missing under paper/figures/"
+  else
+    probe PASS "paper-figures-$lang" "${#fig_refs[@]} inline figures resolve"
+  fi
+done
 
 # ---------------------------------------------------------------------------
 # [python-probes] — schema refs + example YAML validity (uv project env)
