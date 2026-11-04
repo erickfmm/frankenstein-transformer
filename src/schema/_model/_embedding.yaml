@@ -66,6 +66,160 @@ properties:
           **Referencias:** (paper: arxiv:2004.02984) (paper: arxiv:2502.10001)
         default: 128
         examples: [128]
+  dynamic:
+    type: object
+    additionalProperties: false
+    description: |-
+      Dynamic (EELBERT) token embeddings: replaces the trainable `vocab_size × hidden_size` lookup table with an on-the-fly n-gram pooling hash of the token strings. No embedding parameters are stored or trained.
+      **References:** (paper: arxiv:2310.20144)
+    description_es: |-
+      Embeddings de tokens dinámicos (EELBERT): reemplaza la tabla de búsqueda entrenable `vocab_size × hidden_size` por un hash de n-gramas calculado al vuelo sobre las cadenas de los tokens. No se almacenan ni entrenan parámetros de embedding.
+      **Referencias:** (paper: arxiv:2310.20144)
+    properties:
+      enabled:
+        type: boolean
+        title: "Dynamic Embeddings"
+        title_es: "Embeddings Dinámicos"
+        description: |
+          Replace the input embedding table with dynamic, hash-computed embeddings
+          (EELBERT). The `vocab_size × hidden_size` table disappears from the model,
+          checkpoint and export — that is where the compression comes from. Embeddings
+          are frozen (never trained) and the output head stays independent. Requires a
+          tokenizer: the training/deploy/inference pipelines inject its vocabulary and
+          the model hashes the token strings. Mutually exclusive with
+          `embedding.factorized.enabled`.
+
+          **Examples explained:**
+          - `false`: Standard trainable embedding table. Simple and fastest; the table dominates tiny models (BERT-tiny: ~90% of parameters).
+          - `true` with `embedding.dynamic.ngram_max=3`: n-gram pooling hash over 1/2/3-grams; morphologically similar words ("running"/"runner") land close. The paper reports minimal GLUE regression at a fraction of the size.
+          - `true` with `precompute: false`: computes embeddings per batch instead of memoising the table (lower RAM, slower steps).
+          - Decision rule: enable for tiny on-device models where `vocab_size × hidden_size` dominates the parameter budget.
+
+          **References:** (paper: arxiv:2310.20144)
+        description_es: |
+          Reemplaza la tabla de embedding de entrada por embeddings dinámicos calculados
+          con hash (EELBERT). La tabla `vocab_size × hidden_size` desaparece del modelo,
+          del checkpoint y de la exportación — de ahí viene la compresión. Los embeddings
+          son congelados (nunca se entrenan) y la cabeza de salida queda independiente.
+          Requiere un tokenizador: los pipelines de entrenamiento/despliegue/inferencia
+          inyectan su vocabulario y el modelo hashea las cadenas de tokens. Es mutuamente
+          excluyente con `embedding.factorized.enabled`.
+
+          **Ejemplos explicados:**
+          - `false`: Tabla de embedding entrenable estándar. Simple y la más rápida; la tabla domina los modelos pequeños (BERT-tiny: ~90% de los parámetros).
+          - `true` con `embedding.dynamic.ngram_max=3`: hash de n-gramas 1/2/3; palabras morfológicamente similares ("running"/"runner") quedan cerca. El paper reporta una regresión mínima en GLUE con una fracción del tamaño.
+          - `true` con `precompute: false`: calcula embeddings por lote en vez de memoizar la tabla (menos RAM, pasos más lentos).
+          - Regla de decisión: activar para modelos pequeños de dispositivo donde `vocab_size × hidden_size` domina el presupuesto de parámetros.
+
+          **Referencias:** (paper: arxiv:2310.20144)
+        default: false
+        examples: [false]
+      ngram_max:
+        type: integer
+        minimum: 1
+        title: "Max N-gram Size"
+        title_es: "Tamaño Máximo de N-grama"
+        description: |
+          Maximum n-gram size `N` for the pooling hash (only when
+          `embedding.dynamic.enabled=true`). Token strings are hashed over their
+          1..N character n-grams; each n-gram size gets its own share of the embedding
+          dimensions. The paper uses `N=3`.
+
+          **Impact:** Larger N captures longer morphological patterns but costs more
+          compute (`O(token_length × hidden_size)` per token). Must be `<= hidden_size`.
+
+          **References:** (paper: arxiv:2310.20144)
+        description_es: |
+          Tamaño máximo de n-grama `N` para el hash de agrupación (solo cuando
+          `embedding.dynamic.enabled=true`). Las cadenas de tokens se hashean sobre sus
+          n-gramas de caracteres 1..N; cada tamaño de n-grama recibe su propia porción de
+          las dimensiones del embedding. El paper usa `N=3`.
+
+          **Impacto:** Un N mayor captura patrones morfológicos más largos pero cuesta más
+          cómputo (`O(longitud_token × hidden_size)` por token). Debe ser `<= hidden_size`.
+
+          **Referencias:** (paper: arxiv:2310.20144)
+        default: 3
+        examples: [1, 2, 3]
+      bucket:
+        type: integer
+        minimum: 2
+        title: "Hash Bucket Size"
+        title_es: "Tamaño del Bucket de Hash"
+        description: |
+          Hash bucket size `B` used by the rolling hash and the `[-1, 1]` folding step
+          (paper default `10^9 + 7`). Larger primes reduce collisions between distinct
+          n-grams.
+
+          **Impact:** Leave the default unless reproducing a specific hash variant;
+          changing B changes every embedding (they are a deterministic function of it).
+
+          **References:** (paper: arxiv:2310.20144)
+        description_es: |
+          Tamaño del bucket de hash `B` usado por el rolling hash y el plegado a `[-1, 1]`
+          (por defecto en el paper: `10^9 + 7`). Primos más grandes reducen colisiones
+          entre n-gramas distintos.
+
+          **Impacto:** Mantener el valor por defecto salvo que se reproduzca una variante
+          específica; cambiar B cambia todos los embeddings (son función determinista de B).
+
+          **Referencias:** (paper: arxiv:2310.20144)
+        default: 1000000007
+        examples: [1000000007]
+      seed:
+        type: integer
+        title: "Hash Seed"
+        title_es: "Semilla del Hash"
+        description: |
+          Random state used to generate the `hidden_size` hash seeds (only this integer is
+          stored). The same seed reproduces identical embeddings; different seeds give a
+          different (equally valid) hash family.
+
+          **Impact:** Keep it fixed across training and inference of a run. Changing it
+          invalidates any checkpoint trained with the previous seed.
+
+          **References:** (paper: arxiv:2310.20144)
+        description_es: |
+          Estado aleatorio usado para generar las `hidden_size` semillas de hash (solo se
+          almacena este entero). La misma semilla reproduce embeddings idénticos; semillas
+          distintas dan una familia de hash distinta (igualmente válida).
+
+          **Impacto:** Mantenerla fija entre entrenamiento e inferencia de una ejecución.
+          Cambiarla invalida cualquier checkpoint entrenado con la semilla anterior.
+
+          **Referencias:** (paper: arxiv:2310.20144)
+        default: 42
+        examples: [42]
+      precompute:
+        type: boolean
+        title: "Precompute Table"
+        title_es: "Precalcular Tabla"
+        description: |
+          Memoise the full `vocab_size × hidden_size` dynamic table once at model build.
+          The memoised table is a non-persistent buffer: it is never saved in checkpoints
+          nor exported, so model size stays identical to the on-the-fly computation. This
+          is pure caching of a deterministic function (the paper suggests caching frequent
+          n-grams, §5.5).
+
+          **Impact:** `true` makes training fast at the cost of `vocab_size × hidden_size × 4`
+          bytes of RAM; `false` recomputes the hash per batch (minimal RAM, slower steps,
+          useful for extreme low-memory targets).
+
+          **References:** (paper: arxiv:2310.20144)
+        description_es: |
+          Memoiza la tabla dinámica completa `vocab_size × hidden_size` una vez al construir
+          el modelo. La tabla memoizada es un buffer no persistente: nunca se guarda en
+          checkpoints ni se exporta, así que el tamaño del modelo es idéntico al cálculo al
+          vuelo. Es caché puro de una función determinista (el paper sugiere cachear
+          n-gramas frecuentes, §5.5).
+
+          **Impacto:** `true` acelera el entrenamiento a costa de `vocab_size × hidden_size × 4`
+          bytes de RAM; `false` recalcula el hash por lote (RAM mínima, pasos más lentos,
+          útil para objetivos de memoria extrema).
+
+          **Referencias:** (paper: arxiv:2310.20144)
+        default: true
+        examples: [true, false]
   conv:
     type: object
     additionalProperties: false

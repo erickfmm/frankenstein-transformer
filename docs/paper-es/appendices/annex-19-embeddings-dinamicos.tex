@@ -1,0 +1,127 @@
+\section{Embeddings de Tokens Dinámicos (EELBERT)}
+\label{sec:annex-embeddings-dinamicos}
+
+\subsection{Resumen Ejecutivo}
+
+\texttt{embedding.dynamic} reemplaza la tabla de embedding de entrada entrenable $V\times H$ por un \emph{hash de agrupación de $n$-gramas} calculado al vuelo sobre la cadena del token, siguiendo EELBERT \citep{cohn_eelbert_2023}. La tabla de búsqueda desaparece del conteo de parámetros, de los checkpoints y de los artefactos nativos de despliegue. El efecto es mayor en los modelos pequeños, donde la capa de búsqueda domina el presupuesto (en BERT-tiny el embedding de entrada concentra cerca del $90\%$ de los parámetros), y es complementario a cuantización, poda y destilación.
+
+Los embeddings dinámicos son \emph{congelados}: nunca se entrenan ni reciben gradientes. Solo cambian cómo un id de token se convierte en vector; todo lo demás (mezcladores, normalización, residuales, enrutamiento, optimizadores) permanece igual. Como en el paper, la cabeza de salida sigue siendo una matriz independiente y no atada: durante el preentrenamiento MLM todavía almacena una matriz $V\times H$, de modo que la ventaja de tamaño se materializa en el artefacto solo-backbone o posterior al ajuste fino (el checkpoint de entrenamiento no es automáticamente $15\times$ más pequeño). La implementación vive en \path{src/model/embeddings/dynamic_embedding.py}, el contrato de configuración es el bloque \texttt{model.embedding.dynamic.*}, y el vocabulario del tokenizador lo inyectan los pipelines de entrenamiento, despliegue e inferencia mediante \path{src/utils/tokenizer_vocab.py}.
+
+\subsection{Algoritmo}
+
+Sea $w$ una cadena de token de $l$ bytes con valores $b_1,\dots,b_l$, y $d=H$ el ancho del embedding. El algoritmo tiene cinco pasos, con $N$ el tamaño máximo de $n$-grama y $B$ el bucket de hash.
+
+\begin{enumerate}
+\item \textbf{Semillas.} Se extraen $d$ semillas de un único estado aleatorio almacenado $s$,
+\[
+\mathbf{h} = (h_1,\dots,h_d) \in \{0,\dots,B-1\}^d,
+\qquad \mathbf{h} \sim \mathrm{Uniform}(\text{semilla}=s).
+\]
+Solo se persiste el entero $s$; el vector de semillas es una función determinista de él.
+
+\item \textbf{Firmas de $i$-gramas.} Para $i=1,\dots,N$ se calcula el hash polinómico rodante de cada $i$-grama,
+\[
+\sigma_i(j) = \Big(\sum_{t=0}^{i-1} b_{j+t}\,a^{\,i-1-t}\Big) \bmod B,
+\qquad j=1,\dots,k_i,
+\qquad k_i=\max(l-i+1,0),
+\]
+con $a=257$ (primo, mayor que cualquier byte UTF-8). Los hashes se calculan de forma incremental: el hash del $(i{+}1)$-grama reutiliza el del $i$-grama y añade un byte, por lo que el token completo cuesta $\mathcal{O}(lN)$ operaciones enteras.
+
+\item \textbf{Proyección particionada.} Se divide $\mathbf{h}$ en $N$ partes contiguas $\mathbf{h}_i$ de longitud $d_i$ con
+\[
+\sum_{i=1}^{N} d_i = d, \qquad d_i \propto i,
+\]
+de modo que los $n$-gramas más largos reciben más dimensiones. La matriz de proyección de cada tamaño de grama es el producto externo
+\[
+\mathbf{P}_i = \sigma_i \otimes \mathbf{h}_i \in \mathbb{Z}^{k_i\times d_i}.
+\]
+
+\item \textbf{Plegado.} Cada entrada se lleva a $[-1,1]$ mediante
+\[
+\phi(x) = \frac{(x \bmod B) - \mathbf{1}[x \bmod B > B/2]\;B}{B/2} \in (-1, 1],
+\]
+lo que mantiene el embedding acotado sin almacenar ni normalizar una tabla.
+
+\item \textbf{Agrupación y concatenación.} Se promedia cada proyección sobre sus $k_i$ filas y se concatenan las $N$ piezas:
+\[
+\mathbf{e}_i = \frac{1}{k_i}\sum_{j=1}^{k_i} \phi\big(\mathbf{P}_i[j,:]\big),
+\qquad
+\mathbf{e} = [\mathbf{e}_1;\dots;\mathbf{e}_N] \in \mathbb{R}^{d}.
+\]
+Si un token es más corto que $i$, entonces $k_i=0$ y esa partición aporta un vector nulo.
+\end{enumerate}
+
+Como el hash es polinómico sobre caracteres, los tokens morfológicamente relacionados (p.\ ej.\ \texttt{runner} y \texttt{running}) comparten muchos $1$/$2$/$3$-gramas y quedan cerca en el espacio de embedding. El paper muestra que esto importa sobre todo en modelos pequeños: sustituir el hash de $n$-gramas por un hash puramente aleatorio (que preserva posición) cuesta $5.0$ puntos de GLUE en BERT-mini pero solo $0.3$ en BERT-base.
+
+\subsection{Contrato de Configuración}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}l c X@{}}
+\toprule
+\textbf{Clave (\texttt{model.embedding.dynamic.*})} & \textbf{Defecto} & \textbf{Efecto} \\
+\midrule
+\texttt{enabled} & \texttt{false} & Reemplaza la tabla de búsqueda por el embedding hash congelado. Mutuamente excluyente con \texttt{embedding.factorized.enabled}. \\
+\texttt{ngram\_max} & \texttt{3} & Tamaño máximo de $n$-grama $N$; debe cumplir $1 \le N \le H$. \\
+\texttt{bucket} & \texttt{1000000007} & Bucket de hash $B$ ($10^9+7$ en el paper). Cambiarlo cambia todos los embeddings. \\
+\texttt{seed} & \texttt{42} & Estado aleatorio $s$ de las semillas; semillas idénticas reproducen embeddings idénticos. \\
+\texttt{precompute} & \texttt{true} & Memoiza la tabla $V\times H$ en un buffer \emph{no persistente} (caché pura; nunca se guarda ni se exporta). \\
+\bottomrule
+\end{tabularx}
+\caption{Configuración de embeddings dinámicos. El bloque compone con \texttt{embedding.conv.*}, que aplica un Conv1d sobre el flujo dinámico de ancho $H$.}
+\label{tab:dynamic-embedding-config-es}
+\end{table}
+
+El esquema impone la exclusión mutua con embeddings factorizados dos veces: una regla condicional \texttt{if/then} en \texttt{src/schema/\_conditional\_rules.yaml} y una comprobación en \texttt{\_\_post\_init\_\_} de \texttt{FrankensteinModelConfig}. El bloque solo es válido para las clases de texto (\texttt{frankenstein\_text\_encoder} y \texttt{frankenstein\_text\_decoder}); la ViT usa un embedding convolucional de parches y el frontend de audio no es una búsqueda de vocabulario, por lo que \texttt{config\_loader} rechaza la combinación en esas clases.
+
+\subsection{Inyección del Vocabulario y Ciclo de Vida}
+
+Los embeddings hash consumen cadenas de tokens, mientras que los modelos reciben ids enteros. Por eso la configuración lleva un campo de ejecución sin esquema, \texttt{token\_vocab} (cadenas de tokens ordenadas por id). \texttt{inject\_token\_vocab(config, tokenizer)} las extrae de un tokenizador HuggingFace (\texttt{get\_vocab()}) o del envoltorio legacy de SentencePiece (\texttt{vocab}, token $\to$ id), las adjunta antes de \texttt{build\_model} y alinea \texttt{vocab\_size} con los ids del tokenizador. El motor de entrenamiento (\path{src/engine.py} y \path{src/training/main.py}), el cargador de checkpoints de despliegue y el motor de inferencia llaman al ayudante, de modo que el vocabulario no necesita aparecer en el YAML. Construir \texttt{DynamicEmbedding} sin vocabulario lanza un error accionable.
+
+El checkpoint no almacena pesos de embedding: \texttt{state\_dict()} no contiene nada para la capa de entrada, y el vocabulario viaja con el tokenizador guardado junto al checkpoint. Con \texttt{precompute: true} la tabla calculada es un buffer no persistente: sigue a \texttt{.to(device)} pero queda excluida de checkpoints y exportaciones, por lo que es exactamente equivalente al cálculo al vuelo. Con \texttt{precompute: false} el hash se recalcula por lote (menos memoria residente, pasos más lentos); ambas rutas coinciden salvo por el orden de reducción en float32.
+
+Los artefactos nativos de despliegue y el exportador GGUF conservan por tanto la ventaja de tamaño. La exportación a HuggingFace Transformers no puede ejecutar el hash personalizado, así que materializa la tabla calculada como un \texttt{nn.Embedding} congelado, registra la conversión en el informe de compatibilidad y emite una advertencia de que la ventaja de tamaño de EELBERT no se preserva en ese artefacto.
+
+\subsection{Contabilidad de Tamaño y Resultados del Paper}
+
+El bloque eliminado son pesos $V\times H$; el bloque añadido es solo el Conv1d opcional ($k H^2 + H$) cuando \texttt{embedding.conv.enabled} está activo. En nuestro preset \path{configs/eelbert_tiny.yaml} (geometría BERT-tiny: 2 capas, $H=128$, 2 cabezas, FFN reducida a $128$, $V=30{,}522$), la tabla de entrada elimina $3.91$M pesos mientras la cabeza MLM no atada conserva $3.94$M, dejando $4.15$M parámetros totales: la misma contabilidad del paper, donde la cabeza se descarta solo para el despliegue.
+
+La Tabla~\ref{tab:eelbert-results-es} resume los resultados de referencia reportados por \citet{cohn_eelbert_2023}.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}l r r r r r@{}}
+\toprule
+\textbf{Modelo} & \textbf{Paráms.} & \textbf{Tamaño} & \textbf{GLUE} & \textbf{$\Delta$GLUE} & \textbf{Latencia} \\
+\midrule
+BERT-base & 109.5M & 438 MB & 0.775 & --- & 162.0 ms \\
+EELBERT-base & 86.1M & 344 MB & 0.760 & $-1.5$ & 165.0 ms \\
+BERT-mini & 11.17M & 44.8 MB & 0.753 & --- & 7.0 ms \\
+EELBERT-mini & 3.36M & 13.4 MB & 0.746 & $-0.7$ & 9.9 ms \\
+BERT-tiny & 4.39M & 17.7 MB & 0.671 & --- & 1.7 ms \\
+EELBERT-tiny & 0.48M & 2.04 MB & 0.666 & $-0.5$ & 3.9 ms \\
+UNO-EELBERT & 0.31M & 1.24 MB & 0.632 & $-3.9$ & --- \\
+\bottomrule
+\end{tabular}
+\caption{Resultados de referencia de EELBERT (Tabla~2 de \citealp{cohn_eelbert_2023}); latencia en un MacBook Pro M1 con 32\,GB de RAM. UNO-EELBERT es EELBERT-tiny con el tamaño intermedio reducido a $128$.}
+\label{tab:eelbert-results-es}
+\end{table}
+
+La complejidad de un embedding de token es $\mathcal{O}(l\,d)$ frente a la búsqueda $\mathcal{O}(1)$ de BERT: para los anchos de 128--768 usados por BERT, la latencia adicional es despreciable a escala base pero visible en modelos diminutos (cerca de $2.3\times$ para EELBERT-tiny en la tabla). El paper propone tres mitigaciones que esta implementación deja como opciones de ingeniería: una máscara dispersa de ancho fijo sobre el producto externo ($\mathcal{O}(l\,s)$ con $s\ll d$), el hash paralelo por token, y una caché acotada de los $n$-gramas más frecuentes.
+
+\subsection{Mapa de Implementación}
+
+\begin{itemize}[leftmargin=1.4em]
+\item \path{src/model/embeddings/dynamic_embedding.py} --- \texttt{DynamicEmbedding}: semillas, hash rodante por bloques, producto externo particionado, plegado, agrupación, Conv1d opcional y \texttt{embedding\_table()}.
+\item \path{src/model/frankenstein_encoder.py} --- despacho de \texttt{emb} (\texttt{dynamic} $\to$ \texttt{factorized} $\to$ \texttt{nn.Embedding}); el decoder lo reutiliza a través de su backbone encoder. La exclusión mutua y los rangos viven en \path{src/model/config.py}.
+\item \path{src/utils/tokenizer_vocab.py} --- \texttt{token\_strings()} e \texttt{inject\_token\_vocab()}, compartidos por el motor, la ruta CLI de entrenamiento, despliegue e inferencia.
+\item \path{src/deploy/transformers\_export.py} --- materialización de la tabla congelada y advertencia de exportación.
+\item \path{tests/test\_dynamic\_embedding.py} --- determinismo por semilla, cotas $[-1,1]$, similitud morfológica, paridad precompute vs.\ al vuelo, cero parámetros entrenables, errores de vocabulario y configuración, forwards de encoder/decoder, regla del esquema y materialización de exportación.
+\item \path{configs/eelbert_tiny.yaml} y \path{configs/examples/embedding_dynamic.yaml} --- presets; ambos pasan smoke tests, y el arnés E2E cubre la combinación como \texttt{trans\_dynamic\_emb}.
+\end{itemize}
+
+\subsection{Alcance y Limitaciones}
+
+Los embeddings dinámicos son un mecanismo de compresión, no un nuevo objetivo de aprendizaje de representaciones: no aproximan un embedding BERT entrenado y no pueden entrenarse ni ajustarse. Como el mapeo es una función determinista de (cadena, semilla, $B$, $N$), cambiar cualquiera de ellos invalida los checkpoints entrenados previamente. El diseño también acopla el modelo al tokenizador que produjo los ids de entrenamiento: el vocabulario (y por tanto las cadenas de tokens) forma parte del contrato del artefacto, y cambiar el tokenizador altera silenciosamente todos los embeddings de entrada. Por último, la exportación a HuggingFace pierde la ventaja de tamaño por construcción, así que los despliegues en dispositivo deberían preferir el checkpoint nativo, el paquete de despliegue o GGUF.

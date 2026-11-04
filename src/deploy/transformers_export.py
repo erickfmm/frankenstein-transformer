@@ -309,6 +309,149 @@ def _bake_state_dict(
     return model.state_dict(), baked
 
 
+def _dynamic_embedding_enabled(model_config: Dict[str, Any]) -> bool:
+    """Whether a (nested or flat) model config uses dynamic embeddings.
+
+    Args:
+        model_config: Nested ``model:`` block or flat checkpoint config.
+
+    Returns:
+        ``True`` when ``embedding.dynamic.enabled`` (nested) or
+        ``use_dynamic_embedding`` (flat) is set.
+    """
+    if bool(model_config.get("use_dynamic_embedding", False)):
+        return True
+    embedding = model_config.get("embedding")
+    if isinstance(embedding, dict):
+        dynamic = embedding.get("dynamic")
+        if isinstance(dynamic, dict) and bool(dynamic.get("enabled", False)):
+            return True
+    return False
+
+
+def _resolve_dynamic_vocab(
+    model_config: Dict[str, Any],
+    checkpoint: Dict[str, Any],
+    yaml_data: Dict[str, Any],
+) -> List[str]:
+    """Resolve the tokenizer vocabulary required by dynamic embeddings.
+
+    Lookup order: flat config ``token_vocab`` → checkpoint ``config`` →
+    ``tokenizer.name_or_path`` in the training YAML.
+
+    Args:
+        model_config: Model config resolved from the YAML or checkpoint.
+        checkpoint: Loaded checkpoint payload.
+        yaml_data: Parsed training YAML.
+
+    Returns:
+        Id-ordered token strings.
+
+    Raises:
+        ValueError: If no vocabulary can be resolved.
+    """
+    from src.utils.config_flatten import flatten_model_dict
+
+    vocab = flatten_model_dict(model_config).get("token_vocab")
+    if vocab:
+        return list(vocab)
+
+    checkpoint_config = _as_plain_dict(checkpoint.get("config"))
+    vocab = checkpoint_config.get("token_vocab")
+    if vocab:
+        return list(vocab)
+
+    tokenizer_cfg = yaml_data.get("tokenizer") or {}
+    name_or_path = str(tokenizer_cfg.get("name_or_path") or "").strip()
+    if name_or_path:
+        try:
+            from transformers import AutoTokenizer
+            try:
+                from ..utils.tokenizer_vocab import token_strings
+            except ImportError:  # flat sys.path context
+                from utils.tokenizer_vocab import token_strings
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                name_or_path,
+                use_fast=bool(tokenizer_cfg.get("use_fast", True)),
+                trust_remote_code=bool(tokenizer_cfg.get("trust_remote_code", False)),
+            )
+            strings = token_strings(tokenizer)
+            if strings:
+                return strings
+        except Exception as exc:  # noqa: BLE001 - fall through to the error below
+            raise ValueError(
+                "embedding.dynamic.enabled: could not load the tokenizer from "
+                f"tokenizer.name_or_path={name_or_path!r} to materialize the "
+                f"frozen embedding table: {exc}"
+            ) from exc
+
+    raise ValueError(
+        "embedding.dynamic.enabled: the export needs the tokenizer vocabulary to "
+        "materialize the frozen embedding table. Save the checkpoint with the "
+        "training engine (which records token_vocab) or set tokenizer.name_or_path "
+        "in the YAML."
+    )
+
+
+def _materialize_dynamic_embedding(
+    model_config: Dict[str, Any],
+    model_class: str,
+    state_dict: Dict[str, torch.Tensor],
+) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any], int]:
+    """Swap an EELBERT hash embedding for a frozen lookup table for export.
+
+    The HuggingFace artifact carries the computed ``vocab_size × hidden_size``
+    table as a regular (frozen) ``nn.Embedding``, so the exported model runs
+    without the custom hash code. The recorded config disables dynamic
+    embeddings so the exported wrapper rebuilds a plain-table model.
+
+    Args:
+        model_config: Flat config including ``token_vocab``.
+        model_class: Model class string.
+        state_dict: Training checkpoint weights (no embedding table present).
+
+    Returns:
+        Tuple of ``(export_state_dict, export_config, baked_layers)``.
+    """
+    from src.model.config import FrankensteinModelConfig
+    from src.model.frankenstein_decoder import FrankensteinDecoder
+    from src.model.frankenstein_encoder import FrankensteinEncoder
+    from src.utils.config_flatten import flatten_model_dict
+
+    flat = flatten_model_dict(model_config)
+    model_cfg = FrankensteinModelConfig(**flat)
+    decoder = str(model_class).lower() == "frankenstein_text_decoder" or model_cfg.mode == "decoder"
+    if decoder:
+        model_cfg.mode = "decoder"
+        model = FrankensteinDecoder(model_cfg)
+        embedding = model.backbone.emb
+    else:
+        model = FrankensteinEncoder(model_cfg)
+        embedding = model.emb
+
+    model.load_state_dict(state_dict, strict=False)
+    table = embedding.embedding_table().detach().clone()
+    frozen = torch.nn.Embedding.from_pretrained(table, freeze=True)
+    if decoder:
+        model.backbone.emb = frozen
+    else:
+        model.emb = frozen
+    model.eval()
+
+    baked = 0
+    if bake_bitnet_weights is not None and bool(flat.get("use_bitnet", False)):
+        baked = bake_bitnet_weights(model)
+
+    exported = {name: tensor.detach().clone() for name, tensor in model.state_dict().items()}
+    export_config = dict(flat)
+    export_config["use_dynamic_embedding"] = False
+    export_config["dynamic_embedding_precompute"] = False
+    export_config["use_factorized_embedding"] = False
+    export_config["token_vocab"] = None
+    return exported, export_config, baked
+
+
 def _load_schema_layer_enum(schema_path: Path) -> List[str]:
     from src.utils.schema_loader import resolve_schema
     schema = resolve_schema(schema_path)
@@ -550,21 +693,27 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
         if model_config.get("mode") == "decoder" or model_class == "frankenstein_text_decoder"
         else "FrankensteinForMaskedLM"
     )
-    hf_config = _build_transformers_config(
-        model_config=model_config,
-        model_class=model_class,
-        task=task,
-        modeling_class=modeling_class,
-    )
-
-    (output_path / "config.json").write_text(
-        json.dumps(hf_config, indent=2),
-        encoding="utf-8",
-    )
 
     export_state_dict = state_dict
     baked_layers = 0
-    if bool(model_config.get("use_bitnet", False)) and bake_bitnet_weights is not None:
+    if _dynamic_embedding_enabled(model_config):
+        # Dynamic (EELBERT) hash embeddings have no lookup table and are not
+        # expressible in the HF wrapper. Materialize the computed table as a
+        # frozen nn.Embedding so the export runs without the custom hash code.
+        model_config = dict(model_config)
+        model_config["token_vocab"] = _resolve_dynamic_vocab(
+            model_config, checkpoint, yaml_data
+        )
+        export_state_dict, model_config, baked_layers = _materialize_dynamic_embedding(
+            model_config, model_class, state_dict
+        )
+        compatibility.setdefault("warnings", []).append(
+            "Dynamic (EELBERT) embeddings were materialized as a frozen "
+            "vocab_size x hidden_size table for the Transformers export; the "
+            "size advantage of the hash embedding is not preserved in this "
+            "artifact."
+        )
+    elif bool(model_config.get("use_bitnet", False)) and bake_bitnet_weights is not None:
         # Instantiate the model so BitLinear layers can be baked to faithful
         # {-1, 0, 1} * scale weights before serialization. The exported
         # pytorch_model.bin then carries self-describing ternary values.
@@ -580,6 +729,18 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
                 f"BitNet bake skipped (model instantiation failed): {exc}"
             )
             compatibility["warnings"] = warnings_log
+
+    hf_config = _build_transformers_config(
+        model_config=model_config,
+        model_class=model_class,
+        task=task,
+        modeling_class=modeling_class,
+    )
+
+    (output_path / "config.json").write_text(
+        json.dumps(hf_config, indent=2),
+        encoding="utf-8",
+    )
 
     torch.save(export_state_dict, output_path / "pytorch_model.bin")
 

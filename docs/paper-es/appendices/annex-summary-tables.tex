@@ -326,7 +326,7 @@ La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y opt
 \multicolumn{3}{r}{\textit{continúa en la página siguiente}} \\
 \endfoot
 \bottomrule
-\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada. Las primeras 12 filas son codificaciones posicionales (Anexo~12); las últimas tres son optimizaciones estructurales de embedding, incluido el frontend de entrada de audio.}
+\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada. Las primeras 12 filas son codificaciones posicionales (Anexo~12); las últimas cuatro son optimizaciones estructurales de embedding, incluido el frontend de entrada de audio.}
 \label{tab:all-embeddings}
 \endlastfoot
 \multicolumn{3}{c}{\textbf{Codificaciones Posicionales (12)}} \\
@@ -344,10 +344,11 @@ Sinusoidal Rotatoria & Frecuencias sinusoidales como matriz de rotación en Q/K 
 Absoluta Aprendida & Matriz de parámetros aprendible añadida a embeddings & \citep{vaswani_attention_2017} \\
 None & Módulo nulo; ninguna información posicional inyectada & --- \\
 \midrule
-\multicolumn{3}{c}{\textbf{Optimizaciones Estructurales de Embedding (3)}} \\
+\multicolumn{3}{c}{\textbf{Optimizaciones Estructurales de Embedding (4)}} \\
 \midrule
 Embeddings Factorizados & Descompone la matriz de embedding $V \times H$ en factores $V \times R$ y $R \times H$; reduce parámetros de $\mathcal{O}(VH)$ a $\mathcal{O}(V R + R H)$; controlado por \texttt{factorized\_embedding\_dim} & (interno) \\
 Convolución de Embedding & Conv1d depthwise aplicada sobre el flujo de embeddings antes del primer bloque transformer; proporciona filtrado ligero de contexto local; controlado por \texttt{embedding\_conv\_kernel} & (interno) \\
+Embeddings Dinámicos (EELBERT) & Reemplaza la tabla $V \times H$ por un hash de agrupación de $n$-gramas calculado al vuelo sobre las cadenas de tokens; congelado, sin parámetros de embedding entrenables; controlado por el bloque \texttt{embedding.dynamic.*} (Anexo~\ref{sec:annex-embeddings-dinamicos}) & \citep{cohn_eelbert_2023} \\
 Frontend de audio & Tramas log-mel/espectrograma/raw a través de dos etapas Conv2d con stride 2 y una proyección lineal (reducción de tramas $4\times$); lado de entrada de \texttt{frankenstein\_audio}; controlado por el bloque \texttt{audio.*} (Anexo~\ref{sec:annex-18}) & \citep{Gulati2020} \\
 \bottomrule
 \end{longtable}

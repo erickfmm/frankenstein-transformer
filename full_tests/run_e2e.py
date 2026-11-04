@@ -808,6 +808,22 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     add("trans_bitnet_routers", {"use_bitnet": True, "bitnet_routers": True, "use_moe": True, "num_experts": 2, "top_k_experts": 1})
     add("trans_bitnet_conv", {"use_bitnet": True, "use_bitnet_conv": True, "embedding": {"conv": {"enabled": True, "kernel": 3}}})
     add("trans_factorized_emb", {"embedding": {"factorized": {"enabled": True, "dim": 32}}})
+    # EELBERT dynamic embeddings (arXiv:2310.20144): the input lookup table is
+    # replaced by an on-the-fly n-gram hash of the token strings. Real runs get
+    # the vocabulary from the engine; the meta-device parameter count injects
+    # placeholder strings (see _count_param_categories).
+    add("trans_dynamic_emb", {
+        "embedding": {
+            "dynamic": {
+                "enabled": True,
+                "ngram_max": 3,
+                "bucket": 1000000007,
+                "seed": 42,
+                "precompute": True,
+            },
+            "conv": {"enabled": False},
+        },
+    })
     add("trans_embedding_conv", {"embedding": {"conv": {"enabled": True, "kernel": 3}}})
     add("trans_moe", {"use_moe": True, "num_experts": 2, "top_k_experts": 1})
     add("trans_mod", {"use_mixture_of_depths": True, "mixture_of_depths_capacity_ratio": 0.5})
@@ -1422,6 +1438,12 @@ def _count_param_categories(combo_id: str) -> Optional[Dict[str, Any]]:
         loaded = load_training_config(str(yaml_path))
         if loaded.model_config is None:
             return None
+        if getattr(loaded.model_config, "use_dynamic_embedding", False):
+            # No tokenizer on the meta-device counting path: hash embeddings
+            # only need one string per id (content does not affect shapes).
+            loaded.model_config.token_vocab = helpers.dynamic_embedding_vocab(
+                loaded.model_config.vocab_size
+            )
         with torch.device("meta"):
             model = build_model(loaded.model_class, loaded.model_config)
         counts: Dict[str, Any] = {category: 0 for category in BLOCK_CATEGORIES}

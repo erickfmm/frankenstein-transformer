@@ -294,3 +294,33 @@
           properties:
             enabled:
               const: true
+# ---- Dynamic (EELBERT) embeddings replace the token lookup table, so they
+# cannot be combined with the factorized embedding table (D13).
+- if:
+    required:
+    - model
+    properties:
+      model:
+        required:
+        - embedding
+        properties:
+          embedding:
+            required:
+            - dynamic
+            properties:
+              dynamic:
+                required:
+                - enabled
+                properties:
+                  enabled:
+                    const: true
+  then:
+    properties:
+      model:
+        properties:
+          embedding:
+            properties:
+              factorized:
+                properties:
+                  enabled:
+                    const: false

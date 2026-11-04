@@ -25,6 +25,7 @@ try:
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..model.attention.common import BitLinear
     from ..utils.config_flatten import flatten_model_dict
+    from ..utils.tokenizer_vocab import inject_token_vocab
     from ..model.numerics import module_softmax
 except ImportError:
     from model.config import FrankensteinModelConfig
@@ -37,6 +38,7 @@ except ImportError:
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from model.attention.common import BitLinear
     from utils.config_flatten import flatten_model_dict
+    from utils.tokenizer_vocab import inject_token_vocab
     from model.numerics import module_softmax
 
 logging.basicConfig(
@@ -88,13 +90,14 @@ class FrankensteinInference:
         
         # Load config
         self.config = self._load_config()
-        
+
+        # Load the tokenizer first: dynamic (EELBERT) embeddings hash token
+        # strings, so the vocabulary must be attached before model build.
+        self.tokenizer = self._load_tokenizer()
+
         # Load model
         self.model = self._load_model()
-        
-        # Load tokenizer if available
-        self.tokenizer = self._load_tokenizer()
-        
+
         logger.info("✅ Inference engine ready")
     
     def _load_config(self) -> FrankensteinModelConfig:
@@ -291,6 +294,10 @@ class FrankensteinInference:
     
     def _load_model(self) -> FrankensteinEncoder:
         """Load and prepare model for inference."""
+        # Dynamic (EELBERT) embeddings hash token strings: attach the deployed
+        # tokenizer vocabulary before construction (no-op otherwise; also
+        # aligns ``vocab_size`` with the deployed tokenizer).
+        inject_token_vocab(self.config, self.tokenizer)
         # Initialize model (decoder when configured)
         if isinstance(self.config.mode, str) and self.config.mode == "decoder":
             model = FrankensteinDecoder(self.config)

@@ -160,6 +160,7 @@ cli_main([
 | `es_sbert_maria_max.yaml` | sbert | `PlanTL-GOB-ES/roberta-base-bne` | n/a (SBERT trainer) | n/a | sentence pooling `max` | medium | `p40_safe` |
 | `es_sbert_modernbert_mean.yaml` | sbert | `answerdotai/ModernBERT-base` | n/a (SBERT trainer) | n/a | sentence pooling `mean` | medium-high | `p40_experimental` |
 | `es_sbert_xlmr_mean.yaml` | sbert | `xlm-roberta-base` | n/a (SBERT trainer) | n/a | sentence pooling `mean` | high | `p40_safe` |
+| `embedding_dynamic.yaml` | mlm | custom `frankenstein` + dynamic embeddings (EELBERT) | `adamw` | `layer_norm` | `[standard_attn]` ×2 | low | `p40_safe` |
 
 ## Selector Guides
 ### Decoder autoregressive presets (famous architecture-inspired)
@@ -174,6 +175,10 @@ cli_main([
 - `vit_conformer.yaml` — Conformer inside the Vision Transformer
 - `audio_asr_conformer.yaml` / `audio_asr_transducer.yaml` — Conformer ASR (CTC / RNN-T)
 - `audio_classification_conformer.yaml` / `audio_eeg_classification.yaml` — Conformer audio and raw-signal classification
+
+### Dynamic-embedding presets (EELBERT)
+- `embedding_dynamic.yaml` — minimal two-layer MLM encoder with `embedding.dynamic.enabled`: the `vocab_size × hidden_size` input table is replaced by an on-the-fly n-gram hash of the token strings (arXiv:2310.20144)
+- `configs/eelbert_tiny.yaml` — top-level preset mirroring the paper's UNO-EELBERT (BERT-tiny geometry, FFN reduced to 128, BERT WordPiece vocabulary)
 
 ### Gated attention presets
 - `es_arch_gla_deltanet_lion.yaml` — GLA + DeltaNet

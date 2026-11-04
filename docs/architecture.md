@@ -77,7 +77,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/residuals/**` | Residual strategies + factory |
 | `src/model/attention/**` | 45 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
-| `src/model/embeddings/**` | 12 positional encodings + factorized embedding + factory |
+| `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
 | `src/model/activation_function/**` | 43 activations + `ALL_ACTIVATIONS` factory |
 | `src/model/optimizer/**` | 26 optimizers + registry + parameter routing |
@@ -157,6 +157,8 @@ skipped, and `_ATTENTION_MIXER_RENAMES` maps each per-mixer leaf to its flat key
 | `model.norm.qk_norm.quack_tau` | `quack_tau` |
 | `model.norm.qk_norm.eps` | `qk_norm_eps` |
 | `model.embedding.factorized.enabled/dim` | `use_factorized_embedding`, `factorized_embedding_dim` |
+| `model.embedding.dynamic.enabled` | `use_dynamic_embedding` |
+| `model.embedding.dynamic.ngram_max/bucket/seed/precompute` | `dynamic_embedding_ngram_max`, `dynamic_embedding_bucket`, `dynamic_embedding_seed`, `dynamic_embedding_precompute` |
 | `model.embedding.conv.enabled/kernel` | `use_embedding_conv`, `embedding_conv_kernel` |
 | `model.attention.<mixer>.<leaf>` | `_ATTENTION_MIXER_RENAMES` (e.g. `mla.latent_rank` → `mla_latent_rank`) |
 | `model.moe.*` | `use_moe`, `num_experts`, `top_k_experts` |
@@ -314,8 +316,23 @@ exact with QK normalization enabled.
 |---|---:|---|
 | `factorized.enabled` | false | Embedding `V×H` → `V×R + R×H` |
 | `factorized.dim` | 128 | Rank `R` |
-| `conv.enabled` | **true** | Causal Conv1d over token embeddings |
+| `dynamic.enabled` | false | EELBERT (arXiv:2310.20144): replace the lookup table with an on-the-fly n-gram hash of the token strings |
+| `dynamic.ngram_max` | 3 | Maximum n-gram size `N` hashed per token |
+| `dynamic.bucket` | 1000000007 | Hash bucket `B` for the rolling hash and the `[-1, 1]` fold |
+| `dynamic.seed` | 42 | Random state for the `hidden_size` hash seeds (the only stored integer) |
+| `dynamic.precompute` | **true** | Memoise `V×H` in a **non-persistent** buffer (never saved/exported) |
+| `conv.enabled` | **true** | Causal Conv1d over token embeddings (composes with factorized/dynamic) |
 | `conv.kernel` | 3 | Conv kernel size |
+
+Dynamic embeddings are mutually exclusive with `factorized.enabled` (schema
+rule + `__post_init__`). They hash token **strings**, so the config carries a
+runtime-only, non-schema field `token_vocab` that the engine
+(`src/utils/tokenizer_vocab.py`), deploy and inference paths inject from the
+tokenizer before `build_model`; constructing `DynamicEmbedding` without it
+raises. Nothing embedding-shaped enters `state_dict`, so checkpoints and the
+native deploy artifacts stay small. The Transformers export materialises the
+computed table as a frozen `nn.Embedding` and records a warning in the
+compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 

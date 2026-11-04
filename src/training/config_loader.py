@@ -600,6 +600,20 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
             "(the waveform frontend and audio heads are only provided by that class)"
         )
 
+    # Dynamic (EELBERT) embeddings hash token strings, which only exists for
+    # text models: the ViT uses patch embeddings and the audio frontend is not
+    # a vocabulary lookup table.
+    if (
+        model_config is not None
+        and bool(getattr(model_config, "use_dynamic_embedding", False))
+        and model_class in {"frankenstein_vit", "frankenstein_audio"}
+    ):
+        raise ValueError(
+            "embedding.dynamic.enabled is only supported for text models "
+            "(frankenstein_text_encoder / frankenstein_text_decoder); "
+            f"got model_class={model_class}"
+        )
+
     optimizer_data = training_data.get("optimizer")
     if task in {
         "mlm", "causal_lm", "patch_prediction",

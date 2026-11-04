@@ -29,7 +29,7 @@ from .hybrid_layer import HybridLayer
 from .hyperloop import HyperloopConnections
 from .attention.common import BitLinear
 from .norm import get_norm
-from .embeddings import FactorizedEmbedding, build_pos_encoder
+from .embeddings import DynamicEmbedding, FactorizedEmbedding, build_pos_encoder
 from .residuals import ResidualBase, build_residual
 
 
@@ -61,6 +61,9 @@ class FrankensteinEncoder(nn.Module):
       when ``use_bitnet`` is True.
     * **Factorized embeddings**: reduced-dimension embedding lookup +
       projection via :class:`FactorizedEmbedding`.
+    * **Dynamic embeddings** (EELBERT, arXiv:2310.20144): the lookup table is
+      replaced by an on-the-fly n-gram pooling hash of the token strings via
+      :class:`DynamicEmbedding` — no trainable embedding parameters.
     * **Mixture-of-Depths**: per-layer token routing where only the
       top-capacity tokens are updated; auxiliary load-balancing loss is
       accumulated and exposed via ``last_auxiliary_losses``.
@@ -79,8 +82,8 @@ class FrankensteinEncoder(nn.Module):
 
     Attributes:
         config: The :class:`FrankensteinModelConfig` used to build the model.
-        emb: Token embedding layer (:class:`FactorizedEmbedding` or
-            ``nn.Embedding``).
+        emb: Token embedding layer (:class:`FactorizedEmbedding`,
+            :class:`DynamicEmbedding` or ``nn.Embedding``).
         dropout: Embedding dropout layer.
         layers: ModuleList of ``num_layers`` :class:`HybridLayer` blocks.
         final_norm: Final normalization before the output head.
@@ -108,7 +111,9 @@ class FrankensteinEncoder(nn.Module):
         self.last_auxiliary_losses = {}
         self.last_mixture_of_depths_stats = {}
 
-        if config.use_factorized_embedding:
+        if config.use_dynamic_embedding:
+            self.emb = DynamicEmbedding(config)
+        elif config.use_factorized_embedding:
             self.emb = FactorizedEmbedding(config)
         else:
             self.emb = nn.Embedding(config.vocab_size, config.hidden_size)

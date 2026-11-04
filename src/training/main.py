@@ -33,6 +33,7 @@ try:
     from ..model.frankenstein_audio import FrankensteinAudio
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..utils.reproducibility import set_global_seed, make_generator, seed_worker
+    from ..utils.tokenizer_vocab import inject_token_vocab
 except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
@@ -45,6 +46,7 @@ except ImportError:
     from model.frankenstein_audio import FrankensteinAudio
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from utils.reproducibility import set_global_seed, make_generator, seed_worker
+    from utils.tokenizer_vocab import inject_token_vocab
 
 
 def _load_base_model_and_tokenizer(
@@ -160,6 +162,10 @@ def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> "Tuple[torc
 
     logging.info("Tokenizer loaded with %s tokens", len(tokenizer.vocab))
     logging.info("Tokenizer model path: %s", tokenizer.model_path)
+
+    # Dynamic (EELBERT) embeddings hash token strings: attach the vocabulary
+    # before constructing the model (no-op for other embedding types).
+    inject_token_vocab(config, tokenizer)
 
     logging.info("\n" + "=" * 60)
     logging.info("Step 2: Creating Frankenstein Transformer model")

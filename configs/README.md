@@ -290,6 +290,11 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 
 - `factorized.enabled`: enable factorized embeddings.
 - `factorized.dim`: reduced embedding dimension.
+- `dynamic.enabled`: EELBERT dynamic embeddings (arXiv:2310.20144) — replaces the `vocab_size × hidden_size` lookup table with an on-the-fly n-gram hash of the token strings. Mutually exclusive with `factorized.enabled`; requires a tokenizer (the pipeline injects its vocabulary).
+- `dynamic.ngram_max`: maximum n-gram size (default 3).
+- `dynamic.bucket`: hash bucket size (default `1000000007`).
+- `dynamic.seed`: hash-seed random state (default 42); changing it invalidates checkpoints trained with the previous seed.
+- `dynamic.precompute`: memoise the computed table in a non-persistent buffer (default `true`; never saved or exported).
 - `conv.enabled`: optional Conv1d on embeddings.
 - `conv.kernel`: Conv1d kernel size.
 

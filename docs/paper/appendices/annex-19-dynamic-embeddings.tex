@@ -1,0 +1,127 @@
+\section{Dynamic Token Embeddings (EELBERT)}
+\label{sec:annex-dynamic-embeddings}
+
+\subsection{Executive Summary}
+
+\texttt{embedding.dynamic} replaces the trainable $V\times H$ input embedding table with an on-the-fly \emph{$n$-gram pooling hash} of the token string, following EELBERT \citep{cohn_eelbert_2023}. The lookup table disappears from the parameter count, from checkpoints and from native deployment artifacts. The effect is largest in the small models where the lookup layer dominates the budget---in BERT-tiny the input embedding accounts for roughly $90\%$ of the parameters---and it is complementary to quantization, pruning and distillation.
+
+Dynamic embeddings are \emph{frozen}: they are never trained and never receive gradients. They only change how a token id becomes a vector; everything downstream (mixers, normalization, residuals, routing, optimizers) is unchanged. As in the paper, the output head remains an independent, untied matrix: during masked-LM pre-training it still stores a $V\times H$ matrix, so the size advantage materialises in the backbone-only or post-fine-tuning artifact (the training checkpoint is not automatically $15\times$ smaller). The implementation lives in \path{src/model/embeddings/dynamic_embedding.py}, the configuration contract is the \texttt{model.embedding.dynamic.*} block, and the tokenizer vocabulary is injected by the training, deployment and inference pipelines through \path{src/utils/tokenizer_vocab.py}.
+
+\subsection{Algorithm}
+
+Let $w$ be a token string of $l$ bytes with byte values $b_1,\dots,b_l$, and let $d=H$ be the embedding width. The algorithm has five steps, with $N$ the maximum $n$-gram size and $B$ the hash bucket.
+
+\begin{enumerate}
+\item \textbf{Seeds.} Draw $d$ seeds from a single stored random state $s$,
+\[
+\mathbf{h} = (h_1,\dots,h_d) \in \{0,\dots,B-1\}^d,
+\qquad \mathbf{h} \sim \mathrm{Uniform}(\text{seed}=s).
+\]
+Only the integer $s$ is persisted; the seed vector is a deterministic function of it.
+
+\item \textbf{$i$-gram signatures.} For $i=1,\dots,N$ compute the polynomial rolling hash of every $i$-gram,
+\[
+\sigma_i(j) = \Big(\sum_{t=0}^{i-1} b_{j+t}\,a^{\,i-1-t}\Big) \bmod B,
+\qquad j=1,\dots,k_i,
+\qquad k_i=\max(l-i+1,0),
+\]
+with $a=257$ (prime, larger than any UTF-8 byte). The hashes are computed incrementally: the $(i{+}1)$-gram hash reuses the $i$-gram hash and appends one byte, so the whole token costs $\mathcal{O}(lN)$ integer operations.
+
+\item \textbf{Partitioned projection.} Split $\mathbf{h}$ into $N$ contiguous parts $\mathbf{h}_i$ of length $d_i$ with
+\[
+\sum_{i=1}^{N} d_i = d, \qquad d_i \propto i,
+\]
+so longer $n$-grams receive more dimensions. The projection matrix of each gram size is the outer product
+\[
+\mathbf{P}_i = \sigma_i \otimes \mathbf{h}_i \in \mathbb{Z}^{k_i\times d_i}.
+\]
+
+\item \textbf{Folding.} Map each entry into $[-1,1]$ through
+\[
+\phi(x) = \frac{(x \bmod B) - \mathbf{1}[x \bmod B > B/2]\;B}{B/2} \in (-1, 1],
+\]
+which keeps the embedding bounded without storing or normalising a table.
+
+\item \textbf{Pooling and concatenation.} Average each projection across its $k_i$ rows and concatenate the $N$ pieces:
+\[
+\mathbf{e}_i = \frac{1}{k_i}\sum_{j=1}^{k_i} \phi\big(\mathbf{P}_i[j,:]\big),
+\qquad
+\mathbf{e} = [\mathbf{e}_1;\dots;\mathbf{e}_N] \in \mathbb{R}^{d}.
+\]
+When a token is shorter than $i$, $k_i=0$ and that partition contributes a zero vector.
+\end{enumerate}
+
+Because the hash is polynomial over characters, morphologically related tokens (e.g.\ \texttt{runner} and \texttt{running}) share many $1$/$2$/$3$-grams and land close in embedding space. The paper shows this matters most for small models: replacing the $n$-gram hash with a purely random (position-preserving) hash costs $5.0$ GLUE points for BERT-mini but only $0.3$ for BERT-base.
+
+\subsection{Configuration Contract}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}l c X@{}}
+\toprule
+\textbf{Key (\texttt{model.embedding.dynamic.*})} & \textbf{Default} & \textbf{Effect} \\
+\midrule
+\texttt{enabled} & \texttt{false} & Replace the input lookup table with the frozen hash embedding. Mutually exclusive with \texttt{embedding.factorized.enabled}. \\
+\texttt{ngram\_max} & \texttt{3} & Maximum $n$-gram size $N$; must satisfy $1 \le N \le H$. \\
+\texttt{bucket} & \texttt{1000000007} & Hash bucket $B$ ($10^9+7$ in the paper). Changing it changes every embedding. \\
+\texttt{seed} & \texttt{42} & Random state $s$ for the seeds; identical seeds reproduce identical embeddings. \\
+\texttt{precompute} & \texttt{true} & Memoise the $V\times H$ table in a \emph{non-persistent} buffer (pure caching; never saved or exported). \\
+\bottomrule
+\end{tabularx}
+\caption{Dynamic-embedding configuration. The block composes with \texttt{embedding.conv.*}, which applies a Conv1d over the $H$-wide dynamic stream.}
+\label{tab:dynamic-embedding-config}
+\end{table}
+
+The schema enforces the mutual exclusion with factorized embeddings twice: a conditional \texttt{if/then} rule in \texttt{src/schema/\_conditional\_rules.yaml} and a \texttt{\_\_post\_init\_\_} check in \texttt{FrankensteinModelConfig}. The block is only valid for the text classes (\texttt{frankenstein\_text\_encoder} and \texttt{frankenstein\_text\_decoder}); the ViT uses a convolutional patch embedding and the audio frontend is not a vocabulary lookup, so \texttt{config\_loader} rejects the combination for those classes.
+
+\subsection{Vocabulary Injection and Lifecycle}
+
+Hash embeddings consume token \emph{strings}, while models receive integer ids. The configuration therefore carries a runtime-only, non-schema field \texttt{token\_vocab} (id-ordered token strings). \texttt{inject\_token\_vocab(config, tokenizer)} extracts it from a HuggingFace tokenizer (\texttt{get\_vocab()}) or from the legacy SentencePiece wrapper (\texttt{vocab}, token $\to$ id), attaches it before \texttt{build\_model}, and aligns \texttt{vocab\_size} with the tokenizer ids. The training engine (\path{src/engine.py} and \path{src/training/main.py}), deployment checkpoint loader and inference engine all call the helper, so the vocabulary need not appear in the YAML. Constructing \texttt{DynamicEmbedding} without a vocabulary raises an actionable error.
+
+The checkpoint stores no embedding weights: \texttt{state\_dict()} contains nothing for the input layer, and the vocabulary travels with the tokenizer saved next to the checkpoint. With \texttt{precompute: true} the computed table is a non-persistent buffer---it follows \texttt{.to(device)} but is excluded from checkpoints and exports, so it is exactly equivalent to the on-the-fly computation. With \texttt{precompute: false} the hash is recomputed per batch (lower resident memory, slower steps); the two paths agree up to float32 reduction order.
+
+The native deployment artifacts and the GGUF exporter therefore keep the size benefit. The HuggingFace Transformers export cannot run the custom hash, so it materialises the computed table as a frozen \texttt{nn.Embedding}, records the conversion in the compatibility report and emits a warning that the EELBERT size advantage is not preserved in that artifact.
+
+\subsection{Size Accounting and Paper Results}
+
+The removed block is $V\times H$ weights; the added block is only the optional Conv1d ($k H^2 + H$) when \texttt{embedding.conv.enabled} is true. In our preset \path{configs/eelbert_tiny.yaml} (BERT-tiny geometry: 2 layers, $H=128$, 2 heads, FFN reduced to $128$, $V=30{,}522$), the input table removes $3.91$M weights while the untied MLM head keeps $3.94$M, leaving $4.15$M total parameters---the paper's own accounting, where the head is dropped only for deployment.
+
+Table~\ref{tab:eelbert-results} summarises the reference results reported by \citet{cohn_eelbert_2023}.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}l r r r r r@{}}
+\toprule
+\textbf{Model} & \textbf{Params} & \textbf{Size} & \textbf{GLUE} & \textbf{$\Delta$GLUE} & \textbf{Latency} \\
+\midrule
+BERT-base & 109.5M & 438 MB & 0.775 & --- & 162.0 ms \\
+EELBERT-base & 86.1M & 344 MB & 0.760 & $-1.5$ & 165.0 ms \\
+BERT-mini & 11.17M & 44.8 MB & 0.753 & --- & 7.0 ms \\
+EELBERT-mini & 3.36M & 13.4 MB & 0.746 & $-0.7$ & 9.9 ms \\
+BERT-tiny & 4.39M & 17.7 MB & 0.671 & --- & 1.7 ms \\
+EELBERT-tiny & 0.48M & 2.04 MB & 0.666 & $-0.5$ & 3.9 ms \\
+UNO-EELBERT & 0.31M & 1.24 MB & 0.632 & $-3.9$ & --- \\
+\bottomrule
+\end{tabular}
+\caption{Reference EELBERT results (Table~2 of \citealp{cohn_eelbert_2023}); latency on an M1 MacBook Pro with 32\,GB of RAM. UNO-EELBERT is EELBERT-tiny with the intermediate size reduced to $128$.}
+\label{tab:eelbert-results}
+\end{table}
+
+The complexity of a token embedding is $\mathcal{O}(l\,d)$ against the $\mathcal{O}(1)$ table lookup of BERT: for the 128--768 widths used by BERT the additional latency is negligible at the base scale but becomes visible on tiny models (about $2.3\times$ for EELBERT-tiny in the table). The paper proposes three mitigations that this implementation leaves as engineering options: a sparse fixed-width mask on the outer product ($\mathcal{O}(l\,s)$ with $s\ll d$), parallel per-token hashing, and a bounded cache of the most frequent $n$-grams.
+
+\subsection{Implementation Map}
+
+\begin{itemize}[leftmargin=1.4em]
+\item \path{src/model/embeddings/dynamic_embedding.py} --- \texttt{DynamicEmbedding}: seeds, chunked rolling hash, partitioned outer product, folding, pooling, optional Conv1d, \texttt{embedding\_table()}.
+\item \path{src/model/frankenstein_encoder.py} --- \texttt{emb} dispatch (\texttt{dynamic} $\to$ \texttt{factorized} $\to$ \texttt{nn.Embedding}); the decoder reuses it through its encoder backbone. Mutual exclusion and range checks live in \path{src/model/config.py}.
+\item \path{src/utils/tokenizer_vocab.py} --- \texttt{token\_strings()} and \texttt{inject\_token\_vocab()}, shared by the engine, the CLI training path, deployment and inference.
+\item \path{src/deploy/transformers\_export.py} --- frozen-table materialisation and the export warning.
+\item \path{tests/test\_dynamic\_embedding.py} --- determinism per seed, $[-1,1]$ bounds, morphology similarity, precompute vs.\ on-the-fly parity, zero trainable parameters, vocabulary and configuration errors, encoder/decoder forwards, schema rule and export materialisation.
+\item \path{configs/eelbert_tiny.yaml} and \path{configs/examples/embedding_dynamic.yaml} --- presets; both are smoke-tested, and the E2E harness covers the combination as \texttt{trans\_dynamic\_emb}.
+\end{itemize}
+
+\subsection{Scope and Limitations}
+
+Dynamic embeddings are a compression mechanism, not a new representation-learning objective: they do not approximate a trained BERT embedding, and they cannot be trained or fine-tuned themselves. Because the mapping is a deterministic function of (string, seed, $B$, $N$), changing any of those invalidates previously trained checkpoints. The design also couples the model to the tokenizer that produced the training ids: the vocabulary (and therefore the token strings) is part of the artifact contract, and a tokenizer swap silently changes every input embedding. Finally, the HuggingFace export loses the size advantage by construction, so on-device deployments should prefer the native checkpoint, the deployment package or GGUF.

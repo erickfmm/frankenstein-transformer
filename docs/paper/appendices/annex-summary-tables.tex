@@ -326,7 +326,7 @@ Table~\ref{tab:all-embeddings} catalogs the positional encodings and structural 
 \multicolumn{3}{r}{\textit{continued on next page}} \\
 \endfoot
 \bottomrule
-\caption{Embedding variants. $V$ = vocabulary size, $H$ = hidden size, $R$ = factorized intermediate dimension. The first 12 rows are positional encodings (Annex~12); the last three are structural embedding optimizations, including the audio input frontend.}
+\caption{Embedding variants. $V$ = vocabulary size, $H$ = hidden size, $R$ = factorized intermediate dimension. The first 12 rows are positional encodings (Annex~12); the last four are structural embedding optimizations, including the audio input frontend.}
 \label{tab:all-embeddings}
 \endlastfoot
 \multicolumn{3}{c}{\textbf{Positional Encodings (12)}} \\
@@ -344,10 +344,11 @@ Sinusoidal Rotary & Sinusoidal frequencies as a rotation matrix on Q/K & \citep{
 Learned Absolute & Learnable parameter matrix added to embeddings & \citep{vaswani_attention_2017} \\
 None & Null module; no positional information injected & --- \\
 \midrule
-\multicolumn{3}{c}{\textbf{Structural Embedding Optimizations (3)}} \\
+\multicolumn{3}{c}{\textbf{Structural Embedding Optimizations (4)}} \\
 \midrule
 Factorized Embeddings & Decomposes $V \times H$ embedding matrix into $V \times R$ and $R \times H$ factors; reduces parameters from $\mathcal{O}(VH)$ to $\mathcal{O}(V R + R H)$; controlled by \texttt{factorized\_embedding\_dim} & (internal) \\
 Embedding Convolution & Depthwise Conv1d applied over the embedding stream before the first transformer block; provides lightweight local-context filtering; controlled by \texttt{embedding\_conv\_kernel} & (internal) \\
+Dynamic Embeddings (EELBERT) & Replaces the $V \times H$ table with an on-the-fly $n$-gram pooling hash of the token strings; frozen, no trainable embedding parameters; controlled by the \texttt{embedding.dynamic.*} block (Appendix~\ref{sec:annex-dynamic-embeddings}) & \citep{cohn_eelbert_2023} \\
 Audio frontend & Log-mel/spectrogram/raw frames through two stride-2 Conv2d stages and a linear projection ($4\times$ frame reduction); input side of \texttt{frankenstein\_audio}; controlled by the \texttt{audio.*} block (Appendix~\ref{sec:annex-18}) & \citep{Gulati2020} \\
 \bottomrule
 \end{longtable}

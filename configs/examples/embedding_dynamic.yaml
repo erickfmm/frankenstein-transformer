@@ -1,0 +1,68 @@
+# EELBERT-style dynamic token embeddings (arXiv:2310.20144).
+# The `vocab_size x hidden_size` input embedding table is replaced by an
+# on-the-fly n-gram pooling hash of the token strings. The training engine
+# injects the tokenizer vocabulary automatically before model construction;
+# no embedding table is stored in the checkpoint or in exported artifacts.
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    hidden_size: 128
+    num_layers: 2
+    num_heads: 4
+    num_loops: 1
+    layer_pattern: [standard_attn, standard_attn]
+    mode: encoder
+    dropout: 0.1
+  norm:
+    type: layer_norm
+  embedding:
+    dynamic:
+      enabled: true
+      ngram_max: 3
+      bucket: 1000000007
+      seed: 42
+      precompute: true
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 256
+    activation: gelu
+tokenizer:
+  source: hf_repo
+  name_or_path: prajjwal1/bert-tiny
+  use_fast: true
+  trust_remote_code: false
+text_dataset:
+  dataset_name: prajjwal1/wikitext
+  split: train
+  text_column: text
+  max_samples: 5000
+training:
+  task: mlm
+  seed: 42
+  num_epochs: 1
+  batch_size: 8
+  max_length: 128
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      # No embedding-matrix group exists with dynamic embeddings; the head is
+      # the only embedding-adjacent matrix left.
+      adamw-lr_norms: 1e-4
+      adamw-lr_attention: 1e-4
+      adamw-lr_ffn: 1e-4
+      adamw-lr_head: 1e-4
+      adamw-lr_other: 1e-4
+      adamw-wd_norms: 0.0
+      adamw-wd_attention: 0.0
+      adamw-wd_ffn: 0.0
+      adamw-wd_head: 0.0
+      adamw-wd_other: 0.0
+  scheduler_total_steps: 500
+  csv_log_path: "training_metrics_embedding_dynamic.csv"

@@ -1,15 +1,16 @@
 """Embedding and positional encoding modules.
 
-Groups the token embedding (factorized) and the positional encodings
-(RoPE / HoPE / NoPE / ALiBi / BAM / PaPE / sinusoidal / learned) that operate on
-hidden representations, plus the transversal Scalable Softmax (SSMax) logit
-rescale.
+Groups the token embeddings (factorized and EELBERT-style dynamic) and the
+positional encodings (RoPE / HoPE / NoPE / ALiBi / BAM / PaPE / sinusoidal /
+learned) that operate on hidden representations, plus the transversal Scalable
+Softmax (SSMax) logit rescale.
 """
 
 from __future__ import annotations
 
 from .alibi import ALiBi
 from .bam import BAM
+from .dynamic_embedding import DynamicEmbedding
 from .factorized_embedding import FactorizedEmbedding
 from .factory import build_pos_encoder
 from .hope import HoPE
@@ -25,6 +26,7 @@ from .ssmax import SSMax
 __all__ = [
     "ALiBi",
     "BAM",
+    "DynamicEmbedding",
     "FactorizedEmbedding",
     "HoPE",
     "LearnedAbsolutePE",

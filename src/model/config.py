@@ -196,6 +196,21 @@ class FrankensteinModelConfig:
             enabled. Default: 128.
         use_embedding_conv: If True, apply a Conv1d over the factorized
             embedding stream before projection. Default: True.
+        use_dynamic_embedding: If True, replace the embedding lookup table with
+            EELBERT-style dynamic n-gram hash embeddings (arXiv:2310.20144).
+            Requires ``token_vocab`` (injected from the tokenizer) and is
+            mutually exclusive with ``use_factorized_embedding``. Default: False.
+        dynamic_embedding_ngram_max: Maximum n-gram size hashed per token
+            string. Default: 3.
+        dynamic_embedding_bucket: Hash bucket size used by the rolling hash and
+            the ``[-1, 1]`` fold. Default: ``1_000_000_007``.
+        dynamic_embedding_seed: Random state for the hash seeds; the same seed
+            reproduces identical embeddings. Default: 42.
+        dynamic_embedding_precompute: Memoise the full dynamic table once in a
+            non-persistent buffer (never saved nor exported). Default: True.
+        token_vocab: Runtime-only id-ordered token strings injected from the
+            tokenizer; required when ``use_dynamic_embedding`` is True. Not part
+            of the YAML schema. Default: None.
         hope_base: Base frequency for HoPE (Hybrid Positional Encoding).
             Default: 10000.0.
         hope_damping: Damping factor for HoPE high-frequency components.
@@ -514,6 +529,18 @@ class FrankensteinModelConfig:
     use_factorized_embedding: bool = False
     factorized_embedding_dim: int = 128
     use_embedding_conv: bool = True
+
+    # ---- Dynamic (EELBERT) token embeddings (arXiv:2310.20144) ----
+    use_dynamic_embedding: bool = False
+    dynamic_embedding_ngram_max: int = 3
+    dynamic_embedding_bucket: int = 1_000_000_007
+    dynamic_embedding_seed: int = 42
+    dynamic_embedding_precompute: bool = True
+    # Runtime-only: id-ordered token strings injected by the engine / deploy /
+    # inference paths from the tokenizer (never read from YAML). Required when
+    # ``use_dynamic_embedding`` is True; validated by DynamicEmbedding itself
+    # because the dataclass is built before the tokenizer exists.
+    token_vocab: Optional[List[str]] = None
 
     hope_base: float = 10_000.0
     hope_damping: float = 0.01
@@ -1165,6 +1192,26 @@ class FrankensteinModelConfig:
             raise ValueError("quack_tau must be > 0")
         if float(self.qk_norm_eps) <= 0.0:
             raise ValueError("qk_norm_eps must be > 0")
+
+        # ---- Validate dynamic (EELBERT) token embeddings ----
+        if self.use_dynamic_embedding and self.use_factorized_embedding:
+            raise ValueError(
+                "use_dynamic_embedding and use_factorized_embedding are mutually "
+                "exclusive: dynamic embeddings replace the factorized lookup table "
+                "(embedding.dynamic.enabled vs embedding.factorized.enabled)"
+            )
+        if int(self.dynamic_embedding_ngram_max) < 1:
+            raise ValueError("dynamic_embedding_ngram_max must be >= 1")
+        if int(self.dynamic_embedding_bucket) < 2:
+            raise ValueError("dynamic_embedding_bucket must be >= 2")
+        if self.use_dynamic_embedding and int(self.dynamic_embedding_ngram_max) > int(
+            self.hidden_size
+        ):
+            raise ValueError(
+                f"dynamic_embedding_ngram_max ({self.dynamic_embedding_ngram_max}) "
+                f"must be <= hidden_size ({self.hidden_size}): the n-gram partition "
+                "needs at least one embedding dimension per gram size"
+            )
 
         # ---- Validate mHC (Manifold-Constrained Hyper-Connections) ----
         if int(self.mhc_expansion_rate) < 1:

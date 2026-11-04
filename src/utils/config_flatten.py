@@ -16,6 +16,7 @@ The hierarchical schema groups keys as:
                               quack_tau, eps}}
       embedding:
         factorized: {enabled, dim}
+        dynamic:    {enabled, ngram_max, bucket, seed, precompute}
         conv:       {enabled, kernel}
       attention:
         mla:        {latent_rank}
@@ -495,7 +496,8 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
             if "eps" in qk:
                 out["qk_norm_eps"] = qk["eps"]
 
-    # embedding.factorized.* + embedding.conv.* — leaf renames.
+    # embedding.factorized.* + embedding.dynamic.* + embedding.conv.* — leaf
+    # renames.
     embedding = model_data.get("embedding")
     if isinstance(embedding, dict):
         fact = embedding.get("factorized")
@@ -504,6 +506,18 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
                 out["use_factorized_embedding"] = fact["enabled"]
             if "dim" in fact:
                 out["factorized_embedding_dim"] = fact["dim"]
+        dyn = embedding.get("dynamic")
+        if isinstance(dyn, dict):
+            if "enabled" in dyn:
+                out["use_dynamic_embedding"] = dyn["enabled"]
+            if "ngram_max" in dyn:
+                out["dynamic_embedding_ngram_max"] = dyn["ngram_max"]
+            if "bucket" in dyn:
+                out["dynamic_embedding_bucket"] = dyn["bucket"]
+            if "seed" in dyn:
+                out["dynamic_embedding_seed"] = dyn["seed"]
+            if "precompute" in dyn:
+                out["dynamic_embedding_precompute"] = dyn["precompute"]
         conv = embedding.get("conv")
         if isinstance(conv, dict):
             if "enabled" in conv:

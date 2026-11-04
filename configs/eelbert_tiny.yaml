@@ -1,0 +1,87 @@
+# EELBERT-tiny (arXiv:2310.20144): BERT-tiny geometry with the input embedding
+# table replaced by dynamic n-gram hash embeddings. This mirrors the paper's
+# smallest model ("UNO-EELBERT"): BERT-tiny (2 layers, hidden 128, 2 heads)
+# with the intermediate/FFN size reduced from 512 to 128, trained with a BERT
+# WordPiece vocabulary (30522 tokens) and learned absolute positions.
+#
+# Size note: the 30522 x 128 input table (~3.9M weights) is by far the largest
+# block of BERT-tiny; removing it is where the paper's ~15x reduction comes from
+# in the backbone-only/exported model. (As in the paper, the decoupled MLM head
+# still carries a vocab_size x hidden_size matrix during pre-training, so the
+# checkpoint is not 15x smaller until that head is dropped for deployment.)
+# The engine injects the tokenizer vocabulary before building the model, so
+# nothing embedding-shaped is stored for the input layer.
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 30522
+    hidden_size: 128
+    num_layers: 2
+    num_loops: 1
+    num_heads: 2
+    layer_pattern:
+    - standard_attn
+    - standard_attn
+    mode: encoder
+    dropout: 0.1
+  norm:
+    type: layer_norm
+  positional_encoding: learned_absolute
+  positional_encoding_parameters:
+    learned:
+      max_len: 128
+      init_std: 0.02
+  embedding:
+    dynamic:
+      enabled: true
+      ngram_max: 3
+      bucket: 1000000007
+      seed: 42
+      precompute: true
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 128
+    activation: gelu
+tokenizer:
+  source: hf_repo
+  name_or_path: prajjwal1/bert-tiny
+  use_fast: true
+  trust_remote_code: false
+text_dataset:
+  dataset_name: prajjwal1/wikitext
+  split: train
+  text_column: text
+  max_samples: 5000
+training:
+  task: mlm
+  seed: 42
+  num_epochs: 1
+  batch_size: 16
+  max_length: 128
+  mlm_probability: 0.15
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      # Dynamic embeddings have no trainable table: the `embeddings` group is
+      # intentionally absent.
+      adamw-lr_norms: 5e-5
+      adamw-lr_attention: 5e-5
+      adamw-lr_ffn: 5e-5
+      adamw-lr_head: 5e-5
+      adamw-lr_other: 5e-5
+      adamw-wd_norms: 0.0
+      adamw-wd_attention: 0.01
+      adamw-wd_ffn: 0.01
+      adamw-wd_head: 0.01
+      adamw-wd_other: 0.01
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  csv_log_path: "training_metrics_eelbert_tiny.csv"

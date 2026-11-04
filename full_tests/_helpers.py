@@ -563,6 +563,22 @@ def default_training_cfg(parquet_path: Path, batch_size: int = 1, num_epochs: in
     }
 
 
+def dynamic_embedding_vocab(vocab_size: int) -> List[str]:
+    """Deterministic placeholder token strings for dynamic-embedding builds.
+
+    Meta-device parameter counting and the E2E harness build models without a
+    tokenizer, but EELBERT-style hash embeddings need one string per vocabulary
+    id. The strings' content does not affect module shapes or parameter counts.
+
+    Args:
+        vocab_size: Number of vocabulary entries.
+
+    Returns:
+        A list of ``vocab_size`` deterministic placeholder strings.
+    """
+    return [f"tok{i}" for i in range(int(vocab_size))]
+
+
 def default_model_cfg(vocab_size: int = TOY_VOCAB_SIZE, num_layers: int = 2, num_loops: int = 1) -> dict:
     """Return a minimal ``model:`` block."""
     return {
@@ -581,6 +597,7 @@ def default_model_cfg(vocab_size: int = TOY_VOCAB_SIZE, num_layers: int = 2, num
         "norm": {"type": "layer_norm"},
         "embedding": {
             "factorized": {"enabled": False, "dim": 32},
+            "dynamic": {"enabled": False},
             "conv": {"enabled": False, "kernel": 3},
         },
         "attention": {

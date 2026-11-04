@@ -36,6 +36,7 @@ try:
     from .utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from .utils.hf_compat import load_auto_model, load_auto_tokenizer
     from .utils.reproducibility import set_global_seed, make_generator, seed_worker
+    from .utils.tokenizer_vocab import inject_token_vocab
 except ImportError:
     from training.streaming_mlm_dataset import StreamingMLMDataset
     from training.trainer import TitanTrainer, TrainingConfig
@@ -50,6 +51,7 @@ except ImportError:
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from utils.hf_compat import load_auto_model, load_auto_tokenizer
     from utils.reproducibility import set_global_seed, make_generator, seed_worker
+    from utils.tokenizer_vocab import inject_token_vocab
 
 
 __all__ = [
@@ -586,6 +588,7 @@ def _train_from_config_path(
         # model.
         if loaded.model_config is not None:
             loaded.model_config.vocab_size = len(tokenizer)
+            inject_token_vocab(loaded.model_config, tokenizer)
         model = build_model(loaded.model_class, loaded.model_config)
         runtime_config = loaded.model_config
         model_descriptor = loaded.model_class or "frankenstein_text_encoder"
@@ -790,6 +793,7 @@ def _build_legacy(loaded: LoadedTrainingConfig) -> Tuple[torch.nn.Module, Any]:
     config = loaded.model_config
     if config is None:
         raise ValueError("model config is required when base_model is not provided")
+    inject_token_vocab(config, tokenizer)
     model = build_model(loaded.model_class, config)
     return model, tokenizer
 
@@ -939,6 +943,7 @@ def _build_trained_tokenizer_model(
                 "model config is required when base_model is not provided"
             )
         config.vocab_size = len(tokenizer)
+        inject_token_vocab(config, tokenizer)
         model = build_model(loaded.model_class, config)
         runtime_config = config
         model_descriptor = loaded.model_class or "frankenstein_text_encoder"
