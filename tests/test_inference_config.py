@@ -184,9 +184,11 @@ class LoadAndPrecedenceTests(unittest.TestCase):
                 }
             )
 
-    def test_schema_rejects_unknown_keys(self):
-        with self.assertRaises(ValueError):
-            load_inference_config({"kv_cache": {"enabled": True, "bogus": 1}})
+    def test_schema_warns_about_unknown_keys(self):
+        with self.assertLogs("frankenstein.config", level="WARNING") as captured:
+            cfg = load_inference_config({"kv_cache": {"enabled": True, "bogus": 1}})
+        self.assertTrue(cfg.kv_cache_enabled)
+        self.assertTrue(any("bogus" in message for message in captured.output))
 
     def test_warning_for_unsupported_mixer(self):
         doc = {

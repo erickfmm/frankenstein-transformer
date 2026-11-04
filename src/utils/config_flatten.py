@@ -333,8 +333,10 @@ def _flatten_attention(attn: Dict[str, Any], out: Dict[str, Any]) -> None:
     for mixer, spec in attn.items():
         renames = _ATTENTION_MIXER_RENAMES.get(mixer)
         if renames is None:
-            # Unknown mixer sub-key: skip (defensive — the schema
-            # `additionalProperties: false` already rejects unknowns).
+            # Unknown mixer sub-key: skip. Unknown keys are reported as
+            # warnings by ``schema_warnings.warn_extra_keys`` (the schema
+            # keeps ``additionalProperties: false``); this skip is only the
+            # defensive fallback for legacy flat documents.
             continue
         for leaf, flat_key in renames.items():
             if leaf in spec:

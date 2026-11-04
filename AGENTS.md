@@ -49,7 +49,7 @@
 
 ## Hard rules
 
-1. **Schema is the contract.** Every YAML key must exist in `src/schema/**` (`additionalProperties: false`). Never read an undocumented key.
+1. **Schema is the contract.** Every YAML key must exist in `src/schema/**` (`additionalProperties: false`). Presets are validated strictly. At runtime, a key the schema does not know **yet** is logged as `WARNING [schema] … unknown key(s) ignored` (logger `frankenstein.config`) and dropped — configs may lead the schema temporarily. Never *read* or implement behavior for an undocumented key.
 2. **Invariants**: `hidden_size % num_heads == 0`; `num_kv_heads` divides `num_heads`; `len(layer_pattern) == num_layers`; `vocab_size` matches the tokenizer.
 3. **BitNet is on by default** (`bitnet.enabled: true`). `bitnet.routers: true` requires `bitnet.enabled: true`; `bitnet.conv` requires BitNet + `embedding.conv.enabled`.
 4. **Normalization**: enum `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`. `prms_norm` uses `norm.partial_ratio`; `flash_norm` composes with `norm.flashnorm_partial_ratio`.

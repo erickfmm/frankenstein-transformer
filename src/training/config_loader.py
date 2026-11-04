@@ -6,6 +6,7 @@ model configuration, training parameters, tokenizer settings, and runtime
 overrides.
 """
 
+import functools
 import os
 from dataclasses import dataclass
 from dataclasses import field
@@ -23,6 +24,13 @@ try:
         flatten_image_dict,
         flatten_audio_dict,
         flatten_inference_dict,
+        _is_nested_shape,
+    )
+    from ..utils.schema_loader import resolve_schema
+    from ..utils.schema_warnings import (
+        classify_schema_errors,
+        filter_dataclass_kwargs,
+        warn_extra_keys,
     )
     from ..deploy.inference_config import InferenceConfig
 except ImportError:
@@ -33,6 +41,13 @@ except ImportError:
         flatten_image_dict,
         flatten_audio_dict,
         flatten_inference_dict,
+        _is_nested_shape,
+    )
+    from utils.schema_loader import resolve_schema
+    from utils.schema_warnings import (
+        classify_schema_errors,
+        filter_dataclass_kwargs,
+        warn_extra_keys,
     )
     from deploy.inference_config import InferenceConfig
 
@@ -265,14 +280,75 @@ def _inference_schema() -> Dict[str, Any]:
         return yaml.safe_load(handle) or {}
 
 
-def _validate_inference_block(inference_data: Dict[str, Any]) -> None:
+@functools.lru_cache(maxsize=1)
+def _root_schema() -> Dict[str, Any]:
+    """Load and cache the fully resolved root ``schema.yaml`` JSON-Schema."""
+    schema_path = Path(__file__).resolve().parent.parent / "schema.yaml"
+    return resolve_schema(schema_path)
+
+
+def _warn_unknown_schema_keys(data: Dict[str, Any], source: str) -> bool:
+    """Log unknown keys found by the root schema as warnings.
+
+    The loader deliberately accepts partial and legacy documents (for
+    example configs that only set ``training`` or that use the flat
+    pre-nesting ``model:`` shape), so the root schema is used here only to
+    *harvest* ``additionalProperties`` violations. Hard schema violations
+    keep being enforced by the loader's own validators and by the
+    ``inference:`` block validator; the strict whole-document gate lives in
+    ``tests/test_schema_consistency.py``.
+
+    Legacy flat ``model:`` blocks predate the nested schema, so the block is
+    excluded from this pass and unknown flat keys are reported by
+    :func:`filter_dataclass_kwargs` instead.
+
+    Args:
+        data: The parsed YAML document.
+        source: Human-readable config identifier used in messages.
+
+    Returns:
+        ``True`` when the ``model:`` block was inspected against the schema,
+        so the caller can suppress duplicate unknown-key warnings from
+        :func:`filter_dataclass_kwargs`. ``False`` otherwise.
+    """
+    try:
+        import jsonschema
+    except ImportError:  # pragma: no cover - jsonschema ships with the deps
+        return False
+
+    document = data
+    legacy_flat_model = False
+    model_block = data.get("model")
+    if (
+        isinstance(model_block, dict)
+        and model_block
+        and not _is_nested_shape(model_block)
+    ):
+        # Legacy flat model shape: inspect everything except the model block.
+        legacy_flat_model = True
+        document = {key: value for key, value in data.items() if key != "model"}
+
+    validator_cls = getattr(jsonschema, "Draft202012Validator", jsonschema.Draft7Validator)
+    validator = validator_cls(_root_schema())
+    _, extra_errors = classify_schema_errors(validator.iter_errors(document))
+    if extra_errors:
+        warn_extra_keys(extra_errors, source=source)
+    return not legacy_flat_model
+
+
+def _validate_inference_block(
+    inference_data: Dict[str, Any], source: str = "inference"
+) -> None:
     """Validate the ``inference:`` subtree against its JSON-Schema module.
+
+    Unknown keys are downgraded to warnings; genuine violations still raise.
 
     Args:
         inference_data: The ``inference:`` mapping.
+        source: Human-readable config identifier used in messages.
 
     Raises:
-        ValueError: On schema violations (unknown keys, bad enums, the
+        ValueError: On hard schema violations (bad enums, the
             compression-implies-enabled conditional rule, ...).
     """
     try:
@@ -282,9 +358,13 @@ def _validate_inference_block(inference_data: Dict[str, Any]) -> None:
     schema = _inference_schema()
     validator_cls = getattr(jsonschema, "Draft202012Validator", jsonschema.Draft7Validator)
     validator = validator_cls(schema)
-    errors = sorted(validator.iter_errors(inference_data), key=lambda e: list(e.path))
-    if errors:
-        first = errors[0]
+    hard_errors, extra_errors = classify_schema_errors(
+        validator.iter_errors(inference_data)
+    )
+    if extra_errors:
+        warn_extra_keys(extra_errors, source=source, prefix="inference")
+    if hard_errors:
+        first = sorted(hard_errors, key=lambda e: list(e.absolute_path))[0]
         location = "/".join(str(p) for p in first.absolute_path) or "(root)"
         raise ValueError(f"inference.{location}: {first.message}")
 
@@ -403,8 +483,10 @@ def load_inference_config(
     if isinstance(path_or_dict, (str, os.PathLike)):
         with open(path_or_dict, "r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
+        source = str(path_or_dict)
     else:
         data = path_or_dict or {}
+        source = "<inference dict>"
     if not isinstance(data, dict):
         raise ValueError("load_inference_config expects a YAML path or a dict")
 
@@ -417,7 +499,7 @@ def load_inference_config(
     if not isinstance(inference_data, dict):
         raise ValueError("inference must be an object when provided")
 
-    _validate_inference_block(inference_data)
+    _validate_inference_block(inference_data, source=source)
     _validate_inference_rules(inference_data)
     _warn_cache_support(inference_data, full_config)
 
@@ -431,6 +513,12 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     Parses the YAML, validates required sections (``model``, ``training``,
     ``tokenizer``), resolves the training task, and constructs
     :class:`FrankensteinModelConfig` and :class:`TrainingConfig` objects.
+
+    The document is also scanned against the root ``schema.yaml`` so unknown
+    keys are logged as ``WARNING`` records and ignored (the schema may trail
+    the config while it evolves). Hard validation stays with the loader's
+    own checks and the ``inference:`` block validator; the strict
+    whole-document gate is ``tests/test_schema_consistency.py``.
 
     Args:
         path: Filesystem path to the YAML configuration file.
@@ -446,6 +534,14 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     """
     with open(path, "r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
+    if not isinstance(data, dict):
+        raise ValueError("configuration root must be a mapping")
+
+    # The root schema contributes unknown-key warnings only: the loader
+    # accepts partial/legacy documents and its own validators own the hard
+    # errors. Unknown keys warn instead of aborting (the schema may trail
+    # the config while it evolves).
+    model_schema_checked = _warn_unknown_schema_keys(data, source=str(path))
 
     base_model = data.get("base_model")
     if base_model is not None:
@@ -539,6 +635,15 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
         _validate_bitnet_flags(model_data)
         _validate_ffn_activation(model_data)
         _validate_qk_norm(model_data)
+        # Legacy flat blocks and programmatic dicts can carry keys the
+        # dataclass does not know; drop them (the schema pass above already
+        # warned for modern nested configs).
+        model_data = filter_dataclass_kwargs(
+            FrankensteinModelConfig,
+            model_data,
+            source=str(path),
+            warn=not model_schema_checked,
+        )
         model_config = FrankensteinModelConfig(**model_data)
         if not model_class:
             model_class = "frankenstein_text_encoder"

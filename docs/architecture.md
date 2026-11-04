@@ -13,7 +13,10 @@ Frankenstein Transformer is a **schema-first**, configuration-driven toolkit for
 experimenting with transformer sequence mixers, optimizers, normalization layers
 and positional encodings without changing Python code. One strict JSON-Schema
 validates a YAML file; the runtime flattens it into a single dataclass and
-dispatches to factories and registries.
+dispatches to factories and registries. The in-repo presets must validate
+cleanly; at runtime, keys the schema does not know *yet* are logged as
+`[schema] … unknown key(s) ignored` warnings (see §7) instead of aborting the
+load.
 
 ## 1. At a glance
 
@@ -126,6 +129,14 @@ flowchart LR
 ### Top-level YAML keys
 
 Only `training` is required. The rest are optional and cross-validated.
+
+Unknown keys (keys not declared in `src/schema/**`) never abort a runtime
+load: `config_loader` scans the document, logs one
+`WARNING [schema] <path>: <location>: unknown key(s) ignored …` record per
+offending object (`logger name: frankenstein.config`), and drops the key.
+The in-repo presets remain strict — `tests/test_schema_consistency.py`
+still fails on any unknown key. Never read an undocumented key in code: warn
+and drop.
 
 | Key | Schema module | Purpose |
 |---|---|---|
@@ -990,7 +1001,10 @@ last. Every step below ends with the gates in §12.
 ### 11.8 Add a config field
 
 1. Add the field to the correct `src/schema/**` module (keep
-   `additionalProperties: false`).
+   `additionalProperties: false`). Unknown keys keep loading with a
+   `[schema] … unknown key(s) ignored` warning, so a config can lead the
+   schema temporarily; never rely on that in-repo (the preset gate is
+   strict).
 2. If nested, map it in `config_flatten.py`; otherwise it passes through.
 3. Add the flat dataclass field in `src/model/config.py` with the same default.
 4. If the schema declares a default, add the pair to `_DEFAULT_PAIRS`.
@@ -1033,7 +1047,7 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 
 | # | Decision | Rationale |
 |---|---|---|
-| D1 | The JSON Schema is the contract; `additionalProperties: false` everywhere | Unknown keys fail fast instead of silently doing nothing |
+| D1 | The JSON Schema is the contract; `additionalProperties: false` everywhere | Presets validate strictly; runtime logs unknown keys as warnings (so configs may lead the schema) but never reads an undocumented key |
 | D2 | Keep one flat `FrankensteinModelConfig` plus an explicit flattener | The runtime stays simple and old checkpoints stay loadable |
 | D3 | Split the old `frankenstein_model.py` into `config.py`, `hybrid_layer.py`, encoder/decoder/ViT | Smaller coupling surface; enforced by a regression test |
 | D4 | `model.bitnet.enabled` defaults to **true** | BitNet is the project's deployment story; disable explicitly for FP32 |
