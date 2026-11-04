@@ -26,7 +26,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve"}
+        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -896,6 +896,141 @@ class BuildOptimizerEveTests(unittest.TestCase):
         for prev, curr in zip(history, history[1:]):
             self.assertLessEqual(curr, prev + 1e-12)
         self.assertFalse(torch.isnan(p).any())
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerEA4LLMTests(unittest.TestCase):
+    """EA4LLM: gradient-free evolution strategies (arXiv:2510.10603)."""
+
+    @staticmethod
+    def _closure_for(p):
+        """Deterministic quadratic closure: optimum 0.25 is interior."""
+        def closure():
+            p.grad = None
+            loss = ((p - 0.25) ** 2).sum()
+            loss.backward()
+            return float(loss.detach())
+
+        return closure
+
+    @staticmethod
+    def _tiny_param():
+        return nn.Parameter(torch.linspace(-0.5, 0.5, 16).reshape(4, 4))
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("ea4llm", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_requires_closure(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer("ea4llm", groups, {})
+        with self.assertRaises(RuntimeError) as ctx:
+            opt.step()
+        self.assertIn("closure", str(ctx.exception))
+
+    def test_step_runs_with_closure(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 5e-3, "name": "other"}]
+        opt = build_optimizer(
+            "ea4llm", groups, {"ea4llm-seed": 7, "ea4llm-population": 16}
+        )
+        closure = self._closure_for(p)
+        initial = float((((p - 0.25) ** 2).sum()).detach())
+        for _ in range(40):
+            value = opt.step(closure)
+            self.assertTrue(math.isfinite(value))
+        final = float((((p - 0.25) ** 2).sum()).detach())
+        # The ES direction descends the negated fitness, i.e. the loss.
+        self.assertLess(final, initial)
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_defaults_match_paper(self):
+        opt = build_optimizer("ea4llm", _param_groups(), {})
+        self.assertEqual(opt.defaults["population"], 30)
+        self.assertAlmostEqual(opt.defaults["sigma"], 1e-3)
+        self.assertFalse(opt.defaults["antithetic"])
+        self.assertFalse(opt.defaults["rank_shaping"])
+        self.assertFalse(opt.defaults["nes_scaling"])
+
+    def test_custom_suffixes_and_coercion(self):
+        opt = build_optimizer(
+            "ea4llm",
+            _param_groups(),
+            {"ea4llm-population": "8", "ea4llm-sigma": "0.01"},
+        )
+        self.assertEqual(opt.defaults["population"], 8)
+        self.assertAlmostEqual(opt.defaults["sigma"], 0.01)
+
+        opt_bad = build_optimizer(
+            "ea4llm",
+            _param_groups(),
+            {"ea4llm-population": "bad", "ea4llm-sigma": "bad"},
+        )
+        self.assertEqual(opt_bad.defaults["population"], 30)
+        self.assertAlmostEqual(opt_bad.defaults["sigma"], 1e-3)
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("ea4llm", _param_groups(), {"ea4llm-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
+
+    def test_per_group_lr_routes(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 1e-3, "name": "attention"}]
+        opt = build_optimizer("ea4llm", groups, {"ea4llm-lr_attention": 0.02})
+        self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
+
+    def test_state_has_no_per_parameter_buffers(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer(
+            "ea4llm", groups, {"ea4llm-seed": 3, "ea4llm-population": 4}
+        )
+        opt.step(self._closure_for(p))
+        state = opt.state[p]
+        tensor_values = [value for value in state.values() if torch.is_tensor(value)]
+        self.assertEqual(tensor_values, [])
+        self.assertEqual(state["step"], 1)
+
+    def test_rank_shaping_flavor_runs(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 5e-3, "name": "other"}]
+        opt = build_optimizer(
+            "ea4llm",
+            groups,
+            {"ea4llm-rank_shaping": True, "ea4llm-seed": 11, "ea4llm-population": 6},
+        )
+        closure = self._closure_for(p)
+        for _ in range(3):
+            value = opt.step(closure)
+        self.assertTrue(math.isfinite(value))
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_antithetic_flavor_runs(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 5e-3, "name": "other"}]
+        opt = build_optimizer(
+            "ea4llm",
+            groups,
+            {"ea4llm-antithetic": True, "ea4llm-seed": 5, "ea4llm-population": 6},
+        )
+        closure = self._closure_for(p)
+        for _ in range(3):
+            value = opt.step(closure)
+        self.assertTrue(math.isfinite(value))
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_antithetic_odd_population_raises(self):
+        p = self._tiny_param()
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer(
+                "ea4llm",
+                groups,
+                {"ea4llm-antithetic": True, "ea4llm-population": 7},
+            )
+        self.assertIn("population", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,79 @@
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 50000
+    hidden_size: 768
+    num_layers: 12
+    num_loops: 1
+    num_heads: 12
+    layer_pattern:
+    - retnet
+    - titan_attn
+    - mamba
+    - ode
+  norm:
+    type: layer_norm
+  embedding:
+    conv:
+      enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+  attention:
+    ode:
+      solver: rk4
+      steps: 2
+    retnet:
+      heads: 12
+training:
+  task: mlm
+  seed: 42
+  num_epochs: 4
+  batch_size: 2
+  dataloader_workers: 2
+  max_length: 256
+  mlm_probability: 0.15
+  max_samples: 6000000
+  dataset_batch_size: 15000
+  num_workers: 6
+  cache_dir: ./temp_data/v2_dataset_cache
+  local_parquet_dir: /home/erickfmm/.cache/huggingface/hub/datasets--erickfmm--red_pajama_es_hq_35/snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/train/
+  prefer_local_cache: true
+  stream_local_parquet: true
+  join_temp_data_context_window: 0
+  join_temp_data_min_remainder_tokens: 128
+  gradient_accumulation_steps: 1
+  optimizer:
+    optimizer_class: ea4llm
+    parameters:
+      ea4llm-lr_embeddings: 5.0e-4
+      ea4llm-lr_pos: 5.0e-4
+      ea4llm-lr_attention: 5.0e-4
+      ea4llm-lr_ffn: 5.0e-4
+      ea4llm-lr_norms: 5.0e-4
+      ea4llm-lr_head: 5.0e-4
+      ea4llm-lr_mhc: 5.0e-4
+      ea4llm-lr_router: 5.0e-4
+      ea4llm-lr_residual: 5.0e-4
+      ea4llm-lr_other: 5.0e-4
+      ea4llm-wd_embeddings: 0.0
+      ea4llm-wd_pos: 0.0
+      ea4llm-wd_attention: 0.0
+      ea4llm-wd_ffn: 0.0
+      ea4llm-wd_norms: 0.0
+      ea4llm-wd_head: 0.0
+      ea4llm-wd_mhc: 0.0
+      ea4llm-wd_router: 0.0
+      ea4llm-wd_residual: 0.0
+      ea4llm-wd_other: 0.0
+      ea4llm-population: 30
+      ea4llm-sigma: 1.0e-3
+      ea4llm-antithetic: false
+      ea4llm-rank_shaping: false
+      ea4llm-nes_scaling: false
+  scheduler_total_steps: 12000
+  max_nan_retries: 4
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_es_arch_hybrid_ea4llm.csv
+  telemetry_log_interval: 5

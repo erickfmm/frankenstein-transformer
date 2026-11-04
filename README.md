@@ -24,7 +24,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 ```mermaid
 flowchart LR
     A["YAML Config"] --> B{"Schema Validation<br/>(JSON Schema + rules)"}
-    B -- valid --> C["Train<br/>27 optimizer families<br/>AMP · schedulers · thermal guard"]
+    B -- valid --> C["Train<br/>28 optimizer families<br/>AMP · schedulers · thermal guard"]
     B -- error --> A
     C --> D["Checkpoint"]
     D --> E["Deploy<br/>(quantize · export)"]
@@ -90,7 +90,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 | Feature | Scale |
 |---------|-------|
 | Sequence mixer architectures | 42 across 8 categories (Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric) |
-| Optimizer families | 27 across 7 categories |
+| Optimizer families | 28 across 7 categories |
 | Positional encodings | 11 model-wide (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`) with per-mixer opt-out |
 | Model classes | `frankenstein`, `frankensteindecoder`, `frankenstein_vit` + reusable in-process engine API |
 | Training tasks | `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation` |

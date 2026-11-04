@@ -649,16 +649,16 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     training_kwargs["optimizer_class"] = optimizer_class.strip().lower()
     training_kwargs["optimizer_parameters"] = optimizer_parameters
 
-    # EvE is closure-based: it scores candidate points on the current
-    # minibatch inside ``optimizer.step()``.  Gradient accumulation would be
-    # discarded by the closure, and the SBERT loop (sentence-transformers
+    # EvE and EA4LLM are closure-based: they score candidate points on the
+    # current minibatch inside ``optimizer.step()``.  Gradient accumulation
+    # would be discarded by the closure, and the SBERT loop (sentence-transformers
     # ``fit``) cannot supply a closure at all.
-    if str(optimizer_class).strip().lower() == "eve":
+    if str(optimizer_class).strip().lower() in {"eve", "ea4llm"}:
         if task == "sbert":
             raise ValueError(
-                "optimizer_class=eve is not supported for training.task=sbert: the "
+                f"optimizer_class={optimizer_class} is not supported for training.task=sbert: the "
                 "SBERT training loop (sentence-transformers fit) cannot supply the "
-                "closure-based step EvE requires; use another optimizer for SBERT"
+                f"closure-based step {optimizer_class} requires; use another optimizer for SBERT"
             )
         accumulation = training_kwargs.get(
             "gradient_accumulation_steps",
@@ -670,8 +670,8 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
             accumulation = 1
         if accumulation != 1:
             raise ValueError(
-                "optimizer_class=eve requires training.gradient_accumulation_steps=1: "
-                "EvE evaluates candidate points on the current minibatch inside "
+                f"optimizer_class={optimizer_class} requires training.gradient_accumulation_steps=1: "
+                f"{optimizer_class} evaluates candidate points on the current minibatch inside "
                 "optimizer.step(), so accumulated micro-batch gradients would be discarded"
             )
     sbert_data = training_data.get("sbert")
@@ -681,12 +681,12 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
             sbert_optimizer_class = sbert_optimizer.get("optimizer_class")
             if (
                 isinstance(sbert_optimizer_class, str)
-                and sbert_optimizer_class.strip().lower() == "eve"
+                and sbert_optimizer_class.strip().lower() in {"eve", "ea4llm"}
             ):
                 raise ValueError(
-                    "training.sbert.optimizer.optimizer_class=eve is not supported: the "
+                    f"training.sbert.optimizer.optimizer_class={sbert_optimizer_class} is not supported: the "
                     "SBERT training loop (sentence-transformers fit) cannot supply the "
-                    "closure-based step EvE requires; use another optimizer for SBERT"
+                    f"closure-based step {sbert_optimizer_class} requires; use another optimizer for SBERT"
                 )
 
     training_config = TrainingConfig(**training_kwargs)

@@ -1351,6 +1351,71 @@ con $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$. Cada ranura de la 
 \item Dentro de successive halving, completa búsquedas de hiperparámetros y arquitecturas 3,1--3,5$\times$ más rápido mientras rankea configuraciones candidatas con una consistencia con Adam comparable a la que Adam tiene consigo mismo entre semillas ($\tau$ de Kendall de 0,66--0,69).
 \end{itemize}
 
+\paragraph{EA4LLM (Estrategias Evolutivas para Modelos de Lenguaje Grandes).}
+EA4LLM~\citep{liu_ea4llm_2025} es una \textbf{alternativa sin gradientes a Adam} que elimina por completo la retropropagación y el estado del optimizador, y es el primer método que los autores validan para el preentrenamiento de parámetros completos de LLM desde cero, en modelos estilo Qwen3 de 0,5B a 32B parámetros. En lugar de diferenciar una pérdida, EA4LLM trata la verosimilitud del siguiente token como una aptitud de caja negra y estima una dirección de descenso a partir de una población de perturbaciones gaussianas. La aptitud es la log-probabilidad media por token del siguiente token verdadero, enmascarada para el relleno, que es exactamente el objetivo causal estándar salvo el signo:
+\begin{align}
+p_t &= \operatorname{softmax}(z_t), &
+R(x;\theta) &= \frac{1}{\sum_t m_t}\sum_{t=1}^{T} m_t \log p_\theta\!\left(x_{t+1}\mid x_{\le t}\right), &
+F(\theta) &= \frac{1}{|D|}\sum_{x\in D} R(x;\theta),
+\end{align}
+con logits $z_t$, máscara de relleno $m_t \in \{0,1\}$ y corpus $D$. Cada iteración muestrea $N$ ruidos independientes $\epsilon_j \sim \mathcal{N}(0, I)$, evalúa la aptitud perturbada $r_j = F(\theta + \sigma\epsilon_j)$ sobre un subconjunto $D_t \subset D$ de tamaño $M$ extraído uniformemente (el subconjunto es compartido por todos los miembros de la iteración, de modo que el estimador estocástico sigue siendo insesgado, $\mathbb{E}[F_M(\theta)] = F(\theta)$), y transforma las recompensas en pesos mediante normalización z-score o rangos centrados:
+\begin{align}
+w_j &= \frac{r_j - \bar r}{\operatorname{std}(r)}
+&&\text{o}&
+w_j &= \operatorname{rank}(r_j) - \frac{N-1}{2},
+\end{align}
+donde $\operatorname{rank}(\cdot)$ asigna $0,\dots,N-1$ tras ordenar. La dirección es la media ponderada por el ruido, opcionalmente escalada al estilo NES por $1/\sigma$, y la actualización asciende la aptitud:
+\begin{align}
+\hat g &= \frac{1}{N}\sum_{j=1}^{N} w_j \epsilon_j
+&&\text{o}&
+\hat g &= \frac{1}{N\sigma}\sum_{j=1}^{N} w_j \epsilon_j,
+&&&
+\theta \leftarrow \theta + \alpha \hat g .
+\end{align}
+El muestreo antitético evalúa el par $\pm\sigma\epsilon$ de $N/2$ semillas en lugar de un signo por semilla. El runner del artículo usa $N = 30$, $\sigma = 10^{-3}$, $\alpha = 5\times 10^{-4}$ y $M = 5000$ muestras de evaluación por iteración ($T = 1000$ iteraciones, micro-lote 16, longitud máxima de secuencia 256); el muestreo antitético, el shaping por rangos, el escalado NES $1/\sigma$, los multiplicadores agrupados/por capas y los programas de decaimiento del tamaño de paso están todos \emph{desactivados} en esas ejecuciones, y el Apéndice~A.1 afirma que el algoritmo desplegado elimina directamente los operadores agrupados y los multiplicadores. En esta implementación el paso se basa en closure: el minilote actual del trainer proporciona $D_t$ y la pérdida se niega para formar la aptitud, el \texttt{lr\_*} compartido por grupo es el tamaño de paso $\alpha$, y \texttt{wd\_*} aplica un decaimiento multiplicativo desacoplado antes del movimiento ES (una extensión por consistencia con el repositorio --- el artículo no define weight decay). El ruido se regenera a partir de una semilla entera por miembro en una segunda pasada, por lo que el conjunto completo de ruido nunca se almacena: el estado del optimizador es O(1) y no existen búferes de momentos. Como EvE, EA4LLM requiere \texttt{gradient\_accumulation\_steps: 1} y no está disponible para SBERT (el closure no puede coexistir con el bucle de ajuste de SBERT), y AMP no está soportado en la ruta de closure.
+
+\begin{algorithm}[H]
+\caption{EA4LLM (Estrategias Evolutivas de Orden Cero)}
+\label{alg:ea4llm}
+\begin{algorithmic}[1]
+\Require Parámetros $\theta$, aptitud $F$ (pérdida negada), iteraciones $T$, población $N$, escala de ruido $\sigma$, tamaño de paso $\alpha$, tamaño del subconjunto $M$, normalización (z-score o rangos), semilla $s$, USE\_ANTITHETIC, USE\_RANK, USE\_NES
+\Ensure Parámetros optimizados $\theta_T$
+\State sembrar el generador persistente con $s$
+\For{$t = 1, \ldots, T$}
+    \State extraer minilote $D_t \subset D$, $|D_t| = M$ \Comment{Compartido por todos los miembros}
+    \State extraer semillas $\{s_j\}_{j=1}^{N/2}$ (antitético) o $\{s_j\}_{j=1}^{N}$
+    \State $\text{recompensas} \gets [\,]$ \Comment{Pasada 1: perturbar, evaluar, restaurar}
+    \For{cada semilla $s_j$ y signo $\pm$ (o un único signo)}
+        \State $\epsilon \gets \operatorname{randn}(s_j)$; \quad $\theta \gets \theta \pm \sigma\epsilon$; \quad $r \gets -f(\theta; D_t)$; \quad $\theta \gets \theta \mp \sigma\epsilon$
+        \State añadir $r$ a recompensas
+    \EndFor
+    \State $w \gets$ z-score(recompensas) o rangos centrados(recompensas)
+    \State $g \gets 0$ \Comment{Pasada 2: reproducir el mismo ruido}
+    \For{cada semilla $s_j$ y signo $\pm$ (o un único signo)}
+        \State $\epsilon \gets \operatorname{randn}(s_j)$; \quad $g \gets g + w_j (\pm\epsilon)$
+    \EndFor
+    \State $\theta \gets \theta + \alpha g / (N\sigma)$ si USE\_NES, si no $\theta \gets \theta + \alpha g / N$
+\EndFor
+\State \Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Requiere $N$ evaluaciones forward por paso (30 en el artículo), por lo que la eficiencia de muestreo queda por detrás de los métodos de primer orden y la varianza del estimador es mayor; el artículo reporta sensibilidad a $N$, $\sigma$, $\alpha$ y a la elección de normalización.
+\item No hay gradiente disponible, de modo que las rutas de recorte de gradiente y AMP no aplican: el arnés de closure del trainer rechaza \texttt{use\_amp}, exige \texttt{gradient\_accumulation\_steps: 1} y el bucle SBERT no puede alojarlo. Cada evaluación además paga una pasada backward a través del closure compartido aunque ES la descarte.
+\item A presupuestos de evaluación igualados el artículo no reclama calidad final superior a Adam; su argumento es la memoria (>4$\times$ de reducción con $\ge$4B parámetros) y la viabilidad sin gradientes, con el muestreo antitético, el shaping por rangos y el escalado NES desactivados en sus propias ejecuciones a gran escala.
+\item Como el z-score hace que la magnitud de la actualización sea independiente de $\sigma$ y de la escala del gradiente, $\alpha$ debe ajustarse por tarea en lugar de transferirse desde Adam.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Estado del optimizador nulo: sin momentos y sin copias de población, por lo que el artículo mide 60,01 frente a 137,61~GB en 8B y 137,61 frente a 431,76~GB en 32B contra Adam.
+\item Proporciona el primer preentrenamiento ES estable de parámetros completos desde cero en 0,5B--32B, con curvas de pérdida que descienden de forma sostenida (Figura~1) y sin cálculo de gradientes.
+\item Agnóstico a la arquitectura: la aptitud solo necesita una pasada forward y una probabilidad, por lo que los operadores no diferenciables se vuelven entrenables.
+\item La aptitud submuestreada es un estimador insesgado de la aptitud sobre el corpus completo, y la reproducción sembrada en dos pasadas hace el ruido reproducible manteniendo el estado del optimizador en O(1).
+\end{itemize}
+
 \small
 \begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
 \toprule
@@ -1363,7 +1428,7 @@ Simplificación de lotes grandes y programación & LAMB, Schedule-Free AdamW & r
 Eficiencia de memoria & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & reducción del estado del optimizador & Más útil cuando la VRAM está dominada por el estado del optimizador en lugar de las activaciones; los métodos de la familia APOLLO reemplazan los momentos densos de AdamW con escalado estructurado proyectado o cuantizado. \\
 Consciente de curvatura & Shampoo, SOAP, Sophia & mejor condicionamiento & Preferir cuando una geometría más rica justifica la sobrecarga de implementación y cómputo. \\
 Orientado a geometría & Muon, Turbo-Muon, AF-Muon, AdaMuon, Dion3 & estructura de actualización ortogonalizada & Opciones especializadas para geometría matricial y modelado de representaciones; AdaMuon añade un segundo momento por elemento sobre la dirección ortogonalizada con actualizaciones alineadas por RMS; AF-Muon asigna a la tabla de vocabulario atada una geometría de tabla con tope por fila y a los parámetros unidimensionales una actualización RMS, sin estado auxiliar de AdamW; Dion3 conserva la actualización espectral pero ortogonaliza solo una fracción de las filas del momentum por paso con Gram Newton--Schulz y error feedback. \\
-Híbrido evolutivo & EvE & ranking rápido y monótono de candidatos para bucles de búsqueda & Una población de evolución diferencial en régimen estable con un rescate dirigido de Adam intercambia calidad final por velocidad de reloj; es mejor como optimizador interno de búsqueda de hiperparámetros o arquitecturas. \\
+Híbrido evolutivo & EvE, EA4LLM & ranking rápido y monótono de candidatos para bucles de búsqueda; actualizaciones sin gradientes de parámetros completos & Una población de evolución diferencial en régimen estable con un rescate dirigido de Adam intercambia calidad final por velocidad de reloj; es mejor como optimizador interno de búsqueda de hiperparámetros o arquitecturas. EA4LLM elimina los gradientes por completo --- ES de orden cero con aptitud de log-verosimilitud por token y sin estado del optimizador, la opción centrada en memoria para preentrenar a escala. \\
 \bottomrule
 \end{longtable}
 \normalsize

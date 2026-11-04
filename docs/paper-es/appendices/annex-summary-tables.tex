@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 45 mezcladores de secuencia en nueve familias, 27 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 45 mezcladores de secuencia en nueve familias, 28 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -97,7 +97,7 @@ ssog\_attn & Campo geométrico & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\ma
 
 \subsection{Resumen de Optimizadores}
 
-La Tabla~\ref{tab:all-optimizers} cataloga los 27 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
+La Tabla~\ref{tab:all-optimizers} cataloga los 28 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -166,6 +166,7 @@ Anon & Adaptividad ajustable & 3 ($m$, $v$, fixed\_lr) & $\mathcal{O}(n)$ & lr, 
 \multicolumn{6}{c}{\textbf{Poblacionales y Evolutivos}} \\
 \midrule
 EvE & Híbrido evolutivo (DE + rescate Adam) & 12 ($4z$, $4m$, $4v$) & $\mathcal{O}(n)$ + hasta $n_{adam}$ fwd/bwd & lr ($\eta_{lr}$), $F$, $\sigma$, $n_{adam}$, jitter $\gamma$, wd (L2) & \citep{raj_eve_2026} \\
+EA4LLM & Estrategias evolutivas sin gradientes & 0 (solo RNG y contadores) & $N$ evaluaciones fwd/bwd, sin estado & lr ($\alpha$), población $N$, $\sigma$, shaping, antitético, $1/\sigma$ & \citep{liu_ea4llm_2025} \\
 \bottomrule
 \end{longtable}
 \normalsize

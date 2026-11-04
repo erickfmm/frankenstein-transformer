@@ -1351,6 +1351,71 @@ with $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$. Each population s
 \item Inside successive halving, completes hyperparameter and architecture searches 3.1--3.5$\times$ faster while ranking candidate configurations about as consistently with Adam as Adam does with itself across seeds (Kendall's $\tau$ of 0.66--0.69).
 \end{itemize}
 
+\paragraph{EA4LLM (Evolution Strategies for Large Language Models).}
+EA4LLM~\citep{liu_ea4llm_2025} is a \textbf{gradient-free alternative to Adam} that removes backpropagation and optimizer state entirely, and it is the first method the authors validate for full-parameter pretraining of LLMs from scratch, across Qwen3-style models from 0.5B to 32B parameters. Instead of differentiating a loss, EA4LLM treats the next-token likelihood as a black-box fitness and estimates a descent direction from a population of Gaussian perturbations. The fitness is the mean token-level log-probability of the true next token, masked for padding, which is exactly the standard causal-LM objective up to sign:
+\begin{align}
+p_t &= \operatorname{softmax}(z_t), &
+R(x;\theta) &= \frac{1}{\sum_t m_t}\sum_{t=1}^{T} m_t \log p_\theta\!\left(x_{t+1}\mid x_{\le t}\right), &
+F(\theta) &= \frac{1}{|D|}\sum_{x\in D} R(x;\theta),
+\end{align}
+with logits $z_t$, padding mask $m_t \in \{0,1\}$ and corpus $D$. Each iteration samples $N$ independent noises $\epsilon_j \sim \mathcal{N}(0, I)$, evaluates the perturbed fitness $r_j = F(\theta + \sigma\epsilon_j)$ on one uniformly drawn subset $D_t \subset D$ of size $M$ (the subset is shared by every member of the iteration, so the stochastic estimator stays unbiased, $\mathbb{E}[F_M(\theta)] = F(\theta)$), and shapes the rewards into weights by z-score normalization or centered ranks:
+\begin{align}
+w_j &= \frac{r_j - \bar r}{\operatorname{std}(r)}
+&&\text{or}&
+w_j &= \operatorname{rank}(r_j) - \frac{N-1}{2},
+\end{align}
+where $\operatorname{rank}(\cdot)$ assigns $0,\dots,N-1$ after sorting. The direction is the noise-weighted mean, optionally scaled NES-style by $1/\sigma$, and the update ascends the fitness:
+\begin{align}
+\hat g &= \frac{1}{N}\sum_{j=1}^{N} w_j \epsilon_j
+&&\text{or}&
+\hat g &= \frac{1}{N\sigma}\sum_{j=1}^{N} w_j \epsilon_j,
+&&&
+\theta \leftarrow \theta + \alpha \hat g .
+\end{align}
+Antithetic sampling evaluates the $\pm\sigma\epsilon$ pair of $N/2$ seeds instead of one sign per seed. The paper's runner uses $N = 30$, $\sigma = 10^{-3}$, $\alpha = 5\times 10^{-4}$ and $M = 5000$ evaluation samples per iteration ($T = 1000$ iterations, micro-batch 16, maximum sequence length 256); antithetic sampling, rank shaping, the NES $1/\sigma$ scaling, grouped/layered multipliers and step-size schedules are all \emph{off} in those runs, and Appendix~A.1 states that the deployed algorithm removes the grouped operators and multipliers outright. In this implementation the step is closure-based: the trainer's current minibatch supplies $D_t$ and the loss is negated to form the fitness, the shared per-group \texttt{lr\_*} is the step size $\alpha$, and \texttt{wd\_*} applies a decoupled multiplicative decay before the ES move (a repo-consistency extension --- the paper defines no weight decay). Noise is regenerated from one integer seed per member in a second pass, so the full noise set is never stored: optimizer state is O(1) and no moment buffers exist. Like EvE, EA4LLM requires \texttt{gradient\_accumulation\_steps: 1} and is not available for SBERT (the closure cannot coexist with the SBERT fit loop), and AMP is not supported on the closure path.
+
+\begin{algorithm}[H]
+\caption{EA4LLM (Zeroth-Order Evolution Strategies)}
+\label{alg:ea4llm}
+\begin{algorithmic}[1]
+\Require Parameters $\theta$, fitness $F$ (negated loss), iterations $T$, population $N$, noise scale $\sigma$, step size $\alpha$, subset size $M$, normalization (z-score or rank), seed $s$, USE\_ANTITHETIC, USE\_RANK, USE\_NES
+\Ensure Optimized parameters $\theta_T$
+\State seed the persistent generator with $s$
+\For{$t = 1, \ldots, T$}
+    \State draw minibatch $D_t \subset D$, $|D_t| = M$ \Comment{Shared by all members}
+    \State draw seeds $\{s_j\}_{j=1}^{N/2}$ (antithetic) or $\{s_j\}_{j=1}^{N}$
+    \State $\text{rewards} \gets [\,]$ \Comment{Pass 1: perturb, evaluate, restore}
+    \For{each seed $s_j$ and sign $\pm$ (or a single sign)}
+        \State $\epsilon \gets \operatorname{randn}(s_j)$; \quad $\theta \gets \theta \pm \sigma\epsilon$; \quad $r \gets -f(\theta; D_t)$; \quad $\theta \gets \theta \mp \sigma\epsilon$
+        \State append $r$ to rewards
+    \EndFor
+    \State $w \gets$ z-score(rewards) or centered ranks(rewards)
+    \State $g \gets 0$ \Comment{Pass 2: replay the same noise}
+    \For{each seed $s_j$ and sign $\pm$ (or a single sign)}
+        \State $\epsilon \gets \operatorname{randn}(s_j)$; \quad $g \gets g + w_j (\pm\epsilon)$
+    \EndFor
+    \State $\theta \gets \theta + \alpha g / (N\sigma)$ if USE\_NES, else $\theta \gets \theta + \alpha g / N$
+\EndFor
+\State \Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item Requires $N$ forward evaluations per step (30 in the paper), so sample efficiency trails first-order methods and the variance of the estimate is higher; the paper reports sensitivity to $N$, $\sigma$, $\alpha$ and the normalization choice.
+\item No gradient is available, so the gradient-clipping and AMP paths do not apply: the trainer's closure harness rejects \texttt{use\_amp}, requires \texttt{gradient\_accumulation\_steps: 1}, and the SBERT loop cannot host it. Each evaluation also pays a backward pass through the shared closure even though ES discards it.
+\item At matched evaluation budgets the paper does not claim superior final quality to Adam; its case is memory (>4$\times$ reduction at $\ge$4B parameters) and gradient-free feasibility, with antithetic sampling, rank shaping and NES scaling disabled in its own large-scale runs.
+\item Because the z-score makes the update magnitude independent of $\sigma$ and of the gradient scale, $\alpha$ must be tuned per task rather than transferred from Adam.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Zero optimizer state: no moments and no population copies, so the paper measures 60.01 vs 137.61~GB at 8B and 137.61 vs 431.76~GB at 32B against Adam.
+\item Provides the first stable full-parameter ES pretraining from scratch across 0.5B--32B, with steadily decreasing loss curves (Figure~1) and no gradient computation.
+\item Architecture-agnostic: the fitness only needs a forward pass and a probability, so non-differentiable operators become trainable.
+\item The subsampled fitness is an unbiased estimator of the full-corpus fitness, and the two-pass seeded replay makes the noise reproducible while keeping optimizer state at O(1).
+\end{itemize}
+
 \small
 \begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
 \toprule
@@ -1363,7 +1428,7 @@ Large-batch and schedule simplification & LAMB, Schedule-Free AdamW & operationa
 Memory-efficient & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & optimizer-state reduction & Most useful when VRAM is dominated by optimizer state rather than activations; APOLLO-family methods replace dense AdamW moments with projected or quantized structured scaling. \\
 Curvature-aware & Shampoo, SOAP, Sophia & better conditioning & Prefer when richer geometry is worth implementation and compute overhead. \\
 Geometry-oriented & Muon, Turbo-Muon, AF-Muon, AdaMuon, Dion3 & orthogonalized update structure & Specialized options for matrix geometry and representation shaping; AdaMuon adds an element-wise second moment on the orthogonalized direction with RMS-aligned updates; AF-Muon assigns the tied vocabulary table a capped-row table geometry and one-dimensional parameters an RMS update, with no AdamW auxiliary state; Dion3 keeps the spectral update but orthogonalizes only a fraction of the momentum rows per step with Gram Newton--Schulz and error feedback. \\
-Evolutionary hybrid & EvE & fast, monotone candidate ranking for search loops & A steady-state differential-evolution population with a targeted Adam rescue trades final quality for wall-clock speed; best used as the inner optimizer of hyperparameter or architecture search. \\
+Evolutionary hybrid & EvE, EA4LLM & fast, monotone candidate ranking for search loops; gradient-free full-parameter updates & A steady-state differential-evolution population with a targeted Adam rescue trades final quality for wall-clock speed; best used as the inner optimizer of hyperparameter or architecture search. EA4LLM removes gradients entirely --- zeroth-order ES with token-level log-likelihood fitness and no optimizer state, the memory-first option for pretraining at scale. \\
 \bottomrule
 \end{longtable}
 \normalsize

@@ -1565,3 +1565,17 @@ allOf:
             additionalProperties: false
             patternProperties:
               ^eve-: { type: [number, boolean, array, string] }
+- if:
+    properties:
+      optimizer:
+        properties:
+          optimizer_class:
+            const: ea4llm
+  then:
+    properties:
+      optimizer:
+        properties:
+          parameters:
+            additionalProperties: false
+            patternProperties:
+              ^ea4llm-: { type: [number, boolean, array, string] }

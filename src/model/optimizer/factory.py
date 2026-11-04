@@ -34,6 +34,7 @@ from .base import (
 )
 from .cautious_adamw import CautiousAdamW
 from .dion3 import Dion3
+from .ea4llm import EA4LLM
 from .eve import Eve
 from .galore_adamw import GaLoreAdamW
 from .lamb import LAMB
@@ -77,6 +78,7 @@ OPTIMIZER_REGISTRY = {
     "apollo_mini": ApolloMini,
     "q_apollo": QApollo,
     "dion3": Dion3,
+    "ea4llm": EA4LLM,
     "eve": Eve,
 }
 """Mapping from YAML optimizer class names to concrete Optimizer subclasses.
@@ -137,6 +139,8 @@ OPTIMIZER_ALLOWED_KEYS = {
     "anon": _COMMON_PER_GROUP_KEYS | {"gamma"},
     "q_apollo": _COMMON_PER_GROUP_KEYS | {"rank", "update_proj_gap", "scale", "scale_type", "proj_type", "scale_front", "disable_nl", "quant_bits"},
     "dion3": _COMMON_PER_GROUP_KEYS | {"fraction", "momentum", "ns_steps", "ns_eps", "normuon"},
+    "ea4llm": _COMMON_PER_GROUP_KEYS
+    | {"population", "sigma", "antithetic", "rank_shaping", "nes_scaling", "seed"},
     "eve": _COMMON_PER_GROUP_KEYS
     | {"de_weight", "de_jitter", "init_sigma", "adam_steps", "use_pm", "pm_eta", "seed"},
 }
@@ -388,6 +392,24 @@ def build_optimizer(
             ns_steps=ns_steps,
             ns_eps=ns_eps,
             normuon=normuon,
+        )
+
+    if optimizer_name == "ea4llm":
+        population = to_int(scoped.get("population"), 30)
+        sigma = to_float(scoped.get("sigma"), 1e-3)
+        antithetic = bool(scoped.get("antithetic", False))
+        rank_shaping = bool(scoped.get("rank_shaping", False))
+        nes_scaling = bool(scoped.get("nes_scaling", False))
+        seed_value = scoped.get("seed")
+        seed = to_int(seed_value, 0) if seed_value is not None else None
+        return optimizer_cls(
+            converted_groups,
+            population=population,
+            sigma=sigma,
+            antithetic=antithetic,
+            rank_shaping=rank_shaping,
+            nes_scaling=nes_scaling,
+            seed=seed,
         )
 
     if optimizer_name == "eve":
