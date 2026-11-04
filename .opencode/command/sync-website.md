@@ -90,17 +90,19 @@ After syncing paper sources:
 
 ```bash
 cd erickfmm.github.io/frankenstein-transformer/paper
-python3 flatten_tex.py en/paper.tex    en/paper.bbl    /tmp/paper-en-flat.tex --web
-python3 flatten_tex.py es/paper-es.tex es/paper-es.bbl /tmp/paper-es-flat.tex --web
+python3 flatten_tex.py en/paper.tex    en/paper.bbl    /tmp/paper-en-flat.tex --web --manifest /tmp/paper-en-figures.json
+python3 flatten_tex.py es/paper-es.tex es/paper-es.bbl /tmp/paper-es-flat.tex --web --manifest /tmp/paper-es-figures.json
 pandoc /tmp/paper-en-flat.tex -f latex -t html5 --standalone --mathjax --toc --toc-depth=3 -V lang=en -o paper-en.html
 pandoc /tmp/paper-es-flat.tex -f latex -t html5 --standalone --mathjax --toc --toc-depth=3 -V lang=es -o paper-es.html
-python3 postprocess_html.py paper-en.html paper-es.html
+python3 postprocess_html.py --manifest /tmp/paper-en-figures.json paper-en.html
+python3 postprocess_html.py --manifest /tmp/paper-es-figures.json paper-es.html
 ```
 
-`--web` is required: it unwraps `\fitfigure` (pandoc drops the unknown
-`\adjustbox` and leaves caption-only figures) and rewrites every
-`\includegraphics{...figures/<name>.pdf}` to
-`/frankenstein-transformer/paper/figures/<name>.svg`.
+`--web` is required: pandoc drops the `\fitfigure` (`\adjustbox`) wrapper and
+leaves caption-only `<figure id="fig:...">` elements; `flatten_tex.py` writes a
+`fig:<label> -> SVG` manifest and `postprocess_html.py` injects each SVG.
+Never let pandoc parse `\includegraphics` directly: it silently drops 8
+`longtable` environments in the schema annex.
 
 4. **Figures (SVG)** — the paper HTML embeds `paper/figures/**/*.svg`. If any
    `docs/paper/figures/**/*.mmd` changed (or the mirror SVGs are missing),
