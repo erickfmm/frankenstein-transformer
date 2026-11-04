@@ -23,7 +23,7 @@ load.
 | Dimension | Count | Defined in |
 |---|---:|---|
 | `model.dims.layer_pattern` values | **45** (44 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
-| Optimizer families | **27** | `src/schema/_optimizer.yaml` |
+| Optimizer families | **31** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
 | FFN activations | **43** | `src/schema/_model/_ffn.yaml` |
@@ -83,7 +83,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
 | `src/model/activation_function/**` | 43 activations + `ALL_ACTIVATIONS` factory |
-| `src/model/optimizer/**` | 30 optimizers + registry + parameter routing |
+| `src/model/optimizer/**` | 31 optimizers + registry + parameter routing |
 | `src/engine.py` | Framework-neutral `build_model()` used by CLI, DashAI plugin and exports |
 | `src/training/main.py`, `trainer.py` | Task dispatch and training loop |
 | `src/training/streaming_mlm_dataset.py` | Streaming MLM dataset |
@@ -724,7 +724,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 
 ## 8. Training runtime
 
-### 8.1 Optimizers (30)
+### 8.1 Optimizers (31)
 
 `training.optimizer.optimizer_class` selects a family; SBERT uses
 `training.sbert.optimizer.optimizer_class` with the same enum.
@@ -733,7 +733,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 |---|---|---|
 | SGD | `sgd_momentum` | Baseline, momentum/nesterov |
 | AdamW | `adamw` | Default, decoupled weight decay |
-| Memory-efficient | `adafactor`, `lion`, `galore_adamw`, `apollo`, `apollo_mini`, `q_apollo` | Factored/low-rank/quantized state |
+| Memory-efficient | `adafactor`, `lion`, `galore_adamw`, `apollo`, `apollo_mini`, `q_apollo`, `adam_pm` | Factored/low-rank/quantized state; `adam_pm` pools adjacent second-moment entries into group means, shrinking the V-state to `1/s` while keeping Adam's hyperparameters |
 | Auto-LR | `prodigy`, `schedulefree_adamw` | Remove LR tuning/scheduling |
 | Adaptive | `radam`, `adan`, `adopt`, `ademamix`, `mars_adamw`, `cautious_adamw`, `lamb` | Rectification, Nesterov, dual EMA, variance reduction, masking, layer-wise scaling |
 | Second-order | `sophia`, `shampoo`, `soap` | Diagonal Hessian / Kronecker / eigenbasis |

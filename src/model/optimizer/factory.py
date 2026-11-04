@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 
 from torch.optim import Optimizer
 
+from .adam_pm import AdamPM
 from .adamw import AdamWOptimizer
 from .ada_muon import AdaMuon
 from .adafactor import Adafactor
@@ -56,6 +57,7 @@ from .turbo_muon import TurboMuon
 OPTIMIZER_REGISTRY = {
     "sgd_momentum": SGDMomentum,
     "adamw": AdamWOptimizer,
+    "adam_pm": AdamPM,
     "adafactor": Adafactor,
     "galore_adamw": GaLoreAdamW,
     "prodigy": Prodigy,
@@ -105,6 +107,7 @@ _COMMON_PER_GROUP_KEYS = {
 OPTIMIZER_ALLOWED_KEYS = {
     "sgd_momentum": _COMMON_PER_GROUP_KEYS | {"momentum", "nesterov"},
     "adamw": _COMMON_PER_GROUP_KEYS,
+    "adam_pm": _COMMON_PER_GROUP_KEYS | {"group_size", "pool_dim"},
     "adafactor": _COMMON_PER_GROUP_KEYS | {"beta2_decay", "clip_threshold", "eps1", "eps2"},
     "galore_adamw": _COMMON_PER_GROUP_KEYS | {"rank", "update_proj_gap"},
     "prodigy": _COMMON_PER_GROUP_KEYS | {"d_coef"},
@@ -276,6 +279,11 @@ def build_optimizer(
     if optimizer_name == "anon":
         gamma = to_float(scoped.get("gamma"), 0.0)
         return optimizer_cls(converted_groups, gamma=gamma)
+
+    if optimizer_name == "adam_pm":
+        group_size = to_int(scoped.get("group_size"), 8)
+        pool_dim = str(scoped.get("pool_dim", "row")).strip().lower()
+        return optimizer_cls(converted_groups, group_size=group_size, pool_dim=pool_dim)
 
     if optimizer_name == "prodigy":
         d_coef = to_float(scoped.get("d_coef"), 0.8)

@@ -692,6 +692,106 @@ El artículo de APOLLO también enfatiza que la familia se combina naturalmente 
 \item Miembro más agresivo en ahorro de memoria de la pila local, preservando la lógica de gradiente proyectado de APOLLO.
 \end{itemize}
 
+\paragraph{AdamPM (Adam con momentos agrupados).}
+AdamPM~\citep{ji_adampm_2026} es una \textbf{modificación mínima y agnóstica al
+modelo de Adam}: conserva el primer momento por elemento y comprime únicamente
+el segundo momento mediante el \textbf{promedio por grupo de entradas
+adyacentes} a lo largo de cada fila (el valor por defecto, siendo las filas las
+características de salida) o de cada columna (la variante \emph{AdamPM-col} del
+artículo). Para una matriz de pesos $W \in \mathbb{R}^{m \times n}$ y un tamaño
+de grupo $s$, cada fila se particiona en $q = \lceil n/s \rceil$ grupos, el
+gradiente al cuadrado se promedia dentro de cada grupo \emph{antes} de la media
+móvil exponencial, y solo se persiste el estadístico comprimido
+$\bar{V}_t \in \mathbb{R}^{m \times q}$:
+\begin{align}
+M_t &= \beta_1 M_{t-1} + (1-\beta_1)\, G_t
+     && \text{(primer momento, por elemento, Ec.~1)} \\
+\bar{S}_t &= \frac{1}{s}\sum_{k=1}^{s}
+     \mathrm{reshape}(G_t \odot G_t,\, m, q, s)[:,:,k]
+     && \text{(medias por grupo, Ec.~2)} \\
+\bar{V}_t &= \beta_2 \bar{V}_{t-1} + (1-\beta_2)\, \bar{S}_t
+     && \text{(EMA comprimida del segundo momento, Ec.~3)} \\
+W_t &= W_{t-1} - \eta_t \,
+     \frac{M_t/(1-\beta_1^t)}
+          {\sqrt{\hat{\bar{V}}_t \otimes \mathbf{1}_{1\times s}} + \epsilon},
+\qquad \hat{\bar{V}}_t = \frac{\bar{V}_t}{1-\beta_2^t}
+     && \text{(actualización, Ec.~4)}
+\end{align}
+Cuando $n$ no es divisible por $s$, el último grupo se rellena con su propia
+media, de modo que su estadístico promedia solo las entradas que realmente
+contiene; $s{=}1$ recupera Adam exactamente y $s \ge n$ colapsa cada fila (o
+columna) a un escalar, el límite \emph{AdamPM-inf} del artículo. AdamPM agrupa
+los segundos momentos de \textbf{todas} las matrices de pesos---embeddings, la
+cabeza LM, atención y pesos MLP---y trata los parámetros unidimensionales, como
+las escalas RMSNorm, como matrices de una sola fila o de una sola columna, de
+modo que ningún grupo de parámetros queda en una ruta de respaldo. El estado
+persistente es de $mn(1+1/s)$ elementos frente a los $2mn$ de Adam.
+
+\begin{algorithm}[H]
+\caption{AdamPM (Adam con momentos agrupados)}
+\label{alg:adampm}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $W_0 \in \mathbb{R}^{m\times n}$, pasos $T$, tamaño de grupo $s$, tasa de aprendizaje $\eta_t$, tasas de decaimiento $\beta_1, \beta_2$, constante de estabilidad $\epsilon$
+\Ensure Parámetros actualizados $W_T$
+\State $t \gets 0$; \ $q \gets \lceil n/s \rceil$ \Comment{Número de grupos por fila}
+\State $M_0 \gets \mathbf{0}_{m\times n}$; \ $\bar{V}_0 \gets \mathbf{0}_{m\times q}$ \Comment{Primer momento y segundo momento comprimido}
+\Repeat
+    \State $t \gets t + 1$
+    \State $G_t \gets \nabla_W \mathcal{L}(W_{t-1})$ \Comment{Gradiente}
+    \State $M_t \gets \beta_1 M_{t-1} + (1-\beta_1) G_t$ \Comment{EMA del primer momento (Ec.~1)}
+    \State $\bar{S}_t \gets \operatorname{mean}_{k}\big(\mathrm{reshape}(G_t \odot G_t, m, q, s)[:,:,k]\big)$ \Comment{Medias por grupo (Ec.~2)}
+    \State $\bar{V}_t \gets \beta_2 \bar{V}_{t-1} + (1-\beta_2) \bar{S}_t$ \Comment{EMA comprimida del segundo momento (Ec.~3)}
+    \State $\hat{M}_t \gets M_t/(1-\beta_1^t)$; \ $\hat{\bar{V}}_t \gets \bar{V}_t/(1-\beta_2^t)$ \Comment{Correcciones de sesgo}
+    \State difundir $\hat{\bar{V}}_t$ sobre cada grupo \Comment{Producto de Kronecker con $\mathbf{1}_{1\times s}$}
+    \State $W_t \gets W_{t-1} - \eta_t \hat{M}_t / (\sqrt{\hat{\bar{V}}_t} + \epsilon)$ \Comment{Actualización (Ec.~4)}
+\Until{$t = T$ o convergencia}
+\Return $W_t$
+\end{algorithmic}
+\end{algorithm}
+
+Empíricamente, AdamPM iguala a un Adam cuidadosamente ajustado en el
+preentrenamiento de LLaMA de 60M a 1.3B parámetros mientras recorta la memoria
+del segundo momento un 87,5\,\% ($s{=}8$) y hasta un 93,75\,\% ($s{=}16$), con
+el mismo patrón en el ajuste fino de RoBERTa-base sobre GLUE y en el
+entrenamiento supervisado de TinyLLaVA-1B; los tamaños de grupo entre 2 y 8 se
+reportan como robustos, y tres o cinco---no solo potencias de dos---funcionan
+porque el último grupo incompleto se promedia sobre sus propias entradas. El
+Teorema~3.1 ofrece una cota de estacionariedad independiente del tamaño de
+grupo $s$ y, bajo una condición de ruido relativo, AdamPM alcanza la misma tasa
+$\mathcal{O}(\log T/\sqrt{T})$ que Adam. El Algoritmo~1 del artículo no define
+weight decay; esta implementación aplica el decaimiento desacoplado
+\texttt{wd\_*} del repositorio antes de la actualización adaptativa, y los
+sufijos compartidos \texttt{betas}/\texttt{eps} por grupo parametrizan las
+correcciones de sesgo y el denominador.
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item El precondicionador diagonal se vuelve más grueso a medida que crece $s$;
+      el límite AdamPM-inf del artículo muestra una pérdida de perplejidad
+      medible en 350M y 1.3B.
+\item El ahorro cubre solo el estado del optimizador: el primer momento
+      permanece a tamaño completo, así que la memoria del optimizador es
+      $1+1/s$ la de Adam, no $1/s$.
+\item El pooling es unidimensional (filas o columnas); los grupos
+      bidimensionales y el pooling selectivo por capa quedan sin explorar
+      (limitaciones del artículo).
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Aproximadamente la mitad de la memoria de estado del optimizador con el
+      valor por defecto $s{=}8$ (segundo momento a $1/8$), con perplejidad
+      al nivel de Adam hasta 1.3B parámetros y sobrecarga por paso
+      despreciable---sin SVD, sin proyección, sin estado extra.
+\item Hereda directamente la tasa de aprendizaje y las tasas de decaimiento de
+      Adam, de modo que los presets de Adam se transfieren sin reajuste y
+      $\beta_1{=}0.9$, $\beta_2{=}0.95$ coinciden con los valores por defecto
+      del repositorio.
+\item Agnóstico al modelo y aplicable uniformemente a todos los grupos de
+      parámetros; las actualizaciones precondicionadas se parecen más a las de
+      Adam a medida que crece la escala del modelo.
+\end{itemize}
+
 \paragraph{Anon (Adaptivity Non-restricted Optimizer with Novel convergence technique).}
 \begin{figure}[H]
 \centering

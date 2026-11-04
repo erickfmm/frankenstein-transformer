@@ -133,6 +133,7 @@ training:
 `training.optimizer.optimizer_class` supported values:
 - `sgd_momentum`
 - `adamw`
+- `adam_pm`
 - `adafactor`
 - `galore_adamw`
 - `prodigy`
@@ -185,6 +186,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 
 - `sgd_momentum`: `momentum`, `nesterov`
 - `adamw`: none
+- `adam_pm`: `group_size`, `pool_dim` (group-mean pooling of adjacent second-moment entries along rows or columns; second-moment state 1/s; `s=1` → vanilla Adam; first moment untouched; shared `lr_*`/`wd_*`/`betas_*`/`eps_*` per group)
 - `adafactor`: `beta2_decay`, `clip_threshold`, `eps1`, `eps2`
 - `galore_adamw`: `rank`, `update_proj_gap`
 - `prodigy`: `d_coef`
@@ -227,6 +229,8 @@ Examples:
 - `ea4llm-sigma: 1.0e-3`
 - `root-quantile: 0.90`
 - `muon2-ns_steps: 3`
+- `adam_pm-group_size: 8`
+- `adam_pm-pool_dim: col`
 
 ## Available Fields (Detailed)
 

@@ -33,6 +33,7 @@ properties:
       | Optimizer | Use Case | Notes |
       |-----------|----------|-------|
       | `adamw` | General purpose **(recommended)** | Decoupled weight decay, stable |
+      | `adam_pm` | Memory-constrained training | Pooled second moment: group size `s` shrinks the V-state to 1/s, Adam hyperparameters transfer (paper: arxiv:2610.24598) |
       | `sgd_momentum` | Baselines, classic tasks | Simple, less adaptive |
       | `adafactor` | Large models, low memory | Memory-efficient factored moments |
       | `galore_adamw` | Memory-constrained large models | Gradient low-rank projection |
@@ -82,13 +83,15 @@ properties:
       `shampoo` (paper: arxiv:1802.09568); `soap` (paper: arxiv:2409.11321); `anon` (paper:
       arxiv:2605.02317); `apollo`/`apollo_mini`/`q_apollo` (paper: arxiv:2412.05270); `dion3` (paper:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
-      `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967)
+      `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
+      arxiv:2610.24598)
     description_es: |-
       Algoritmo optimizador. Resumen por caso de uso:
 
       | Optimizador | Caso de Uso | Notas |
       |-------------|-------------|-------|
       | `adamw` | Propósito general **(recomendado)** | Weight decay desacoplado, estable |
+      | `adam_pm` | Entrenamiento con memoria limitada | Segundo momento agrupado: el tamaño de grupo `s` reduce el estado V a 1/s, los hiperparámetros de Adam se transfieren (paper: arxiv:2610.24598) |
       | `sgd_momentum` | Líneas base, tareas clásicas | Simple, menos adaptativo |
       | `adafactor` | Modelos grandes, baja memoria | Eficiente en memoria |
       | `galore_adamw` | Modelos grandes con memoria limitada | Proyección de gradiente de bajo rango |
@@ -139,10 +142,12 @@ properties:
       `shampoo` (paper: arxiv:1802.09568); `soap` (paper: arxiv:2409.11321); `anon` (paper:
       arxiv:2605.02317); `apollo`/`apollo_mini`/`q_apollo` (paper: arxiv:2412.05270); `dion3` (paper:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
-      `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967)
+      `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
+      arxiv:2610.24598)
     enum:
       - sgd_momentum
       - adamw
+      - adam_pm
       - adafactor
       - galore_adamw
       - prodigy
@@ -188,6 +193,7 @@ properties:
 
       **Optimizer-specific suffixes** (see `x_parameter_reference.by_optimizer`):
       - `sgd_momentum`: `momentum`, `nesterov`
+      - `adam_pm`: `group_size`, `pool_dim`. Row/column group-mean pooling of the second moment only; `s=1` reduces to vanilla Adam, `s` ≥ axis length gives one statistic per row/column (AdamPM-inf); the first moment stays element-wise; the shared `lr_*`, `wd_*` (decoupled), `betas_*`, `eps_*` apply per group
       - `adafactor`: `beta2_decay`, `clip_threshold`, `eps1`, `eps2`
       - `galore_adamw`: `rank`, `update_proj_gap`
       - `prodigy`: `d_coef`
@@ -231,6 +237,7 @@ properties:
 
       **Sufijos específicos por optimizador** (ver `x_parameter_reference.by_optimizer`):
       - `sgd_momentum`: `momentum`, `nesterov`
+      - `adam_pm`: `group_size`, `pool_dim`. Pooling por media de grupo del segundo momento únicamente (filas o columnas); `s=1` equivale a Adam vainilla, `s` ≥ longitud del eje deja un estadístico por fila/columna (AdamPM-inf); el primer momento queda por elemento; los sufijos compartidos `lr_*`, `wd_*` (desacoplado), `betas_*`, `eps_*` aplican por grupo
       - `adafactor`: `beta2_decay`, `clip_threshold`, `eps1`, `eps2`
       - `galore_adamw`: `rank`, `update_proj_gap`
       - `prodigy`: `d_coef`
@@ -304,6 +311,10 @@ properties:
           prefix: "adamw-"
           supports_shared_per_group_suffixes: true
           specific_global_suffixes: []
+        adam_pm:
+          prefix: "adam_pm-"
+          supports_shared_per_group_suffixes: true
+          specific_global_suffixes: [group_size, pool_dim]
         adafactor:
           prefix: "adafactor-"
           supports_shared_per_group_suffixes: true

@@ -97,7 +97,7 @@ ssog\_attn & Campo geométrico & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\ma
 
 \subsection{Resumen de Optimizadores}
 
-La Tabla~\ref{tab:all-optimizers} cataloga los 30 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
+La Tabla~\ref{tab:all-optimizers} cataloga los 31 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -138,6 +138,7 @@ Cautious AdamW & Momentum enmascarado & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\
 LAMB & Adaptativo por capas & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{you_largebatch_2020} \\
 Schedule-Free & Sin programación & 3 ($z$, $x$, $n$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, wd & \citep{defazio_road_2024} \\
 Adafactor & Eficiente en memoria & 1--2 (fila/col) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{shazeer_adafactor_2018} \\
+AdamPM & Segundo momento agrupado & 2 ($m$, $\bar{v}$ a $1/s$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd, tamaño de grupo $s$, fila/columna & \citep{ji_adampm_2026} \\
 GaLore & Proyección de bajo rango & 2 ($m$, $v$) + SVD & $\mathcal{O}(n r)$ & lr, rango $r$, $\beta_1$, $\beta_2$, eps, wd & \citep{zhao_galore_2024} \\
 Prodigy & Sin parámetros & 3 ($m$, $v$, $d$) & $\mathcal{O}(n)$ & $\beta_1$, $\beta_2$, eps, wd, $d_0$ & \citep{mishchenko_prodigy_2023} \\
 Lion & Momentum de signo & 1 ($m$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, wd & \citep{chen_symbolic_2023} \\

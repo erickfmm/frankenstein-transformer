@@ -1607,3 +1607,17 @@ allOf:
             additionalProperties: false
             patternProperties:
               ^muon2-: { type: [number, boolean, array, string] }
+- if:
+    properties:
+      optimizer:
+        properties:
+          optimizer_class:
+            const: adam_pm
+  then:
+    properties:
+      optimizer:
+        properties:
+          parameters:
+            additionalProperties: false
+            patternProperties:
+              ^adam_pm-: { type: [number, boolean, array, string] }

@@ -27,7 +27,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root"}
+        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -404,6 +404,117 @@ class BuildOptimizerMuon2Tests(unittest.TestCase):
         groups = [{"params": [p], "lr": 1e-3, "name": "ffn"}]
         opt = build_optimizer("muon2", groups, {"muon2-lr_ffn": 0.02})
         self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerAdamPMTests(unittest.TestCase):
+    """AdamPM pooled second moments (arXiv:2610.24598)."""
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("adam_pm", _param_groups(), {})
+        self.assertIsNotNone(opt)
+        self.assertEqual(opt.defaults["group_size"], 8)
+        self.assertEqual(opt.defaults["pool_dim"], "row")
+        self.assertEqual(opt.defaults["betas"], (0.9, 0.95))
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(8, 16))
+        v = nn.Parameter(torch.randn(16))
+        groups = [{"params": [p, v], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("adam_pm", groups, {})
+        for _ in range(3):
+            opt.zero_grad()
+            (p.square().mean() + v.square().mean()).backward()
+            opt.step()
+        self.assertFalse(torch.isnan(p).any())
+        self.assertFalse(torch.isnan(v).any())
+
+    def test_second_moment_state_is_pooled(self):
+        # Fig. 1 / Sec. 3.3: the persistent second-moment buffer is (m, ceil(n/s)).
+        p = nn.Parameter(torch.randn(4, 16))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("adam_pm", groups, {"adam_pm-group_size": 8})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("exp_avg", state)
+        self.assertIn("exp_avg_pooled", state)
+        self.assertNotIn("exp_avg_sq", state)
+        self.assertEqual(tuple(state["exp_avg"].shape), (4, 16))
+        self.assertEqual(tuple(state["exp_avg_pooled"].shape), (4, 2))
+
+    def test_column_pooling_state_shapes(self):
+        # AdamPM-col pools within each column: state is (ceil(m/s), n).
+        p = nn.Parameter(torch.randn(16, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "attention"}]
+        opt = build_optimizer("adam_pm", groups, {"adam_pm-group_size": 4, "adam_pm-pool_dim": "col"})
+        p.sum().backward()
+        opt.step()
+        self.assertEqual(tuple(opt.state[p]["exp_avg_pooled"].shape), (4, 4))
+
+    def test_specific_suffixes_parsed(self):
+        opt = build_optimizer(
+            "adam_pm",
+            _param_groups(),
+            {"adam_pm-group_size": "4", "adam_pm-pool_dim": "COL"},
+        )
+        self.assertEqual(opt.defaults["group_size"], 4)
+        self.assertEqual(opt.defaults["pool_dim"], "col")
+
+    def test_invalid_group_size_falls_back(self):
+        # The factory coerces unparsable ints to the documented default.
+        opt = build_optimizer("adam_pm", _param_groups(), {"adam_pm-group_size": "bad"})
+        self.assertEqual(opt.defaults["group_size"], 8)
+
+    def test_invalid_pool_dim_raises(self):
+        with self.assertRaises(ValueError):
+            build_optimizer("adam_pm", _param_groups(), {"adam_pm-pool_dim": "diag"})
+
+    def test_s1_matches_vanilla_adam(self):
+        # s = 1 reduces AdamPM to Adam (paper: "AdamPM and Adam (s = 1)").
+        torch.manual_seed(0)
+        base = torch.randn(4, 6)
+        grad = torch.randn(4, 6)
+
+        p_ref = nn.Parameter(base.clone())
+        ref = torch.optim.Adam([p_ref], lr=1e-2, betas=(0.9, 0.95), eps=1e-8)
+        p_ref.grad = grad.clone()
+        ref.step()
+
+        p_pm = nn.Parameter(base.clone())
+        groups = [{"params": [p_pm], "lr": 1e-2, "weight_decay": 0.0, "name": "other"}]
+        opt = build_optimizer("adam_pm", groups, {"adam_pm-group_size": 1})
+        p_pm.grad = grad.clone()
+        opt.step()
+
+        torch.testing.assert_close(p_pm, p_ref, atol=1e-6, rtol=1e-6)
+
+    def test_partial_group_mean_pads_with_mean(self):
+        # Sec. 3.3 padding rule: the final incomplete group is averaged over
+        # the entries it actually contains (sum / count, not sum / s).
+        p = nn.Parameter(torch.zeros(1, 13))
+        groups = [{"params": [p], "lr": 0.0, "weight_decay": 0.0, "name": "other"}]
+        opt = build_optimizer("adam_pm", groups, {"adam_pm-group_size": 8})
+        grad = torch.arange(1.0, 14.0).reshape(1, 13)
+        p.grad = grad.clone()
+        opt.step()
+
+        pooled = opt.state[p]["exp_avg_pooled"]
+        self.assertEqual(tuple(pooled.shape), (1, 2))
+        squared = grad.square()
+        scale = 1.0 - 0.95  # first step of the compressed second-moment EMA
+        self.assertAlmostEqual(
+            pooled[0, 0].item(), scale * squared[0, :8].mean().item(), places=5
+        )
+        # Last group holds 5 entries: mean of 9^2..13^2, not sum / 8.
+        self.assertAlmostEqual(
+            pooled[0, 1].item(), scale * squared[0, 8:].mean().item(), places=5
+        )
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("adam_pm", _param_groups(), {"adam_pm-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
