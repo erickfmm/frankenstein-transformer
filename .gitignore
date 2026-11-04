@@ -36,6 +36,12 @@ full_tests/**/*.model
 full_tests/**/*.vocab
 
 exp.zip
-experimentos/
+
+experimentos/**/*.json
+experimentos/**/*.csv
+experimentos/**/*.html
+experimentos/**/*.md
+experimentos/**/*.txt
+experimentos/**/out/
 
 erickfmm.github.io/
