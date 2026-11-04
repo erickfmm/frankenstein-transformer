@@ -1,17 +1,17 @@
 \section{Ronda 2: el atlas de los mixers}
 \label{sec:annex-experiment-2}
 
-Este apéndice reporta la ronda~2 en su totalidad. Sigue el orden del informe publicado: el paisaje de parámetros, los resultados de entrenamiento, la dinámica de aprendizaje, el atlas A$\times$B, las barridas de ablación, las mediciones de despliegue e inferencia, la fiabilidad del pipeline y las correlaciones entre las variables medidas. Todos los números provienen de \texttt{master.csv} del dataset publicado; todas las figuras se regeneran con \texttt{make\_paper\_figures.py} a partir de los mismos constructores de gráficos que el informe web.
+Este apéndice reporta la ronda~2 en su totalidad. Sigue el orden del informe publicado: el paisaje de parámetros, los resultados de entrenamiento, la dinámica de aprendizaje, el atlas A$\times$B, las barridas de ablación, las mediciones de despliegue e inferencia, la fiabilidad del pipeline y las correlaciones entre las variables medidas. Todos los números provienen de \texttt{master.csv} del dataset publicado; todas las figuras se regeneran con \texttt{make\_paper\_figures.py} a partir de los mismos constructores de gráficos que el informe web, así que el apéndice y el sitio no pueden contradecirse.
 
 \subsection{Configuración}
 
-La población es de 868 configuraciones: 703 registros de pares híbridos (667 pares únicos tras colapsar el duplicado \texttt{retnet}/\texttt{retnet\_attn}), 38 líneas base de un solo mezclador, 48 transformers de visión y 79 ablaciones. Cada corrida entrena 100 épocas (unos 3{,}000 pasos) sobre un vocabulario español de 512 tokens con secuencias de 32 tokens, una semilla, el mismo calendario de warm-up más coseno y BitNet activado por defecto. Los pares híbridos son las combinaciones de dos elementos de la lista de 42 mezcladores, con la capa~0 ejecutando el mezclador~A y la capa~1 el mezclador~B; no existe ningún par invertido, así que la asimetría primero/segundo es descriptiva. Un par está cubierto si ambos mezcladores entrenan en todas las configuraciones que los contienen: la rejilla tiene $42\times41/2 = 861$ celdas y se midieron 667.
+La población es de 868 configuraciones: 703 registros de pares híbridos (667 pares únicos tras colapsar el duplicado \texttt{retnet}/\texttt{retnet\_attn}), 38 líneas base de un solo mezclador, 48 transformers de visión y 79 ablaciones. Cada corrida entrena 100 épocas (unos 3{,}000 pasos) sobre un vocabulario español de 512 tokens con secuencias de 32 tokens, una semilla, el mismo calendario de warm-up más coseno y BitNet activado por defecto. Mantener fijos el calendario, los datos y el presupuesto es lo que hace comparables las celdas: las únicas partes que se mueven son las decisiones arquitectónicas bajo estudio. Los pares híbridos son las combinaciones de dos elementos de la lista de 42 mezcladores, con la capa~0 ejecutando el mezclador~A y la capa~1 el mezclador~B; no existe ningún par invertido, así que la asimetría primero/segundo es descriptiva. Una celda de la rejilla está cubierta solo si ambos mezcladores entrenan en todas las configuraciones que los contienen: la rejilla tiene $42\times41/2 = 861$ celdas y se midieron 667.
 
 \subsection{El paisaje de parámetros}
 
-Las 868 configuraciones abarcan de 127\,328 a 415\,904 parámetros, con una mediana de 220\,160. Los pares híbridos ocupan el centro del rango porque combinan dos módulos de atención; las corridas más pequeñas son líneas base de un solo mezclador como \texttt{attn\_single\_mamba} (127\,328 parámetros), y la mayor es \texttt{engram\_\_conformer\_attn} con 415\,904, impulsada por el banco de memoria \texttt{engram}, que añade una gran tabla clave-valor al bloque de atención.
+Las 868 configuraciones abarcan de 127\,328 a 415\,904 parámetros, con una mediana de 220\,160. Los pares híbridos ocupan el centro del rango porque apilan dos módulos de atención; las corridas más pequeñas son líneas base de un solo mezclador como \texttt{attn\_single\_mamba} (127\,328 parámetros), y la mayor es \texttt{engram\_\_conformer\_attn} con 415\,904, impulsada por el banco de memoria \texttt{engram}, que añade una gran tabla clave-valor al bloque de atención.
 
-El gráfico de composición es el diagnóstico más útil de esta sección. Los embeddings y la cabeza de salida son costes fijos de unos 49k parámetros cada uno, así que cualquier diferencia entre configuraciones se paga casi por completo en el bloque de atención y la FFN. Los transformers de visión son la familia más costosa porque añaden embeddings de parches y una cabeza de clasificación mayor, mientras que las ablaciones de optimizador, normalización o codificación posicional mantienen por diseño el mismo esqueleto de 210k. El coste tiene una lectura clara: \texttt{engram} añade entre 100k y 160k parámetros cada vez que aparece, y \texttt{mamba} y \texttt{retnet} están entre los segundos mezcladores más baratos aunque sean los peores---barato y malo, la peor combinación.
+El gráfico de composición (Figura~\ref{fig:r2-params-composition}) es el diagnóstico más útil de la sección. Los embeddings y la cabeza de salida son costes fijos de unos 49k parámetros cada uno, así que casi toda diferencia entre configuraciones se paga en el bloque de atención y la FFN---los dos componentes que los experimentos realmente varían. Los transformers de visión son la familia más costosa porque añaden embeddings de parches y una cabeza de clasificación mayor, mientras que las ablaciones de optimizador, normalización o codificación posicional mantienen por diseño el mismo esqueleto de 210k, de modo que solo difiere el componente ablacionado. El coste tiene una lectura clara por mezclador: \texttt{engram} añade entre 100k y 160k parámetros cada vez que aparece, y \texttt{mamba} y \texttt{retnet} están entre los segundos mezcladores más baratos aunque sean los peores---barato y malo, la peor combinación en ambos ejes.
 
 \begin{figure}[tbp]
 \centering
@@ -29,9 +29,9 @@ El gráfico de composición es el diagnóstico más útil de esta sección. Los 
 
 \subsection{Resultados de entrenamiento}
 
-Entre los pares híbridos, la pérdida final va de 8,116 a 10,450 nats (mediana 9,595). El mejor par es \texttt{nsa\_\_engram\_attn} con 8,116, seguido de \texttt{gated\_deltanet2\_\_sparda\_attn} (8,567) y \texttt{falcon3\_\_conformer\_attn} (8,620). El peor, \texttt{gqa\_\_tucker\_attn}, necesita 10,450 nats. La brecha entre extremos supera la brecha entre casi todas las ablaciones de optimizadores, y ese es el argumento más fuerte para elegir bien el par de atención.
+Entre los pares híbridos, la pérdida final va de 8,116 a 10,450 nats (mediana 9,595). El mejor par es \texttt{nsa\_\_engram\_attn} con 8,116, seguido de \texttt{gated\_deltanet2\_\_sparda\_attn} (8,567) y \texttt{falcon3\_\_conformer\_attn} (8,620); el peor, \texttt{gqa\_\_tucker\_attn}, necesita 10,450. La brecha entre el mejor y el peor par supera la brecha entre casi todas las ablaciones de optimizadores---el argumento más fuerte de la ronda para elegir bien el par de atención: la pila de mezcladores importa más que el optimizador.
 
-Pérdida y precisión de validación no coinciden. Su correlación de rangos entre pares es débil, el par con mejor pérdida marca 0,0\% de top-1, y el de mejor precisión (\texttt{fox\_\_falcon1a\_attn}) alcanza 12,55\% con una pérdida de entrenamiento peor (9,292). Con cuatro frases de evaluación, un token afortunado reescribe el ranking, así que hay que reportar ambas señales. La Tabla~\ref{tab:r2-top-loss} lista los diez mejores pares por pérdida final y la Tabla~\ref{tab:r2-top-acc} los diez mejores por precisión de validación.
+Pérdida y precisión de validación, sin embargo, no coinciden. Su correlación de rangos entre pares es débil; el par con mejor pérdida absoluta marca 0,0\% de top-1, y el de mejor precisión (\texttt{fox\_\_falcon1a\_attn}) alcanza 12,55\% con una pérdida de entrenamiento peor (9,292). La razón es la resolución: con cuatro frases de evaluación, un token afortunado o desafortunado reescribe el ranking. Por eso se reportan ambas señales a lo largo del apéndice, y las tablas de inferencia deben leerse como control de fallos catastróficos y no como clasificación. La Tabla~\ref{tab:r2-top-loss} lista los diez mejores pares por pérdida final y la Tabla~\ref{tab:r2-top-acc} los diez mejores por precisión de validación; las dos tablas no comparten ningún par.
 
 \begin{table}[H]
 \centering
@@ -102,9 +102,9 @@ Par (A + B) & Paráms. & Pérdida final & Top-1 & Top-5 & Entreno (min) \\
 
 \subsection{Dinámica de entrenamiento}
 
-Todas las corridas usan el mismo calendario de warm-up más coseno, así que las curvas de aprendizaje son directamente comparables. La población de pares sigue descendiendo en la época~100: la pérdida mediana cae de unos 10,2 nats en la época~0 a 9,49 al final. La tanda mide, por tanto, velocidad de aprendizaje y no calidad convergida, y todo ranking debe leerse como ``qué par aprende más rápido en 3{,}000 pasos''.
+Todas las corridas usan el mismo calendario de warm-up más coseno, así que las curvas de aprendizaje son directamente comparables sin renormalización. La población de pares sigue descendiendo en la época~100: la pérdida mediana cae de unos 10,2 nats en la época~0 a 9,49 al final. La tanda mide, por tanto, velocidad de aprendizaje y no calidad convergida, y todo ranking de este apéndice debe leerse como ``qué par aprende más rápido en 3{,}000 pasos'' y no como ``qué par es el mejor en el límite''.
 
-Las normas de gradiente son estables entre familias (1,87 para el bloque de atención, 0,92 para la FFN, 3,47 para la cabeza), y la razón de recorte mediana se sitúa en 0,90, por debajo del umbral de 1,0, así que la mayoría de los pasos pasan sin recorte y este solo actúa en los picos. El rendimiento mediano es 357 tokens/s para la población de pares; la cola de 3k--31k pertenece a ablaciones de tokenizer y audio cuyo cronómetro cubre solo parte del trabajo, por lo que el análisis de Pareto la excluye.
+Las estadísticas de optimización son tranquilas. Las normas de gradiente son estables entre familias (1,87 para el bloque de atención, 0,92 para la FFN, 3,47 para la cabeza), y la razón de recorte mediana se sitúa en 0,90---por debajo del umbral de recorte de 1,0---, así que la mayoría de los pasos pasan sin recorte y este solo actúa en los picos. El rendimiento mediano es 357 tokens/s para la población de pares; la cola de 3k--31k visible en los gráficos pertenece a las ablaciones de tokenizer y audio, cuyo cronómetro cubre solo parte del trabajo, por lo que el análisis de Pareto la excluye.
 
 \begin{figure}[tbp]
 \centering
@@ -129,9 +129,9 @@ Las normas de gradiente son estables entre familias (1,87 para el bloque de aten
 
 \subsection{El atlas A$\times$B}
 
-El atlas es el centro del experimento: cada celda es un par híbrido, las filas son el primer mezclador y las columnas el segundo. Leído columna a columna, el segundo mezclador domina: un B bueno (\texttt{sparsek}, \texttt{engram}, \texttt{mlra}) mantiene casi todo A en la banda de 8,9--9,6 nats, mientras que un B malo (\texttt{mamba}, \texttt{retnet}, \texttt{bigbird}) arrastra incluso al mejor A por encima de 10 nats. Leído fila a fila, ningún primer mezclador rescata a un segundo malo.
+El atlas (Figura~\ref{fig:r2-matrix-loss}) es el centro del experimento: una matriz en la que cada celda es un par híbrido, las filas indexan el primer mezclador, las columnas el segundo y el color codifica la pérdida final. Se lee en dos direcciones. Columna a columna---segundo mezclador fijo, primero variable---, el segundo mezclador domina: un B bueno (\texttt{sparsek}, \texttt{engram}, \texttt{mlra}) mantiene casi todo A en la banda de 8,9--9,6 nats, mientras que un B malo (\texttt{mamba}, \texttt{retnet}, \texttt{bigbird}) arrastra incluso al mejor A por encima de 10 nats. Fila a fila---primer mezclador fijo, segundo variable---, ningún A rescata a un B malo. La asimetría es la forma visual del primer hallazgo de la Sección~\ref{sec:empirical-evaluation}.
 
-La cobertura es casi completa: se entrenaron 667 de los 861 pares posibles. Los 158 pares que nunca entrenaron son exactamente los que contienen \texttt{cca}, \texttt{ccgqa}, \texttt{msa} o \texttt{ssog}, cuatro mezcladores que fallan en toda configuración ($4\times41 - \binom{4}{2} = 158$).
+La cobertura es casi completa: se entrenaron 667 de los 861 pares posibles. Los 158 pares que nunca entrenaron son exactamente los que contienen \texttt{cca}, \texttt{ccgqa}, \texttt{msa} o \texttt{ssog}---cuatro mezcladores que fallan en toda configuración---, lo que da la cuenta exacta: $4\times41 - \binom{4}{2} = 158$.
 
 \begin{figure}[tbp]
 \centering
@@ -148,7 +148,7 @@ La cobertura es casi completa: se entrenaron 667 de los 861 pares posibles. Los 
 \end{figure}
 
 \paragraph{Qué segundo mezclador elegir.}
-La Tabla~\ref{tab:r2-best-b} ordena los segundos mezcladores por pérdida final media en todos los pares que los contienen. La columna Pares indica el tamaño de muestra detrás de cada media; una media de un solo par (por ejemplo \texttt{mamba}) es anecdótica. La mitad inferior es tan informativa como la superior: \texttt{mamba}, \texttt{bigbird}, \texttt{longformer} y \texttt{retnet} son baratos pero arrastran sistemáticamente al par, justo el patrón que muestran los mapas de calor.
+La Tabla~\ref{tab:r2-best-b} ordena los segundos mezcladores por pérdida final media en todos los pares que los contienen. La columna \emph{Pares} es el tamaño de muestra detrás de cada media y debe leerse junto con ella: una media de un solo par (por ejemplo \texttt{mamba}, con un par) es anecdótica, mientras que una media de 30--40 pares es una estimación sólida. La mitad inferior de la tabla es tan informativa como la superior: \texttt{mamba}, \texttt{bigbird}, \texttt{longformer} y \texttt{retnet} son baratos pero arrastran sistemáticamente a sus pares---justo el patrón que muestran los mapas de calor, y una advertencia contra equiparar economía de parámetros con calidad.
 
 \begin{table}[H]
 \centering
@@ -181,11 +181,11 @@ Segundo mezclador & Pares & Pérdida media & Top-1 medio & Paráms. medios \\
 \end{table}
 
 \paragraph{La interacción supera a los marginales.}
-El gráfico de sinergia mide cuánto mejor es un par frente a la media de sus dos marginales,
+Ordenar los mezcladores individualmente no permite reconstruir el atlas, porque los pares interactúan. El gráfico de sinergia lo cuantifica: para cada par mide cuánto mejor (o peor) es el par frente a la media de sus dos marginales,
 \[
 S_{A,B} = \frac{\mu_A + \mu_B}{2} - L_{A,B},
 \]
-donde $\mu_A$ y $\mu_B$ son las pérdidas medias de todos los pares que contienen A y B. \texttt{nsa+engram} gana 1,304 nats y los diez primeros comparten un patrón: un primer mezclador barato y limpio con un segundo de memoria pesada. La cola negativa está dominada por \texttt{gta}, \texttt{gqa} y \texttt{tucker} como B---mezcladores que parecen promedio en aislamiento pero chocan al apilarse tras un A fuerte.
+donde $\mu_A$ y $\mu_B$ son las pérdidas medias de todos los pares que contienen A y B, respectivamente. Sinergia positiva significa que el par supera lo que sus partes prediccen. \texttt{nsa+engram} gana 1,304 nats y la parte alta de la tabla comparte un patrón: un primer mezclador barato y limpio apilado bajo uno de memoria pesada. La cola negativa está dominada por \texttt{gta}, \texttt{gqa} y \texttt{tucker} como B---mezcladores que parecen promedio en aislamiento pero chocan al apilarse tras un A fuerte. Para síntesis, el mensaje es que una lista ordenada de mezcladores es un resumen necesario pero una herramienta de diseño insuficiente: antes de componer una pila hay que consultar el atlas o, al menos, la tabla de sinergia.
 
 \begin{table}[H]
 \centering
@@ -221,7 +221,7 @@ Par & Pérdida del par & Esperada & Sinergia & Top-1 \\
 \begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/experiments/round2/pareto_speed_loss.pdf}}
-\caption{Frontera de Pareto velocidad--calidad de los pares híbridos. La frontera la pueblan pares cuyo segundo mezclador tiene memoria pesada pero cuyo primero es barato.}
+\caption{Frontera de Pareto velocidad--calidad de los pares híbridos. Un par está en la frontera cuando ningún otro es a la vez más rápido y mejor; la frontera la pueblan pares cuyo segundo mezclador tiene memoria pesada pero cuyo primero es barato.}
 \label{fig:r2-pareto}
 \end{figure}
 
@@ -242,7 +242,7 @@ Par & Pérdida del par & Esperada & Sinergia & Top-1 \\
 \subsection{Ablaciones}
 
 \paragraph{Optimizadores.}
-La barrida de optimizadores es el gráfico más aleccionador: 23 optimizadores, el mismo esqueleto de 210k y un rango de 10,10--10,77 nats. \texttt{q\_apollo} gana con 10,098 y \texttt{galore\_adamw} cierra la tabla con 10,772, pero una docena de optimizadores aterrizan exactamente en 10,404, así que la corrida es demasiado corta para separar la elección del ruido de semilla. Las diferencias de velocidad sí son reales: el tiempo por paso varía un 30\% y \texttt{shampoo} y \texttt{muon} pagan sobrecoste visible.
+La barrida de optimizadores es el gráfico más aleccionador de la ronda: 23 optimizadores, el mismo esqueleto de 210k y un rango de pérdida final de solo 10,10--10,77 nats (Tabla~\ref{tab:r2-optimizers}). \texttt{q\_apollo} gana con 10,098 y \texttt{galore\_adamw} cierra la tabla con 10,772, pero una docena de optimizadores aterrizan exactamente en 10,404---la corrida es demasiado corta para que la elección del optimizador se separe del ruido, y el resumen honesto a este presupuesto es que la mayoría de los optimizadores modernos son intercambiables. Las diferencias de velocidad sí son reales: el tiempo medio por paso varía en torno a un 30\% y los métodos de segundo orden y ortogonalizados (\texttt{shampoo}, \texttt{muon}) pagan un sobrecoste visible. Cuando las corridas son cortas, el optimizador conviene elegirlo por velocidad y no por pérdida final.
 
 \begin{table}[H]
 \centering
@@ -295,7 +295,7 @@ Optimizador & Pérdida final & Top-1 & Tok/s \\
 \end{figure}
 
 \paragraph{Normalización y codificación posicional.}
-Entre las normalizaciones, \texttt{flash\_norm} gana con claridad (9,749 nats, medio nat por delante del segundo), mientras que \texttt{prms\_norm} y \texttt{rms\_norm} quedan atrás. En codificaciones posicionales la familia PAPE (\texttt{pape\_ri}, \texttt{pape}, \texttt{pape\_efficient}) barre el podio, y RoPE clásico queda a media tabla a esta escala---recordatorio de que ``moderno'' no es automáticamente mejor en una corrida de 100 épocas.
+Entre las normalizaciones (Tabla~\ref{tab:r2-norms}), \texttt{flash\_norm} gana con claridad con 9,749 nats---medio nat por delante del segundo, un margen grande según los estándares de esta ronda---, mientras que \texttt{prms\_norm} y \texttt{rms\_norm} quedan atrás. En las codificaciones posicionales (Tabla~\ref{tab:r2-pe}), la familia PAPE (\texttt{pape\_ri}, \texttt{pape}, \texttt{pape\_efficient}) barre el podio y RoPE clásico queda a media tabla. Ambos resultados sirven de calibración: ``moderno'' no es automáticamente mejor en una corrida de 100 épocas a esta escala, y decisiones de componente que en la literatura parecen refinamientos aquí pueden separar medio nat.
 
 \begin{table}[H]
 \centering
@@ -356,7 +356,7 @@ Codificación & Pérdida final & Top-1 & Paráms. \\
 \end{figure}
 
 \paragraph{Conmutadores estructurales.}
-Los conmutadores estructurales se separan más que los optimizadores. Los embeddings factorizados (9,623), la FFN SwiGLU (9,901) y dos bucles de Hyperloop (9,908) son las tres victorias; los conmutadores de BitNet quedan en 10,016, mHC en 10,186 y las variantes de residuales en 10,43--10,49. Mixture-of-Depths es el peor conmutador con 10,854, consistente con su incompatibilidad con mHC a esta profundidad.
+Los conmutadores estructurales (Tabla~\ref{tab:r2-trans}) se separan más que los optimizadores---evidencia de que, a esta escala, la arquitectura es una palanca más fuerte que la regla de actualización. Las tres victorias son los embeddings factorizados (9,623), la FFN SwiGLU (9,901) y dos bucles de Hyperloop (9,908). Los conmutadores de BitNet quedan en 10,016, mHC en 10,186 y las variantes de residuales entre 10,43 y 10,49. Mixture-of-Depths es el peor conmutador con 10,854, consistente con su incompatibilidad documentada con mHC a esta profundidad.
 
 \begin{table}[H]
 \centering
@@ -399,7 +399,7 @@ Conmutador & Pérdida final & Top-1 & Paráms. \\
 \end{figure}
 
 \paragraph{Visión y tareas.}
-El bloque de visión funciona. La segmentación alcanza 90,7\% de precisión media de validación, la clasificación 75,8\% y la predicción de parches 69,9\%. Estas cifras están un orden de magnitud por encima de los pares MLM (mediana 4,0\%) porque la tarea es más fácil, no porque el mezclador importe más, y por eso el informe mantiene las familias separadas. Las ablaciones de tokenizer y tarea se comportan como se espera: el tokenizer cambia la pérdida en varios nats porque cambia el vocabulario y la longitud media de secuencia, y la tarea la cambia porque cambia el objetivo.
+El bloque de visión funciona. La segmentación alcanza 90,7\% de precisión media de validación, la clasificación 75,8\% y la predicción de parches 69,9\%. Estas cifras están un orden de magnitud por encima de los pares MLM (mediana 4,0\%) porque la tarea es más fácil, no porque el mezclador importe más; el informe mantiene las familias separadas y no extrae ninguna conclusión entre familias. Las ablaciones de tokenizer y tarea se comportan como se espera y sirven sobre todo de anclas de escala: el tokenizer mueve la pérdida en varios nats porque cambia el vocabulario y la longitud media de secuencia, y la tarea la cambia porque cambia el objetivo mismo. Ninguna es comparable con la barrida de mezcladores, y ambas quedan fuera de ella.
 
 \begin{figure}[tbp]
 \centering
@@ -417,9 +417,9 @@ El bloque de visión funciona. La segmentación alcanza 90,7\% de precisión med
 
 \subsection{Despliegue e inferencia}
 
-La cuantización post-entrenamiento es la buena noticia de la ronda. En las 810 configuraciones con ambos formatos, el top-1 medio pasa de 5,62\% a 5,43\% y el top-5 medio de 13,36\% a 13,24\%, deltas de $-0{,}19$ y $-0{,}12$ puntos porcentuales. Ochocientas configuraciones quedan exactamente iguales; las pocas que se mueven lo hacen por una muestra de cuatro. Para un modelo a escala de humo es el resultado esperado, pero vale la pena medirlo en vez de asumirlo.
+La cuantización post-entrenamiento es la buena noticia de la ronda. En las 810 configuraciones con ambos formatos, el top-1 medio pasa de 5,62\% a 5,43\% y el top-5 medio de 13,36\% a 13,24\%---deltas de $-0{,}19$ y $-0{,}12$ puntos porcentuales. Ochocientas de las 810 configuraciones quedan exactamente iguales, y las pocas que se mueven lo hacen por una sola muestra de cuatro. Para un modelo a escala de humo es el resultado esperado, pero vale la pena medirlo en vez de asumirlo.
 
-La historia de velocidad es menos halagüeña. El despliegue cuantizado es más rápido que el estándar solo en el 32,3\% de las corridas (ratio mediano 0,64$\times$) porque la etapa de despliegue está dominada por la serialización y la conversión, no por la inferencia; la evaluación es más rápida el 51,2\% de las veces con una aceleración mediana de 1,03$\times$. La inferencia en sí tarda unos 10,5\,s para cuatro frases, que es la métrica que importa en producción.
+La historia de velocidad es menos halagüeña, y la razón es estructural. El despliegue cuantizado es más rápido que el estándar solo en el 32,3\% de las corridas (ratio mediano 0,64$\times$) porque la etapa de despliegue está dominada por la serialización y la conversión de formato, no por la inferencia; la etapa de evaluación, que sí mide inferencia, es más rápida el 51,2\% de las veces con una aceleración mediana de 1,03$\times$. La inferencia en sí tarda unos 10,5\,s para cuatro frases---el número que importa en producción.
 
 La mejor configuración de inferencia no es la de mejor pérdida. \texttt{mamba\_\_engram\_attn} acierta tres de cuatro tokens en el top-5 (75,0\%) con una pérdida de entrenamiento de 10,277, por encima de la mediana de los pares. Con cuatro muestras por configuración, el top-5 es un instrumento romo: sirve para detectar fallos catastróficos, no para coronar un ganador.
 
@@ -476,9 +476,9 @@ Configuración & Top-5 est. & Top-1 est. & Top-5 cuant. & Pérdida final & Pará
 
 \subsection{Fiabilidad del pipeline}
 
-El libro registra 5{,}271 ejecuciones de etapas. 868 entrenamientos tuvieron éxito y 171 fallaron con código de salida distinto de cero, todos fuera de las 868 configuraciones analizadas, que se eligieron justamente porque entrenaron. El despliegue falló 104 veces de 1{,}734, siempre en pares simétricos: una configuración que falla el export estándar también falla el cuantizado, lo que apunta a una causa raíz compartida (serialización del checkpoint o de la configuración) y no a la cuantización en sí.
+El libro registra 5{,}271 ejecuciones de etapas. 868 entrenamientos tuvieron éxito y 171 fallaron con código de salida distinto de cero---todos fuera de las 868 configuraciones analizadas, que se eligieron justamente porque entrenaron. El despliegue falló 104 veces de 1{,}734, siempre en pares simétricos: una configuración que falla el export estándar también falla el cuantizado, lo que apunta a una causa raíz compartida (serialización del checkpoint o de la configuración) y no a la cuantización en sí.
 
-Dos hallazgos de calidad de datos condicionan la interpretación. Primero, cuatro mixers nunca entrenan: \texttt{cca}, \texttt{ccgqa}, \texttt{msa} y \texttt{ssog} fallan en sus cuatro singles y en los 158 pares que los contienen, exactamente las 158 celdas ausentes del atlas. Segundo, cuatro mixers son indistinguibles con contexto de 32 tokens: \texttt{standard}, \texttt{bigbird}, \texttt{longformer} y \texttt{titan} comparten pérdidas y parámetros bit a bit idénticos porque sus ventanas (al menos 64 tokens) cubren toda la secuencia y la variante aumentada con posición se reduce a atención multi-cabeza pura; coinciden en los 33 segundos mixers compartidos. Por separado, 37 pares aparecen como \texttt{attn\_retnet\_\_X} y \texttt{attn\_retnet\_attn\_\_X} con métricas idénticas---dos nombres para una implementación---que el atlas colapsa a una fila.
+Dos hallazgos de calidad de datos condicionan la interpretación del atlas. Primero, cuatro mezcladores nunca entrenan: \texttt{cca}, \texttt{ccgqa}, \texttt{msa} y \texttt{ssog} fallan en sus cuatro singles y en los 158 pares que los contienen---exactamente las 158 celdas ausentes. Segundo, cuatro mezcladores son indistinguibles con un contexto de 32 tokens: \texttt{standard}, \texttt{bigbird}, \texttt{longformer} y \texttt{titan} comparten pérdidas y recuentos de parámetros bit a bit idénticos porque sus ventanas (al menos 64 tokens) cubren toda la secuencia y la variante aumentada con posición se reduce a atención multi-cabeza pura; coinciden en los 33 segundos mezcladores compartidos. Por separado, 37 pares aparecen como \texttt{attn\_retnet\_\_X} y \texttt{attn\_retnet\_attn\_\_X} con métricas idénticas---dos nombres para una implementación---que el atlas colapsa a una fila. Cada uno de estos hechos es una advertencia que se arrastra hacia adelante y no un defecto oculto: el atlas tiene 667 celdas medidas, 158 estructuralmente ausentes y cuatro mezcladores que, a esta longitud de contexto, son el mismo modelo.
 
 \begin{figure}[tbp]
 \centering
@@ -496,9 +496,9 @@ Dos hallazgos de calidad de datos condicionan la interpretación. Primero, cuatr
 
 \subsection{Qué predice la calidad}
 
-Sobre los pares híbridos, el número de parámetros correlaciona con la pérdida final a $r = -0{,}20$ y con la precisión de validación a $r = -0{,}07$: el tamaño apenas compra calidad aquí. Lo que sí predice de forma fiable es el coste ($r = 0{,}68$ con el tiempo por paso, $r = 0{,}65$ con el tiempo total). La pérdida de entrenamiento apenas informa sobre la calidad de inferencia ($r = 0{,}14$ con el top-5). La norma de gradiente y la razón de recorte son exactamente redundantes entre sí ($r = 1{,}00$), lo que es esperable porque la razón de recorte se calcula a partir de la norma de gradiente, y ninguna correlaciona con la calidad.
+Sobre los pares híbridos, el número de parámetros correlaciona con la pérdida final a $r = -0{,}20$ y con la precisión de validación a $r = -0{,}07$: el tamaño apenas compra calidad aquí. Lo que sí predice de forma fiable es el coste ($r = 0{,}68$ con el tiempo por paso, $r = 0{,}65$ con el tiempo total). La pérdida de entrenamiento apenas informa sobre la calidad de inferencia ($r = 0{,}14$ con el top-5)---la forma cuantitativa del desacuerdo pérdida/precisión anotado arriba. La norma de gradiente y la razón de recorte son exactamente redundantes entre sí ($r = 1{,}00$), lo que es esperable porque la razón de recorte se calcula a partir de la norma de gradiente, y ninguna correlaciona con la calidad.
 
-La matriz de correlación de la Figura~\ref{fig:r2-correlation} se calcula sobre las 868 filas. Leída así, el número de parámetros correlaciona con la pérdida a $-0{,}43$ y con la precisión a $+0{,}42$, lo que contradice los números de solo pares. Ambas lecturas son correctas: la matriz de todas las filas está dominada por el contraste entre transformers de visión (más grandes, mucha menor pérdida, mucha mayor precisión) y pares MLM, así que mide la brecha de familias y no el efecto del tamaño. Dentro de la población que importa para el atlas---los pares híbridos---el tamaño es casi irrelevante.
+La matriz de correlación de la Figura~\ref{fig:r2-correlation} se calcula sobre las 868 filas. Leída así, el número de parámetros correlaciona con la pérdida a $-0{,}43$ y con la precisión a $+0{,}42$, en aparente contradicción con los números de solo pares. Ambas lecturas son correctas, y la reconciliación es una confusión de manual: la matriz de todas las filas está dominada por el contraste entre transformers de visión (más grandes, mucha menor pérdida, mucha mayor precisión) y pares MLM, así que mide la brecha entre familias y no el efecto del tamaño dentro de una familia. Dentro de la población de la que trata el atlas---los pares híbridos---el tamaño es casi irrelevante, y ese es el número que debe citarse.
 
 \begin{figure}[tbp]
 \centering
@@ -509,6 +509,6 @@ La matriz de correlación de la Figura~\ref{fig:r2-correlation} se calcula sobre
 
 \subsection{Lectura práctica y próximos pasos}
 
-Si hay que elegir a ciegas, usa un segundo mezclador con memoria pesada (\texttt{engram}, \texttt{sparsek}, \texttt{mlra}) y un primero barato y estable (\texttt{fox}, \texttt{gqa}, \texttt{gated\_deltanet2}), y evita \texttt{mamba}, \texttt{retnet} y \texttt{bigbird} como B. Espera unos $\pm0{,}3$ nats de ruido de interacción, mayor que la diferencia entre la mayoría de los optimizadores.
+Si hay que elegir un par a ciegas, la ronda respalda una heurística simple: usa un segundo mezclador con memoria pesada (\texttt{engram}, \texttt{sparsek}, \texttt{mlra}) y un primero barato y estable (\texttt{fox}, \texttt{gqa}, \texttt{gated\_deltanet2}), y evita \texttt{mamba}, \texttt{retnet} y \texttt{bigbird} como B. Espera unos $\pm0{,}3$ nats de ruido de interacción---mayor que la diferencia entre la mayoría de los optimizadores y, por tanto, la incertidumbre dominante al componer una pila.
 
-La ronda también define a su propia sucesora. El atlas debería repetirse con 256--512 tokens, donde los cuatro mezcladores que colapsan se vuelven distinguibles y los patrones dispersos se dispersan de verdad; la evaluación debería usar un conjunto reservado de 200 frases con log-verosimilitud por token, porque cuatro frases no pueden ordenar 800 configuraciones; los mejores pares deberían entrenarse 300 épocas, porque todas las curvas siguen bajando; el alias \texttt{retnet} y los cuatro mezcladores que fallan deberían corregirse o retirarse de la lista; y deberían correrse al menos tres semillas en las familias de ablación, donde la dispersión actual está dentro del ruido de semilla. La cuantización debería ser el formato de despliegue por defecto: costó 0,12 puntos de top-5 y aceleró la evaluación en la mitad de las corridas.
+La ronda también define a su propia sucesora, y sus limitaciones son la especificación. El atlas debería repetirse con 256--512 tokens, donde los cuatro mezcladores que colapsan por ventana se vuelven distinguibles y los patrones dispersos se dispersan de verdad; la evaluación debería usar un conjunto reservado de 200 frases puntuado por log-verosimilitud por token, porque cuatro frases no pueden ordenar 800 configuraciones; los mejores pares deberían entrenarse 300 épocas, porque todas las curvas siguen bajando; el alias \texttt{retnet} y los cuatro mezcladores que fallan deberían corregirse o retirarse de la lista; y las familias de ablación deberían correr al menos tres semillas, porque la dispersión actual está dentro del ruido de semilla. Finalmente, la cuantización debería ser el formato de despliegue por defecto: costó 0,12 puntos de top-5 y aceleró la evaluación en la mitad de las corridas.
