@@ -157,6 +157,7 @@ training:
 - `dion3`
 - `eve`
 - `ea4llm`
+- `root`
 
 `training.optimizer.parameters` must use the selected optimizer prefix. Example: when `optimizer_class: adamw`, all keys must start with `adamw-`.
 
@@ -207,6 +208,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `dion3`: `fraction`, `momentum`, `ns_steps`, `ns_eps`, `normuon`
 - `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed` (population-of-4 differential evolution with a targeted Adam fallback; the shared `lr_*`/`wd_*`/`betas_*`/`eps_*` configure the fallback per group, with `wd` folded into the fallback gradient as L2; requires `gradient_accumulation_steps: 1`, not available for SBERT)
 - `ea4llm`: `population`, `sigma`, `antithetic`, `rank_shaping`, `nes_scaling`, `seed` (gradient-free evolution strategies; the shared `lr_*` is the per-group step size and `wd_*` a decoupled decay extension, `betas_*`/`eps_*` accepted but unused; N forward evaluations per step; requires `gradient_accumulation_steps: 1`, not available for SBERT)
+- `root`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `quantile`, `softthresh`, `ada_newton` (same hybrid routing as `muon`, with per-shape calibrated Newton-Schulz coefficients and a dynamic soft-threshold `epsilon_t = Quantile(|M_t|, p)` on the momentum; `quantile` defaults to 0.90)
 
 Examples:
 - `adafactor-beta2_decay: 0.8`
@@ -219,6 +221,7 @@ Examples:
 - `eve-adam_steps: 3`
 - `ea4llm-population: 30`
 - `ea4llm-sigma: 1.0e-3`
+- `root-quantile: 0.90`
 
 ## Available Fields (Detailed)
 

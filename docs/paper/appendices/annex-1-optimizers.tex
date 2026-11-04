@@ -1265,6 +1265,87 @@ returning $Q_T X$. A \emph{restart} after iteration~2 ($X \gets Q_2 X$, $R_2 \ge
 \item At $f = 1$ the update reduces to Muon (or NorMuon), and a single momentum buffer per matrix parameter suffices; error feedback lets ignored rows participate eventually.
 \end{itemize}
 
+\paragraph{ROOT (Robust Orthogonalized Optimizer).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/optimizers/root.pdf}}
+\caption{Step flow of ROOT: momentum accumulation, soft-threshold outlier separation, and shape-calibrated Newton--Schulz orthogonalization.}
+\label{fig:opt-root}
+\end{figure}
+ROOT~\citep{he_root_2025} is a \textbf{robustness-oriented revision of Muon} that attacks two fragilities of the fixed-coefficient Newton--Schulz pipeline. First, the universal coefficients $(a,b,c)=(3.4445,-4.7750,2.0315)$ are calibrated for an ``average'' matrix shape and lose precision exactly on square and near-square layers: the orthogonalization MSE ranges from $0.0499$ at $2048\times2048$ to $0.0003$ at $2048\times16384$ in Table~1 of the paper. ROOT replaces them with per-shape coefficients $\{a^{(m,n)}, b^{(m,n)}, c^{(m,n)}\}$ calibrated offline over momentum singular-value distributions (Mixed 1:3 real-to-random calibration), a scheme the authors call \emph{AdaNewton}. Second, heavy-tailed gradient components distort the Frobenius normalization required by Newton--Schulz and are amplified by the polynomial iteration; ROOT models the momentum as $M_t = B_t + O_t$ and solves a proximal L1 problem whose closed-form solution is soft-thresholding. Only the robust base component $B_t$ is orthogonalized; the sparse outlier component $O_t$ is discarded. For a hidden-layer weight matrix $W \in \mathbb{R}^{m\times n}$, momentum $\mu$, learning rate $\eta$, percentile $p$ and iteration count $K$:
+\begin{align}
+M_t &= \mu M_{t-1} + \nabla \mathcal{L}(\theta_{t-1}) \quad\text{(momentum, Eq. 1)} \\
+\varepsilon_t &= \operatorname{Quantile}(|M_t|, p) \quad\text{(dynamic threshold, } p=0.90 \text{ default)} \\
+O_t &= \mathcal{T}_{\varepsilon_t}[M_t], \quad \mathcal{T}_\varepsilon[x]_i = \operatorname{sign}(x_i)\max(|x_i|-\varepsilon, 0) \quad\text{(soft-threshold, Eqs. 7--10)} \\
+B_t &= M_t - O_t \quad\text{(clipped robust component, Eq. 9)} \\
+X_0 &= \frac{B_t}{\lVert B_t\rVert_F}, \qquad X_k = a^{(m,n)}X_{k-1} + b^{(m,n)}X_{k-1}(X_{k-1}^\top X_{k-1}) + c^{(m,n)}X_{k-1}(X_{k-1}^\top X_{k-1})^2 \\
+\theta_t &= \theta_{t-1} - \eta X_K \quad\text{(update, } K=5\text{)}
+\end{align}
+
+\begin{table}[H]
+\centering
+\caption{AdaNewton coefficients from Table~1 of \citet{he_root_2025} (Mixed 1:3 calibration). Shapes outside the table fall back to Muon's fixed $(3.4445,-4.7750,2.0315)$.}
+\label{tab:root-coefficients}
+\small
+\begin{tabular}{rrrrrr}
+\toprule
+$m$ & $n$ & $a^{(m,n)}$ & $b^{(m,n)}$ & $c^{(m,n)}$ & MSE \\
+\midrule
+2048 & 2048 & 3.3334 & $-4.2591$ & 1.7791 & 0.0352 \\
+4096 & 4096 & 3.3732 & $-4.6134$ & 2.0576 & 0.0470 \\
+8192 & 8192 & 3.3886 & $-4.9026$ & 2.3105 & 0.0587 \\
+3072 & 2048 & 2.9091 & $-3.8108$ & 1.8600 & 0.0024 \\
+4096 & 2048 & 2.7739 & $-3.4911$ & 1.6992 & 0.0010 \\
+8192 & 2048 & 2.5925 & $-3.0010$ & 1.4138 & 0.0003 \\
+16384 & 2048 & 2.7045 & $-3.2335$ & 1.5336 & 0.0003 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{algorithm}[H]
+\caption{ROOT (Robust Orthogonalized Optimizer)}
+\label{alg:root}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta$, learning rate $\eta$, momentum $\mu$, percentile $p$, Newton--Schulz iters $K$
+\Ensure Updated parameters $\theta_T$
+\For{each parameter $P$}
+    \If{$P$ is a hidden-layer 2D matrix $W$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradient}
+        \State $M \gets \mu M + G$ \Comment{Momentum accumulation}
+        \State $\varepsilon \gets \operatorname{Quantile}(|M|, p)$ \Comment{Dynamic threshold}
+        \State $O \gets \operatorname{sign}(M)\max(|M|-\varepsilon, 0)$ \Comment{Outlier separation (soft-threshold)}
+        \State $B \gets M - O$ \Comment{Clipped robust component}
+        \State $X_0 \gets \frac{B}{\|B\|_F + \epsilon}$ \Comment{Normalize by Frobenius norm}
+        \For{$k = 0, 1, \ldots, K-1$}
+            \State $A_k \gets X_k X_k^\top$ \Comment{Gramian}
+            \State $B_k \gets b^{(m,n)} A_k + c^{(m,n)} A_k^2$ \Comment{Shape-calibrated coefficients}
+            \State $X_{k+1} \gets a^{(m,n)} X_k + B_k X_k$ \Comment{Polynomial step}
+        \EndFor
+        \State $W \gets W - \eta X_K$ \Comment{Update with orthogonalized direction}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Hybrid fallback: embeddings, pos, heads, non-matrices}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+Following the hybrid recipe of Muon, only hidden-layer 2-D matrices take the ROOT path; embedding tables, learned positional encodings, output heads and every non-matrix parameter are trained with decoupled AdamW using the group-level learning rate, weight decay, $\beta_1, \beta_2$ and $\epsilon$ settings. The paper's LLM runs apply a $0.2$ update-RMS scaling factor following Moonlight; this implementation lets the per-group learning rates absorb that calibration, so no scale constant is applied. Shapes absent from Table~\ref{tab:root-coefficients} fall back to Muon's fixed coefficients, and the dynamic quantile costs an additional sort of $|M_t|$ per matrix per step.
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item The percentile threshold requires an $O(N\log N)$ sort of the momentum matrix at every step, on top of the Newton--Schulz matmuls.
+\item The calibrated coefficient table covers seven shapes only; every other shape falls back to Muon's fixed coefficients.
+\item Outliers are discarded rather than shrunk, so an extremely noisy gradient can also lose informative signal; the paper's ablation shows the trade-off is governed by the percentile (0.85 truncates too much, 0.99 too little).
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Dimension-invariant orthogonalization precision: shape-calibrated coefficients remove the precision cliff that fixed coefficients show on square and near-square layers.
+\item Outlier-robust without retuning the Muon recipe; the paper reports lower loss and a better zero-shot average than Muon and AdamW at 1B scale (60.12 vs 59.59 vs 59.05) and gains on ViT/CIFAR-10.
+\item Same single momentum buffer per matrix parameter as Muon, and the \texttt{softthresh}/\texttt{ada\_newton} toggles expose the paper's ablations directly.
+\end{itemize}
+
 \subsection{Evolutionary and Population-Based Hybrids}
 
 \paragraph{EvE (Evolutionary Explorer).}

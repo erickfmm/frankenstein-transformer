@@ -1265,6 +1265,87 @@ y devuelve $Q_T X$. Un \emph{reinicio} tras la iteración~2 ($X \gets Q_2 X$, $R
 \item Con $f = 1$ la actualización se reduce a Muon (o NorMuon), y basta un único búfer de momentum por parámetro matricial; el error feedback permite que las filas ignoradas participen eventualmente.
 \end{itemize}
 
+\paragraph{ROOT (Optimizador Ortogonalizado Robusto).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/root.pdf}}
+\caption{Flujo por paso de ROOT: acumulación de momentum, separación de atípicos por soft-threshold y ortogonalización Newton--Schulz calibrada por forma.}
+\label{fig:opt-root}
+\end{figure}
+ROOT~\citep{he_root_2025} es una \textbf{revisión orientada a la robustez de Muon} que ataca dos fragilidades del esquema Newton--Schulz de coeficientes fijos. Primero, los coeficientes universales $(a,b,c)=(3.4445,-4.7750,2.0315)$ están calibrados para una forma matricial ``promedio'' y pierden precisión justamente en capas cuadradas y casi cuadradas: el MSE de ortogonalización va de $0.0499$ en $2048\times2048$ a $0.0003$ en $2048\times16384$ en la Tabla~1 del artículo. ROOT los reemplaza por coeficientes por forma $\{a^{(m,n)}, b^{(m,n)}, c^{(m,n)}\}$ calibrados fuera de línea sobre distribuciones de valores singulares del momentum (calibración mixta 1:3 real-a-aleatorio), un esquema que los autores llaman \emph{AdaNewton}. Segundo, las componentes de gradiente de cola pesada distorsionan la normalización de Frobenius que requiere Newton--Schulz y son amplificadas por la iteración polinómica; ROOT modela el momentum como $M_t = B_t + O_t$ y resuelve un problema proximal L1 cuya solución cerrada es el soft-thresholding. Solo se ortogonaliza la componente base robusta $B_t$; la componente de atípicos dispersa $O_t$ se descarta. Para una matriz de pesos de capa oculta $W \in \mathbb{R}^{m\times n}$, momentum $\mu$, tasa de aprendizaje $\eta$, percentil $p$ e iteraciones $K$:
+\begin{align}
+M_t &= \mu M_{t-1} + \nabla \mathcal{L}(\theta_{t-1}) \quad\text{(momentum, Ec. 1)} \\
+\varepsilon_t &= \operatorname{Quantile}(|M_t|, p) \quad\text{(umbral dinámico, } p=0.90 \text{ por defecto)} \\
+O_t &= \mathcal{T}_{\varepsilon_t}[M_t], \quad \mathcal{T}_\varepsilon[x]_i = \operatorname{sign}(x_i)\max(|x_i|-\varepsilon, 0) \quad\text{(soft-threshold, Ecs. 7--10)} \\
+B_t &= M_t - O_t \quad\text{(componente robusta recortada, Ec. 9)} \\
+X_0 &= \frac{B_t}{\lVert B_t\rVert_F}, \qquad X_k = a^{(m,n)}X_{k-1} + b^{(m,n)}X_{k-1}(X_{k-1}^\top X_{k-1}) + c^{(m,n)}X_{k-1}(X_{k-1}^\top X_{k-1})^2 \\
+\theta_t &= \theta_{t-1} - \eta X_K \quad\text{(actualización, } K=5\text{)}
+\end{align}
+
+\begin{table}[H]
+\centering
+\caption{Coeficientes AdaNewton de la Tabla~1 de \citet{he_root_2025} (calibración mixta 1:3). Las formas fuera de la tabla usan los coeficientes fijos de Muon $(3.4445,-4.7750,2.0315)$.}
+\label{tab:root-coefficients}
+\small
+\begin{tabular}{rrrrrr}
+\toprule
+$m$ & $n$ & $a^{(m,n)}$ & $b^{(m,n)}$ & $c^{(m,n)}$ & MSE \\
+\midrule
+2048 & 2048 & 3.3334 & $-4.2591$ & 1.7791 & 0.0352 \\
+4096 & 4096 & 3.3732 & $-4.6134$ & 2.0576 & 0.0470 \\
+8192 & 8192 & 3.3886 & $-4.9026$ & 2.3105 & 0.0587 \\
+3072 & 2048 & 2.9091 & $-3.8108$ & 1.8600 & 0.0024 \\
+4096 & 2048 & 2.7739 & $-3.4911$ & 1.6992 & 0.0010 \\
+8192 & 2048 & 2.5925 & $-3.0010$ & 1.4138 & 0.0003 \\
+16384 & 2048 & 2.7045 & $-3.2335$ & 1.5336 & 0.0003 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{algorithm}[H]
+\caption{ROOT (Optimizador Ortogonalizado Robusto)}
+\label{alg:root}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta$, tasa de aprendizaje $\eta$, momentum $\mu$, percentil $p$, iteraciones Newton--Schulz $K$
+\Ensure Parámetros actualizados $\theta_T$
+\For{cada parámetro $P$}
+    \If{$P$ es una matriz 2D de capa oculta $W$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradiente}
+        \State $M \gets \mu M + G$ \Comment{Acumulación de momentum}
+        \State $\varepsilon \gets \operatorname{Quantile}(|M|, p)$ \Comment{Umbral dinámico}
+        \State $O \gets \operatorname{sign}(M)\max(|M|-\varepsilon, 0)$ \Comment{Separación de atípicos (soft-threshold)}
+        \State $B \gets M - O$ \Comment{Componente robusta recortada}
+        \State $X_0 \gets \frac{B}{\|B\|_F + \epsilon}$ \Comment{Normalización por norma de Frobenius}
+        \For{$k = 0, 1, \ldots, K-1$}
+            \State $A_k \gets X_k X_k^\top$ \Comment{Gramiana}
+            \State $B_k \gets b^{(m,n)} A_k + c^{(m,n)} A_k^2$ \Comment{Coeficientes calibrados por forma}
+            \State $X_{k+1} \gets a^{(m,n)} X_k + B_k X_k$ \Comment{Paso polinómico}
+        \EndFor
+        \State $W \gets W - \eta X_K$ \Comment{Actualización con dirección ortogonalizada}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Respaldo híbrido: embeddings, pos, heads, no matriciales}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+Siguiendo la receta híbrida de Muon, solo las matrices 2-D de capas ocultas toman la ruta ROOT; las tablas de embeddings, los encodings posicionales aprendidos, los heads de salida y todo parámetro no matricial se entrenan con AdamW desacoplado usando la tasa de aprendizaje, el weight decay, $\beta_1, \beta_2$ y $\epsilon$ por grupo. Los experimentos LLM del artículo aplican un factor de escalado de RMS de actualización de $0.2$ siguiendo Moonlight; esta implementación deja que las tasas de aprendizaje por grupo absorban esa calibración, por lo que no se aplica ninguna constante de escala. Las formas ausentes de la Tabla~\ref{tab:root-coefficients} usan los coeficientes fijos de Muon, y el cuantil dinámico cuesta un ordenamiento adicional de $|M_t|$ por matriz y por paso.
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item El umbral por percentil requiere un ordenamiento $O(N\log N)$ de la matriz de momentum en cada paso, además de las multiplicaciones de Newton--Schulz.
+\item La tabla de coeficientes calibrados cubre solo siete formas; cualquier otra forma usa los coeficientes fijos de Muon.
+\item Los atípicos se descartan en lugar de encogerse, por lo que un gradiente extremadamente ruidoso también puede perder señal informativa; la ablación del artículo muestra que el compromiso lo gobierna el percentil (0.85 recorta demasiado, 0.99 demasiado poco).
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Precisión de ortogonalización invariante a la dimensión: los coeficientes calibrados por forma eliminan el precipicio de precisión que los coeficientes fijos muestran en capas cuadradas y casi cuadradas.
+\item Robustez frente a atípicos sin reajustar la receta de Muon; el artículo reporta menor pérdida y mejor promedio zero-shot que Muon y AdamW a escala 1B (60.12 vs 59.59 vs 59.05) y ganancias en ViT/CIFAR-10.
+\item El mismo único búfer de momentum por parámetro matricial que Muon, y los interruptores \texttt{softthresh}/\texttt{ada\_newton} exponen directamente las ablaciones del artículo.
+\end{itemize}
+
 \subsection{Híbridos Evolutivos y Poblacionales}
 
 \paragraph{EvE (Evolutionary Explorer).}

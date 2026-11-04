@@ -9,6 +9,7 @@ if TORCH_AVAILABLE:
     import torch
     import torch.nn as nn
     from src.model.optimizer.factory import build_optimizer, OPTIMIZER_REGISTRY
+    from src.model.optimizer.root import _shape_coefficients
 
 
 def _param_groups(lr=1e-3, wd=0.01):
@@ -26,7 +27,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm"}
+        required = {"adamw", "sgd_momentum", "lion", "muon", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -230,6 +231,66 @@ class BuildOptimizerTurboMuonTests(unittest.TestCase):
         opt.step()
         self.assertFalse(torch.equal(before, p.detach()))
         self.assertFalse(torch.isnan(p).any())
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerROOTTests(unittest.TestCase):
+    def test_builds_without_error(self):
+        opt = build_optimizer("root", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("root", groups, {})
+        loss = p.sum()
+        loss.backward()
+        opt.step()
+
+    def test_default_betas_and_eps_present(self):
+        opt = build_optimizer("root", _param_groups(), {})
+        self.assertEqual(opt.defaults["betas"], (0.9, 0.95))
+        self.assertEqual(opt.defaults["eps"], 1e-8)
+        self.assertEqual(opt.defaults["quantile"], 0.90)
+        self.assertTrue(opt.defaults["softthresh"])
+        self.assertTrue(opt.defaults["ada_newton"])
+
+    def test_hidden_matrix_uses_momentum_state(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 0.02, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("root", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("momentum_buffer", opt.state[p])
+        self.assertNotIn("exp_avg", opt.state[p])
+
+    def test_embedding_group_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "embeddings"}]
+        opt = build_optimizer("root", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("exp_avg", opt.state[p])
+        self.assertNotIn("momentum_buffer", opt.state[p])
+
+    def test_specific_suffixes_parsed(self):
+        params = {
+            "root-quantile": 0.95,
+            "root-softthresh": False,
+            "root-ada_newton": False,
+            "root-ns_steps": 3,
+        }
+        opt = build_optimizer("root", _param_groups(), params)
+        self.assertAlmostEqual(opt.defaults["quantile"], 0.95)
+        self.assertFalse(opt.defaults["softthresh"])
+        self.assertFalse(opt.defaults["ada_newton"])
+        self.assertEqual(opt.defaults["ns_steps"], 3)
+
+    def test_shape_coefficients_match_table1(self):
+        self.assertEqual(_shape_coefficients(2048, 8192, True), (2.5925, -3.0010, 1.4138))
+        self.assertEqual(_shape_coefficients(8192, 2048, True), (2.5925, -3.0010, 1.4138))
+        self.assertEqual(_shape_coefficients(64, 64, False), (3.4445, -4.7750, 2.0315))
+        self.assertEqual(_shape_coefficients(64, 64, True), (3.4445, -4.7750, 2.0315))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

@@ -44,6 +44,7 @@ from .muon import Muon
 from .prodigy import Prodigy
 from .q_apollo import QApollo
 from .radam import RAdamOptimizer
+from .root import ROOT
 from .schedulefree_adamw import ScheduleFreeAdamW
 from .sgd_momentum import SGDMomentum
 from .shampoo import Shampoo
@@ -80,6 +81,7 @@ OPTIMIZER_REGISTRY = {
     "dion3": Dion3,
     "ea4llm": EA4LLM,
     "eve": Eve,
+    "root": ROOT,
 }
 """Mapping from YAML optimizer class names to concrete Optimizer subclasses.
 
@@ -143,6 +145,8 @@ OPTIMIZER_ALLOWED_KEYS = {
     | {"population", "sigma", "antithetic", "rank_shaping", "nes_scaling", "seed"},
     "eve": _COMMON_PER_GROUP_KEYS
     | {"de_weight", "de_jitter", "init_sigma", "adam_steps", "use_pm", "pm_eta", "seed"},
+    "root": _COMMON_PER_GROUP_KEYS
+    | {"momentum", "nesterov", "ns_steps", "ns_eps", "quantile", "softthresh", "ada_newton"},
 }
 
 
@@ -430,6 +434,25 @@ def build_optimizer(
             use_pm=use_pm,
             pm_eta=pm_eta,
             seed=seed,
+        )
+
+    if optimizer_name == "root":
+        momentum = to_float(scoped.get("momentum"), 0.95)
+        nesterov = bool(scoped.get("nesterov", True))
+        ns_steps = to_int(scoped.get("ns_steps"), 5)
+        ns_eps = to_float(scoped.get("ns_eps"), 1e-7)
+        quantile = to_float(scoped.get("quantile"), 0.90)
+        softthresh = bool(scoped.get("softthresh", True))
+        ada_newton = bool(scoped.get("ada_newton", True))
+        return optimizer_cls(
+            converted_groups,
+            momentum=momentum,
+            nesterov=nesterov,
+            ns_steps=ns_steps,
+            ns_eps=ns_eps,
+            quantile=quantile,
+            softthresh=softthresh,
+            ada_newton=ada_newton,
         )
 
     return optimizer_cls(converted_groups)
