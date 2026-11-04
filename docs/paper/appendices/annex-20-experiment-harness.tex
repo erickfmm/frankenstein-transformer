@@ -26,7 +26,7 @@ Three recorders write independently and are joined only at reporting time:
 
 \subsection{The Stage Ledger of Round~2}
 
-Table~\ref{tab:stage-ledger} reproduces the ledger. Training dominates both the record count and the cost: 1{,}039 attempts, of which 868 succeeded and 171 failed, with a median of 68 minutes and a P90 of 84 minutes per successful run---906 GPU-hours in total. Every other stage is measured in seconds. Deployment is the only stage besides training that fails (104 times out of 1{,}734), and the failures are symmetric: whenever a configuration's standard export fails, its quantized export fails too. The symmetry points to a shared root cause upstream of quantization---checkpoint or configuration serialisation---rather than to the quantization step itself. Evaluation and Hugging Face export never failed in the analysed population.
+Table~\ref{tab:stage-ledger} reproduces the ledger. Training dominates both the record count and the cost: 1{,}039 attempts, of which 868 succeeded and 171 failed, with a median of 68 minutes and a P90 of 84 minutes per attempt---906 GPU-hours in total, of which 905 belong to the 868 analysed runs and the remainder to the discarded attempts. Every other stage is measured in seconds. Deployment is the only stage besides training that fails (104 times out of 1{,}734), and the failures are symmetric: whenever a configuration's standard export fails, its quantized export fails too. The symmetry points to a shared root cause upstream of quantization---checkpoint or configuration serialisation---rather than to the quantization step itself. Evaluation and Hugging Face export never failed in the analysed population.
 
 \begin{table}[H]
 \centering
