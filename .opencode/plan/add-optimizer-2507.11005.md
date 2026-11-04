@@ -1,6 +1,6 @@
 # Plan: add AdaMuon optimizer (arXiv 2507.11005)
 
-> Canonical location: `.opencode/plans/add-optimizer-2507.11005.md`.
+> Canonical location: `.opencode/plan/add-optimizer-2507.11005.md`.
 
 ## 1. Header
 

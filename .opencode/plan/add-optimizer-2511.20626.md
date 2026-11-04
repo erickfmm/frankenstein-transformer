@@ -1,6 +1,6 @@
 # Plan: add ROOT optimizer (arXiv 2511.20626)
 
-> Canonical location: `.opencode/plans/add-optimizer-2511.20626.md`.
+> Canonical location: `.opencode/plan/add-optimizer-2511.20626.md`.
 > Implemented in `feat(optimizer): add ROOT (arXiv 2511.20626)`.
 > Source command: `/add-optimizer https://www.alphaxiv.org/abs/2511.20626`.
 > Status: PLAN ONLY — nothing outside the plan directory was written by the

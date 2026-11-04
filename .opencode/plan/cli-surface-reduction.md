@@ -2,7 +2,7 @@
 
 **Decision (locked with author):** keep only **4 subcommands** — `train`, `deploy`, `infer`, `web-server`. Everything else is merged into them. The YAML schema is the single source of truth for all model/training settings; the **only** YAML-overriding CLI argument is `--device`.
 
-> Intended final home: `<repo>/.opencode/plans/cli-surface-reduction.md` (repo convention — move it there when implementing).
+> Canonical location: `.opencode/plan/cli-surface-reduction.md`.
 
 ---
 
@@ -142,7 +142,7 @@ Notes:
 - **`docs/transformers_compatibility.md`** — update any `transformers-export` invocations (verify by grep).
 - **`AGENTS.md`** — CLI subcommand list line: `(subcommands: train, deploy, infer, web-server)`.
 - **`configs/README.md`** — grep for stale command mentions.
-- **Paper sources** `docs/paper*/**.tex` — subcommand enumerations (e.g. `paper-es.tex:47`, EN intro/figure 1 listing; `.opencode/plans/paper-cleanup-plan.md:54` tracks fig. 1) → `train / deploy / infer / web-server`.
+- **Paper sources** `docs/paper*/**.tex` — subcommand enumerations (e.g. `paper-es.tex:47`, EN intro/figure 1 listing; `.opencode/plan/paper-cleanup-plan.md:54` tracks fig. 1) → `train / deploy / infer / web-server`.
 
 ### 4.4 Website mirror (gitignored clone — mirror-only edits, never synced from main)
 

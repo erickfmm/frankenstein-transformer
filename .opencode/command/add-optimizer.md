@@ -6,7 +6,7 @@ subtask: false
 Produce a **complete, implementation-ready plan** for adding one new optimizer family
 to frankenstein-transformer — and nothing else. This command runs in **plan mode**: it
 reads the paper, explores the repository and writes the plan to
-`.opencode/plans/add-optimizer-<arxiv-id>.md`. It does **not** create, edit or delete code,
+`.opencode/plan/add-optimizer-<arxiv-id>.md`. It does **not** create, edit or delete code,
 schema, presets, tests, docs, PDFs, website-mirror files or git history.
 
 The canonical recipe is `docs/architecture.md` §11.2 ("Add an optimizer") and the
@@ -22,7 +22,7 @@ document that describes an action:
 
 | Forbidden now | Required instead |
 |---|---|
-| Creating/editing/deleting anything outside `.opencode/plans/` | Describe the exact change in the plan |
+| Creating/editing/deleting anything outside `.opencode/plan/` | Describe the exact change in the plan |
 | `git add`, `commit`, `push`, `checkout`, `stash`, `reset` | `git status --short`, `git log`, `git diff` (read-only) |
 | Running `pytest`, `full_tests/run_e2e.py`, `param_count_check.py`, `param_estimate_check.mjs` | List them as *planned verification* with expected results |
 | Running `pdflatex`, `bibtex`, `pandoc`, `flatten_tex.py` | Write the exact command sequence for implementation time |
@@ -30,7 +30,7 @@ document that describes an action:
 | `uv sync`, training, inference, `web-server` | Quote the CPU-first commands for the implementer |
 | Touching `src/`, `configs/`, `tests/`, `docs/`, `full_tests/` | Read only |
 
-If the runtime nevertheless exposes edit tools for paths outside `.opencode/plans/`,
+If the runtime nevertheless exposes edit tools for paths outside `.opencode/plan/`,
 ignore them: the deliverable is a plan, not a patch. Never "do a small fix while you are
 there". If the paper implies a destructive or out-of-scope step (deleting a family,
 renaming an existing optimizer, touching unrelated drift), do not perform it — flag it in
@@ -45,7 +45,7 @@ the plan as requiring explicit user approval before implementation.
 - `https://www.alphaxiv.org/abs/2610.01395` (or `/overview`, `/html`, …)
 
 Normalize to the bare arXiv ID and use it in the plan filename
-(`.opencode/plans/add-optimizer-<arxiv-id>.md`). If `$ARGUMENTS` is empty or no ID can be
+(`.opencode/plan/add-optimizer-<arxiv-id>.md`). If `$ARGUMENTS` is empty or no ID can be
 extracted, STOP and ask the user for the paper link — do not invent a topic.
 
 ## Phase 1 — Read the paper (read-only)
@@ -132,7 +132,7 @@ the plan document, so the user can veto a decision before the plan is finalised.
 
 ## Phase 4 — Write the plan document
 
-Create `.opencode/plans/add-optimizer-<arxiv-id>.md` with this skeleton. Every section is
+Create `.opencode/plan/add-optimizer-<arxiv-id>.md` with this skeleton. Every section is
 mandatory; "n/a" is allowed only with a one-line reason.
 
 ### 1. Header
@@ -256,11 +256,11 @@ this command.
 
 ## Phase 5 — Deliver
 
-1. Write the plan to `.opencode/plans/add-optimizer-<arxiv-id>.md`. If the plan-mode
+1. Write the plan to `.opencode/plan/add-optimizer-<arxiv-id>.md`. If the plan-mode
    runtime denies that write, keep the full plan in the chat response and say so.
 2. Reply with: the paper in one paragraph, the decisions (name, category, suffixes,
    example preset, census bump), the file-by-file table, and the path of the plan file.
-3. End with the confirmation line: `Plan only — no files outside .opencode/plans/ were
+3. End with the confirmation line: `Plan only — no files outside .opencode/plan/ were
    changed`, plus `git status --short` output. It must list only the new plan file
    (untracked) and no modification to `src/`, `configs/`, `tests/`, `docs/`,
    `full_tests/` or the mirror; if other paths appear, report them and leave them alone.
@@ -277,4 +277,4 @@ this command.
 - Every row of the file-by-file table names the file and the concrete content to add,
   with anchors into the current repo (path + line or quoted snippet).
 - No command that mutates the repository was executed; no file outside
-  `.opencode/plans/` was written.
+  `.opencode/plan/` was written.

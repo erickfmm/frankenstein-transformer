@@ -197,7 +197,7 @@ Verificar que:
 - Los `\ref` en el cuerpo del texto muestran "Appendix 1", "Appendix 2", etc.
 
 ### Paso 9: Actualizar plan histórico (opcional)
-`.opencode/plans/cca-ccgqa-implementation.md` línea 114 y 117 referencian `annex-b-latent-attention.tex` (nombre antiguo). Actualizar a `annex-3-latent-attention.tex` para consistencia.
+`.opencode/plan/cca-ccgqa-implementation.md` línea 114 y 117 referencian `annex-b-latent-attention.tex` (nombre antiguo). Actualizar a `annex-3-latent-attention.tex` para consistencia.
 
 ## Verificación de no-regresión
 
