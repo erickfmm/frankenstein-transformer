@@ -245,7 +245,7 @@ VISION_PE_TYPES = [
 
 OPTIMIZERS = [
     "sgd_momentum", "adamw", "adafactor", "galore_adamw", "prodigy", "lion",
-    "sophia", "muon", "turbo_muon", "ada_muon", "radam", "adan", "adopt", "ademamix",
+    "sophia", "muon", "turbo_muon", "af_muon", "ada_muon", "radam", "adan", "adopt", "ademamix",
     "mars_adamw", "cautious_adamw", "lamb", "schedulefree_adamw", "shampoo",
     "soap", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm",
 ]

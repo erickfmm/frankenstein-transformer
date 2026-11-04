@@ -1,0 +1,22 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  i["iteration t: draw minibatch Dₜ (shared by all members)"]
+  s["draw one integer seed sⱼ per member (N, or N/2 antithetic)"]
+  p1["pass 1: θ ← θ ± σ·εⱼ, εⱼ = randn(sⱼ)"]
+  fit["rⱼ ← −f(θ; Dₜ) — token log-likelihood fitness"]
+  back["restore θ ∓ σ·εⱼ; repeat for every member"]
+  shape{"rank_shaping?"}
+  z["z-score: wⱼ = (rⱼ − r̄) / std(r)"]
+  rk["centered ranks: wⱼ = rank(rⱼ) − (N−1)/2"]
+  p2["pass 2: replay εⱼ from sⱼ; ĝ ← (1/N) Σ wⱼ εⱼ"]
+  nes{"nes_scaling?"}
+  ua["θ ← θ + α·ĝ/N"]
+  un["θ ← θ + α·ĝ/(Nσ)"]
+  out["no moment buffers: ε and the weights are never stored"]
+
+  i --> s --> p1 --> fit --> back --> shape
+  shape -- "no" --> z --> p2
+  shape -- "yes" --> rk --> p2
+  p2 --> nes
+  nes -- "no" --> ua --> out
+  nes -- "yes" --> un --> out

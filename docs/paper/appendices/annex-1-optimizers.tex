@@ -1352,6 +1352,12 @@ with $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$. Each population s
 \end{itemize}
 
 \paragraph{EA4LLM (Evolution Strategies for Large Language Models).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/optimizers/ea4llm.pdf}}
+\caption{Step flow of EA4LLM: each iteration evaluates $N$ Gaussian perturbations of the parameters on one minibatch shared by every member, scores them by the negated token-level log-likelihood, shapes the rewards into z-score or centered-rank weights, and replays the same seeded noise to accumulate the ES direction --- no gradients and no per-parameter optimizer state.}
+\label{fig:opt-ea4llm}
+\end{figure}
 EA4LLM~\citep{liu_ea4llm_2025} is a \textbf{gradient-free alternative to Adam} that removes backpropagation and optimizer state entirely, and it is the first method the authors validate for full-parameter pretraining of LLMs from scratch, across Qwen3-style models from 0.5B to 32B parameters. Instead of differentiating a loss, EA4LLM treats the next-token likelihood as a black-box fitness and estimates a descent direction from a population of Gaussian perturbations. The fitness is the mean token-level log-probability of the true next token, masked for padding, which is exactly the standard causal-LM objective up to sign:
 \begin{align}
 p_t &= \operatorname{softmax}(z_t), &
