@@ -14,8 +14,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        # include-only on purpose: an `include` entry that matches an existing
+        # combination MERGES into it instead of adding a job. With the old
+        # `python-version: [...] + include:` shape the "extra leg" below
+        # silently replaced the py3.12 leg, so py3.12 + the current stack was
+        # never tested. Listing every leg here keeps all four.
         include:
+          - python-version: "3.10"
+          - python-version: "3.11"
+          - python-version: "3.12"
           # Extra leg: transformers 4.x on py3.12. The dependency range allows
           # both transformers majors (<6), so keep the 4.x path covered too —
           # it is what Python 3.9 installs resolve to, and the fallback for
@@ -50,14 +57,18 @@ jobs:
             > /tmp/requirements-ci.txt
           pip install -r /tmp/requirements-ci.txt
 
-      # Only on the legacy leg: downgrade transformers to the 4.x series
-      # (sentence-transformers>=5.2 still allows transformers>=4.41). Pin
-      # huggingface_hub <1 too (transformers 4.x requires it) and datasets <4:
-      # hub <1 does not export BucketNotFoundError, and datasets 4+ would also
-      # drag torchcodec into every Audio path.
+      # Only on the legacy leg: downgrade the whole HF stack to the 4.x/0.x/3.x
+      # series. transformers 4.x requires huggingface_hub <1 (hub 1.x removed
+      # symbols it imports), hub <1 does not export BucketNotFoundError
+      # (datasets>=5 needs it), and datasets 4+ drags torchcodec into every
+      # Audio path. sentence-transformers <6 is part of the same pin: 6.x
+      # requires transformers>=5.0 + huggingface_hub>=1.3.0 and imports httpx
+      # (via the hub 1.x re-export or standalone), which leaves the legacy
+      # env without the `httpx` module and breaks `import sentence_transformers`
+      # (all SBERT tests). 5.7.x allows transformers<6,>=4.41 + hub>=0.23.
       - name: Pin transformers 4.x (legacy leg)
         if: matrix.transformers-pin == '<5'
-        run: pip install "transformers<5" "huggingface_hub<1" "datasets<4"
+        run: pip install "transformers<5" "huggingface_hub<1" "datasets<4" "sentence-transformers<6"
 
       # Install the package itself without pulling in deps (torch already
       # installed as CPU above; --no-deps avoids overriding it with cu118).
