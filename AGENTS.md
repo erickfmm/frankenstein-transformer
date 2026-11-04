@@ -15,7 +15,7 @@
 - **GPU only for real training/inference** (Tesla P40): `uv sync --extra cu118 --extra train`, then `uv run --extra cu118 --extra train frankenstein-transformer train --config …`. The torch extras (`cpu`/`cu118`/`cu126`/`cu128`) are mutually exclusive; a bare `uv run` resyncs without extras and swaps torch — always pass the same extras.
 - **CLI**: `uv run --extra cpu --extra train frankenstein-transformer {train,deploy,infer,web-server}`. `web-server` is the Streamlit YAML builder.
 - **Style**: no linter/formatter configured. Match surrounding code; `from __future__ import annotations`; absolute `src.` imports; Google-style docstrings.
-- **CI**: Python 3.10–3.12, CPU torch 2.6.0 first, then `requirements.txt` with torch/extra-index lines stripped, then `pip install -e . --no-deps`.
+- **CI**: Python 3.10–3.12, CPU torch 2.7.0 first, then `requirements.txt` with torch/extra-index lines stripped, then `pip install -e . --no-deps`.
 
 ## Where things live
 
@@ -33,7 +33,8 @@
 | Inference runtime config | `src/deploy/inference_config.py`, `src/schema/_inference.yaml` |
 | Activations | `src/model/activation_function/` |
 | Residuals / mHC / Hyperloop | `src/model/residuals/`, `src/model/mhc.py`, `hyperloop.py` |
-| Model classes | `src/model/frankenstein_{encoder,decoder,vit}.py`, `src/model/__init__.py` |
+| Model classes | `src/model/frankenstein_{encoder,decoder,vit,audio}.py`, `src/model/__init__.py` |
+| Audio (Conformer / ASR) | `src/model/frankenstein_audio.py`, `src/training/audio_dataset.py`, `src/schema/_audio*.yaml` |
 | Validation / task dispatch | `src/training/config_loader.py`, `src/training/main.py` |
 | Training loop | `src/training/trainer.py` |
 | Framework-neutral builder | `src/engine.py` (`build_model`) |
@@ -41,7 +42,7 @@
 | SBERT | `src/sbert/` |
 | Streamlit UI | `src/streamlit_gui/app.py` |
 | Presets | `configs/*.yaml`, `configs/examples/*.yaml` |
-| Tests | `tests/` (46 files; see gates below) |
+| Tests | `tests/` (76 files; see gates below) |
 | Theory / citations | `docs/paper*/`, `docs/bibliography/` |
 | Website mirror sync | `.opencode/command/sync-website.md` |
 
@@ -54,9 +55,9 @@
 3. **BitNet is on by default** (`bitnet.enabled: true`). `bitnet.routers: true` requires `bitnet.enabled: true`; `bitnet.conv` requires BitNet + `embedding.conv.enabled`.
 4. **Normalization**: enum `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`. `prms_norm` uses `norm.partial_ratio`; `flash_norm` composes with `norm.flashnorm_partial_ratio`.
 5. **`fasa_attn` / `sparge_attn` are inference-sparse** (`HybridLayer.TRAINING_FREE_LAYERS`). In `train()` mode `HybridLayer` runs standard dense attention over the mixer's own projections (`mixer.dense_forward`); the sparse heuristic activates in `eval()` only. They are valid in training presets.
-6. **Forced modes**: `frankenstein_text_decoder` → `mode: decoder`; `frankenstein_vit` → `mode: encoder`. `training.task: causal_lm` requires the decoder; vision tasks require the ViT.
+6. **Forced modes**: `frankenstein_text_decoder` → `mode: decoder`; `frankenstein_vit` → `mode: encoder`. `training.task: causal_lm` requires the decoder; vision tasks require the ViT; audio tasks (`asr`, `audio_classification`) require `frankenstein_audio`.
 7. **Optimizer keys are prefixed**: `<optimizer>-<group>_<param>` or `<optimizer>-<param>`. Groups: `embeddings`, `pos`, `attention`, `ffn`, `norms`, `head`, `mhc`, `router`, `residual`, `other`. A new family needs an enum value, a `by_optimizer` prefix, and a matching `if/then` rule.
-8. **`training.task` is required**, one of `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`. No legacy top-level optimizer keys.
+8. **`training.task` is required**, one of `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`, `asr`, `audio_classification`. No legacy top-level optimizer keys.
 9. **All presets are smoke-tested** (`configs/*.yaml` + `configs/examples/*.yaml`). A new mixer/optimizer needs an example YAML.
 10. **The activation enum is the source of truth** (43 values). GLU variants (`swiglu`/`geglu`/`reglu`) are handled by `GatedFFN`, not `get_activation()`.
 11. **mHC and Mixture-of-Depths are mutually exclusive.** Do not enable both.
@@ -85,6 +86,8 @@
 - `tests/test_common_modules.py`, `test_positional_encodings.py`, `test_activation_functions.py`, `test_residuals.py`.
 - `tests/test_naming_conventions.py` — no legacy names, no `frankenstein_model.py` shim.
 - `tests/test_frankenstein_vit.py`, `test_vision_dataset.py`, `test_vision_loss.py`.
+- `tests/test_frankenstein_audio.py`, `test_audio_dataset.py`, `test_audio_loss.py`,
+  `test_audio_training.py`, `test_audio_param_categories.py`.
 - `tests/test_kv_cache_*.py` — slot/codec/mixer-parity/fallback/mechanism/eval-only/quant suites;
   `test_inference_config.py`, `test_inference_generate.py`, `test_transformers_export.py`.
   `test_kv_cache_mixers.py` parametrizes every mixer in `IMPLEMENTED_MIXERS`
@@ -96,7 +99,7 @@
 |---|---|
 | D1 | Schema is the executable contract; `additionalProperties: false` everywhere |
 | D2 | One flat `FrankensteinModelConfig` + explicit flattener (no nested runtime config) |
-| D3 | Model core split into `config.py` / `hybrid_layer.py` / encoder / decoder / ViT; no `frankenstein_model.py` |
+| D3 | Model core split into `config.py` / `hybrid_layer.py` / encoder / decoder / ViT / audio; no `frankenstein_model.py` |
 | D4 | BitNet enabled by default |
 | D5 | `fasa_attn` / `sparge_attn` train as dense attention, sparse eval |
 | D6 | mHC and Mixture-of-Depths are mutually exclusive |
@@ -130,4 +133,5 @@ Environment-provided skills (`hf-cli`, `opencode`, `report`, `understand*`, `off
 - Implementation spec + extension recipes: [`docs/architecture.md`](docs/architecture.md).
 - Presets/optimizer parameters: [`configs/README.md`](configs/README.md).
 - Theory, formulations, citations: `docs/paper/`, `docs/paper-es/`, `docs/bibliography/`.
+- Implementation plans (all of them, single directory): `.opencode/plan/`.
 - Build API docs: `bash docs/build_docs.sh` (Sphinx → `docs/_build/html`).
