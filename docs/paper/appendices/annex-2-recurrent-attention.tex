@@ -1,7 +1,7 @@
 \section{Dense, Recurrent, and Memory-Augmented Transformers}
 \label{sec:annex-transformer}
 
-This annex synthesizes the dense, recurrent, and memory-augmented transformer families. The field has evolved toward several primary paradigms: dense global attention with variants, key-value head compression via grouped-query attention, recurrent state compression with decay, selective state-space models, continuous-depth numerical integration, and memory-augmented architectures. Understanding this taxonomy illuminates fundamental tradeoffs between expressiveness, computational cost, memory footprint, and deployment simplicity.
+This annex synthesizes the dense, recurrent, and memory-augmented transformer families. The field has evolved toward several primary paradigms: dense global attention with variants, key-value head compression via grouped-query attention, recurrent state compression with decay, selective state-space models, continuous-depth numerical integration, token-indexed value memory, and memory-augmented architectures. Understanding this taxonomy illuminates fundamental tradeoffs between expressiveness, computational cost, memory footprint, and deployment simplicity.
 
 \subsection{Dense Attention Baselines: Standard and Sigmoid}
 
@@ -83,6 +83,60 @@ GQA interpolates smoothly between MHA ($h_k = h$, $G = 1$) and MQA ($h_k = 1$, $
     \item \textbf{Inference complexity}: $\mathcal{O}(n)$ per token, $\mathcal{O}(h_k \cdot n \cdot d_h)$ KV-cache space.
     \item \textbf{Strengths}: Flexible head-count tradeoff; proven at scale (Llama 2 \& 3 use $h_k = 8$ KV heads with $h = 32$ query heads); reduces KV-cache by $G \times$; supports fast inference with FlashAttention.
     \item \textbf{Weaknesses}: Fewer KV heads can reduce representational capacity in small models; requiring $h_k$ to divide $h$ constrains architectural choices.
+\end{itemize}
+
+\subsection{Token-Indexed Memory: Memory Attention}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/memory.pdf}}
+\caption{Dataflow of Memory Attention: the value projection is removed;
+values are the unrotated keys plus a per-KV-head RMSNorm'd row of a
+layer-specific token-ID memory table. RoPE applies only to the scoring pair.}
+\label{fig:mixer-memory}
+\end{figure}
+
+Memory Attention \citep{kang_memory_attention_2026} removes the dedicated value
+projection and constructs values from contextual keys plus layer-specific
+token memory. With token IDs $s$, vocabulary size $N$ and
+$d_v = H_{KV} d_h$:
+
+\begin{algorithmic}[1]
+\State \textbf{Input:} hidden states $X \in \mathbb{R}^{T \times d}$, token IDs $s$, table $E \in \mathbb{R}^{N \times d_v}$
+\State $M \gets \mathrm{Norm}(E[s]) \in \mathbb{R}^{T \times d_v}$ \Comment{RMSNorm per token vector, per key/value head}
+\State $Q \gets X W_Q$, \quad $K \gets X W_K$, \quad $V \gets K + M$ \Comment{no $W_V$; values from unrotated keys}
+\State $Q_R \gets \mathrm{RoPE}(Q)$, \quad $K_R \gets \mathrm{RoPE}(K)$ \Comment{rotation for scoring only}
+\State \textbf{Output:} $Y = \mathrm{softmax}\!\left(\tfrac{Q_R K_R^\top}{\sqrt{d_k}} + C\right) V$
+\end{algorithmic}
+
+The output decomposes as $O_{\mathrm{MA}} = A(K{+}M) = AK + AM$: a contextual
+retrieval term over keys and a memory retrieval term aggregated under the same
+attention distribution. Across $L$ replaced layers, MA swaps the standard
+$L\,d\,d_v$ value-projection parameters for $L(N d_v + p_{\mathrm{norm}})$
+memory and normalization parameters --- added capacity accessed by lookup
+instead of dense computation. At inference the per-row normalization is folded
+into the table ($E[i] \gets \mathrm{Norm}(E[i])$), reducing online value
+construction to lookup and addition while retaining a conventional KV cache.
+The paper reports improved LAMBADA/WikiText perplexity and average downstream
+accuracy across MHA/GQA/MQA backbones at matched token budgets, with
+$1.42\times$/$1.16\times$ token efficiency; the comparison includes the
+additional memory parameters, so it does not isolate structure from capacity.
+MA-Offload (CPU-resident tables with prefetching) and MA-Recall (reconstructing
+historical values as $V_{1:T} = K_{1:T} + E[s_{1:T}]$ for a ${\sim}50\%$ smaller
+value cache) are analyzed but not implemented here.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n^2 d)$ attention with
+    $\mathcal{O}(n d_v)$ lookup+norm+add value construction (replacing the
+    $\mathcal{O}(n\, d\, d_v)$ projection).
+    \item \textbf{Inference complexity}: $\mathcal{O}(n)$ per token with a
+    conventional KV cache; $N d_v$ extra parameters per layer.
+    \item \textbf{Strengths}: Extra capacity without dense-compute growth;
+    layer-specific token representations; exact standard-attention aggregation;
+    KV-cache-compatible by construction.
+    \item \textbf{Weaknesses}: Parameter count grows with the vocabulary
+    ($N \gg d$); needs token IDs (text-only); the reported gains are not
+    parameter-matched.
 \end{itemize}
 
 \subsection{Recurrent and Retentive Architectures}
@@ -239,6 +293,8 @@ The codebase selects a mixer per block from the configured \texttt{layer\_patter
     \State $H \gets \text{softmax-attention}(H)$
 \ElsIf{$m=\texttt{sigmoid\_attn}$}
     \State $H \gets \text{sigmoid-attention}(H)$
+\ElsIf{$m=\texttt{memory\_attn}$}
+    \State $H \gets \text{memory-attention}(H)$
 \ElsIf{$m\in\{\texttt{retnet},\texttt{retnet\_attn}\}$}
     \State $H \gets \text{retention}(H)$
 \ElsIf{$m=\texttt{mamba}$}

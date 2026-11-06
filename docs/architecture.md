@@ -22,7 +22,7 @@ load.
 
 | Dimension | Count | Defined in |
 |---|---:|---|
-| `model.dims.layer_pattern` values | **45** (44 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
+| `model.dims.layer_pattern` values | **46** (45 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
 | Optimizer families | **31** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
@@ -35,9 +35,10 @@ load.
 | Deployment formats | **4** | `src/cli.py` (`deploy --format`) |
 
 > The schema enums are the executable contract for code. README badges say
-> "44 mixers / 11 positional encodings" because they exclude the placeholder
-> `mamba` layer and the `none` encoding. The mathematical definitions stay in
-> the paper; this document tracks what is actually wired up.
+> "46 mixers / 11 positional encodings": the mixer badge follows the schema
+> enum (including the `mamba` placeholder), while the PE badge excludes the
+> `none` encoding. The mathematical definitions stay in the paper; this
+> document tracks what is actually wired up.
 
 ## 2. System overview
 
@@ -78,7 +79,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/frankenstein_audio.py` | Audio model class: log-mel/spectrogram/raw frontend, conv subsampling, ASR and classification heads (forces `mode=encoder`) |
 | `src/model/mhc.py`, `src/model/hyperloop.py` | Manifold-constrained hyper-connections and loop-level variants |
 | `src/model/residuals/**` | Residual strategies + factory |
-| `src/model/attention/**` | 45 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
+| `src/model/attention/**` | 46 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
 | `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
@@ -347,7 +348,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-45 enum values in 9 families. `config subkey` is the optional
+46 enum values in 10 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -397,6 +398,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `gma_attn` | Latent (Gaussian mixture) | `gma.*` | yes |
 | `ssog_attn` | Geometric field | `ssog.*` | yes (encoder, grid input) |
 | `conformer_attn` | Convolution-augmented | `conformer.*` | yes |
+| `memory_attn` | Memory | `dims.num_kv_heads` | yes |
 
 Inference-sparse mixers: `HybridLayer.TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}`
 run standard dense attention in `train()` mode (via `mixer.dense_forward`, sharing
@@ -410,6 +412,13 @@ swa.num_sinks` most recent tokens (causal in decoder mode, symmetric in
 encoder mode). The mask is built vectorized; there are no extra parameters
 beyond the standard attention projections, and the receptive field after `l`
 layers is `l·(w−s)` plus the always-visible sink prefix.
+
+`memory_attn` implements Memory Attention from arXiv:2609.28399: the value
+projection is removed and values are `V = K + RMSNorm(E[s])`, where
+`E ∈ R^{vocab_size × d_v}` is a per-layer token-ID memory table and
+`d_v = num_kv_heads · head_dim`. RoPE applies to the scoring pair only (values
+come from the unrotated keys); the mixer needs `input_ids` like `engram_attn`.
+Attention weights are standard softmax, so the KV cache is a plain `KVSlot`.
 
 Registry: the local `mixer_registry` dict in `src/model/hybrid_layer.py` maps
 names to classes; `mamba` is handled as a linear projection special case.
@@ -626,7 +635,7 @@ Implemented cached branches (parity-tested in
 `gta_attn`, `swa_attn`, `longformer_attn`, `bigbird_attn`,
 `sparse_transformer_attn`, `fasa_attn`, `retnet`, `retnet_attn`,
 `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`,
-`gated_deltanet2_attn`, `hgrn2_attn`, `kda_attn`, `gma_attn`.
+`gated_deltanet2_attn`, `hgrn2_attn`, `kda_attn`, `gma_attn`, `memory_attn`.
 Documented fallbacks: `mamba` (stateless), `ssog_attn` (bidirectional
 vision grid, no causal formulation), `ode` (solver re-derives all
 intermediate states each step), `falcon*` (chunk-parallel rehearsal FIFO),

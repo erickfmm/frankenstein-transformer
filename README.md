@@ -89,7 +89,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | 42 across 8 categories (Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric) |
+| Sequence mixer architectures | 46 across 10 categories (Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory) |
 | Optimizer families | 31 across 7 categories |
 | Positional encodings | 11 model-wide (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`) with per-mixer opt-out |
 | Model classes | `frankenstein`, `frankensteindecoder`, `frankenstein_vit` + reusable in-process engine API |
@@ -130,11 +130,13 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 | **Dense** (2) | `standard_attn`, `sigmoid_attn` | Full quadratic attention variants |
 | **GQA** (1) | `gqa_attn` | Grouped-query attention with configurable KV heads |
 | **Recurrent** (6) | `retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `engram_attn` | Retention networks, state-space models, continuous-depth ODE layers, memory-augmented attention, and n-gram memory |
-| **Sparse** (9) | `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn` ⚠️, `fasa_attn` ⚠️, `msa_attn`, `sparda_attn` | Factorized, sliding-window, token-selection, and block-sparse (GQA-based) patterns |
+| **Sparse** (10) | `sparse_transformer_attn`, `longformer_attn`, `swa_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn` ⚠️, `fasa_attn` ⚠️, `msa_attn`, `sparda_attn` | Factorized, sliding-window, token-selection, and block-sparse (GQA-based) patterns |
 | **Gated** (8) | `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` | Linear attention with multiplicative gates, delta rules, and gated softmax |
 | **Fast-Weight** (6) | `falcon1_attn`, `falcon2_attn`, `falcon3_attn`, `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn` | Fast-weight / online-learning attention with per-layer fast-weight update rules |
 | **Latent** (10) | `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
 | **Geometric** (1) | `ssog_attn` | Separable Sum of Gaussians — geometric field attention |
+| **Convolution-augmented** (1) | `conformer_attn` | Macaron FFN₁ + MHSA + depthwise-conv module (arXiv:2005.08100) |
+| **Memory** (1) | `memory_attn` | Token-ID memory values: `V = K + Norm(E[s])`; removes the value projection (arXiv:2609.28399) |
 
 ⚠️ `sparge_attn` and `fasa_attn` are **eval-only** — training raises a runtime error.
 

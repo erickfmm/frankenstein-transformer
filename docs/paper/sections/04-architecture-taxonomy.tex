@@ -4,7 +4,7 @@
 \subsection{Attention and Sequence-Mixer Families}
 \label{sec:attention-families}
 
-The system implements forty-five sequence mixers organized into nine functional categories that reflect how each method balances expressivity, computational cost, and memory.
+The system implements forty-six sequence mixers organized into ten functional categories that reflect how each method balances expressivity, computational cost, and memory.
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Dense baselines} (3): standard softmax attention, sigmoid attention, and Grouped-Query Attention (GQA) provide full global routing at quadratic cost.
     \item \textbf{Recurrent and retentive} (5): RetNet, Mamba, ODE-style blocks, and Titans maintain state for constant-time inference through recurrence, selective state spaces, continuous depth, or test-time memory.
@@ -12,6 +12,7 @@ The system implements forty-five sequence mixers organized into nine functional 
     \item \textbf{Gated mechanisms} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, and KDA introduce data-dependent control over retention, forgetting, and update strength.
     \item \textbf{Latent compression} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA, and GMA compress key--value state into low-rank bottlenecks or route through a Gaussian-mixture latent memory.
     \item \textbf{Conditional memory} (1): Engram provides test-time read/write memory through learned lookups.
+    \item \textbf{Token-indexed memory} (1): Memory Attention replaces the dedicated value projection with layer-specific token memory, constructing values as \(V = K + \mathrm{Norm}(E[s])\) while keeping the softmax weighting unchanged \citep{kang_memory_attention_2026}.
     \item \textbf{Fast-weight attention} (6): Falcon-1/2/3 and Falcon-1A/2A/3A treat the recurrent state transition as an online continual-learning rule \citep{zhang_falcon_2026}.
     \item \textbf{Geometric field} (1): SSOG applies a structured geometric prior over the attention matrix \citep{pisoni_ssog_2026}.
     \item \textbf{Convolution-augmented} (1): the Conformer block \citep{Gulati2020} fuses multi-head self-attention with a depthwise-convolution module between two Macaron feed-forward layers, giving every layer a local branch alongside the global receptive field (Appendix~\ref{sec:annex-17}).
@@ -20,7 +21,7 @@ The system implements forty-five sequence mixers organized into nine functional 
 \begin{figure}[t]
 \centering
 \fitfigure{\includegraphics{figures/mixer-taxonomy.pdf}}
-\caption{Taxonomy of the forty-five sequence mixers across nine functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; conditional memory adds test-time read/write lookups; fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors.}
+\caption{Taxonomy of the forty-six sequence mixers across ten functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; conditional memory adds test-time read/write lookups; token-indexed memory relocates value capacity into lookup tables; fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -39,6 +40,21 @@ The dense baselines---standard softmax \citep{vaswani_attention_2017} and sigmoi
 \fitfigure{\includegraphics{figures/recurrent-map.pdf}}
 \caption{Recurrent and retentive family. RetNet offers parallel and recurrent forms, Mamba uses selective state-space parameters, ODE blocks model continuous depth, and Titans add test-time memory; all achieve constant-time per-step inference.}
 \label{fig:recurrent-map}
+\end{figure}
+
+\subsection{Token-Indexed Memory Family}
+Memory Attention \citep{kang_memory_attention_2026} keeps the standard softmax
+attention operator but removes the dedicated value projection: values are the
+contextual keys plus a layer-specific, token-ID-indexed memory row,
+\(V = K + \mathrm{Norm}(E[s])\), with RoPE applied only to the scoring pair.
+This increases parameter capacity without proportional dense computation and
+retains a conventional KV cache at inference.
+
+\begin{figure}[t]
+\centering
+\fitfigure{\includegraphics{figures/memory-map.pdf}}
+\caption{Token-indexed memory family. Memory Attention forms values from the contextual keys plus a normalized row of a per-layer token-ID memory table, replacing the value projection while keeping full quadratic attention weighting.}
+\label{fig:memory-map}
 \end{figure}
 
 \subsection{Latent and Low-Rank Attention Family}

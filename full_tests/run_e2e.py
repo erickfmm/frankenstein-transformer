@@ -235,6 +235,9 @@ ATTENTIONS = [
     # + convolution module. Trains densely in both encoder and decoder modes
     # (causal padding in the decoder), so it belongs in the pair sweep too.
     "conformer_attn",
+    # Memory Attention (arXiv:2609.28399): V = K + Norm(E[s]) — trains
+    # densely in encoder and decoder modes; conventional KV cache.
+    "memory_attn",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).

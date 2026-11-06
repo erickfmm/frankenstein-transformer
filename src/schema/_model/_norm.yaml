@@ -173,7 +173,7 @@ properties:
       `sparse_transformer_attn`, `gta_attn`, `iha_attn`, `mtla_attn`,
       `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`, `sparda_attn`,
       `conformer_attn`, `fox_attn`, `gated_softmax_attn`, `titan_attn`,
-      `gqla_attn`, `mlra_attn`. `gma_attn` supports every method except
+      `gqla_attn`, `mlra_attn`, `memory_attn`. `gma_attn` supports every method except
       `qk_clip` (it routes through Gaussian mixture responsibilities instead
       of a QK dot product). Enabling this block while `dims.layer_pattern`
       contains any other mixer is rejected at load time; for `qk_clip` the
@@ -240,7 +240,7 @@ properties:
       `bigbird_attn`, `sparse_transformer_attn`, `gta_attn`, `iha_attn`,
       `mtla_attn`, `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`,
       `sparda_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
-      `titan_attn`, `gqla_attn`, `mlra_attn`. `gma_attn` soporta todos los
+      `titan_attn`, `gqla_attn`, `mlra_attn`, `memory_attn`. `gma_attn` soporta todos los
       métodos excepto `qk_clip` (enruta mediante responsabilidades de mezcla
       Gaussiana en lugar de un producto punto QK). Activar este bloque con
       cualquier otro mixer en `dims.layer_pattern` se rechaza al cargar la

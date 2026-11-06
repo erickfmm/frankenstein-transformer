@@ -17,7 +17,7 @@ With a cache, the prefill costs $\mathcal{O}(S^2)$ once and each decode step cos
 \]
 The difference is the familiar one between re-encoding a conversation and continuing it.
 
-The subsystem covers every one of the forty-four dispatchable layer types. Twenty-six have parity-tested incremental branches; the remainder are registered with an explicit, paper-based rationale for running uncached (\S\ref{sec:kv-fallbacks}). Quantization and eviction are orthogonal to the mixer mathematics: codecs transform tensors at \emph{write} time and policies act at \emph{read} time, so the same \texttt{int8} or \texttt{int4\_kivi} codec serves a dense, latent or ring slot without per-mixer code \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
+The subsystem covers every one of the forty-five dispatchable layer types. Twenty-seven have parity-tested incremental branches; the remainder are registered with an explicit, paper-based rationale for running uncached (\S\ref{sec:kv-fallbacks}). Quantization and eviction are orthogonal to the mixer mathematics: codecs transform tensors at \emph{write} time and policies act at \emph{read} time, so the same \texttt{int8} or \texttt{int4\_kivi} codec serves a dense, latent or ring slot without per-mixer code \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
 
 \subsection{Cache Architecture}
 \label{sec:kv-architecture}
@@ -161,6 +161,7 @@ with $\mathbf{B}$ the positional bias of \S\ref{sec:kv-correctness}. Grouped-que
     \item \textbf{Gated softmax.} The gate $\sigma(\mathbf{x}\mathbf{W}_g)$ multiplies the attention output and depends only on the current token, so nothing extra is cached \citep{qiu_gated_attention_2025}.
     \item \textbf{Forgetting attention.} The logit bias is $D_{ij} = c_i - c_j$ with $c_i = \sum_{l\le i}\log f_l$ the cumulative log-forget sum. The cache stores one scalar per token and head as an extra; decode extends the running sum from the last cached token and evaluates a single row of $D$ against the cached column \citep{lin_forgetting_transformer_2025}.
     \item \textbf{Titans.} The implemented layer is the attention window; the memory module is outside the cached path. Standard append/read applies \citep{behrouz_titans_2025}.
+    \item \textbf{Memory Attention.} Class (i): prefill caches the post-RoPE keys and the constructed values $V = K + \mathrm{RMSNorm}(E[s])$, so decode looks up only the new token's memory row and the slot is byte-identical to standard KV \citep{kang_memory_attention_2026}.
     \item \textbf{Interleaved head attention.} Pseudo-key/value tensors are static learned head mixings computed on the fly; only the real per-token K/V is cached, and the mixing is applied after the read (the mixing is a per-token head-space map, so applying it post-read is exact) \citep{duvvuri_iha_2026}.
 \end{itemize}
 
@@ -334,7 +335,7 @@ The central test is a parity protocol: for a mixer and a positional encoding, co
 slots & append/read/truncate/device moves; ring wrap with position metadata; in-place state; conv-tail FIFO; token tail \\
 codecs & int8 error $\le 10^{-2}$; int4 error $\le 7.5\times10^{-2}$; protected window exactly fp; group boundaries; \texttt{update} $=$ dequant$\to$concat$\to$requant \\
 mixers & every implemented mixer $\times$ \{rope, none, ALiBi\}: full forward vs prefill+decode \\
-fallback & all $44$ enum values run with the cache on; unimplemented mixers bit-identical on/off; PaPE per-layer fallback \\
+fallback & all $45$ enum values run with the cache on; unimplemented mixers bit-identical on/off; PaPE per-layer fallback \\
 mechanisms & looped depth (distinct slots per logical layer), Hyperloop, mHC, MoD dense prefill, AttnRes fallback \\
 quantization & int8/int4 drift bounds with BitNet on and off; int4 engages on short prompts; protected window exact \\
 compression & sinks pinned after eviction; retained region correct; composition with int8 \\

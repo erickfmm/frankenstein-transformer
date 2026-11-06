@@ -3,7 +3,7 @@
 ``CACHE_SPECS`` is the single declarative source consumed by
 :class:`~src.model.hybrid_layer.HybridLayer` at runtime and by
 ``config_loader`` for static validation. One entry per schema
-``layer_pattern`` enum value (45 total: 44 mixer classes + the ``mamba``
+``layer_pattern`` enum value (46 total: 45 mixer classes + the ``mamba``
 linear placeholder).
 
 Rules (see the KV-cache integration plan, §5.4):
@@ -74,6 +74,7 @@ IMPLEMENTED_MIXERS = frozenset(
         # ---- F1 dense / softmax ----
         "sigmoid_attn",        # F1 (L1 normalizer re-summed over the cache)
         "gated_softmax_attn",  # F1
+        "memory_attn",         # F1 (standard KV; values built at append time)
         "titan_attn",          # F1
         "fox_attn",            # F1 (cumulative log-forget extras)
         # ---- F1 latent family ----
@@ -103,7 +104,7 @@ IMPLEMENTED_MIXERS = frozenset(
 )
 
 
-#: mixer_key -> CacheSpec. One entry per schema enum value (45).
+#: mixer_key -> CacheSpec. One entry per schema enum value (46).
 CACHE_SPECS: Dict[str, CacheSpec] = {
     # ---- Dense / softmax family (plan §6.2) ----
     "standard_attn": CacheSpec(
@@ -345,6 +346,15 @@ CACHE_SPECS: Dict[str, CacheSpec] = {
         slot_type="state",
         notes="KDA / Kimi Linear (arXiv:2510.26692); channel-wise decay; "
         "repo uses the plain recurrence (no DPLR kernel).",
+    ),
+    "memory_attn": CacheSpec(
+        supported=True,
+        slot_type="kv",
+        notes="Memory Attention (arXiv:2609.28399); conventional KV cache "
+        "(class i): prefill computes V = K + RMSNorm(E[s]) once and appends "
+        "(K_R, V); decode looks up only the new token's memory row. The "
+        "paper's MA-Recall (store K + token IDs, reconstruct V, ~50% smaller "
+        "cache) is analyzed but unmeasured — not implemented.",
     ),
     "falcon1_attn": CacheSpec(
         supported=True,

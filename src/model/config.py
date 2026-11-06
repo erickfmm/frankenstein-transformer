@@ -283,6 +283,9 @@ class FrankensteinModelConfig:
             model-wide positional encoding. Default: True.
         sigmoid_attn_use_pe: Whether ``sigmoid_attn`` layers consume the
             model-wide positional encoding. Default: True.
+        memory_attn_use_pe: Whether ``memory_attn`` layers consume the
+            model-wide positional encoding (RoPE on the scoring pair only;
+            values are built from the unrotated keys). Default: True.
         gated_softmax_attn_use_pe: Whether ``gated_softmax_attn`` layers
             consume the model-wide positional encoding. Default: True.
         gqa_attn_use_pe: Whether ``gqa_attn`` layers consume the
@@ -593,6 +596,7 @@ class FrankensteinModelConfig:
     standard_attn_use_pe: bool = True
     titan_attn_use_pe: bool = True
     sigmoid_attn_use_pe: bool = True
+    memory_attn_use_pe: bool = True
     gated_softmax_attn_use_pe: bool = True
     gqa_attn_use_pe: bool = True
     mla_attn_use_pe: bool = True

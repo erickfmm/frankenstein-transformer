@@ -63,6 +63,7 @@ from .attention.sparse import (
     SlidingWindowAttention,
 )
 from .attention.standard import StandardAttention
+from .attention.memory import MemoryAttention
 from .attention.ssog import SSOGAttention
 from .attention.titan import TitanAttention
 from .attention.latent import (
@@ -225,6 +226,7 @@ class HybridLayer(nn.Module):
             "gma_attn": GaussianMixtureAttention,
             "ssog_attn": SSOGAttention,
             "conformer_attn": ConformerAttention,
+            "memory_attn": MemoryAttention,
         }
 
         if layer_type == "mamba":
@@ -442,6 +444,17 @@ class HybridLayer(nn.Module):
                 x = self.mixer(x)
         elif self.layer_type == "engram_attn":
             x = self.mixer(x, input_ids=input_ids, logical_layer_idx=logical_layer_idx, pos_encoder=self.pos_encoder)
+        elif self.layer_type == "memory_attn":
+            # Memory Attention indexes a token-ID memory table, so it needs the
+            # token IDs on every path (legacy and cached).
+            x = self.mixer(
+                x,
+                input_ids=input_ids,
+                logical_layer_idx=logical_layer_idx,
+                pos_encoder=self.pos_encoder,
+                cache=slot,
+                cache_position=cache_position,
+            )
         elif slot is not None:
             x = self.mixer(
                 x,
@@ -561,6 +574,15 @@ class HybridLayer(nn.Module):
                 input_ids=input_ids,
                 logical_layer_idx=logical_layer_idx,
                 pos_encoder=self.pos_encoder,
+            )
+        elif self.layer_type == "memory_attn":
+            attn_out = self.mixer(
+                attn_in,
+                input_ids=input_ids,
+                logical_layer_idx=logical_layer_idx,
+                pos_encoder=self.pos_encoder,
+                cache=slot,
+                cache_position=cache_position,
             )
         elif slot is not None:
             attn_out = self.mixer(

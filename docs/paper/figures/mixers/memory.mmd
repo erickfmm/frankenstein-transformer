@@ -1,0 +1,30 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  s["token IDs s<br/>[B,n]"]
+  q["Q = Wq·x<br/>[B,n,nH·hd]"]
+  k["K = Wk·x<br/>[B,n,nKv·hd]"]
+  e["E[s]<br/>[B,n,nKv·hd]"]
+  m["M = RMSNorm(E[s])<br/>per KV head"]
+  v["V = K + M<br/>(pre-RoPE)"]
+  qr["Qᵣ = RoPE(Q)"]
+  kr["Kᵣ = RoPE(K)"]
+  sc["scores = QᵣKᵣᵀ/√d<br/>[B,nH,n]"]
+  sm["softmax<br/>(scores)"]
+  a["A<br/>= softmax · V"]
+  o["O = Wo·A<br/>[B,n,H]"]
+
+  x -- "Wq" --> q
+  x -- "Wk" --> k
+  s -- "lookup" --> e
+  e -- "RMSNorm" --> m
+  k -- "+" --> v
+  m -- "+" --> v
+  q -- "RoPE" --> qr
+  k -- "RoPE" --> kr
+  qr -- "QᵣKᵣᵀ" --> sc
+  kr -- "QᵣKᵣᵀ" --> sc
+  sc -- "softmax" --> sm
+  sm -- "A·V" --> a
+  v -- "A·V" --> a
+  a -- "Wo" --> o

@@ -226,6 +226,7 @@ El array \texttt{model.dims.layer\_pattern} acepta los siguientes 43 códigos de
 \endlastfoot
 standard\_attn & Atención multi-cabeza clásica (estilo BERT) & \checkmark & \checkmark \\
 sigmoid\_attn & Atención con compuerta sigmoide & \checkmark & \checkmark \\
+memory\_attn & Atención con memoria — valores por ID de token (V = K + Norm(E[s])) & \checkmark & \checkmark \\
 gated\_softmax\_attn & Atención softmax con compuerta sigmoide post-SDPA & \checkmark & \checkmark \\
 titan\_attn & Atención Titan con codificación posicional (HoPE/RoPE) & \checkmark & \checkmark \\
 retnet / retnet\_attn & Red de Retención (híbrido RNN+transformer) & \checkmark & \checkmark \\

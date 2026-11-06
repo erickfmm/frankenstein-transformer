@@ -25,7 +25,7 @@ EVAL_ONLY = {"fasa_attn", "sparge_attn"}
 
 
 def _schema_enum():
-    """Read the layer_pattern enum straight from the schema (45 values)."""
+    """Read the layer_pattern enum straight from the schema (46 values)."""
     with open("src/schema/_model/_dims.yaml") as handle:
         dims = yaml.safe_load(handle)
     return list(dims["properties"]["layer_pattern"]["items"]["enum"])
@@ -59,7 +59,7 @@ def _build(pattern, pe="rope", **extra):
 class RegistryConsistencyTests(unittest.TestCase):
     def test_capacity_spec_covers_every_enum_value(self):
         enum = _schema_enum()
-        self.assertEqual(len(enum), 45)
+        self.assertEqual(len(enum), 46)
         self.assertEqual(set(CACHE_SPECS), set(enum))
         # All implemented mixers must exist in the schema enum.
         self.assertTrue(IMPLEMENTED_MIXERS.issubset(set(enum)))

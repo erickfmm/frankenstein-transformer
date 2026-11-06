@@ -1,7 +1,7 @@
 \section{Transformadores Densos, Recurrentes y Aumentados con Memoria}
 \label{sec:annex-transformer}
 
-Este anexo sintetiza las familias densas, recurrentes y aumentadas con memoria de transformers. El campo ha evolucionado hacia varios paradigmas principales: atención densa global con variantes, compresión de cabezas clave-valor mediante atención por consultas agrupadas, compresión de estado recurrente con decaimiento, modelos de espacio de estado selectivos, integración numérica de profundidad continua y arquitecturas aumentadas con memoria. Comprender esta taxonomía ilumina las compensaciones fundamentales entre expresividad, costo computacional, huella de memoria y simplicidad de despliegue.
+Este anexo sintetiza las familias densas, recurrentes y aumentadas con memoria de transformers. El campo ha evolucionado hacia varios paradigmas principales: atención densa global con variantes, compresión de cabezas clave-valor mediante atención por consultas agrupadas, compresión de estado recurrente con decaimiento, modelos de espacio de estado selectivos, integración numérica de profundidad continua, memoria de valores indexada por token y arquitecturas aumentadas con memoria. Comprender esta taxonomía ilumina las compensaciones fundamentales entre expresividad, costo computacional, huella de memoria y simplicidad de despliegue.
 
 \subsection{Atención Densa de Referencia: Estándar y Sigmoide}
 
@@ -83,6 +83,61 @@ GQA interpola suavemente entre MHA ($h_k = h$, $G = 1$) y MQA ($h_k = 1$, $G = h
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token, espacio de caché KV $\mathcal{O}(h_k \cdot n \cdot d_h)$.
     \item \textbf{Fortalezas}: Balance flexible de cabezas; probado a escala (Llama 2 y 3 usan $h_k = 8$ cabezas KV con $h = 32$ cabezas de consulta); reduce el caché KV en factor $G \times$; soporta inferencia rápida con FlashAttention.
     \item \textbf{Debilidades}: Menos cabezas KV pueden reducir la capacidad representacional en modelos pequeños; requerir que $h_k$ divida a $h$ restringe las opciones arquitectónicas.
+\end{itemize}
+
+\subsection{Memoria Indexada por Token: Memory Attention}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/memory.pdf}}
+\caption{Flujo de datos de Memory Attention: se elimina la proyección de valores;
+los valores son las claves sin rotar más una fila de la tabla de memoria por ID de
+token, normalizada con RMSNorm por cabeza KV. RoPE se aplica solo al par de puntuación.}
+\label{fig:mixer-memory}
+\end{figure}
+
+Memory Attention \citep{kang_memory_attention_2026} elimina la proyección de
+valores dedicada y construye los valores a partir de las claves contextuales más
+la memoria específica de capa indexada por token. Con IDs de token $s$, tamaño de
+vocabulario $N$ y $d_v = H_{KV} d_h$:
+
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} estados ocultos $X \in \mathbb{R}^{T \times d}$, IDs de token $s$, tabla $E \in \mathbb{R}^{N \times d_v}$
+\State $M \gets \mathrm{Norm}(E[s]) \in \mathbb{R}^{T \times d_v}$ \Comment{RMSNorm por vector de token, por cabeza clave/valor}
+\State $Q \gets X W_Q$, \quad $K \gets X W_K$, \quad $V \gets K + M$ \Comment{sin $W_V$; valores desde claves sin rotar}
+\State $Q_R \gets \mathrm{RoPE}(Q)$, \quad $K_R \gets \mathrm{RoPE}(K)$ \Comment{rotación solo para puntuar}
+\State \textbf{Salida:} $Y = \mathrm{softmax}\!\left(\tfrac{Q_R K_R^\top}{\sqrt{d_k}} + C\right) V$
+\end{algorithmic}
+
+La salida se descompone como $O_{\mathrm{MA}} = A(K{+}M) = AK + AM$: un término de
+recuperación contextual sobre las claves y un término de recuperación de memoria
+agregado bajo la misma distribución de atención. A través de $L$ capas
+reemplazadas, MA cambia los $L\,d\,d_v$ parámetros estándar de la proyección de
+valores por $L(N d_v + p_{\mathrm{norm}})$ parámetros de memoria y normalización
+---capacidad adicional accedida por búsqueda en lugar de cómputo denso. En
+inferencia, la normalización por fila se pliega en la tabla ($E[i] \gets
+\mathrm{Norm}(E[i])$), reduciendo la construcción de valores en línea a búsqueda
+y suma, manteniendo un caché KV convencional. El artículo reporta mejor perplejidad
+en LAMBADA/WikiText y precisión promedio en tareas posteriores para backbones
+MHA/GQA/MQA con presupuestos de tokens igualados, con eficiencia de tokens
+$1.42\times$/$1.16\times$; la comparación incluye los parámetros de memoria
+adicionales, por lo que no aísla la estructura de la capacidad. MA-Offload
+(tablas residentes en CPU con prefetch) y MA-Recall (reconstruir valores
+históricos como $V_{1:T} = K_{1:T} + E[s_{1:T}]$ para un caché de valores
+${\sim}50\%$ menor) se analizan pero no se implementan aquí.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 d)$ de atención con
+    construcción de valores $\mathcal{O}(n d_v)$ (búsqueda+norma+suma), en lugar de
+    la proyección $\mathcal{O}(n\, d\, d_v)$.
+    \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token con un
+    caché KV convencional; $N d_v$ parámetros extra por capa.
+    \item \textbf{Fortalezas}: Capacidad adicional sin crecimiento del cómputo
+    denso; representaciones de token específicas por capa; agregación de atención
+    estándar exacta; compatible con el caché KV por construcción.
+    \item \textbf{Debilidades}: El número de parámetros crece con el vocabulario
+    ($N \gg d$); requiere IDs de token (solo texto); las ganancias reportadas no
+    están igualadas en parámetros.
 \end{itemize}
 
 \subsection{Arquitecturas Recurrentes y Retentivas}
@@ -239,6 +294,8 @@ El código base selecciona un mezclador por bloque a partir del \texttt{layer\_p
     \State $H \gets \text{softmax-attention}(H)$
 \ElsIf{$m=\texttt{sigmoid\_attn}$}
     \State $H \gets \text{sigmoid-attention}(H)$
+\ElsIf{$m=\texttt{memory\_attn}$}
+    \State $H \gets \text{memory-attention}(H)$
 \ElsIf{$m\in\{\texttt{retnet},\texttt{retnet\_attn}\}$}
     \State $H \gets \text{retention}(H)$
 \ElsIf{$m=\texttt{mamba}$}

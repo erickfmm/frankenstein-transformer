@@ -17,7 +17,7 @@ Con caché, el prefill cuesta $\mathcal{O}(S^2)$ una vez y cada paso de decodifi
 \]
 La diferencia es la conocida entre re-codificar una conversación y continuarla.
 
-El subsistema cubre los cuarenta y cuatro tipos de capa despachables. Veintiséis tienen ramas incrementales verificadas por paridad; el resto queda registrado con una justificación explícita, basada en el artículo, para ejecutarse sin caché (\S\ref{sec:kv-fallbacks}). La cuantización y la expulsión son ortogonales a la matemática del mezclador: los códecs transforman tensores en \emph{escritura} y las políticas actúan en \emph{lectura}, de modo que el mismo códec \texttt{int8} o \texttt{int4\_kivi} sirve a un slot denso, latente o de anillo sin código por mezclador \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
+El subsistema cubre los cuarenta y cinco tipos de capa despachables. Veintisiete tienen ramas incrementales verificadas por paridad; el resto queda registrado con una justificación explícita, basada en el artículo, para ejecutarse sin caché (\S\ref{sec:kv-fallbacks}). La cuantización y la expulsión son ortogonales a la matemática del mezclador: los códecs transforman tensores en \emph{escritura} y las políticas actúan en \emph{lectura}, de modo que el mismo códec \texttt{int8} o \texttt{int4\_kivi} sirve a un slot denso, latente o de anillo sin código por mezclador \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
 
 \subsection{Arquitectura de la Caché}
 \label{sec:kv-architecture}
@@ -161,6 +161,7 @@ con $\mathbf{B}$ el sesgo posicional de \S\ref{sec:kv-correctness}. La atención
     \item \textbf{Softmax con compuerta.} La compuerta $\sigma(\mathbf{x}\mathbf{W}_g)$ multiplica la salida de atención y depende sólo del token actual, así que no se cachea nada extra \citep{qiu_gated_attention_2025}.
     \item \textbf{Atención con olvido.} El sesgo de logits es $D_{ij} = c_i - c_j$ con $c_i = \sum_{l\le i}\log f_l$ la suma acumulada de log-olvido. La caché guarda un escalar por token y cabeza como extra; la decodificación extiende la suma corrida desde el último token cacheado y evalúa una sola fila de $D$ contra la columna cacheada \citep{lin_forgetting_transformer_2025}.
     \item \textbf{Titans.} La capa implementada es la ventana de atención; el módulo de memoria queda fuera de la ruta cacheada. Se aplica el append/read estándar \citep{behrouz_titans_2025}.
+    \item \textbf{Memory Attention.} Clase (i): el prefill cachea las claves post-RoPE y los valores construidos $V = K + \mathrm{RMSNorm}(E[s])$, de modo que la decodificación solo busca la fila de memoria del token nuevo y el slot es byte-idéntico al KV estándar \citep{kang_memory_attention_2026}.
     \item \textbf{Atención de cabezas intercaladas.} Los tensores pseudo-clave/valor son mezclas estáticas aprendidas de cabezas calculadas al vuelo; sólo se cachea el K/V real por token, y la mezcla se aplica después de la lectura (la mezcla es un mapa por token en el espacio de cabezas, así que aplicarla post-lectura es exacto) \citep{duvvuri_iha_2026}.
 \end{itemize}
 
@@ -334,7 +335,7 @@ El test central es un protocolo de paridad: para un mezclador y una codificació
 slots & append/read/truncate/movimientos de dispositivo; vuelta de anillo con metadatos de posición; estado in situ; FIFO de cola de convolución; cola de tokens \\
 códecs & error int8 $\le 10^{-2}$; error int4 $\le 7.5\times10^{-2}$; ventana protegida exactamente fp; fronteras de grupo; \texttt{update} $=$ descuantizar$\to$concatenar$\to$recuantizar \\
 mezcladores & cada mezclador implementado $\times$ \{rope, none, ALiBi\}: pasada completa vs prefill+decodificación \\
-respaldo & los $44$ valores del enum corren con la caché activa; mezcladores no implementados bit-idénticos on/off; respaldo PaPE por capa \\
+respaldo & los $45$ valores del enum corren con la caché activa; mezcladores no implementados bit-idénticos on/off; respaldo PaPE por capa \\
 mecanismos & profundidad en bucle (slots distintos por capa lógica), Hyperloop, mHC, prefill denso de MoD, respaldo AttnRes \\
 cuantización & cotas de deriva int8/int4 con BitNet on y off; int4 se activa en prompts cortos; ventana protegida exacta \\
 compresión & sinks fijados tras la expulsión; región retenida correcta; composición con int8 \\

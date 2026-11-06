@@ -40,6 +40,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "gated_softmax_attn",
             "engram_attn",
             "gqa_attn",
+            "memory_attn",
             "msa_attn",
             "sparda_attn",
             "kda_attn",
@@ -136,7 +137,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             )
 
     def test_cache_specs_match_layer_pattern_enum(self):
-        """T12: CACHE_SPECS covers exactly the layer_pattern enum (45)."""
+        """T12: CACHE_SPECS covers exactly the layer_pattern enum (46)."""
         from src.model.cache.capabilities import CACHE_SPECS
 
         schema_path = pathlib.Path(__file__).parent.parent / "src" / "schema.yaml"
@@ -146,7 +147,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "layer_pattern"
             ]["items"]["enum"]
         )
-        self.assertEqual(len(enum_values), 45)
+        self.assertEqual(len(enum_values), 46)
         self.assertEqual(set(CACHE_SPECS), enum_values)
 
     def test_inference_schema_is_referenced(self):

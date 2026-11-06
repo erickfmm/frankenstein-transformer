@@ -51,7 +51,7 @@ properties:
       gated_softmax_attn, gla_attn, deltanet_attn, gated_deltanet_attn,
       gated_deltanet2_attn, hgrn2_attn, fox_attn, longformer_attn, bigbird_attn,
       sparse_transformer_attn, sparsek_attn, nsa_attn, sparge_attn, fasa_attn, kda_attn,
-      mamba) do not need a sub-object. `gqa_attn` reads `dims.num_kv_heads`.
+      memory_attn, mamba) do not need a sub-object. `gqa_attn` reads `dims.num_kv_heads`.
 
       **References:** (paper: arxiv:1706.03762) (paper: arxiv:2307.08621) (paper: arxiv:2312.00752)
       (paper: arxiv:2501.00663)
@@ -61,7 +61,7 @@ properties:
       sigmoid_attn, gated_softmax_attn, gla_attn, deltanet_attn, gated_deltanet_attn,
       gated_deltanet2_attn, hgrn2_attn, fox_attn, longformer_attn, bigbird_attn,
       sparse_transformer_attn, sparsek_attn, nsa_attn, sparge_attn, fasa_attn, kda_attn,
-      mamba) no necesitan sub-objeto. `gqa_attn` lee `dims.num_kv_heads`.
+      memory_attn, mamba) no necesitan sub-objeto. `gqa_attn` lee `dims.num_kv_heads`.
 
       **Referencias:** (paper: arxiv:1706.03762) (paper: arxiv:2307.08621) (paper: arxiv:2312.00752)
       (paper: arxiv:2501.00663)

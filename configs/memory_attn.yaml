@@ -1,0 +1,103 @@
+# Memory Attention (arXiv:2609.28399) — reproduction of the paper's reference
+# L24-D2048 decoder: 24 layers, hidden 2048, 32 query / 32 KV heads, RoPE
+# (base 10000), RMSNorm, gated MLP (5632), vocab 32000, causal LM.
+model_class: frankenstein_text_decoder
+model:
+  dims:
+    vocab_size: 32000
+    hidden_size: 2048
+    num_layers: 24
+    num_loops: 1
+    num_heads: 32
+    num_kv_heads: 32
+    dropout: 0.0
+    layer_pattern:
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    - memory_attn
+    mode: decoder
+  norm:
+    type: rms_norm
+  embedding:
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 5632
+    activation: swiglu
+  positional_encoding: rope
+  positional_encoding_parameters:
+    rope:
+      base: 10000.0
+training:
+  task: causal_lm
+  seed: 42
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 2048
+  max_samples: 20000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: ./temp_data/v2_dataset_cache
+  gradient_accumulation_steps: 16
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-6
+      adamw-lr_norms: 5e-6
+      adamw-lr_attention: 3e-6
+      adamw-lr_other: 2e-6
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_embeddings:
+      - 0.9
+      - 0.95
+      adamw-betas_norms:
+      - 0.9
+      - 0.95
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-eps_embeddings: 1e-8
+      adamw-eps_norms: 1e-8
+      adamw-eps_attention: 1e-8
+      adamw-eps_other: 1e-8
+  scheduler_total_steps: 20480
+  scheduler_warmup_ratio: 0.05
+  scheduler_type: cosine
+  grad_clip_max_norm: 1.0
+  max_nan_retries: 3
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_memory_attn.csv
+  telemetry_log_interval: 5

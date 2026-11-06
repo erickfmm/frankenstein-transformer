@@ -7,6 +7,7 @@ Attention Package
    common
    standard
    sigmoid
+   memory
    retnet
    ode
    titan

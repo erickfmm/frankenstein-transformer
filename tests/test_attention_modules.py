@@ -13,6 +13,7 @@ if TORCH_AVAILABLE:
     from src.model.attention.ode import ODEAttentionBlock, ODEFunc
     from src.model.attention.retnet import MultiScaleRetention
     from src.model.attention.grouped_query_attention import GroupedQueryAttention
+    from src.model.attention.memory import MemoryAttention
 
 
 def _cfg(**overrides):
@@ -122,6 +123,102 @@ class SigmoidAttentionTests(unittest.TestCase):
         x = self._x().requires_grad_(True)
         attn(x).sum().backward()
         self.assertIsNotNone(x.grad)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class MemoryAttentionTests(unittest.TestCase):
+    """Memory Attention: V = K + Norm(E[s]) with a token-ID memory table."""
+
+    def _make(self, **kw):
+        kw.setdefault("num_kv_heads", 2)
+        return MemoryAttention(_cfg(**kw))
+
+    def _x(self):
+        return torch.randn(BSZ, SEQ, DIM)
+
+    def _ids(self):
+        return torch.randint(0, 64, (BSZ, SEQ))
+
+    def test_encoder_output_shape(self):
+        attn = self._make()
+        y = attn(self._x(), input_ids=self._ids())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_output_shape(self):
+        attn = self._make(mode="decoder")
+        y = attn(self._x(), input_ids=self._ids())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_missing_input_ids_raises(self):
+        attn = self._make()
+        with self.assertRaises(ValueError):
+            attn(self._x())
+
+    def test_decoder_is_causal(self):
+        attn = self._make(mode="decoder").eval()
+        x, ids = self._x(), self._ids()
+        full = attn(x, input_ids=ids)
+        prefix = attn(x[:, :4], input_ids=ids[:, :4])
+        self.assertTrue(torch.allclose(full[:, :4], prefix, atol=1e-5))
+
+    def test_memory_is_per_head_rms_normalized(self):
+        attn = self._make().eval()
+        ids = self._ids()
+        e = attn.memory(ids).view(BSZ, SEQ, attn.num_kv_heads, attn.head_dim)
+        rms = torch.sqrt(e.pow(2).mean(dim=-1, keepdim=True) + attn.memory_eps)
+        gamma = attn.memory_norm_weight.view(attn.num_kv_heads, attn.head_dim)
+        expected = (e / rms) * gamma
+        actual = attn._memory_lookup(ids).view(BSZ, SEQ, attn.num_kv_heads, attn.head_dim)
+        self.assertTrue(torch.allclose(expected, actual, atol=1e-6))
+
+    def test_gradient_flows_to_memory_and_keys(self):
+        attn = self._make()
+        x = self._x().requires_grad_(True)
+        attn(x, input_ids=self._ids()).sum().backward()
+        self.assertIsNotNone(x.grad)
+        self.assertIsNotNone(attn.memory.weight.grad)
+        self.assertIsNotNone(attn.memory_norm_weight.grad)
+        self.assertIsNotNone(attn.k_proj.weight.grad)
+
+    def test_with_bitnet(self):
+        from src.model.attention.common import BitLinear
+
+        attn = self._make(use_bitnet=True)
+        self.assertIsInstance(attn.q_proj, BitLinear)
+        self.assertIsInstance(attn.k_proj, BitLinear)
+        self.assertIsInstance(attn.out_proj, BitLinear)
+        self.assertNotIsInstance(attn.memory, BitLinear)
+        y = attn(self._x(), input_ids=self._ids())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_no_nans(self):
+        for mode in ("encoder", "decoder"):
+            attn = self._make(mode=mode).eval()
+            y = attn(self._x(), input_ids=self._ids())
+            self.assertTrue(torch.isfinite(y).all())
+
+    def test_qk_norm_attached_and_runs(self):
+        from src.model.norm.qk import QKNorm
+
+        attn = self._make(use_qk_norm=True, qk_norm_method="rms_norm")
+        self.assertIsInstance(attn.qk_norm, QKNorm)
+        y = attn(self._x(), input_ids=self._ids())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_use_pe_flag_controls_positional_encoder(self):
+        class _AddOne(torch.nn.Module):
+            def forward(self, x, logical_layer_idx=None, position_offset=None):
+                return x + 1.0
+
+        torch.manual_seed(0)
+        on = self._make(memory_attn_use_pe=True)
+        off = self._make(memory_attn_use_pe=False)
+        off.load_state_dict(on.state_dict())
+        pe = _AddOne()
+        x, ids = self._x(), self._ids()
+        y_on = on(x, input_ids=ids, pos_encoder=pe)
+        y_off = off(x, input_ids=ids, pos_encoder=pe)
+        self.assertFalse(torch.allclose(y_on, y_off, atol=1e-6))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

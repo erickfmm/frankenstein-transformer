@@ -226,6 +226,7 @@ The \texttt{model.dims.layer\_pattern} array accepts the following 43 mixer code
 \endlastfoot
 standard\_attn & Classic multi-head self-attention (BERT-style) & \checkmark & \checkmark \\
 sigmoid\_attn & Sigmoid-gated attention & \checkmark & \checkmark \\
+memory\_attn & Memory Attention — token-ID memory values (V = K + Norm(E[s])) & \checkmark & \checkmark \\
 gated\_softmax\_attn & Gated softmax attention with post-SDPA sigmoid & \checkmark & \checkmark \\
 titan\_attn & Titan attention with positional encoding (HoPE/RoPE) & \checkmark & \checkmark \\
 retnet / retnet\_attn & Retention Network (RNN+transformer hybrid) & \checkmark & \checkmark \\

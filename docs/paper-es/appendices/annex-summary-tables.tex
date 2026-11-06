@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 45 mezcladores de secuencia en nueve familias, 28 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 46 mezcladores de secuencia en diez familias, 28 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -91,6 +91,11 @@ cca\_attn & Latente & $\mathcal{O}(n^2 d / C)$ & $\mathcal{O}(\tilde{e} \cdot n)
 ccgqa\_attn & Latente & $\mathcal{O}(n^2 d / C_1)$ & $\mathcal{O}(\tilde{e}_{\text{kv}} \cdot n)$ & CCA + GQA desacoplada; mejor pérdida a $8\times$ reducción de caché & \citep{figliola_cca_2025} \\
 gma\_attn & Latente & $\mathcal{O}(nK d_r + nK d_v)$ & $\mathcal{O}(K)$/paso & Atención de Mezcla Gaussiana; enrutamiento latente probabilístico a través de $K$ componentes GMM aprendidos por cabeza; tiempo lineal para $K$ fijo; causal vía cumsums de prefijo & \citep{huang_gma_2026} \\
 ssog\_attn & Campo geométrico & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$/pasada & SSOG: campo Gaussiano separable sobre posición relativa; el contenido dirige (residuos acotados $\mu/\sigma/\lambda$ detrás de compuertas de arranque en frío), nunca puntúa; solo encoder & \citep{pisoni_ssog_2026} \\
+\midrule
+
+\multicolumn{6}{c}{\textbf{Memoria (1)}} \\
+\midrule
+memory\_attn & Memoria & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Valores de memoria por ID de token $V = K + \mathrm{Norm}(E[s])$; elimina la proyección de valores; $+Nd_v$ parámetros por capa & \citep{kang_memory_attention_2026} \\
 \bottomrule
 \end{longtable}
 \normalsize

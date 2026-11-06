@@ -279,6 +279,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   - `cca_attn` — Compressed Convolutional Attention, attention in compressed latent + convs (arXiv:2510.04476).
   - `ccgqa_attn` — Compressed Convolutional Grouped Query Attention, CCA + decoupled GQA in latent (arXiv:2510.04476).
 - Convolution-augmented: `conformer_attn` — Conformer, macaron FFN₁ + MHSA + convolution module (arXiv:2005.08100).
+- Memory blocks: `memory_attn` — Memory Attention, token-ID memory values `V = K + Norm(E[s])` replacing the value projection (arXiv:2609.28399).
 - Training-free policy: `sparge_attn` and `fasa_attn` are eval-only; training mode raises an explicit runtime error.
 
 #### model.norm
@@ -302,7 +303,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   `longformer_attn`, `bigbird_attn`, `sparse_transformer_attn`, `gta_attn`,
   `iha_attn`, `mtla_attn`, `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`,
   `sparda_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
-  `titan_attn`, `gqla_attn`, `mlra_attn`; `qk_clip` additionally excludes
+  `titan_attn`, `gqla_attn`, `mlra_attn`, `memory_attn`; `qk_clip` additionally excludes
   `gma_attn`. Recurrent/state-space mixers (`retnet`, `gla_attn`, `mamba`, …)
   are rejected at load time. Examples: `norm_qknorm_rms.yaml`,
   `norm_qknorm_clip_mla.yaml`, `norm_qknorm_quack.yaml`.
@@ -441,6 +442,21 @@ MLM preset), `configs/examples/mixer_conformer.yaml` (minimal smoke preset),
 - `positional_encoding_parameters.use_pe.conformer_attn`: per-mixer PE opt-out (default true).
 - Decoder mode pads the depth-wise conv causally; encoder mode uses symmetric padding.
 - `conformer_attn` is not KV-cacheable (depth-wise conv + macaron state); it always runs the legacy full-recompute path.
+
+### Memory Attention (model.attention.memory_attn)
+
+`memory_attn` (arXiv:2609.28399) keeps the standard softmax attention operator
+but drops the dedicated value projection: values are the contextual keys plus a
+per-layer, token-ID-indexed memory table, `V = K + RMSNorm(E[s])`, with
+`d_v = dims.num_kv_heads * (hidden_size / num_heads)`. RoPE applies only to the
+scoring pair. There are no per-mixer sub-keys (`dims.num_kv_heads` and
+`dims.vocab_size` are the only inputs); `positional_encoding_parameters.use_pe.memory_attn`
+(default true) is the only flag. The mixer needs token IDs, so it is text-only
+(mask `input_ids`; ViT/audio presets have none). At inference it uses a plain
+KV slot, so `inference.kv_cache.enabled: true` works as for `standard_attn`.
+Examples: `configs/examples/es_arch_memory_adamw.yaml` (small Spanish MLM
+preset) and `configs/memory_attn.yaml` (the paper's L24-D2048 causal-LM
+reference).
 
 ### Audio presets (`frankenstein_audio`, tasks `asr` / `audio_classification`)
 
