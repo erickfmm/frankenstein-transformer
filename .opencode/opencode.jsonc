@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Plan mode saves implementation plans in this repo's .opencode/plan/.
+  // The built-in `plan` agent denies edits everywhere except ~/.opencode/plan,
+  // so append a narrower allow for the project's tracked plan folder.
+  // Rules are ordered and the last matching rule wins.
+  "instructions": [".opencode/PLAN_MODE.md"],
+
+  "agents": {
+    "plan": {
+      "permissions": [
+        { "action": "edit", "resource": "*.opencode/plan/*", "effect": "allow" }
+      ]
+    }
+  }
+}
