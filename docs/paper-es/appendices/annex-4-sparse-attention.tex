@@ -686,22 +686,103 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
     \item \textbf{Limitación}: Requiere un pipeline de offload CPU--GPU y un selector base congelado; el beneficio anticipado depende de que la demanda de bloques de la siguiente capa sea predecible a partir del Pronóstico actual.
 \end{itemize}
 
+\subsection{LSA (Atención Dispersa Latente): Clustering Semántico de Claves con Selección Top-k}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/lsa.pdf}}
+\caption{Flujo de datos de N-LSA: las claves agrupadas se clusterizan con Ward en buckets; cada consulta puntúa los centroides, expande los mejores buckets en un conjunto top-$k$ de claves de largo alcance y atiende a sumideros + selección + ventana.}
+\label{fig:mixer-lsa}
+\end{figure}
+
+\subsubsection{Formulación Matemática}
+
+La Atención Dispersa Latente \citep{kubicek_lsa_2026} reemplaza el escaneo por clave (o por bloque) de un indexador disperso por \textbf{clustering semántico}: las claves se agrupan por contenido en un espacio latente aprendido y cada consulta puntúa los centroides de los buckets en lugar de todas las claves. El paper define dos variantes entrenables: Distilled-LSA (D-LSA), que añade pequeñas proyecciones índice a un modelo preentrenado congelado, y \textbf{Native-LSA (N-LSA)}, entrenada desde cero solo con la pérdida del siguiente token. La implementación de este código sigue N-LSA.
+
+\paragraph{Clustering semántico}: Cada clave índice se normaliza L2,
+\[
+\hat{\mathbf{k}}_j = \frac{\mathbf{k}_j}{\lVert \mathbf{k}_j \rVert_2},
+\]
+y cada $n_{\text{pool}}$ claves consecutivas se suman en una clave de pool, de modo que el clustering recorre $T/n_{\text{pool}}$ claves de pool en lugar de $T$ claves. Las claves se procesan en \emph{bloques de clustering} de $n_{\text{cluster}}$ tokens consecutivos; una vez completo un bloque, sus claves de pool se fusionan de abajo hacia arriba con el criterio de Ward en $m = n_{\text{cluster}}/\bar{n}_b$ buckets cuyos centroides unitarios son
+\[
+\mathbf{c}_b = \frac{\mathbf{k}^{\text{sum}}_b}{\lVert \mathbf{k}^{\text{sum}}_b \rVert_2},
+\]
+donde $\mathbf{k}^{\text{sum}}_b$ es la suma de las claves del bucket $b$ y $\bar{n}_b$ el número medio de claves por bucket. En cada ronda se fusionan en paralelo todos los pares que son mutuamente el más barato; con la matriz de Gram $G_{bb'} = \mathbf{k}^{\text{sum}}_b \cdot \mathbf{k}^{\text{sum}}_{b'}$ el costo de fusión es
+\[
+a_b = \sqrt{G_{bb}}, \qquad a_{b \cup b'} = \sqrt{G_{bb} + G_{b'b'} + 2G_{bb'}}, \qquad \Delta(b,b') = a_b + a_{b'} - a_{b \cup b'},
+\]
+y una fusión se omite cuando el bucket combinado superaría $n_{\max}^b$ claves. La caché de buckets guarda cada centroide junto con las posiciones de sus claves. \textbf{Una vez clusterizado un bloque, sus buckets nunca cambian}, lo que hace exacta la decodificación incremental en esta implementación.
+
+\paragraph{Búsqueda semántica}: Cada consulta se normaliza L2, $\hat{\mathbf{q}}_i = \mathbf{q}_i/\lVert \mathbf{q}_i \rVert_2$, y puntúa los centroides de todos los buckets de los bloques de clustering anteriores al suyo. Para N-LSA la puntuación es la mejor similitud que cualquier cabeza de consulta da al centroide,
+\[
+s_{i,b} = \max_h \hat{\mathbf{q}}_{i,h} \cdot \mathbf{c}_b,
+\]
+de modo que una única lista de índices $\mathcal{J}_i$ es compartida por todas las cabezas de consulta. Los $p$ buckets mejores se expanden mejor-primero hasta seleccionar $k$ claves de \emph{largo alcance}; la expansión siempre llena $k$ porque $p$ se elige de forma que $p\, n_{\text{pool}} \ge k$, y las claves ya cubiertas por el prefijo sumidero o la ventana se omiten. Cada consulta atiende además a $n_{\text{sink}}$ claves sumidero y a las $n_w = n_{\text{cluster}}$ claves más recientes (su propio bloque aún no clusterizado), lo que da un conjunto
+\[
+\mathcal{J}_i \subseteq \{\text{sumideros}\} \cup \{\text{top-}k \text{ claves de largo alcance}\} \cup \{\text{ventana del bloque propio}\}, \qquad |\mathcal{J}_i| \le n_{\text{sink}} + k + n_w .
+\]
+
+\paragraph{Atención}: La atención estándar de producto punto escalado se calcula solo sobre $\mathcal{J}_i$,
+\[
+z_{i,j} = \frac{\mathbf{q}_i \cdot \mathbf{k}_j}{\sqrt{d_h}}, \qquad
+\mathbf{o}_i = \mathrm{softmax}_{j \in \mathcal{J}_i}(z_{i,j})\, \mathbf{V}_{\mathcal{J}_i},
+\]
+donde el softmax se renormaliza por cabeza sobre la selección compartida. N-LSA \textbf{no añade parámetros}, \textbf{no usa codificación posicional} (RoPE podría soportarse clusterizando solo la parte libre de RoPE de las claves) y \textbf{detiene el gradiente a través de la selección}: el clustering, la puntuación de centroides y la expansión se ejecutan sin gradientes, de modo que la pérdida del siguiente token entrena las proyecciones de atención solo a través de las claves a las que cada consulta atiende.
+
+\subsubsection{Pseudocódigo Algorítmico}
+
+\begin{algorithm}[H]
+\caption{N-LSA: clustering Ward de un bloque y búsqueda semántica plana}
+\begin{algorithmic}[1]
+\Require Claves índice $\mathbf{k}_j$ de un bloque de clustering completo; tamaños $n_{\text{cluster}}, n_{\text{pool}}, m, n_{\max}^b$
+\Require Consultas $\mathbf{q}_i$; presupuesto de sumideros $n_{\text{sink}}$; presupuesto de largo alcance $k$; ventana $n_w = n_{\text{cluster}}$
+\Ensure Caché de buckets con $m$ centroides y sus posiciones; salida $\mathbf{Y}$
+\State $\hat{\mathbf{k}}_j \gets \mathbf{k}_j / \lVert \mathbf{k}_j \rVert_2$ para todas las claves del bloque
+\For{todas las claves de pool $\mathbf{k}^{\text{pool}}$, en paralelo}
+    \State $\mathbf{k}^{\text{pool}} \gets$ suma de sus $n_{\text{pool}}$ claves consecutivas $\hat{\mathbf{k}}_j$
+\EndFor
+\State iniciar un bucket $b$ por clave de pool: $\mathbf{k}^{\text{sum}}_b \gets \mathbf{k}^{\text{pool}}$, $|b| \gets n_{\text{pool}}$
+\While{queden más de $m$ buckets}
+    \State $G \gets [\mathbf{k}^{\text{sum}}_b \cdot \mathbf{k}^{\text{sum}}_{b'}]$ \Comment{matriz de Gram}
+    \State $\Delta(b,b') \gets \sqrt{G_{bb}} + \sqrt{G_{b'b'}} - \sqrt{G_{bb} + G_{b'b'} + 2G_{bb'}}$
+    \State fusionar los pares mutuos más baratos con $|b| + |b'| \le n_{\max}^b$, como máximo tantos como buckets por encima de $m$
+\EndWhile
+\State $\mathbf{c}_b \gets \mathbf{k}^{\text{sum}}_b / \lVert \mathbf{k}^{\text{sum}}_b \rVert_2$; guardar $\mathbf{c}_b$ y las posiciones del bucket $b$
+\State $\hat{\mathbf{q}}_i \gets \mathbf{q}_i / \lVert \mathbf{q}_i \rVert_2$ para todas las consultas
+\State $s_{i,b} \gets \max_h \hat{\mathbf{q}}_{i,h} \cdot \mathbf{c}_b$ sobre los buckets anteriores al bloque propio de la consulta
+\State seleccionar los $p$ buckets mejores; expandirlos mejor-primero en $k$ claves de largo alcance (omitir sumideros y ventana)
+\State $\mathcal{J}_i \gets \{\text{sumideros}\} \cup \{\text{claves de largo alcance}\} \cup \{\text{ventana del bloque propio}\}$
+\State $\mathbf{Y} \gets$ atención sobre $\mathcal{J}_i$ con softmax por cabeza renormalizado sobre la selección compartida
+\Return $\mathbf{Y}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Características Clave}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad}: La búsqueda plana puntúa $\mathcal{O}(T/\bar{n}_b)$ centroides por consulta, es decir, $\mathcal{O}(T^2/\bar{n}_b + T(k+n_w+n_{\text{sink}})d_h)$ en prefill y $\mathcal{O}(T/\bar{n}_b + k+n_w+n_{\text{sink}})$ por token decodificado; la variante de árbol del paper hace el indexador $\mathcal{O}(T \log T)$.
+    \item \textbf{Entrenable}: Sí, de forma nativa desde cero con la pérdida del siguiente token (N-LSA); la selección no es diferenciable y el gradiente se detiene a través de ella. Sin profesor, sin proyecciones índice, sin pérdida auxiliar---y \textbf{sin parámetros extra}.
+    \item \textbf{Fortaleza}: En el híbrido de 0.5B del paper, N-LSA iguala la pérdida de validación de la atención completa a 128k tokens ($1.085$ frente a $1.085$; PISA $1.100$, NSA $1.117$, SWA $1.154$) y entrena hasta $1.6\times$ más rápido por capa de atención a 128k. Como cada bloque de clustering es inmutable una vez completo, la decodificación en caché de este código es exacta, no una aproximación.
+    \item \textbf{Limitación}: El indexador plano sigue siendo cuadrático en la longitud de contexto (con una constante $1/\bar{n}_b$); la búsqueda en árbol queda para trabajo futuro. La lista de índices única del paper asume una sola cabeza KV compartida ($n_{kv}=1$), y N-LSA usa deliberadamente ausencia de codificación posicional.
+\end{itemize}
+
 \subsection{Espacio de Diseño y Criterios de Selección}
 
-Los diez métodos de atención dispersa ocupan posiciones complementarias en un espacio de diseño multidimensional:
+Los once métodos de atención dispersa ocupan posiciones complementarias en un espacio de diseño multidimensional:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Patrones geométricos/fijos} (Sparse Transformer, Longformer): Simples de implementar y analizar, pero los patrones no se adaptan al contenido.
     \item \textbf{Desalojo de KV con memoria fija} (SWA con sumideros): La política más barata posible---conservar un prefijo sumidero y una ventana reciente, descartar el resto. Sin parámetros extra, sin entrenamiento, memoria acotada.
     \item \textbf{Selección aprendida} (SparseK, NSA): Permiten adaptación mediante redes de selección entrenables, a costa de mayor complejidad de implementación.
     \item \textbf{Aceleración sin entrenamiento} (FASA, SpargeAttn): Permiten aceleración directa de modelos existentes sin reentrenamiento, adecuados para sistemas desplegados.
+    \item \textbf{Selección semántica} (LSA): Agrupa las claves por contenido y guarda un centroide por bucket, de modo que el indexador recorre un pequeño múltiplo de $T/\bar{n}_b$ en lugar de $T$; es el único miembro cuyas estadísticas por bloque son inmutables, lo que hace posible la decodificación exacta en caché.
     \item \textbf{Garantías teóricas} (BigBird): Proporcionan demostraciones formales de completitud expresiva, importantes para comprender los márgenes de seguridad.
 \end{itemize}
 
 \textbf{Orientación de selección:}
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Entrenamiento de nuevos modelos} donde los recursos lo permitan: NSA o SparseK para máxima aceleración de inferencia; BigBird para garantía teórica; SWA con sumideros como el baseline de bajo costo más fuerte.
-    \item \textbf{Comprensión de documentos de contexto largo}: SWA con sumideros (ventana 256--512) para la mejor precisión por byte de caché KV; Longformer o FASA por simplicidad práctica; NSA para escala extrema.
+    \item \textbf{Entrenamiento de nuevos modelos} donde los recursos lo permitan: NSA o SparseK para máxima aceleración de inferencia; BigBird para garantía teórica; LSA cuando importen el clustering semántico y la decodificación exacta en caché a contexto ultra-largo; SWA con sumideros como el baseline de bajo costo más fuerte.
+    \item \textbf{Comprensión de documentos de contexto largo}: SWA con sumideros (ventana 256--512) para la mejor precisión por byte de caché KV; Longformer o FASA por simplicidad práctica; NSA para escala extrema; LSA cuando el escaneo del indexador sea el cuello de botella.
     \item \textbf{Aceleración de modelos existentes}: SWA con sumideros como baseline sin entrenamiento por defecto (superó a la mayoría de los retrofits de atención lineal en el estudio original); FASA para LLMs basados en RoPE; SpargeAttn para cualquier arquitectura.
     \item \textbf{Entornos con recursos limitados}: SWA con sumideros para un presupuesto de memoria fijo; Sparse Transformer por simplicidad y eficiencia probada a escala moderada.
 \end{enumerate}

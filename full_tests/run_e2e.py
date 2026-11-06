@@ -238,6 +238,10 @@ ATTENTIONS = [
     # Memory Attention (arXiv:2609.28399): V = K + Norm(E[s]) — trains
     # densely in encoder and decoder modes; conventional KV cache.
     "memory_attn",
+    # Latent Sparse Attention / N-LSA (arXiv:2610.42147): semantic key
+    # clustering + top-k selection; trains natively in encoder and decoder
+    # modes; exact bucket-cache incremental decoding.
+    "lsa_attn",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).

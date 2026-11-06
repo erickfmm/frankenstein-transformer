@@ -348,7 +348,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-46 enum values in 10 families. `config subkey` is the optional
+47 enum values in 10 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -399,6 +399,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `ssog_attn` | Geometric field | `ssog.*` | yes (encoder, grid input) |
 | `conformer_attn` | Convolution-augmented | `conformer.*` | yes |
 | `memory_attn` | Memory | `dims.num_kv_heads` | yes |
+| `lsa_attn` | Sparse (semantic) | `lsa.*` | yes |
 
 Inference-sparse mixers: `HybridLayer.TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}`
 run standard dense attention in `train()` mode (via `mixer.dense_forward`, sharing
@@ -419,6 +420,19 @@ projection is removed and values are `V = K + RMSNorm(E[s])`, where
 `d_v = num_kv_heads · head_dim`. RoPE applies to the scoring pair only (values
 come from the unrotated keys); the mixer needs `input_ids` like `engram_attn`.
 Attention weights are standard softmax, so the KV cache is a plain `KVSlot`.
+
+`lsa_attn` implements Native-LSA from arXiv:2610.42147: keys are L2-normalised,
+pooled every `lsa.pool_size` tokens and Ward-clustered per complete
+`lsa.cluster_block` into `lsa.cluster_block / lsa.keys_per_bucket` buckets
+whose unit-norm centroids are scored by the best query head
+(`s_{i,b} = max_h q̂_h·c_b`). Each query expands the top `lsa.num_buckets`
+buckets, best first, into `lsa.num_long_range` long-range keys and attends to
+`lsa.num_sinks` sinks + selection + its own block (window `n_w =
+lsa.cluster_block`), with one index list shared by every head. The mixer adds
+no parameters, defaults `lsa_attn_use_pe` to `false` (N-LSA trains without
+positional encoding) and stops the gradient through the selection. Buckets are
+immutable once a block completes, so the `BucketKVSlot` incremental branch is
+exact; flat search scores about `T/keys_per_bucket` centroids per decode step.
 
 Registry: the local `mixer_registry` dict in `src/model/hybrid_layer.py` maps
 names to classes; `mamba` is handled as a linear projection special case.
@@ -635,7 +649,9 @@ Implemented cached branches (parity-tested in
 `gta_attn`, `swa_attn`, `longformer_attn`, `bigbird_attn`,
 `sparse_transformer_attn`, `fasa_attn`, `retnet`, `retnet_attn`,
 `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`,
-`gated_deltanet2_attn`, `hgrn2_attn`, `kda_attn`, `gma_attn`, `memory_attn`.
+`gated_deltanet2_attn`, `hgrn2_attn`, `kda_attn`, `gma_attn`, `memory_attn`,
+`lsa_attn` (`BucketKVSlot`: KV + immutable per-block bucket centroids/index
+table, never quantized).
 Documented fallbacks: `mamba` (stateless), `ssog_attn` (bidirectional
 vision grid, no causal formulation), `ode` (solver re-derives all
 intermediate states each step), `falcon*` (chunk-parallel rehearsal FIFO),
@@ -1072,6 +1088,7 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 ## 14. Known limitations
 
 - `fasa_attn` / `sparge_attn` train as standard dense attention (no learned sparse rule); their sparse path is inference-only.
+- `lsa_attn` is a CPU-first reference implementation: it materialises the per-query key set `J_i` densely, so its memory grows with `num_long_range + cluster_block + num_sinks` per query. The paper's kernels (`docs/paper/`, arXiv:2610.42147) chunk and threshold the scan; that is out of scope here, and the tree search variant is not implemented.
 - mHC and MoD cannot be enabled together.
 - `ssog_attn` is encoder-oriented and expects a `grid_h × grid_w` raster.
 - `mamba` is currently a linear placeholder in the registry, not a full SSM.

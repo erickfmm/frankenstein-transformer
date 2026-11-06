@@ -260,6 +260,7 @@ properties:
       | `ssog_attn` | SSOG — separable Gaussian field over relative position, near-linear O(R·N·√N); content steers, never scores (Pisoni 2026) (paper: https://www.pisoni.ai/posts/ssog/) | ✅ | ✅ |
       | `conformer_attn` | Conformer — macaron FFN₁ + MHSA + convolution module (paper: arxiv:2005.08100) | ✅ | ✅ |
       | `memory_attn` | Memory Attention — value projection replaced by layer-specific token-ID memory, V = K + Norm(E[s]) (paper: arxiv:2609.28399) | ✅ | ✅ |
+      | `lsa_attn` | Latent Sparse Attention — semantic Ward clustering of keys + top-k long-range selection; natively trainable, no extra parameters, no PE (paper: arxiv:2610.42147) | ✅ | ✅ |
 
       **Examples explained:**
       - `[standard_attn]` repeated 12 times: Classic BERT-like encoder. Simplest configuration, serves as a reliable baseline. All layers use full quadratic attention.
@@ -317,6 +318,7 @@ properties:
       | `ssog_attn` | SSOG — campo Gaussiano separable sobre posición relativa, casi lineal O(R·N·√N); el contenido dirige, nunca puntúa (Pisoni 2026) (paper: https://www.pisoni.ai/posts/ssog/) | ✅ | ✅ |
       | `conformer_attn` | Conformer — FFN₁ macaron + MHSA + módulo de convolución (paper: arxiv:2005.08100) | ✅ | ✅ |
       | `memory_attn` | Memory Attention — proyección de valores reemplazada por memoria token-ID por capa, V = K + Norm(E[s]) (paper: arxiv:2609.28399) | ✅ | ✅ |
+      | `lsa_attn` | Atención Dispersa Latente — clustering Ward semántica de claves + selección top-k de largo alcance; entrenable de forma nativa, sin parámetros extra, sin PE (paper: arxiv:2610.42147) | ✅ | ✅ |
       **Ejemplos explicados:**
       - `[standard_attn]` repetido 12 veces: Encoder clásico tipo BERT. Configuración más simple, sirve como línea base confiable. Todas las capas usan atención cuadrática completa.
       - `[retnet, titan_attn, retnet, mamba, titan_attn, ode]` con `num_layers=6`: Arquitectura mixta que combina retención recurrente (largo alcance eficiente), atención Titan con codificación posicional (atención local precisa), Mamba SSM (modelado de secuencias en tiempo lineal) y ODE de profundidad continua. Cada posición recibe un tipo diferente de cómputo, permitiendo representaciones diversas.
@@ -376,6 +378,7 @@ properties:
         - falcon2a_attn
         - falcon3a_attn
         - memory_attn
+        - lsa_attn
     examples:
       - [retnet, titan_attn, retnet, mamba, titan_attn, ode]
       - [standard_attn]

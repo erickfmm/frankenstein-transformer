@@ -43,6 +43,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "memory_attn",
             "msa_attn",
             "sparda_attn",
+            "lsa_attn",
             "kda_attn",
             "mla_attn",
             "gqla_attn",
@@ -105,6 +106,10 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             },
             "msa": {"block_size", "topk_blocks", "index_dim", "kl_loss_weight"},
             "sparda": {"block_size", "topk_blocks", "forecast_dim"},
+            "lsa": {
+                "num_long_range", "num_buckets", "num_sinks", "pool_size",
+                "cluster_block", "keys_per_bucket", "max_keys_per_bucket",
+            },
             "gma": {
                 "num_components", "routing_dim", "epsilon", "sigma_eps",
                 "init_mean_std",
@@ -137,7 +142,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             )
 
     def test_cache_specs_match_layer_pattern_enum(self):
-        """T12: CACHE_SPECS covers exactly the layer_pattern enum (46)."""
+        """T12: CACHE_SPECS covers exactly the layer_pattern enum (47)."""
         from src.model.cache.capabilities import CACHE_SPECS
 
         schema_path = pathlib.Path(__file__).parent.parent / "src" / "schema.yaml"
@@ -147,7 +152,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "layer_pattern"
             ]["items"]["enum"]
         )
-        self.assertEqual(len(enum_values), 46)
+        self.assertEqual(len(enum_values), 47)
         self.assertEqual(set(CACHE_SPECS), enum_values)
 
     def test_inference_schema_is_referenced(self):

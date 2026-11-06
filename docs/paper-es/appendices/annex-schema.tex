@@ -48,7 +48,7 @@ dims.num\_layers & int $\ge 1$ (obligatorio) & Número de capas físicas del tra
 dims.num\_loops & int $\ge 1$ & Número de bucles lógicos. Cada capa en \texttt{layer\_pattern} se ejecuta \texttt{num\_loops} veces. Por defecto: 1. \\
 dims.num\_heads & int $\ge 1$ (obligatorio) & Número de cabezas de atención paralelas. Debe dividir \texttt{hidden\_size} exactamente. \\
 dims.dropout & float [0,1] & Tasa de dropout global. Típico: 0.1 (estándar BERT). \\
-dims.layer\_pattern & array of enum (obligatorio) & Secuencia ordenada de tipos de capa. La longitud debe igualar \texttt{num\_layers}. 43 códigos de mezclador disponibles (ver Tabla~\ref{tab:layer-pattern}). \\
+dims.layer\_pattern & array of enum (obligatorio) & Secuencia ordenada de tipos de capa. La longitud debe igualar \texttt{num\_layers}. 47 códigos de mezclador disponibles (ver Tabla~\ref{tab:layer-pattern}). \\
 \midrule
 \multicolumn{3}{l}{\textit{model.norm.*}} \\
 \midrule
@@ -143,6 +143,16 @@ attention.sparda.block\_size & int $\ge 1$ & Tamaño de bloque KV para SparDA. P
 attention.sparda.topk\_blocks & int $\ge 1$ & Número de bloques KV seleccionados por grupo GQA. Por defecto: 16. \\
 attention.sparda.forecast\_dim & int $\ge 1$ & Dimensionalidad de la proyección Forecast. Por defecto: 64. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.attention.lsa.*}} \\
+\midrule
+attention.lsa.num\_long\_range & int $\ge 1$ & Presupuesto de claves de largo alcance $k$ por consulta. Por defecto: 2048. \\
+attention.lsa.num\_buckets & int $\ge 1$ & Buckets puntuados por consulta $p$; se eleva para que $p\cdot$\texttt{pool\_size} $\ge k$. Por defecto: 512. \\
+attention.lsa.num\_sinks & int $\ge 1$ & Claves sumidero iniciales siempre atendidas. Por defecto: 4. \\
+attention.lsa.pool\_size & int $\ge 1$ & Claves sumadas por clave de pool antes del clustering Ward. Por defecto: 4. \\
+attention.lsa.cluster\_block & int $\ge 2$ & Tamaño de bloque de clustering; también la ventana $n_w$. Por defecto: 512. \\
+attention.lsa.keys\_per\_bucket & int $\ge 1$ & Claves medias por bucket; produce \texttt{cluster\_block / keys\_per\_bucket} buckets por bloque. Por defecto: 8. \\
+attention.lsa.max\_keys\_per\_bucket & int $\ge 1$ & Límite de fusión por bucket. Por defecto: 16. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.attention.engram.*}} \\
 \midrule
 attention.engram.max\_ngram\_size & int $\ge 2$ & Tamaño máximo de N-grama para el módulo de memoria Engram. \\
@@ -206,7 +216,7 @@ Los campos se agrupan bajo sub-objetos jerárquicos (\texttt{dims}, \texttt{norm
 \subsubsection{Enumeración del Patrón de Capas}
 \label{tab:layer-pattern}
 
-El array \texttt{model.dims.layer\_pattern} acepta los siguientes 43 códigos de mezclador. Cada elemento define una capa física en la pila del modelo. La Tabla~\ref{tab:layer-pattern-enum} enumera todos los tipos disponibles con su soporte de entrenamiento e inferencia.
+El array \texttt{model.dims.layer\_pattern} acepta los siguientes 47 códigos de mezclador. Cada elemento define una capa física en la pila del modelo. La Tabla~\ref{tab:layer-pattern-enum} enumera todos los tipos disponibles con su soporte de entrenamiento e inferencia.
 
 \begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{4.7cm}>{\raggedright\arraybackslash}p{5.0cm}cc}
 \toprule
@@ -248,6 +258,7 @@ sparge\_attn & SpargeAttn --- poda de bloques en dos etapas; entrenamiento denso
 fasa\_attn & FASA --- selección de tokens consciente de frecuencia; entrenamiento denso, inferencia dispersa & \checkmark & \checkmark \\
 msa\_attn & MiniMax Sparse Attention --- bloques dispersos sobre GQA & \checkmark & \checkmark \\
 sparda\_attn & SparDA --- atención dispersa desacoplada con proyección Forecast & \checkmark & \checkmark \\
+lsa\_attn & Latent Sparse Attention --- clustering semántico de claves con selección top-k & \checkmark & \checkmark \\
 kda\_attn & Kimi Delta Attention --- decaimiento por canal + compuerta de escritura escalar & \checkmark & \checkmark \\
 falcon1\_attn / falcon2\_attn / falcon3\_attn & Familia de regresión Falcon --- regla delta NLMS prefix-alineada (RAW) & \checkmark & \checkmark \\
 falcon1a\_attn / falcon2a\_attn / falcon3a\_attn & Familia de producto interno Falcon --- escrituras aditivas desplazadas con decaimiento por ridge & \checkmark & \checkmark \\

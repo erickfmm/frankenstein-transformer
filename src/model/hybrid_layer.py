@@ -54,6 +54,7 @@ from .attention.sparse import (
     BigBirdAttention,
     FASAAttention,
     LongformerAttention,
+    LSAAttention,
     MSAAttention,
     NSAAttention,
     SparseKAttention,
@@ -227,6 +228,7 @@ class HybridLayer(nn.Module):
             "ssog_attn": SSOGAttention,
             "conformer_attn": ConformerAttention,
             "memory_attn": MemoryAttention,
+            "lsa_attn": LSAAttention,
         }
 
         if layer_type == "mamba":

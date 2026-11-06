@@ -11,6 +11,7 @@ if TORCH_AVAILABLE:
         BigBirdAttention,
         FASAAttention,
         LongformerAttention,
+        LSAAttention,
         MSAAttention,
         NSAAttention,
         SparseKAttention,
@@ -308,6 +309,60 @@ class SparDAAttentionTests(unittest.TestCase):
     def test_invalid_kv_heads_raises(self):
         with self.assertRaises(ValueError):
             SparDAAttention(_cfg(num_kv_heads=4))
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class LSAAttentionTests(unittest.TestCase):
+    def _lsa_cfg(self, **overrides):
+        base = dict(
+            num_kv_heads=1,
+            lsa_cluster_block=8,
+            lsa_pool_size=2,
+            lsa_keys_per_bucket=2,
+            lsa_num_buckets=2,
+            lsa_num_long_range=4,
+            lsa_num_sinks=1,
+        )
+        base.update(overrides)
+        return _cfg(**base)
+
+    def test_output_shape(self):
+        attn = LSAAttention(self._lsa_cfg())
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_mode(self):
+        attn = LSAAttention(self._lsa_cfg(mode="decoder"))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_gradient_flows(self):
+        attn = LSAAttention(self._lsa_cfg())
+        x = _x().requires_grad_(True)
+        out = attn(x)
+        self.assertTrue(torch.isfinite(out).all())
+        out.sum().backward()
+        self.assertIsNotNone(x.grad)
+
+    def test_invalid_kv_heads_raises(self):
+        with self.assertRaises(ValueError):
+            LSAAttention(_cfg(num_kv_heads=4))  # 4 does not divide 6
+
+    def test_short_sequence_uses_window_only(self):
+        # SEQ=8 < default cluster_block=512 -> no complete block: J = sinks + window.
+        attn = LSAAttention(_cfg(num_kv_heads=1))
+        out = attn(_x())
+        self.assertEqual(attn.last_num_buckets, 0)
+        self.assertTrue(torch.isfinite(out).all())
+
+    def test_buckets_form_and_select(self):
+        # cluster_block=4 with SEQ=8 -> blocks 0 and 1 complete.
+        attn = LSAAttention(self._lsa_cfg())
+        out = attn(_x())
+        self.assertGreater(attn.last_num_buckets, 0)
+        self.assertTrue(torch.isfinite(out).all())
+
+    def test_bitnet_on(self):
+        attn = LSAAttention(self._lsa_cfg(use_bitnet=True))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
 
 if __name__ == "__main__":

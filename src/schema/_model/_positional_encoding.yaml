@@ -21,7 +21,7 @@ properties:
       - `learned_absolute`: Learnable absolute PE (paper: arxiv:2010.11929). nn.Parameter added to token embeddings. Standard in BERT and ViT.
       - `none`: No positional encoding. Explicitly disables PE.
 
-      **Per-mixer control:** Each mixer has a `<mixer>_use_pe` flag (default True for attention mixers, False for recurrent/decay mixers like retnet, mamba, ode, gla, deltanet, hgrn2, fox, kda, mtla). Set to False to opt a specific mixer out of the model-wide PE.
+      **Per-mixer control:** Each mixer has a `<mixer>_use_pe` flag (default True for attention mixers, False for recurrent/decay mixers like retnet, mamba, ode, gla, deltanet, hgrn2, fox, kda, mtla, falcon*, lsa_attn). Set to False to opt a specific mixer out of the model-wide PE.
 
       **References:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805) (paper: arxiv:2104.09864)
       (paper: arxiv:2509.05218) (paper: arxiv:2305.19466) (paper: arxiv:2108.12409) (paper:
@@ -382,13 +382,15 @@ properties:
           Per-mixer boolean flags to enable/disable the model-wide positional encoding
           for specific mixers. Defaults: True for attention mixers, False for
           recurrent/decay mixers (retnet, mamba, ode, gla, deltanet, gated_deltanet,
-          gated_deltanet2, hgrn2, fox, kda, mtla, falcon*). Override to force PE
+          gated_deltanet2, hgrn2, fox, kda, mtla, falcon*) and for `lsa_attn`
+          (Native-LSA trains without positional encoding). Override to force PE
           on/off per mixer. `ssog_attn` is a positional-field mixer; it defaults to
           True and the flag is documented for completeness.
         description_es: |-
           Banderas booleanas por mixer para habilitar/deshabilitar la codificación
           posicional a nivel de modelo para mixers específicos. Por defecto: True para
-          mixers de atención, False para mixers recurrentes/de decaimiento.
+          mixers de atención, False para mixers recurrentes/de decaimiento y para
+          `lsa_attn` (Native-LSA entrena sin codificación posicional).
         properties:
           standard_attn: { type: boolean, title: "standard_attn", description: "Model-wide PE for `standard_attn` layers (paper: arxiv:1706.03762).", default: true, description_es: "PE a nivel de modelo para capas `standard_attn` (paper: arxiv:1706.03762)." }
           titan_attn: { type: boolean, title: "titan_attn", description: "Model-wide PE for `titan_attn` layers (paper: arxiv:2501.00663).", default: true, description_es: "PE a nivel de modelo para capas `titan_attn` (paper: arxiv:2501.00663)." }
@@ -417,6 +419,7 @@ properties:
           nsa_attn: { type: boolean, title: "nsa_attn", description: "Model-wide PE for `nsa_attn` layers (paper: arxiv:2502.11089).", default: true, description_es: "PE a nivel de modelo para capas `nsa_attn` (paper: arxiv:2502.11089)." }
           fasa_attn: { type: boolean, title: "fasa_attn", description: "Model-wide PE for `fasa_attn` layers (inference-time sparse selection; trained as dense attention) (paper: arxiv:2602.03152).", default: true, description_es: "PE a nivel de modelo para capas `fasa_attn` (selección dispersa en inferencia; entrenada como atención densa) (paper: arxiv:2602.03152)." }
           sparge_attn: { type: boolean, title: "sparge_attn", description: "Model-wide PE for `sparge_attn` layers (inference-time block pruning; trained as dense attention) (paper: arxiv:2502.18137).", default: true, description_es: "PE a nivel de modelo para capas `sparge_attn` (poda de bloques en inferencia; entrenada como atención densa) (paper: arxiv:2502.18137)." }
+          lsa_attn: { type: boolean, title: "lsa_attn", description: "Model-wide PE for `lsa_attn` layers (Native-LSA trains without positional encoding) (paper: arxiv:2610.42147).", default: false, description_es: "PE a nivel de modelo para capas `lsa_attn` (Native-LSA entrena sin codificación posicional) (paper: arxiv:2610.42147)." }
           engram_attn: { type: boolean, title: "engram_attn", description: "Model-wide PE for `engram_attn` layers (paper: arxiv:2601.07372).", default: true, description_es: "PE a nivel de modelo para capas `engram_attn` (paper: arxiv:2601.07372)." }
           retnet: { type: boolean, title: "retnet", description: "Model-wide PE for `retnet` layers (paper: arxiv:2307.08621).", default: false, description_es: "PE a nivel de modelo para capas `retnet` (paper: arxiv:2307.08621)." }
           retnet_attn: { type: boolean, title: "retnet_attn", description: "Model-wide PE for `retnet_attn` layers (paper: arxiv:2307.08621).", default: false, description_es: "PE a nivel de modelo para capas `retnet_attn` (paper: arxiv:2307.08621)." }

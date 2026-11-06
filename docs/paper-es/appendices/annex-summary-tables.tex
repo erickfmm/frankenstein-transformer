@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 46 mezcladores de secuencia en diez familias, 28 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 47 mezcladores de secuencia en diez familias, 28 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -42,7 +42,7 @@ titan\_attn & Recurrente & $\mathcal{O}(c^2 + n f)$ & $\mathcal{O}(c^2 + 1)$ & A
 engram\_attn & Memoria & $\mathcal{O}(n \cdot N \cdot H)$ & $\mathcal{O}(1)$ lookup & Memoria condicional de N-gramas; recuperación escalable basada en hash & \citep{cheng2026conditionalmemoryscalablelookup} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Disperso (10)}} \\
+\multicolumn{6}{c}{\textbf{Disperso (11)}} \\
 \midrule
 sparse\_transformer\_attn & Disperso & $\mathcal{O}(n \sqrt{n} \cdot d)$ & $\mathcal{O}(n)$ & Máscaras factorizadas estrideadas + fijas; patrón de dispersidad $\sqrt{n}$ & \citep{child_sparse_transformer_2019} \\
 longformer\_attn & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(n)$ & Ventana deslizante + dilatación + tokens globales; lineal en $n$ & \citep{beltagy_longformer_2020} \\
@@ -54,6 +54,7 @@ sparge\_attn & Disperso & $\mathcal{O}(n^2 \cdot s \cdot d)$ & $\mathcal{O}(n)$ 
 fasa\_attn & Disperso & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ & $\mathcal{O}(n)$ & Dispersidad consciente de frecuencia RoPE; entrenamiento denso, inferencia dispersa & \citep{wang_fasa_2026} \\
 msa\_attn & Disperso & $\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}} \cdot N^2 + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Bloques dispersos con rama índice; desplegado a escala 109B & \citep{lai_minimax_2026} \\
 sparda\_attn & Disperso & $\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot N_b + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Prefetch anticipado guiado por pronóstico; dispersidad predictiva & \citep{fu_sparda_2026} \\
+lsa\_attn & Disperso & $\mathcal{O}(N^2/\bar{n}_b + N\,(k+n_w+n_{\text{sink}})\,d_h)$ & $\mathcal{O}(N/\bar{n}_b + k+n_w+n_{\text{sink}})$ & Clustering Ward semántico de claves; selección top-$k$ de largo alcance; entrenable de forma nativa, sin parámetros extra & \citep{kubicek_lsa_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Con Compuerta (8)}} \\

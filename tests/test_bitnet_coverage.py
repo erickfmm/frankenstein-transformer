@@ -46,6 +46,7 @@ def _make(bitnet_routers: bool, mode: str = "encoder"):
             "mtla_attn",
             "msa_attn",
             "sparda_attn",
+            "lsa_attn",
             "nsa_attn",
             "sparsek_attn",
             "titan_attn",

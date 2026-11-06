@@ -261,12 +261,12 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - `num_layers`: physical layers.
 - `num_loops`: logical loops.
 - `num_heads`: attention heads.
-- `num_kv_heads`: key-value heads for GQA (also used by `msa_attn`/`sparda_attn`).
+- `num_kv_heads`: key-value heads for GQA (also used by `msa_attn`/`sparda_attn`/`lsa_attn`).
 - `dropout`: global dropout.
 - `layer_pattern`: list of blocks.
 - `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankenstein_text_decoder`, which forces decoder).
 - Legacy blocks: `retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`.
-- Sparse blocks: `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `msa_attn` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda_attn` (SparDA, arXiv:2606.04511).
+- Sparse blocks: `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `msa_attn` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda_attn` (SparDA, arXiv:2606.04511), `lsa_attn` (Latent Sparse Attention, arXiv:2610.42147).
 - Gated blocks: `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` (Kimi Delta Attention, arXiv:2510.26692).
 - Latent blocks (KV-compression / head-mixing, generalising GQA):
   - `mla_attn` — Multi-Head Latent Attention + RoPE (arXiv:2506.09342).
@@ -302,7 +302,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   `standard_attn`, `sigmoid_attn`, `gqa_attn`, `mla_attn`, `swa_attn`,
   `longformer_attn`, `bigbird_attn`, `sparse_transformer_attn`, `gta_attn`,
   `iha_attn`, `mtla_attn`, `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`,
-  `sparda_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
+  `sparda_attn`, `lsa_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
   `titan_attn`, `gqla_attn`, `mlra_attn`, `memory_attn`; `qk_clip` additionally excludes
   `gma_attn`. Recurrent/state-space mixers (`retnet`, `gla_attn`, `mamba`, …)
   are rejected at load time. Examples: `norm_qknorm_rms.yaml`,
@@ -335,7 +335,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 #### model.attention.<mixer>
 
 Per-mixer sub-objects: `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
-`cca`, `ccgqa`, `msa`, `sparda`, `engram`, `gma`, `ssog`, `conformer`,
+`cca`, `ccgqa`, `msa`, `sparda`, `lsa`, `engram`, `gma`, `ssog`, `conformer`,
 `falcon`, `ode` (`solver`, `steps`), `retnet` (`heads`). Optional rank fields
 accept `null` (= derive from `hidden_size` / `num_heads`).
 
@@ -414,6 +414,20 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
 - `model.attention.sparda.block_size`: KV block size for `sparda_attn` (default 128).
 - `model.attention.sparda.topk_blocks`: blocks selected per GQA group (default 16).
 - `model.attention.sparda.forecast_dim`: Forecast projection dim (default 64).
+
+### Latent Sparse Attention (model.attention.lsa)
+
+- `model.attention.lsa.num_long_range`: long-range keys selected per query $k$ (default 2048).
+- `model.attention.lsa.num_buckets`: buckets scored per query $p$; raised to `ceil(k / pool_size)` when smaller, clamped to the cached buckets (default 512).
+- `model.attention.lsa.num_sinks`: always-attended leading sink keys (default 4).
+- `model.attention.lsa.pool_size`: keys summed per pool key before Ward clustering (default 4).
+- `model.attention.lsa.cluster_block`: cluster block size, also the window $n_w$ (default 512).
+- `model.attention.lsa.keys_per_bucket`: average keys per bucket; yields `cluster_block / keys_per_bucket` buckets per block and must divide `cluster_block` (default 8).
+- `model.attention.lsa.max_keys_per_bucket`: Ward merge cap per bucket, at least `keys_per_bucket` (default 16).
+
+`lsa_attn` uses `num_kv_heads` (the paper's N-LSA uses a single shared KV head),
+adds no parameters, and opts out of the model-wide positional encoding by
+default (N-LSA trains without PE).
 
 ### SSOG — Separable Sum of Gaussians (model.attention.ssog)
 

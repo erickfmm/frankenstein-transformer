@@ -13,3 +13,4 @@ Sparse Attention
    fasa_attn
    msa_attn
    sparda_attn
+   lsa_attn

@@ -48,7 +48,7 @@ dims.num\_layers & int $\ge 1$ (required) & Number of physical transformer layer
 dims.num\_loops & int $\ge 1$ & Logical loop count. Each layer in \texttt{layer\_pattern} runs \texttt{num\_loops} times. Default: 1. \\
 dims.num\_heads & int $\ge 1$ (required) & Number of parallel attention heads. Must divide \texttt{hidden\_size} evenly. \\
 dims.dropout & float [0,1] & Global dropout rate. Typical: 0.1 (BERT standard). \\
-dims.layer\_pattern & array of enum (required) & Ordered sequence of layer types. Length must equal \texttt{num\_layers}. 43 mixer codes available (see Table~\ref{tab:layer-pattern}). \\
+dims.layer\_pattern & array of enum (required) & Ordered sequence of layer types. Length must equal \texttt{num\_layers}. 47 mixer codes available (see Table~\ref{tab:layer-pattern}). \\
 \midrule
 \multicolumn{3}{l}{\textit{model.norm.*}} \\
 \midrule
@@ -143,6 +143,16 @@ attention.sparda.block\_size & int $\ge 1$ & KV block size for SparDA. Default: 
 attention.sparda.topk\_blocks & int $\ge 1$ & Number of KV blocks selected per GQA group. Default: 16. \\
 attention.sparda.forecast\_dim & int $\ge 1$ & Dimensionality of Forecast projection. Default: 64. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.attention.lsa.*}} \\
+\midrule
+attention.lsa.num\_long\_range & int $\ge 1$ & Long-range key budget $k$ selected per query. Default: 2048. \\
+attention.lsa.num\_buckets & int $\ge 1$ & Buckets scored per query $p$; raised so $p\cdot$\texttt{pool\_size} $\ge k$. Default: 512. \\
+attention.lsa.num\_sinks & int $\ge 1$ & Always-attended leading sink keys. Default: 4. \\
+attention.lsa.pool\_size & int $\ge 1$ & Keys summed per pool key before Ward clustering. Default: 4. \\
+attention.lsa.cluster\_block & int $\ge 2$ & Cluster block size; also the window $n_w$. Default: 512. \\
+attention.lsa.keys\_per\_bucket & int $\ge 1$ & Average keys per bucket; yields \texttt{cluster\_block / keys\_per\_bucket} buckets per block. Default: 8. \\
+attention.lsa.max\_keys\_per\_bucket & int $\ge 1$ & Merge cap per bucket. Default: 16. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.attention.engram.*}} \\
 \midrule
 attention.engram.max\_ngram\_size & int $\ge 2$ & Maximum N-gram order for Engram memory module. \\
@@ -206,7 +216,7 @@ Fields are grouped under hierarchical sub-objects (\texttt{dims}, \texttt{norm},
 \subsubsection{Layer Pattern Enumeration}
 \label{tab:layer-pattern}
 
-The \texttt{model.dims.layer\_pattern} array accepts the following 43 mixer codes. Each element defines one physical layer in the model stack. Table~\ref{tab:layer-pattern-enum} lists all available types with their training and inference support.
+The \texttt{model.dims.layer\_pattern} array accepts the following 47 mixer codes. Each element defines one physical layer in the model stack. Table~\ref{tab:layer-pattern-enum} lists all available types with their training and inference support.
 
 \begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{4.7cm}>{\raggedright\arraybackslash}p{5.0cm}cc}
 \toprule
@@ -248,6 +258,7 @@ sparge\_attn & SpargeAttn --- two-stage block pruning; dense training, sparse in
 fasa\_attn & FASA --- frequency-aware token selection; dense training, sparse inference & \checkmark & \checkmark \\
 msa\_attn & MiniMax Sparse Attention --- block-sparse on GQA & \checkmark & \checkmark \\
 sparda\_attn & SparDA --- decoupled sparse attention with Forecast projection & \checkmark & \checkmark \\
+lsa\_attn & Latent Sparse Attention --- semantic key clustering with top-k selection & \checkmark & \checkmark \\
 kda\_attn & Kimi Delta Attention --- channel-wise decay + scalar write gate & \checkmark & \checkmark \\
 falcon1\_attn / falcon2\_attn / falcon3\_attn & Falcon regression family --- RAW prefix-aligned NLMS delta rule & \checkmark & \checkmark \\
 falcon1a\_attn / falcon2a\_attn / falcon3a\_attn & Falcon inner-product family --- shifted additive writes with ridge decay & \checkmark & \checkmark \\

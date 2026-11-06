@@ -127,5 +127,88 @@ class MixerParityTests(unittest.TestCase):
         self.assertTrue(torch.equal(legacy, cached))
 
 
+def _build_lsa_small(pe: str = "nope"):
+    """Tiny ``lsa_attn`` decoder whose 4-token blocks complete during the test."""
+    cfg = FrankensteinModelConfig(
+        vocab_size=64,
+        hidden_size=32,
+        num_layers=1,
+        num_loops=1,
+        num_heads=4,
+        retention_heads=4,
+        num_kv_heads=1,
+        dropout=0.0,
+        use_bitnet=False,
+        layer_pattern=["lsa_attn"],
+        mode="decoder",
+        positional_encoding=pe,
+        norm_type="layer_norm",
+        ffn_hidden_size=64,
+        lsa_cluster_block=4,
+        lsa_pool_size=2,
+        lsa_keys_per_bucket=2,
+        lsa_num_buckets=2,
+        lsa_num_long_range=4,
+        lsa_num_sinks=1,
+    )
+    torch.manual_seed(0)
+    return FrankensteinDecoder(cfg).eval()
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class LSABucketParityTests(unittest.TestCase):
+    """``lsa_attn`` parity with real bucket formation (tiny knobs)."""
+
+    def test_prefill_decode_parity_with_buckets(self):
+        torch.manual_seed(42)
+        m1 = _build_lsa_small()
+        m2 = _build_lsa_small()
+        m2.load_state_dict(m1.state_dict())
+        prompt = torch.randint(0, 64, (1, 6))
+        with torch.inference_mode():
+            legacy = m1.generate(prompt.clone(), max_new_tokens=4, greedy=True)
+            cached = m2.generate(
+                prompt.clone(), max_new_tokens=4, greedy=True, use_cache=True
+            )
+        self.assertTrue(torch.equal(legacy, cached))
+
+    def test_bucket_cache_populated(self):
+        # An 8-token cached prefill completes two 4-token cluster blocks
+        # (m = cluster_block / keys_per_bucket = 2 buckets each).
+        from src.model.cache import FrankensteinCache
+
+        model = _build_lsa_small()
+        prompt = torch.randint(0, 64, (1, 8))
+        cache = FrankensteinCache.new(model, None, device=prompt.device)
+        with torch.inference_mode():
+            _, cache = model(
+                prompt,
+                past_key_values=cache,
+                use_cache=True,
+                return_cache=True,
+            )
+        slot = cache.slot(0)
+        self.assertEqual(slot.num_completed_blocks, 2)
+        self.assertIsNotNone(slot.bucket_centroids)
+        self.assertEqual(int(slot.bucket_centroids.size(1)), 4)
+
+    def test_truncate_drops_partial_buckets(self):
+        from src.model.cache import FrankensteinCache
+
+        model = _build_lsa_small()
+        prompt = torch.randint(0, 64, (1, 8))
+        cache = FrankensteinCache.new(model, None, device=prompt.device)
+        with torch.inference_mode():
+            _, cache = model(
+                prompt,
+                past_key_values=cache,
+                use_cache=True,
+                return_cache=True,
+            )
+        slot = cache.slot(0)
+        slot.truncate(6)  # cut inside block 1 -> block 0 survives
+        self.assertEqual(slot.num_completed_blocks, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

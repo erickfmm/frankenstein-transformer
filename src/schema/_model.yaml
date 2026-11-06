@@ -89,6 +89,8 @@ properties:
         $ref: "_model/_attention_sparse.yaml#/properties/msa"
       sparda:
         $ref: "_model/_attention_sparse.yaml#/properties/sparda"
+      lsa:
+        $ref: "_model/_attention_lsa.yaml#/properties/lsa"
       engram:
         $ref: "_model/_attention_engram.yaml#/properties/engram"
       gma:

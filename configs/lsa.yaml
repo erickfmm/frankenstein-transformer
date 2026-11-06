@@ -1,0 +1,116 @@
+# Native-LSA reference configuration (arXiv:2610.42147 §4.4).
+#
+# A 0.5B-class hybrid: 24 layers, every fourth layer is an N-LSA attention
+# layer (8 query heads over a single 128-dim KV head, no positional encoding)
+# and the remaining layers are Gated DeltaNet (linear attention).
+#
+# N-LSA reference knobs (paper Table 2 / §4.4): k=2048 long-range keys,
+# p=512 buckets, 4 sinks, n_pool=4, n_cluster=512 (= window),
+# n_bar_b=8 keys/bucket, n_max_b=16. N-LSA adds no parameters.
+#
+# The paper trains with a Warmup-Stable-Decay schedule (100B tokens of
+# FineWeb-Edu at 4k tokens, then 12B tokens of LongDocs at 128k tokens in the
+# decay phase). The preset keeps max_length at 4096 for practicality; raise it
+# to 131072 for the paper's decay phase.
+model_class: frankenstein_text_decoder
+model:
+  dims:
+    vocab_size: 128256
+    hidden_size: 1024
+    num_layers: 24
+    num_loops: 1
+    num_heads: 8
+    num_kv_heads: 1
+    dropout: 0.0
+    mode: decoder
+    layer_pattern:
+    - lsa_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - lsa_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - lsa_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - lsa_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - lsa_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - lsa_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+    - gated_deltanet_attn
+  norm:
+    type: rms_norm
+  embedding:
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  positional_encoding: none
+  attention:
+    lsa:
+      num_long_range: 2048
+      num_buckets: 512
+      num_sinks: 4
+      pool_size: 4
+      cluster_block: 512
+      keys_per_bucket: 8
+      max_keys_per_bucket: 16
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 4096
+    activation: silu
+training:
+  # The paper trains N-LSA on the next-token loss alone.
+  task: causal_lm
+  seed: 42
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 4096
+  max_samples: 20000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: ./temp_data/v2_dataset_cache
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-6
+      adamw-lr_norms: 5e-6
+      adamw-lr_attention: 3e-6
+      adamw-lr_other: 2e-6
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_embeddings:
+      - 0.9
+      - 0.95
+      adamw-betas_norms:
+      - 0.9
+      - 0.95
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-eps_embeddings: 1e-8
+      adamw-eps_norms: 1e-8
+      adamw-eps_attention: 1e-8
+      adamw-eps_other: 1e-8
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  gradient_log_interval: 10

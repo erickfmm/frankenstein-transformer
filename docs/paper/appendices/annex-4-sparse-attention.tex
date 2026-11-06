@@ -686,22 +686,103 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
     \item \textbf{Limitation}: Requires a CPU--GPU offload pipeline and a frozen base selector; the lookahead benefit is contingent on next-layer block demand being predictable from the current Forecast.
 \end{itemize}
 
+\subsection{LSA (Latent Sparse Attention): Semantic Key Clustering with Top-k Selection}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/lsa.pdf}}
+\caption{Dataflow of N-LSA: pooled keys are Ward-clustered into buckets; each query scores the centroids, expands the best buckets into a top-$k$ long-range key set, and attends to sinks + selection + window.}
+\label{fig:mixer-lsa}
+\end{figure}
+
+\subsubsection{Mathematical Formulation}
+
+Latent Sparse Attention \citep{kubicek_lsa_2026} replaces the per-key (or per-block) scan of a sparse indexer with \textbf{semantic clustering}: keys are clustered by content in a learned latent space, and each query scores the bucket centroids instead of every key. The paper defines two trainable variants: Distilled-LSA (D-LSA), which adds small index projections to a frozen pre-trained model, and \textbf{Native-LSA (N-LSA)}, trained from scratch on the next-token loss alone. The implementation in this codebase follows N-LSA.
+
+\paragraph{Semantic clustering}: Each index key is first L2-normalised,
+\[
+\hat{\mathbf{k}}_j = \frac{\mathbf{k}_j}{\lVert \mathbf{k}_j \rVert_2},
+\]
+and every $n_{\text{pool}}$ consecutive keys are summed into one pool key, so clustering runs over $T/n_{\text{pool}}$ pool keys rather than $T$ keys. Keys are processed in \emph{cluster blocks} of $n_{\text{cluster}}$ consecutive tokens; once a block is complete, its pool keys are merged bottom-up with Ward's criterion into $m = n_{\text{cluster}}/\bar{n}_b$ buckets whose unit-norm centroids are
+\[
+\mathbf{c}_b = \frac{\mathbf{k}^{\text{sum}}_b}{\lVert \mathbf{k}^{\text{sum}}_b \rVert_2},
+\]
+where $\mathbf{k}^{\text{sum}}_b$ is the sum of the keys in bucket $b$ and $\bar{n}_b$ is the average number of keys per bucket. In every round all pairs that are each other's cheapest merge are merged in parallel; with the Gram matrix $G_{bb'} = \mathbf{k}^{\text{sum}}_b \cdot \mathbf{k}^{\text{sum}}_{b'}$ the merge cost is
+\[
+a_b = \sqrt{G_{bb}}, \qquad a_{b \cup b'} = \sqrt{G_{bb} + G_{b'b'} + 2G_{bb'}}, \qquad \Delta(b,b') = a_b + a_{b'} - a_{b \cup b'},
+\]
+and a merge is skipped when the combined bucket would exceed $n_{\max}^b$ keys. The bucket cache stores every centroid together with the positions of its keys. \textbf{Once a cluster block is clustered, its buckets never change}, which is what makes incremental decoding exact in this implementation.
+
+\paragraph{Semantic search}: Each query is L2-normalised, $\hat{\mathbf{q}}_i = \mathbf{q}_i/\lVert \mathbf{q}_i \rVert_2$, and scores the centroids of every bucket in the cluster blocks before its own. For N-LSA the score is the best similarity any query head gives the centroid,
+\[
+s_{i,b} = \max_h \hat{\mathbf{q}}_{i,h} \cdot \mathbf{c}_b,
+\]
+so a single index list $\mathcal{J}_i$ is shared by every query head. The top-$p$ buckets are expanded best-first until $k$ \emph{long-range} keys are selected; the expansion always fills $k$ because $p$ is chosen such that $p\, n_{\text{pool}} \ge k$, and keys already covered by the sink prefix or the window are skipped. Every query additionally attends to $n_{\text{sink}}$ sink keys and the $n_w = n_{\text{cluster}}$ most recent keys (its own, not-yet-clustered block), giving a set
+\[
+\mathcal{J}_i \subseteq \{\text{sinks}\} \cup \{\text{top-}k \text{ long-range keys}\} \cup \{\text{own-block window}\}, \qquad |\mathcal{J}_i| \le n_{\text{sink}} + k + n_w .
+\]
+
+\paragraph{Attention}: Standard scaled dot-product attention is computed only over $\mathcal{J}_i$,
+\[
+z_{i,j} = \frac{\mathbf{q}_i \cdot \mathbf{k}_j}{\sqrt{d_h}}, \qquad
+\mathbf{o}_i = \mathrm{softmax}_{j \in \mathcal{J}_i}(z_{i,j})\, \mathbf{V}_{\mathcal{J}_i},
+\]
+where the softmax is renormalised per head over the shared selection. N-LSA \textbf{adds no parameters}, uses \textbf{no positional encoding} (RoPE could be supported by clustering only the RoPE-free part of the keys), and \textbf{stops the gradient through the selection}: the clustering, centroid scoring and expansion run without gradients, so the next-token loss trains the attention projections only through the keys each query attends to.
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{N-LSA: Ward clustering of one cluster block and flat semantic search}
+\begin{algorithmic}[1]
+\Require Index keys $\mathbf{k}_j$ of a complete cluster block; sizes $n_{\text{cluster}}, n_{\text{pool}}, m, n_{\max}^b$
+\Require Queries $\mathbf{q}_i$; sink budget $n_{\text{sink}}$; long-range budget $k$; window $n_w = n_{\text{cluster}}$
+\Ensure Bucket cache with $m$ centroids and their key positions; output $\mathbf{Y}$
+\State $\hat{\mathbf{k}}_j \gets \mathbf{k}_j / \lVert \mathbf{k}_j \rVert_2$ for all keys in the block
+\For{all pool keys $\mathbf{k}^{\text{pool}}$, in parallel}
+    \State $\mathbf{k}^{\text{pool}} \gets$ sum of its $n_{\text{pool}}$ consecutive $\hat{\mathbf{k}}_j$
+\EndFor
+\State start one bucket $b$ per pool key: $\mathbf{k}^{\text{sum}}_b \gets \mathbf{k}^{\text{pool}}$, $|b| \gets n_{\text{pool}}$
+\While{more than $m$ buckets remain}
+    \State $G \gets [\mathbf{k}^{\text{sum}}_b \cdot \mathbf{k}^{\text{sum}}_{b'}]$ \Comment{Gram matrix}
+    \State $\Delta(b,b') \gets \sqrt{G_{bb}} + \sqrt{G_{b'b'}} - \sqrt{G_{bb} + G_{b'b'} + 2G_{bb'}}$
+    \State merge the cheapest mutual pairs with $|b| + |b'| \le n_{\max}^b$, at most as many as buckets above $m$
+\EndWhile
+\State $\mathbf{c}_b \gets \mathbf{k}^{\text{sum}}_b / \lVert \mathbf{k}^{\text{sum}}_b \rVert_2$; store $\mathbf{c}_b$ and the positions of bucket $b$
+\State $\hat{\mathbf{q}}_i \gets \mathbf{q}_i / \lVert \mathbf{q}_i \rVert_2$ for all queries
+\State $s_{i,b} \gets \max_h \hat{\mathbf{q}}_{i,h} \cdot \mathbf{c}_b$ over the buckets before the query's own block
+\State select the top-$p$ buckets; expand them best-first into $k$ long-range keys (skip sinks and the window)
+\State $\mathcal{J}_i \gets \{\text{sinks}\} \cup \{\text{long-range keys}\} \cup \{\text{own-block window}\}$
+\State $\mathbf{Y} \gets$ attention over $\mathcal{J}_i$ with a per-head softmax renormalised over the shared selection
+\Return $\mathbf{Y}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: Flat search scores $\mathcal{O}(T/\bar{n}_b)$ centroids per query, i.e.\ $\mathcal{O}(T^2/\bar{n}_b + T(k+n_w+n_{\text{sink}})d_h)$ for prefill and $\mathcal{O}(T/\bar{n}_b + k+n_w+n_{\text{sink}})$ per decoded token; the tree variant of the paper makes the indexer $\mathcal{O}(T \log T)$.
+    \item \textbf{Trainable}: Yes, natively from scratch on the next-token loss (N-LSA); the selection is non-differentiable and the gradient is stopped through it. No teacher, no index projections, no auxiliary loss---and \textbf{no extra parameters}.
+    \item \textbf{Strength}: In the paper's 0.5B hybrid, N-LSA matches the full-attention validation loss at 128k tokens ($1.085$ against $1.085$; PISA $1.100$, NSA $1.117$, SWA $1.154$) while training up to $1.6\times$ faster per attention layer at 128k. Because every cluster block is immutable once complete, cached decoding in this codebase is exact rather than an approximation.
+    \item \textbf{Limitation}: The flat indexer remains quadratic in context length (with a $1/\bar{n}_b$ constant); tree search is left to future work. The paper's single index list assumes a single shared KV head ($n_{kv}=1$), and N-LSA deliberately uses no positional encoding.
+\end{itemize}
+
 \subsection{Design Space and Selection Criteria}
 
-The ten sparse attention methods occupy complementary positions in a multidimensional design space:
+The eleven sparse attention methods occupy complementary positions in a multidimensional design space:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Geometric/fixed patterns} (Sparse Transformer, Longformer): Simple to implement and analyze, but patterns do not adapt to content.
     \item \textbf{Fixed-memory KV eviction} (SWA with sinks): The cheapest possible policy---keep a sink prefix and a recent window, discard everything else. No extra parameters, no training required, bounded memory.
     \item \textbf{Learned selection} (SparseK, NSA): Enable adaptation through trainable selection networks, at the cost of higher implementation complexity.
     \item \textbf{Training-free acceleration} (FASA, SpargeAttn): Enable drop-in speedup of existing models without retraining, suited for deployed systems.
+    \item \textbf{Semantic selection} (LSA): Clusters keys by content and caches one centroid per bucket, so the indexer scans a small multiple of $T/\bar{n}_b$ instead of $T$; the only member whose per-block statistics are immutable, which makes exact cached decoding possible.
     \item \textbf{Theoretical guarantees} (BigBird): Provide formal proofs of expressive completeness, important for understanding safety margins.
 \end{itemize}
 
 \textbf{Selection guidance:}
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{New model training} where resources permit: NSA or SparseK for maximal inference speedup; BigBird for theoretical assurance; SWA with sinks as the strongest low-cost baseline.
-    \item \textbf{Long-context document understanding}: SWA with sinks (window 256--512) for the best accuracy per byte of KV cache; Longformer or FASA for practical simplicity; NSA for extreme scale.
+    \item \textbf{New model training} where resources permit: NSA or SparseK for maximal inference speedup; BigBird for theoretical assurance; LSA when semantic clustering and exact cached decoding at ultra-long context matter; SWA with sinks as the strongest low-cost baseline.
+    \item \textbf{Long-context document understanding}: SWA with sinks (window 256--512) for the best accuracy per byte of KV cache; Longformer or FASA for practical simplicity; NSA for extreme scale; LSA when the indexer scan itself dominates.
     \item \textbf{Accelerating existing models}: SWA with sinks as the default training-free baseline (beat most linear-attention retrofits in the original study); FASA for RoPE-based LLMs; SpargeAttn for any architecture.
     \item \textbf{Constrained environments}: SWA with sinks for a fixed memory budget; Sparse Transformer for simplicity and proven efficiency at moderate scale.
 \end{enumerate}

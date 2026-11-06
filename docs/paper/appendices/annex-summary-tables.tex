@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 46 sequence mixers across ten families, 28 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 47 sequence mixers across ten families, 28 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -42,7 +42,7 @@ titan\_attn & Recurrent & $\mathcal{O}(c^2 + n f)$ & $\mathcal{O}(c^2 + 1)$ & Te
 engram\_attn & Memory & $\mathcal{O}(n \cdot N \cdot H)$ & $\mathcal{O}(1)$ lookup & Conditional N-gram memory; hash-based scalable retrieval & \citep{cheng2026conditionalmemoryscalablelookup} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Sparse (10)}} \\
+\multicolumn{6}{c}{\textbf{Sparse (11)}} \\
 \midrule
 sparse\_transformer\_attn & Sparse & $\mathcal{O}(n \sqrt{n} \cdot d)$ & $\mathcal{O}(n)$ & Factorized strided + fixed masks; $\sqrt{n}$ sparsity pattern & \citep{child_sparse_transformer_2019} \\
 longformer\_attn & Sparse & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(n)$ & Sliding window + dilation + global tokens; linear in $n$ & \citep{beltagy_longformer_2020} \\
@@ -54,6 +54,7 @@ sparge\_attn & Sparse & $\mathcal{O}(n^2 \cdot s \cdot d)$ & $\mathcal{O}(n)$ & 
 fasa\_attn & Sparse & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ & $\mathcal{O}(n)$ & RoPE frequency-aware sparse; dense training, sparse inference & \citep{wang_fasa_2026} \\
 msa\_attn & Sparse & $\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}} \cdot N^2 + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Index-branch block sparse; deployed at 109B scale & \citep{lai_minimax_2026} \\
 sparda\_attn & Sparse & $\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot N_b + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Forecast-guided lookahead prefetch; predictive sparsity & \citep{fu_sparda_2026} \\
+lsa\_attn & Sparse & $\mathcal{O}(N^2/\bar{n}_b + N\,(k+n_w+n_{\text{sink}})\,d_h)$ & $\mathcal{O}(N/\bar{n}_b + k+n_w+n_{\text{sink}})$ & Semantic Ward clustering of keys; top-$k$ long-range selection; natively trainable, no extra parameters & \citep{kubicek_lsa_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Gated (8)}} \\

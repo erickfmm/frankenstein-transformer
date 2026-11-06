@@ -68,6 +68,7 @@ QK_NORM_MIXERS = frozenset(
         "gqla_attn",
         "mlra_attn",
         "memory_attn",
+        "lsa_attn",
     }
 )
 

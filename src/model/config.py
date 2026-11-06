@@ -122,7 +122,7 @@ class FrankensteinModelConfig:
             ``"mla_attn"``, ``"gqla_attn"``, ``"mlra_attn"``,
             ``"tucker_attn"``, ``"iha_attn"``, ``"gta_attn"``,
             ``"mtla_attn"``, ``"cca_attn"``, ``"ccgqa_attn"``,
-            ``"msa_attn"``, ``"sparda_attn"``.
+            ``"msa_attn"``, ``"sparda_attn"``, ``"lsa_attn"``.
             Default: ``["retnet", "ode", "mamba", "titan_attn"] * 3``.
         ode_solver: ODE solver for ``ode`` mixer layers. One of ``"rk4"``
             (Runge-Kutta 4th order) or ``"euler"``. Default: ``"rk4"``.
@@ -313,6 +313,8 @@ class FrankensteinModelConfig:
             model-wide positional encoding. Default: True.
         sparda_attn_use_pe: Whether ``sparda_attn`` layers consume the
             model-wide positional encoding. Default: True.
+        lsa_attn_use_pe: Whether ``lsa_attn`` layers consume the model-wide
+            positional encoding. Native LSA trains without PE. Default: False.
         gma_attn_use_pe: Whether ``gma_attn`` layers consume the
             model-wide positional encoding. Default: True.
         longformer_attn_use_pe: Whether ``longformer_attn`` layers consume
@@ -610,6 +612,7 @@ class FrankensteinModelConfig:
     ccgqa_attn_use_pe: bool = True
     msa_attn_use_pe: bool = True
     sparda_attn_use_pe: bool = True
+    lsa_attn_use_pe: bool = False
     gma_attn_use_pe: bool = True
     longformer_attn_use_pe: bool = True
     swa_attn_use_pe: bool = True
@@ -862,6 +865,18 @@ class FrankensteinModelConfig:
     sparda_block_size: int = 128
     sparda_topk_blocks: int = 16
     sparda_forecast_dim: int = 64
+
+    # ---- LSA / Latent Sparse Attention (arXiv:2610.42147) ----
+    # Paper Table 2 bucket column + §4.4 (N-LSA):
+    # k=2048 long-range keys, p=512 buckets, 4 sinks, n_pool=4,
+    # n_cluster=512 (= window), n̄_b=8 keys/bucket, n_max_b=16.
+    lsa_num_long_range: int = 2048
+    lsa_num_buckets: int = 512
+    lsa_num_sinks: int = 4
+    lsa_pool_size: int = 4
+    lsa_cluster_block: int = 512
+    lsa_keys_per_bucket: int = 8
+    lsa_max_keys_per_bucket: int = 16
 
     # ---- Vision Transformer (frankenstein_vit, arXiv:2010.11929) ----
     # Image dimensions and patch config for the Vision Transformer model class.
@@ -1117,6 +1132,50 @@ class FrankensteinModelConfig:
                 "swa_num_sinks must be smaller than swa_window_size, got "
                 f"num_sinks={self.swa_num_sinks}, "
                 f"window_size={self.swa_window_size}"
+            )
+
+        # ---- Validate LSA / Latent Sparse Attention (arXiv:2610.42147) ----
+        if self.lsa_num_long_range < 1:
+            raise ValueError(
+                f"lsa_num_long_range must be >= 1, got {self.lsa_num_long_range}"
+            )
+        if self.lsa_num_buckets < 1:
+            raise ValueError(
+                f"lsa_num_buckets must be >= 1, got {self.lsa_num_buckets}"
+            )
+        if self.lsa_num_sinks < 1:
+            raise ValueError(
+                f"lsa_num_sinks must be >= 1, got {self.lsa_num_sinks}"
+            )
+        if self.lsa_pool_size < 1:
+            raise ValueError(
+                f"lsa_pool_size must be >= 1, got {self.lsa_pool_size}"
+            )
+        if self.lsa_cluster_block < 2:
+            raise ValueError(
+                f"lsa_cluster_block must be >= 2, got {self.lsa_cluster_block}"
+            )
+        if self.lsa_num_sinks >= self.lsa_cluster_block:
+            raise ValueError(
+                "lsa_num_sinks must be smaller than lsa_cluster_block, got "
+                f"num_sinks={self.lsa_num_sinks}, "
+                f"cluster_block={self.lsa_cluster_block}"
+            )
+        if self.lsa_keys_per_bucket < 1:
+            raise ValueError(
+                f"lsa_keys_per_bucket must be >= 1, got {self.lsa_keys_per_bucket}"
+            )
+        if self.lsa_cluster_block % self.lsa_keys_per_bucket:
+            raise ValueError(
+                "lsa_cluster_block must be divisible by lsa_keys_per_bucket, got "
+                f"cluster_block={self.lsa_cluster_block}, "
+                f"keys_per_bucket={self.lsa_keys_per_bucket}"
+            )
+        if self.lsa_max_keys_per_bucket < self.lsa_keys_per_bucket:
+            raise ValueError(
+                "lsa_max_keys_per_bucket must be >= lsa_keys_per_bucket, got "
+                f"max_keys_per_bucket={self.lsa_max_keys_per_bucket}, "
+                f"keys_per_bucket={self.lsa_keys_per_bucket}"
             )
 
         # ---- Validate Conformer convolution module (arXiv:2005.08100) ----

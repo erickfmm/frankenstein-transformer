@@ -17,7 +17,7 @@ With a cache, the prefill costs $\mathcal{O}(S^2)$ once and each decode step cos
 \]
 The difference is the familiar one between re-encoding a conversation and continuing it.
 
-The subsystem covers every one of the forty-five dispatchable layer types. Twenty-seven have parity-tested incremental branches; the remainder are registered with an explicit, paper-based rationale for running uncached (\S\ref{sec:kv-fallbacks}). Quantization and eviction are orthogonal to the mixer mathematics: codecs transform tensors at \emph{write} time and policies act at \emph{read} time, so the same \texttt{int8} or \texttt{int4\_kivi} codec serves a dense, latent or ring slot without per-mixer code \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
+The subsystem covers every one of the forty-six dispatchable layer types. Twenty-eight have parity-tested incremental branches; the remainder are registered with an explicit, paper-based rationale for running uncached (\S\ref{sec:kv-fallbacks}). Quantization and eviction are orthogonal to the mixer mathematics: codecs transform tensors at \emph{write} time and policies act at \emph{read} time, so the same \texttt{int8} or \texttt{int4\_kivi} codec serves a dense, latent or ring slot without per-mixer code \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
 
 \subsection{Cache Architecture}
 \label{sec:kv-architecture}

@@ -128,6 +128,15 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
         "topk_blocks": "sparda_topk_blocks",
         "forecast_dim": "sparda_forecast_dim",
     },
+    "lsa": {
+        "num_long_range": "lsa_num_long_range",
+        "num_buckets": "lsa_num_buckets",
+        "num_sinks": "lsa_num_sinks",
+        "pool_size": "lsa_pool_size",
+        "cluster_block": "lsa_cluster_block",
+        "keys_per_bucket": "lsa_keys_per_bucket",
+        "max_keys_per_bucket": "lsa_max_keys_per_bucket",
+    },
     "engram": {
         "max_ngram_size": "engram_max_ngram_size",
         "n_heads_per_ngram": "engram_n_heads_per_ngram",

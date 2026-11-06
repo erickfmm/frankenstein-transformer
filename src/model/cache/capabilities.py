@@ -3,7 +3,7 @@
 ``CACHE_SPECS`` is the single declarative source consumed by
 :class:`~src.model.hybrid_layer.HybridLayer` at runtime and by
 ``config_loader`` for static validation. One entry per schema
-``layer_pattern`` enum value (46 total: 45 mixer classes + the ``mamba``
+``layer_pattern`` enum value (47 total: 46 mixer classes + the ``mamba``
 linear placeholder).
 
 Rules (see the KV-cache integration plan, §5.4):
@@ -90,6 +90,7 @@ IMPLEMENTED_MIXERS = frozenset(
         "bigbird_attn",        # F1 (seeded random links, R2)
         "sparse_transformer_attn",  # F1 (position-based patterns)
         "fasa_attn",           # F1 (row-local top-k over cached RoPE keys)
+        "lsa_attn",            # F2 (bucket cache over immutable complete cluster blocks)
         # ---- F2 recurrent / state family ----
         "retnet",              # F2 (parallel == recurrent form)
         "retnet_attn",         # F2
@@ -298,6 +299,19 @@ CACHE_SPECS: Dict[str, CacheSpec] = {
         slot_type="kv",
         notes="FASA (arXiv:2602.03152); decode-time selection over cached "
         "RoPE'd keys via dominant frequency-chunk proxies. Eval-only.",
+    ),
+    "lsa_attn": CacheSpec(
+        supported=True,
+        slot_type="kv",
+        extras=("bucket_centroids", "bucket_index_table"),
+        notes="LSA/N-LSA (arXiv:2610.42147); keeps the full KV cache and "
+        "selects keys per query: keys are L2-normalized, pooled (n_pool) and "
+        "Ward-clustered per complete n_cluster block into m = n_cluster/n̄_b "
+        "immutable buckets — centroids + index table live in a BucketKVSlot "
+        "built by the mixer's make_cache_slot hook. Buckets never change once "
+        "a block completes, so incremental decode is exact (unlike "
+        "nsa/msa/sparda); flat search scores ~T/n̄_b centroids per decode "
+        "step. Bucket tables are never quantized.",
     ),
     # ---- Recurrent / linear family (plan §6.5) ----
     "retnet": CacheSpec(

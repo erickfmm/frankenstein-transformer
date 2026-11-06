@@ -1,7 +1,7 @@
 """Typed per-layer cache slots.
 
 Every slot stores the state of one logical layer (identity key:
-``logical_layer_idx``) across decode steps. Six slot kinds cover the 45
+``logical_layer_idx``) across decode steps. Seven slot kinds cover the 46
 dispatchable layer types (see ``capabilities.py``):
 
 * :class:`KVSlot` — post-RoPE K/V (+ per-token ``extras`` metadata) for
@@ -11,6 +11,8 @@ dispatchable layer types (see ``capabilities.py``):
 * :class:`StateSlot` — fixed-size recurrent matrix updated in place.
 * :class:`RingSlot` — capacity-bounded K/V ring buffer with pinned sinks
   (sliding-window family / ``window_sinks`` policy).
+* :class:`BucketKVSlot` — KV plus the block-level semantic bucket cache of
+  Latent Sparse Attention (``lsa_attn``, arXiv:2610.42147).
 * :class:`ConvTailSlot` — FIFO of the last ``kernel - 1`` pre-conv rows.
 * :class:`TokenTailSlot` — FIFO of the last ``n`` token ids.
 
@@ -45,6 +47,7 @@ __all__ = [
     "LatentKVSlot",
     "StateSlot",
     "RingSlot",
+    "BucketKVSlot",
     "ConvTailSlot",
     "TokenTailSlot",
 ]
@@ -595,6 +598,186 @@ class RingSlot(KVSlot):
         overflow = self.length - self.capacity
         if overflow > 0:
             self.evict_oldest(overflow)
+
+
+class BucketKVSlot(KVSlot):
+    """KV slot plus a block-level semantic bucket cache (LSA, arXiv:2610.42147).
+
+    Extends :class:`KVSlot` with the bucket cache ``B_cache^(idx)`` of Latent
+    Sparse Attention: for every *complete* cluster block the mixer stores
+    ``m`` unit-norm centroids of shape ``(B, m, D)``, the absolute key
+    positions belonging to each bucket (padded with ``-1`` to
+    ``max_keys_per_bucket``) and each bucket's key count. Buckets are
+    immutable once their block completes ("Once a cluster block is clustered,
+    its buckets never change"), which is what makes the cached decode path
+    exact — unlike the chunk-level block statistics of NSA/MSA/SparDA.
+
+    The bucket tables are block-level state: they are stored in full
+    precision (never routed through the KV codec, mirroring D12 for recurrent
+    states) and :meth:`truncate` drops every bucket whose key positions
+    intersect the rollback boundary.
+
+    Attributes:
+        max_keys_per_bucket: Padding width ``n_max_b`` of the position table.
+    """
+
+    kind = "kv"
+
+    def __init__(
+        self,
+        meta: SlotMeta,
+        codec=None,
+        policy=None,
+        num_sinks: int = 0,
+        protected_window: int = 0,
+        group_size: int = 64,
+        max_keys_per_bucket: int = 16,
+        cluster_block: int = 1,
+    ):
+        super().__init__(
+            meta,
+            codec=codec,
+            policy=policy,
+            num_sinks=num_sinks,
+            protected_window=protected_window,
+            group_size=group_size,
+        )
+        self.max_keys_per_bucket = max(1, int(max_keys_per_bucket))
+        self.cluster_block = max(1, int(cluster_block))
+        self._centroids: Optional[torch.Tensor] = None
+        self._bucket_positions: Optional[torch.Tensor] = None
+        self._bucket_sizes: Optional[torch.Tensor] = None
+        self._bucket_block_ids: List[int] = []
+        self._next_block = 0
+
+    # ------------------------------------------------------------------ #
+    # Bucket cache introspection
+    # ------------------------------------------------------------------ #
+    @property
+    def num_completed_blocks(self) -> int:
+        """Number of cluster blocks whose buckets have been stored."""
+        return int(self._next_block)
+
+    @property
+    def bucket_centroids(self) -> Optional[torch.Tensor]:
+        """Unit-norm centroids ``(B, C, D)`` or ``None`` when empty."""
+        return self._centroids
+
+    @property
+    def bucket_positions(self) -> Optional[torch.Tensor]:
+        """Key positions ``(B, C, n_max_b)`` (``-1`` padding) or ``None``."""
+        return self._bucket_positions
+
+    @property
+    def bucket_sizes(self) -> Optional[torch.Tensor]:
+        """Key counts per bucket ``(B, C)`` or ``None`` when empty."""
+        return self._bucket_sizes
+
+    @property
+    def bucket_block_ids(self) -> Tuple[int, ...]:
+        """Cluster-block id of every stored bucket (length ``C``)."""
+        return tuple(self._bucket_block_ids)
+
+    # ------------------------------------------------------------------ #
+    # Write path (block granularity)
+    # ------------------------------------------------------------------ #
+    def append_block(
+        self,
+        *,
+        block_id: int,
+        centroids: torch.Tensor,
+        positions: torch.Tensor,
+        sizes: torch.Tensor,
+    ) -> None:
+        """Append one complete block's bucket table.
+
+        Args:
+            block_id: 0-based index of the complete cluster block. Appends
+                are accepted strictly in order and are idempotent: an
+                already-stored block id is ignored, and out-of-order ids are
+                dropped (they would break the "blocks before mine" rule).
+            centroids: Unit-norm centroids ``(B, m, D)``.
+            positions: Key positions ``(B, m, <=n_max_b)``; ``-1`` pads.
+            sizes: Key count per bucket ``(B, m)``.
+        """
+        block_id = int(block_id)
+        if block_id < self._next_block:
+            return
+        if block_id != self._next_block:
+            return
+        centroids = _detach_cast(centroids, self.meta.dtype)
+        positions = _detach_cast(positions, torch.long)
+        sizes = _detach_cast(sizes, torch.long)
+        width = self.max_keys_per_bucket
+        if positions.size(-1) < width:
+            pad = positions.new_full(
+                (*positions.shape[:-1], width - positions.size(-1)), -1
+            )
+            positions = torch.cat([positions, pad], dim=-1)
+        elif positions.size(-1) > width:
+            positions = positions[..., :width]
+        if self._centroids is None:
+            self._centroids = centroids
+            self._bucket_positions = positions
+            self._bucket_sizes = sizes
+        else:
+            self._centroids = torch.cat([self._centroids, centroids], dim=1)
+            self._bucket_positions = torch.cat([self._bucket_positions, positions], dim=1)
+            self._bucket_sizes = torch.cat([self._bucket_sizes, sizes], dim=1)
+        self._bucket_block_ids.extend([block_id] * int(centroids.size(1)))
+        self._next_block = block_id + 1
+
+    def read_bucket_cache(self):
+        """Return ``(centroids, positions, sizes, block_ids)``.
+
+        ``block_ids`` is a tuple with one entry per stored bucket; the first
+        three values are ``None`` when no complete block has been stored.
+        """
+        return (
+            self._centroids,
+            self._bucket_positions,
+            self._bucket_sizes,
+            tuple(self._bucket_block_ids),
+        )
+
+    # ------------------------------------------------------------------ #
+    # Rollback / device
+    # ------------------------------------------------------------------ #
+    def truncate(self, num_tokens: int) -> None:
+        """Keep the prefix and drop buckets of blocks cut by the rollback.
+
+        A bucket is only usable when its whole cluster block survives (its
+        centroid and key set are immutable), so every block whose key range
+        reaches beyond ``num_tokens`` is discarded. The completed-block
+        cursor is rewound so a later re-completion re-clusters the truncated
+        block.
+        """
+        super().truncate(num_tokens)
+        if self._bucket_positions is None or self._bucket_positions.numel() == 0:
+            self._next_block = 0
+            return
+        complete_blocks = int(num_tokens) // self.cluster_block
+        keep = torch.tensor(
+            [block < complete_blocks for block in self._bucket_block_ids],
+            dtype=torch.bool,
+        )
+        if not bool(keep.all()):
+            index = keep.nonzero(as_tuple=False).flatten()
+            self._centroids = self._centroids[:, index]
+            self._bucket_positions = self._bucket_positions[:, index]
+            self._bucket_sizes = self._bucket_sizes[:, index]
+            self._bucket_block_ids = [
+                self._bucket_block_ids[int(i)] for i in index.tolist()
+            ]
+        self._next_block = complete_blocks if self._bucket_block_ids else 0
+
+    def to(self, device: torch.device) -> None:
+        """Move every stored tensor (KV streams and bucket tables) to ``device``."""
+        super().to(device)
+        if self._centroids is not None:
+            self._centroids = self._centroids.to(device)
+            self._bucket_positions = self._bucket_positions.to(device)
+            self._bucket_sizes = self._bucket_sizes.to(device)
 
 
 class LatentKVSlot(_PositionedSlotBase):
