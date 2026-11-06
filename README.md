@@ -17,7 +17,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Model Classes | Training Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-------------:|:--------------:|:-------:|:------------:|
-| **42** | **26** | **11** | **3** | **6** | **122** | **4** |
+| **47** | **31** | **11** | **4** | **9** | **168** | **4** |
 
 ## How It Works
 
@@ -49,23 +49,28 @@ flowchart TB
         E["frankenstein_text_encoder<br/><i>encoder (mixed attention)</i>"]
         D["frankenstein_text_decoder<br/><i>causal decoder</i>"]
         V["frankenstein_vit<br/><i>vision transformer</i>"]
+        A["frankenstein_audio<br/><i>audio encoder</i>"]
     end
     subgraph TASKS["Training Tasks"]
         direction LR
-        T1["mlm · sbert"]
+        T1["mlm · sbert · text_classification"]
         T2["causal_lm"]
         T3["patch_prediction · classification · segmentation"]
+        T4["asr · audio_classification"]
     end
     E --> T1
     D --> T2
     V --> T3
+    A --> T4
 
     style E fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a
     style D fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a
     style V fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a
+    style A fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a
     style T1 fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
     style T2 fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
     style T3 fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
+    style T4 fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
 ```
 
 ## Quick Start
@@ -89,13 +94,13 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | 46 across 10 categories (Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory) |
-| Optimizer families | 31 across 7 categories |
+| Sequence mixer architectures | 47 across 10 categories (Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory) |
+| Optimizer families | 31 across 8 categories |
 | Positional encodings | 11 model-wide (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`) with per-mixer opt-out |
-| Model classes | `frankenstein`, `frankensteindecoder`, `frankenstein_vit` + reusable in-process engine API |
-| Training tasks | `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation` |
+| Model classes | `frankenstein_text_encoder`, `frankenstein_text_decoder`, `frankenstein_vit`, `frankenstein_audio` + reusable in-process engine API |
+| Training tasks | `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`, `asr`, `audio_classification` |
 | Normalization types | `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm` |
-| Config presets | 34 named presets + 88 example configs (schema smoke-tested in CI) |
+| Config presets | 51 named presets + 117 example configs (schema smoke-tested in CI) |
 | CLI subcommands | 4 (`train`, `deploy`, `infer`, `web-server`) |
 | Web configuration UI | Streamlit schema-driven YAML builder |
 | Quantized deployment | BitNet + checkpoint export pipeline (HF Transformers / GGUF) |
@@ -106,9 +111,10 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
-| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 42 mixer types |
+| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 47 mixer types |
 | `frankenstein_text_decoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 | `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `vision_dataset:` blocks |
+| `frankenstein_audio` | Encoder (audio) | Audio Transformer for ASR and audio/signal classification; log-mel/spectrogram/raw frontend, conv subsampling, CTC/RNN-T or classification heads; forces `mode: encoder`, requires `audio:` + `audio_dataset:` blocks |
 
 See [configs/README.md](configs/README.md) for preset details and [docs/architecture.md](docs/architecture.md) for the architecture spec and extension guide.
 
@@ -146,13 +152,14 @@ Configure via `layer_pattern` in YAML. See [src/schema.yaml](src/schema.yaml) fo
 
 | Category | Optimizers | Count |
 |----------|------------|-------|
-| **Classical** | `sgd_momentum`, `adamw`, `radam`, `adan`, `adopt`, `ademamix`, `lamb` | 7 |
-| **Variance Reduction** | `mars_adamw`, `cautious_adamw` | 2 |
-| **Memory-Efficient** | `adafactor`, `galore_adamw`, `lion`, `apollo`, `apollo_mini`, `q_apollo`, `adam_pm` | 7 |
-| **Schedule-Free** | `schedulefree_adamw`, `prodigy` | 2 |
+| **Classical** | `sgd_momentum`, `adamw`, `radam` | 3 |
+| **Momentum & Variance Reduction** | `adan`, `adopt`, `ademamix`, `mars_adamw`, `cautious_adamw` | 5 |
+| **Memory-Efficient & Low-Rank** | `adafactor`, `galore_adamw`, `lion`, `apollo`, `apollo_mini`, `q_apollo`, `adam_pm` | 7 |
+| **Schedule-Free & Parameter-Free** | `schedulefree_adamw`, `prodigy`, `lamb` | 3 |
 | **Second-Order** | `sophia`, `shampoo`, `soap` | 3 |
-| **Geometry-Oriented** | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `anon` | 6 |
-| **Evolutionary** | `eve` | 1 |
+| **Geometry-Oriented** | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `root`, `muon2` | 7 |
+| **Adaptivity-Tunable** | `anon` | 1 |
+| **Evolutionary** | `eve`, `ea4llm` | 2 |
 
 Parameters use prefixed keys: `<optimizer_class>-<group>_<param>` (e.g. `adamw-lr_embeddings`, `muon-ns_steps`). See [configs/README.md](configs/README.md) for the full parameter reference.
 
@@ -177,7 +184,7 @@ This engine powers the **`dashai-frankenstein` plugin**, which registers Franken
 | [docs/paper-es/paper-es.pdf](docs/paper-es/paper-es.pdf) | Technical report (Spanish) |
 | [docs/architecture.md](docs/architecture.md) | Canonical implementation spec: architecture, state, extension guide |
 | [docs/architecture.md](docs/architecture.md#711-vision-transformer-image-vision_dataset) | Vision Transformer (frankenstein_vit) — patch prediction, classification, segmentation |
-| [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) | Mixer registry (43 variants / 8 families) and selection guide |
+| [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) | Mixer registry (47 variants / 10 families) and selection guide |
 | [docs/dashai-plugin-audit.md](docs/dashai-plugin-audit.md) | DashAI plugin integration design and status |
 | [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specification, API, papers, bibliography) |
 | [docs/transformers_compatibility.md](docs/transformers_compatibility.md) | HuggingFace export compatibility guide |
