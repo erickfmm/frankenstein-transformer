@@ -149,6 +149,7 @@ class AttentionRefactorTests(unittest.TestCase):
             "sparse_transformer_attn",
             "longformer_attn",
             "swa_attn",
+            "fastconformer_attn",
             "bigbird_attn",
             "sparsek_attn",
             "nsa_attn",

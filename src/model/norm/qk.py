@@ -51,6 +51,7 @@ QK_NORM_MIXERS = frozenset(
         "mla_attn",
         "swa_attn",
         "longformer_attn",
+        "fastconformer_attn",
         "bigbird_attn",
         "sparse_transformer_attn",
         "gta_attn",

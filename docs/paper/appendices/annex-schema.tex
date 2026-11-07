@@ -153,6 +153,13 @@ attention.lsa.cluster\_block & int $\ge 2$ & Cluster block size; also the window
 attention.lsa.keys\_per\_bucket & int $\ge 1$ & Average keys per bucket; yields \texttt{cluster\_block / keys\_per\_bucket} buckets per block. Default: 8. \\
 attention.lsa.max\_keys\_per\_bucket & int $\ge 1$ & Merge cap per bucket. Default: 16. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.attention.fastconformer.*}} \\
+\midrule
+attention.fastconformer.window\_size & int $\ge 2$ & Total local span $w$; per-side context $w/2$ (paper: 128 each side). Default: 256. \\
+attention.fastconformer.global\_tokens & int $\ge 0$ & Leading global attention tokens $g$ (paper: 1; 0 = pure limited context). Default: 1. \\
+attention.fastconformer.global\_tokens\_spacing & int $\ge 1$ & Stride $s$ between global positions $\{0, s, \dots, (g{-}1)s\}$. Default: 1. \\
+attention.fastconformer.global\_attn\_separate & bool & Separate global Q/K/V projections ($+3H^2$; \S2.2) vs shared (\S3.4). Default: false. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.attention.engram.*}} \\
 \midrule
 attention.engram.max\_ngram\_size & int $\ge 2$ & Maximum N-gram order for Engram memory module. \\
@@ -259,6 +266,7 @@ fasa\_attn & FASA --- frequency-aware token selection; dense training, sparse in
 msa\_attn & MiniMax Sparse Attention --- block-sparse on GQA & \checkmark & \checkmark \\
 sparda\_attn & SparDA --- decoupled sparse attention with Forecast projection & \checkmark & \checkmark \\
 lsa\_attn & Latent Sparse Attention --- semantic key clustering with top-k selection & \checkmark & \checkmark \\
+fastconformer\_attn & Fast Conformer --- limited-context window + head-pinned global token & \checkmark & \checkmark \\
 kda\_attn & Kimi Delta Attention --- channel-wise decay + scalar write gate & \checkmark & \checkmark \\
 falcon1\_attn / falcon2\_attn / falcon3\_attn & Falcon regression family --- RAW prefix-aligned NLMS delta rule & \checkmark & \checkmark \\
 falcon1a\_attn / falcon2a\_attn / falcon3a\_attn & Falcon inner-product family --- shifted additive writes with ridge decay & \checkmark & \checkmark \\

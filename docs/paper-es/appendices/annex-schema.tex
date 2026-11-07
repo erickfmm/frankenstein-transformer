@@ -153,6 +153,13 @@ attention.lsa.cluster\_block & int $\ge 2$ & Tamaño de bloque de clustering; ta
 attention.lsa.keys\_per\_bucket & int $\ge 1$ & Claves medias por bucket; produce \texttt{cluster\_block / keys\_per\_bucket} buckets por bloque. Por defecto: 8. \\
 attention.lsa.max\_keys\_per\_bucket & int $\ge 1$ & Límite de fusión por bucket. Por defecto: 16. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.attention.fastconformer.*}} \\
+\midrule
+attention.fastconformer.window\_size & int $\ge 2$ & Tramo local total $w$; contexto por lado $w/2$ (paper: 128 a cada lado). Por defecto: 256. \\
+attention.fastconformer.global\_tokens & int $\ge 0$ & Tokens de atención globales iniciales $g$ (paper: 1; 0 = contexto limitado puro). Por defecto: 1. \\
+attention.fastconformer.global\_tokens\_spacing & int $\ge 1$ & Paso $s$ entre posiciones globales $\{0, s, \dots, (g{-}1)s\}$. Por defecto: 1. \\
+attention.fastconformer.global\_attn\_separate & bool & Proyecciones globales Q/K/V separadas ($+3H^2$; \S2.2) vs compartidas (\S3.4). Por defecto: false. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.attention.engram.*}} \\
 \midrule
 attention.engram.max\_ngram\_size & int $\ge 2$ & Tamaño máximo de N-grama para el módulo de memoria Engram. \\
@@ -259,6 +266,7 @@ fasa\_attn & FASA --- selección de tokens consciente de frecuencia; entrenamien
 msa\_attn & MiniMax Sparse Attention --- bloques dispersos sobre GQA & \checkmark & \checkmark \\
 sparda\_attn & SparDA --- atención dispersa desacoplada con proyección Forecast & \checkmark & \checkmark \\
 lsa\_attn & Latent Sparse Attention --- clustering semántico de claves con selección top-k & \checkmark & \checkmark \\
+fastconformer\_attn & Fast Conformer --- ventana de contexto limitado + token global anclado a la cabecera & \checkmark & \checkmark \\
 kda\_attn & Kimi Delta Attention --- decaimiento por canal + compuerta de escritura escalar & \checkmark & \checkmark \\
 falcon1\_attn / falcon2\_attn / falcon3\_attn & Familia de regresión Falcon --- regla delta NLMS prefix-alineada (RAW) & \checkmark & \checkmark \\
 falcon1a\_attn / falcon2a\_attn / falcon3a\_attn & Familia de producto interno Falcon --- escrituras aditivas desplazadas con decaimiento por ridge & \checkmark & \checkmark \\

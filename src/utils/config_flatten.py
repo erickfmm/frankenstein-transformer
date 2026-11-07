@@ -40,6 +40,8 @@ The hierarchical schema groups keys as:
         ssog:       {num_atoms, lookat, max_offset, cold_init, sigma_floor,
                     grid_h, grid_w}
         swa:        {window_size, num_sinks}
+        fastconformer: {window_size, global_tokens, global_tokens_spacing,
+                    global_attn_separate}
         falcon:     {chunk_size, qk_norm, beta_mode, lambda_mode, beta,
                     lambda, window, short_conv, conv_kernel, eps, eps_gamma}
         ode:        {solver, steps}
@@ -163,6 +165,12 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
     "swa": {
         "window_size": "swa_window_size",
         "num_sinks": "swa_num_sinks",
+    },
+    "fastconformer": {
+        "window_size": "fastconformer_window_size",
+        "global_tokens": "fastconformer_global_tokens",
+        "global_tokens_spacing": "fastconformer_global_tokens_spacing",
+        "global_attn_separate": "fastconformer_global_attn_separate",
     },
     "conformer": {
         "kernel_size": "conformer_kernel_size",

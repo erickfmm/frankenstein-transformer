@@ -5,6 +5,7 @@ from .sigmoid import SigmoidAttention
 from .sparse import (
     BigBirdAttention,
     FASAAttention,
+    FastConformerAttention,
     LongformerAttention,
     LSAAttention,
     MSAAttention,
@@ -75,6 +76,7 @@ __all__ = [
     "SparDAAttention",
     "SlidingWindowAttention",
     "LSAAttention",
+    "FastConformerAttention",
     "GatedLinearAttention",
     "DeltaNetAttention",
     "GatedDeltaNetAttention",

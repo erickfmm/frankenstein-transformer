@@ -22,7 +22,7 @@ load.
 
 | Dimension | Count | Defined in |
 |---|---:|---|
-| `model.dims.layer_pattern` values | **46** (45 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
+| `model.dims.layer_pattern` values | **48** (47 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
 | Optimizer families | **31** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
@@ -35,7 +35,7 @@ load.
 | Deployment formats | **4** | `src/cli.py` (`deploy --format`) |
 
 > The schema enums are the executable contract for code. README badges say
-> "46 mixers / 11 positional encodings": the mixer badge follows the schema
+> "48 mixers / 11 positional encodings": the mixer badge follows the schema
 > enum (including the `mamba` placeholder), while the PE badge excludes the
 > `none` encoding. The mathematical definitions stay in the paper; this
 > document tracks what is actually wired up.
@@ -79,7 +79,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/frankenstein_audio.py` | Audio model class: log-mel/spectrogram/raw frontend, conv subsampling, ASR and classification heads (forces `mode=encoder`) |
 | `src/model/mhc.py`, `src/model/hyperloop.py` | Manifold-constrained hyper-connections and loop-level variants |
 | `src/model/residuals/**` | Residual strategies + factory |
-| `src/model/attention/**` | 46 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
+| `src/model/attention/**` | 47 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
 | `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
@@ -348,7 +348,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-47 enum values in 10 families. `config subkey` is the optional
+48 enum values in 10 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -400,6 +400,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `conformer_attn` | Convolution-augmented | `conformer.*` | yes |
 | `memory_attn` | Memory | `dims.num_kv_heads` | yes |
 | `lsa_attn` | Sparse (semantic) | `lsa.*` | yes |
+| `fastconformer_attn` | Sparse | `fastconformer.*` | yes |
 
 Inference-sparse mixers: `HybridLayer.TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}`
 run standard dense attention in `train()` mode (via `mixer.dense_forward`, sharing
@@ -433,6 +434,19 @@ no parameters, defaults `lsa_attn_use_pe` to `false` (N-LSA trains without
 positional encoding) and stops the gradient through the selection. Buckets are
 immutable once a block completes, so the `BucketKVSlot` incremental branch is
 exact; flat search scores about `T/keys_per_bucket` centroids per decode step.
+
+`fastconformer_attn` implements Fast Conformer limited-context attention from
+arXiv:2305.05084: every query attends to a symmetric local window
+(`fastconformer.window_size`, paper §3.4: 128 per side, i.e. 256) plus
+`fastconformer.global_tokens` global attention tokens pinned at the head
+positions `{0, s, …, (g−1)s}` (`s = fastconformer.global_tokens_spacing`), which
+attend to everything and are attended by everything. `global_attn_separate`
+gives the global token its own q/k/v projections (paper §2.2, Longformer-style,
+`+3H²` parameters) instead of sharing the local ones (paper §3.4, the evaluated
+long-form model). The reference implementation masks a dense score matrix; the
+paper's overlapping-chunk kernel is out of scope. The mixer adds no parameters
+by default, trains its windowed pattern in both train and eval, and caches in a
+`RingSlot` whose pinned head prefix covers the global positions (exact decode).
 
 Registry: the local `mixer_registry` dict in `src/model/hybrid_layer.py` maps
 names to classes; `mamba` is handled as a linear projection special case.
@@ -636,7 +650,7 @@ logical roles). Per-layer storage is typed:
 | `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
 
 **Capability registry (D5).** `src/model/cache/capabilities.py` holds one
-`CacheSpec` per `layer_pattern` enum value (45). A layer caches only when
+`CacheSpec` per `layer_pattern` enum value (48). A layer caches only when
 the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
 (incremental branch implemented + parity-tested). Everything else receives
 `cache=None` and runs the legacy path — **inference never fails because of
@@ -651,7 +665,8 @@ Implemented cached branches (parity-tested in
 `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`,
 `gated_deltanet2_attn`, `hgrn2_attn`, `kda_attn`, `gma_attn`, `memory_attn`,
 `lsa_attn` (`BucketKVSlot`: KV + immutable per-block bucket centroids/index
-table, never quantized).
+table, never quantized), `fastconformer_attn` (`RingSlot`: pinned head prefix
+covers the global tokens).
 Documented fallbacks: `mamba` (stateless), `ssog_attn` (bidirectional
 vision grid, no causal formulation), `ode` (solver re-derives all
 intermediate states each step), `falcon*` (chunk-parallel rehearsal FIFO),

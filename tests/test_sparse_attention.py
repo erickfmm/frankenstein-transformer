@@ -10,6 +10,7 @@ if TORCH_AVAILABLE:
     from src.model.attention.sparse import (
         BigBirdAttention,
         FASAAttention,
+        FastConformerAttention,
         LongformerAttention,
         LSAAttention,
         MSAAttention,
@@ -192,6 +193,138 @@ class SlidingWindowAttentionTests(unittest.TestCase):
     def test_invalid_window_raises(self):
         with self.assertRaisesRegex(ValueError, "swa_window_size"):
             SlidingWindowAttention(self._cfg_swa(window=1, sinks=1))
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class FastConformerAttentionTests(unittest.TestCase):
+    """Limited-context attention with a head-pinned global token (arXiv:2305.05084)."""
+
+    def _fc_cfg(self, **overrides):
+        base = dict(
+            fastconformer_window_size=5,
+            fastconformer_global_tokens=2,
+            fastconformer_global_tokens_spacing=2,
+            fastconformer_global_attn_separate=False,
+        )
+        base.update(overrides)
+        return _cfg(**base)
+
+    def _fc(self, **overrides):
+        return FastConformerAttention(self._fc_cfg(**overrides))
+
+    def test_output_shape_encoder(self):
+        attn = self._fc()
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_output_shape_decoder(self):
+        attn = self._fc(mode="decoder")
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_gradient_flows(self):
+        attn = self._fc()
+        x = _x().requires_grad_(True)
+        attn(x).sum().backward()
+        self.assertIsNotNone(x.grad)
+
+    def test_no_nan_or_inf(self):
+        for mode in ("encoder", "decoder"):
+            attn = self._fc(mode=mode)
+            out = attn(_x())
+            self.assertTrue(torch.isfinite(out).all(), msg=mode)
+
+    def test_mask_shape_and_dtype(self):
+        attn = self._fc()
+        mask = attn._build_mask(SEQ, torch.device("cpu"))
+        self.assertEqual(mask.shape, (SEQ, SEQ))
+        self.assertEqual(mask.dtype, torch.bool)
+
+    def test_global_token_attended_by_all(self):
+        # G = {0, 2}: every query sees both global columns (encoder mode).
+        attn = self._fc()
+        mask = attn._build_mask(SEQ, torch.device("cpu"))
+        self.assertTrue(mask[:, 0].all())
+        self.assertTrue(mask[:, 2].all())
+
+    def test_global_token_attends_to_all(self):
+        attn = self._fc()
+        mask = attn._build_mask(SEQ, torch.device("cpu"))
+        self.assertTrue(mask[0, :].all())
+        self.assertTrue(mask[2, :].all())
+
+    def test_encoder_symmetric_window(self):
+        # w=5 -> half=2: |i-j| <= 2, plus globals {0, 2}.
+        attn = self._fc()
+        mask = attn._build_mask(SEQ, torch.device("cpu"))
+        expected = {0, 2, 5, 6, 7}
+        self.assertEqual(
+            set(mask[7].nonzero(as_tuple=False).flatten().tolist()), expected
+        )
+
+    def test_decoder_has_no_future_leak(self):
+        attn = self._fc(mode="decoder")
+        mask = attn._build_mask(SEQ, torch.device("cpu"))
+        upper = torch.triu(torch.ones(SEQ, SEQ, dtype=torch.bool), diagonal=1)
+        self.assertFalse((mask & upper).any())
+
+    def test_decoder_global_rows_are_causal_clipped(self):
+        attn = self._fc(mode="decoder")
+        mask = attn._build_mask(SEQ, torch.device("cpu"))
+        # Row 0: only itself. Row 2 (global): every past position.
+        self.assertEqual(
+            set(mask[0].nonzero(as_tuple=False).flatten().tolist()), {0}
+        )
+        self.assertEqual(
+            set(mask[2].nonzero(as_tuple=False).flatten().tolist()), {0, 1, 2}
+        )
+
+    def test_window_larger_than_sequence_is_full_causal(self):
+        attn = self._fc(mode="decoder", fastconformer_window_size=256,
+                        fastconformer_global_tokens=1)
+        mask = attn._build_mask(SEQ, torch.device("cpu"))
+        causal = torch.tril(torch.ones(SEQ, SEQ, dtype=torch.bool))
+        self.assertTrue(torch.equal(mask, causal))
+
+    def test_shared_projections_are_parameter_neutral(self):
+        attn = self._fc()
+        params = sum(p.numel() for p in attn.parameters())
+        self.assertEqual(params, 4 * DIM * DIM)
+        self.assertIsNone(attn.global_q_proj)
+
+    def test_separate_projections_add_three_matrices(self):
+        attn = self._fc(fastconformer_global_attn_separate=True)
+        params = sum(p.numel() for p in attn.parameters())
+        self.assertEqual(params, 7 * DIM * DIM)
+        for proj in (attn.global_q_proj, attn.global_k_proj, attn.global_v_proj):
+            self.assertIsNotNone(proj)
+
+    def test_separate_variant_forward(self):
+        for mode in ("encoder", "decoder"):
+            attn = self._fc(mode=mode, fastconformer_global_attn_separate=True)
+            out = attn(_x())
+            self.assertEqual(out.shape, (BSZ, SEQ, DIM))
+            self.assertTrue(torch.isfinite(out).all())
+
+    def test_bitnet_uses_bitlinear(self):
+        from src.model.attention.common import BitLinear
+
+        attn = self._fc(use_bitnet=True, fastconformer_global_attn_separate=True)
+        for proj in (
+            attn.q_proj, attn.k_proj, attn.v_proj, attn.out_proj,
+            attn.global_q_proj, attn.global_k_proj, attn.global_v_proj,
+        ):
+            self.assertIsInstance(proj, BitLinear)
+
+    def test_invalid_window_raises(self):
+        with self.assertRaisesRegex(ValueError, "fastconformer_window_size"):
+            self._fc(fastconformer_window_size=1)
+
+    def test_invalid_global_tokens_raises(self):
+        with self.assertRaisesRegex(ValueError, "fastconformer_global_tokens must"):
+            self._fc(fastconformer_global_tokens=-1)
+
+    def test_invalid_spacing_raises(self):
+        with self.assertRaisesRegex(ValueError, "global_tokens_spacing"):
+            self._fc(fastconformer_global_tokens_spacing=0)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

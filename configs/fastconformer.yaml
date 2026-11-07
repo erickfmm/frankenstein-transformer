@@ -1,0 +1,105 @@
+# Fast Conformer reference configuration (arXiv:2305.05084 §3.4, Table 9 FC-L
+# proportions adapted to text MLM).
+#
+# Every encoder layer is limited-context attention: a 128-token local window
+# per side (`window_size: 256`) plus a single global attention token pinned at
+# the head of the sequence, using the paper's §3.4 shared-projection long-form
+# recipe (`global_attn_separate: false`). The paper's 8x depthwise-separable
+# audio subsampling and RNNT/CTC decoders are audio-frontend work and are not
+# part of this text reference; the model classes here run the same mixer stack.
+#
+# Fast Conformer-L (Table 9): hidden 512, 17 encoder layers, 8 heads. The paper
+# fine-tunes from a full-context checkpoint for 10k steps at peak LR 1e-6 with
+# a 1k warmup and cosine decay; this preset trains from scratch with the same
+# cosine schedule shape and keeps max_length at 512 for practicality.
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 32000
+    hidden_size: 512
+    num_layers: 17
+    num_loops: 1
+    num_heads: 8
+    dropout: 0.1
+    mode: encoder
+    layer_pattern:
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+    - fastconformer_attn
+  norm:
+    type: layer_norm
+  embedding:
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  positional_encoding: rope
+  attention:
+    fastconformer:
+      window_size: 256
+      global_tokens: 1
+      global_tokens_spacing: 1
+      global_attn_separate: false
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 2048
+    activation: gelu
+training:
+  task: mlm
+  seed: 42
+  batch_size: 8
+  dataloader_workers: 2
+  max_length: 512
+  mlm_probability: 0.15
+  max_samples: 20000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: ./temp_data/v2_dataset_cache
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-6
+      adamw-lr_norms: 5e-6
+      adamw-lr_attention: 3e-6
+      adamw-lr_other: 2e-6
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_embeddings:
+      - 0.9
+      - 0.95
+      adamw-betas_norms:
+      - 0.9
+      - 0.95
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-eps_embeddings: 1e-8
+      adamw-eps_norms: 1e-8
+      adamw-eps_attention: 1e-8
+      adamw-eps_other: 1e-8
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  gradient_log_interval: 10

@@ -17,7 +17,7 @@ Con caché, el prefill cuesta $\mathcal{O}(S^2)$ una vez y cada paso de decodifi
 \]
 La diferencia es la conocida entre re-codificar una conversación y continuarla.
 
-El subsistema cubre los cuarenta y seis tipos de capa despachables. Veintiocho tienen ramas incrementales verificadas por paridad; el resto queda registrado con una justificación explícita, basada en el artículo, para ejecutarse sin caché (\S\ref{sec:kv-fallbacks}). La cuantización y la expulsión son ortogonales a la matemática del mezclador: los códecs transforman tensores en \emph{escritura} y las políticas actúan en \emph{lectura}, de modo que el mismo códec \texttt{int8} o \texttt{int4\_kivi} sirve a un slot denso, latente o de anillo sin código por mezclador \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
+El subsistema cubre los cuarenta y siete tipos de capa despachables. Veintinueve tienen ramas incrementales verificadas por paridad; el resto queda registrado con una justificación explícita, basada en el artículo, para ejecutarse sin caché (\S\ref{sec:kv-fallbacks}). La cuantización y la expulsión son ortogonales a la matemática del mezclador: los códecs transforman tensores en \emph{escritura} y las políticas actúan en \emph{lectura}, de modo que el mismo códec \texttt{int8} o \texttt{int4\_kivi} sirve a un slot denso, latente o de anillo sin código por mezclador \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
 
 \subsection{Arquitectura de la Caché}
 \label{sec:kv-architecture}

@@ -1,12 +1,12 @@
 %%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
 flowchart TD
-  root["Sequence Mixer Registry (47 variants)"]
+  root["Sequence Mixer Registry (48 variants)"]
 
   d["Dense (3)"] --> d1["standard_attn"] --> d2["sigmoid_attn"] --> d3["gqa_attn"]
 
   r["Recurrent (5)"] --> r1["retnet / retnet_attn"] --> r2["mamba"] --> r3["ode"] --> r4["titan_attn"]
 
-  s["Sparse (11)"] --> s1["sparse_transformer_attn"] --> s2["longformer_attn"] --> s3["bigbird_attn"] --> s4["sparsek_attn"] --> s5["nsa_attn"] --> s6["sparge_attn"] --> s7["fasa_attn"] --> s8["msa_attn"] --> s9["sparda_attn"] --> s10["swa_attn"] --> s11["lsa_attn"]
+  s["Sparse (12)"] --> s1["sparse_transformer_attn"] --> s2["longformer_attn"] --> s3["bigbird_attn"] --> s4["sparsek_attn"] --> s5["nsa_attn"] --> s6["sparge_attn"] --> s7["fasa_attn"] --> s8["msa_attn"] --> s9["sparda_attn"] --> s10["swa_attn"] --> s11["lsa_attn"] --> s12["fastconformer_attn"]
 
   g["Gated (8)"] --> g1["gla_attn"] --> g2["deltanet_attn"] --> g3["gated_deltanet_attn"] --> g4["gated_deltanet2_attn"] --> g5["hgrn2_attn"] --> g6["fox_attn"] --> g7["gated_softmax_attn"] --> g8["kda_attn"]
 

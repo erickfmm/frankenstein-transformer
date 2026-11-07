@@ -1,4 +1,5 @@
 from .bigbird_attn import BigBirdAttention
+from .fastconformer_attn import FastConformerAttention
 from .fasa_attn import FASAAttention
 from .longformer_attn import LongformerAttention
 from .lsa_attn import LSAAttention
@@ -22,4 +23,5 @@ __all__ = [
     "SparDAAttention",
     "SlidingWindowAttention",
     "LSAAttention",
+    "FastConformerAttention",
 ]

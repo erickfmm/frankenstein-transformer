@@ -266,7 +266,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - `layer_pattern`: list of blocks.
 - `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankenstein_text_decoder`, which forces decoder).
 - Legacy blocks: `retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`.
-- Sparse blocks: `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `msa_attn` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda_attn` (SparDA, arXiv:2606.04511), `lsa_attn` (Latent Sparse Attention, arXiv:2610.42147).
+- Sparse blocks: `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `msa_attn` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda_attn` (SparDA, arXiv:2606.04511), `lsa_attn` (Latent Sparse Attention, arXiv:2610.42147), `fastconformer_attn` (Fast Conformer limited-context attention, arXiv:2305.05084).
 - Gated blocks: `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` (Kimi Delta Attention, arXiv:2510.26692).
 - Latent blocks (KV-compression / head-mixing, generalising GQA):
   - `mla_attn` — Multi-Head Latent Attention + RoPE (arXiv:2506.09342).
@@ -302,7 +302,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   `standard_attn`, `sigmoid_attn`, `gqa_attn`, `mla_attn`, `swa_attn`,
   `longformer_attn`, `bigbird_attn`, `sparse_transformer_attn`, `gta_attn`,
   `iha_attn`, `mtla_attn`, `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`,
-  `sparda_attn`, `lsa_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
+  `sparda_attn`, `lsa_attn`, `fastconformer_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
   `titan_attn`, `gqla_attn`, `mlra_attn`, `memory_attn`; `qk_clip` additionally excludes
   `gma_attn`. Recurrent/state-space mixers (`retnet`, `gla_attn`, `mamba`, …)
   are rejected at load time. Examples: `norm_qknorm_rms.yaml`,
@@ -335,7 +335,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 #### model.attention.<mixer>
 
 Per-mixer sub-objects: `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
-`cca`, `ccgqa`, `msa`, `sparda`, `lsa`, `engram`, `gma`, `ssog`, `conformer`,
+`cca`, `ccgqa`, `msa`, `sparda`, `lsa`, `fastconformer`, `engram`, `gma`, `ssog`, `conformer`,
 `falcon`, `ode` (`solver`, `steps`), `retnet` (`heads`). Optional rank fields
 accept `null` (= derive from `hidden_size` / `num_heads`).
 
@@ -428,6 +428,18 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
 `lsa_attn` uses `num_kv_heads` (the paper's N-LSA uses a single shared KV head),
 adds no parameters, and opts out of the model-wide positional encoding by
 default (N-LSA trains without PE).
+
+### Fast Conformer limited-context attention (model.attention.fastconformer)
+
+- `model.attention.fastconformer.window_size`: total local span $w$; the per-side context is `w / 2` (default 256, the paper's 128 steps on each side).
+- `model.attention.fastconformer.global_tokens`: number of leading global attention tokens $g$; they attend to every position and are attended by every position (default 1, the paper's single global token; `0` is the pure limited-context variant).
+- `model.attention.fastconformer.global_tokens_spacing`: stride $s$ between global positions $\{0, s, \dots, (g{-}1)s\}$ (default 1).
+- `model.attention.fastconformer.global_attn_separate`: use a separate set of global query/key/value projections (paper §2.2, Longformer-style, adds $3H^2$ parameters) instead of the shared local ones (paper §3.4, the evaluated long-form model; default `false`).
+
+`fastconformer_attn` uses plain multi-head projections (it does not read
+`num_kv_heads`), adds no parameters by default, trains its windowed + global
+pattern in both training and inference, and caches in a `RingSlot` whose pinned
+head prefix covers the global positions (exact incremental decoding).
 
 ### SSOG — Separable Sum of Gaussians (model.attention.ssog)
 

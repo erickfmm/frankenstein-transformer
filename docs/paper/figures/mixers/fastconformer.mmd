@@ -1,0 +1,22 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V<br/>[B,n,H]"]
+  gproj["Qg, Kg, Vg<br/>[B,n,H]<br/>(optional)"]
+  win["local<br/>window w"]
+  glo["head tokens 0,s,…<br/>g global"]
+  s["masked scores =<br/>(w+g)⊗QKᵀ"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "Wg (separate)" --> gproj
+  x -- "window" --> win
+  x -- "global rows/cols" --> glo
+  qkv -- "mask" --> s
+  gproj -- "global rows/cols" --> s
+  win -- "mask" --> s
+  glo -- "mask" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  qkv -- "V" --> o

@@ -242,6 +242,11 @@ ATTENTIONS = [
     # clustering + top-k selection; trains natively in encoder and decoder
     # modes; exact bucket-cache incremental decoding.
     "lsa_attn",
+    # Fast Conformer limited-context attention (arXiv:2305.05084): local
+    # window + head-pinned global attention token; trains its windowed pattern
+    # natively in encoder and decoder modes; exact ring-cache incremental
+    # decoding.
+    "fastconformer_attn",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).

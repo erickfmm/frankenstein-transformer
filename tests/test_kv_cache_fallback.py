@@ -59,7 +59,7 @@ def _build(pattern, pe="rope", **extra):
 class RegistryConsistencyTests(unittest.TestCase):
     def test_capacity_spec_covers_every_enum_value(self):
         enum = _schema_enum()
-        self.assertEqual(len(enum), 47)
+        self.assertEqual(len(enum), 48)
         self.assertEqual(set(CACHE_SPECS), set(enum))
         # All implemented mixers must exist in the schema enum.
         self.assertTrue(IMPLEMENTED_MIXERS.issubset(set(enum)))

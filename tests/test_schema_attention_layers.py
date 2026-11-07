@@ -63,6 +63,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "falcon1a_attn",
             "falcon2a_attn",
             "falcon3a_attn",
+            "fastconformer_attn",
         }
 
         self.assertTrue(expected.issubset(set(enum_values)))
@@ -119,6 +120,10 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "sigma_floor", "grid_h", "grid_w",
             },
             "swa": {"window_size", "num_sinks"},
+            "fastconformer": {
+                "window_size", "global_tokens", "global_tokens_spacing",
+                "global_attn_separate",
+            },
             "conformer": {"kernel_size", "macaron", "conv_norm"},
             "falcon": {
                 "chunk_size", "qk_norm", "beta_mode", "lambda_mode",
@@ -152,7 +157,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "layer_pattern"
             ]["items"]["enum"]
         )
-        self.assertEqual(len(enum_values), 47)
+        self.assertEqual(len(enum_values), 48)
         self.assertEqual(set(CACHE_SPECS), enum_values)
 
     def test_inference_schema_is_referenced(self):

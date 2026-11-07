@@ -3,7 +3,7 @@
 
 \subsection{Executive Summary}
 
-Sparse attention mechanisms address the prohibitive $\mathcal{O}(n^2)$ computational and memory complexity of standard scaled dot-product attention by restricting the set of attended key-value pairs. Modern sparse attention spans a rich design space distinguished by four orthogonal dimensions: (i) \textbf{sparsity pattern} (fixed geometric, data-dependent, or frequency-based), (ii) \textbf{trainability} (end-to-end trained or inference-only), (iii) \textbf{sparsity unit} (individual tokens, local windows, or blocks), and (iv) \textbf{mechanism} (masking, selection, filtering, or compression). This annex synthesizes ten major sparse attention families---Sparse Transformer, Longformer, SWA with attention sinks, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, and SparDA---providing mathematical formulations, algorithmic pseudocode, and comprehensive architectural comparisons.
+Sparse attention mechanisms address the prohibitive $\mathcal{O}(n^2)$ computational and memory complexity of standard scaled dot-product attention by restricting the set of attended key-value pairs. Modern sparse attention spans a rich design space distinguished by four orthogonal dimensions: (i) \textbf{sparsity pattern} (fixed geometric, data-dependent, or frequency-based), (ii) \textbf{trainability} (end-to-end trained or inference-only), (iii) \textbf{sparsity unit} (individual tokens, local windows, or blocks), and (iv) \textbf{mechanism} (masking, selection, filtering, or compression). This annex synthesizes twelve major sparse attention methods---Sparse Transformer, Longformer, SWA with attention sinks, Fast Conformer, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, SparDA, and LSA---providing mathematical formulations, algorithmic pseudocode, and comprehensive architectural comparisons.
 
 \subsection{Sparse Transformer: Factorized Strided and Fixed Patterns}
 
@@ -766,13 +766,99 @@ where the softmax is renormalised per head over the shared selection. N-LSA \tex
     \item \textbf{Limitation}: The flat indexer remains quadratic in context length (with a $1/\bar{n}_b$ constant); tree search is left to future work. The paper's single index list assumes a single shared KV head ($n_{kv}=1$), and N-LSA deliberately uses no positional encoding.
 \end{itemize}
 
+\subsection{Fast Conformer: Limited-Context Attention with a Head-Pinned Global Token}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/fastconformer.pdf}}
+\caption{Dataflow of Fast Conformer limited-context attention: every query attends to a symmetric local window, while a small set of global attention tokens pinned at the head of the sequence attend to every position and are attended by every position; the global token may use its own query/key/value projections (paper \S2.2).}
+\label{fig:mixer-fastconformer}
+\end{figure}
+
+\subsubsection{Mathematical Formulation}
+
+Fast Conformer \citep{rekesh_fastconformer_2023} attacks the quadratic cost of Conformer self-attention in two ways: it raises the front-end downsampling to $8\times$, and, for long-form inputs, it replaces global attention with \emph{limited-context} attention. The paper describes the mixer in prose rather than in display equations: ``we use a single global attention token, which attends to all other tokens and has all other tokens attend to it, using a separate set of query, key and value linear projections, while others attend in a fixed-size window surrounding each token'' (\S2.2), while the evaluated long-form model ``has shared query, key and value projection layers that are used for global and local attention'' (\S3.4) and sets ``the size of the limited context \ldots to 128 steps on each side of a token''. This implementation encodes exactly that description and inherits the global-attention dataflow from Longformer \citep{beltagy_longformer_2020}, which the paper explicitly cites for the mechanism and for its overlapping-chunk kernel.
+
+Let $X \in \mathbb{R}^{n \times H}$ be the layer input, $h$ the number of heads and $d = H/h$. The shared projections are
+\[
+\mathbf{Q} = X\mathbf{W}_Q, \qquad \mathbf{K} = X\mathbf{W}_K, \qquad \mathbf{V} = X\mathbf{W}_V,
+\]
+with $\mathbf{W}_\ast \in \mathbb{R}^{H \times H}$ and no bias. The optional global projections of the paper's \S2.2 variant are a second set,
+\[
+\mathbf{Q}^{g} = X\mathbf{W}_Q^{g}, \qquad \mathbf{K}^{g} = X\mathbf{W}_K^{g}, \qquad \mathbf{V}^{g} = X\mathbf{W}_V^{g},
+\]
+which adds $3H^2$ parameters; the \S3.4 evaluated model sets $\mathbf{W}_\ast^{g} = \mathbf{W}_\ast$.
+
+The global positions are the head of the sequence, spaced $s$ apart,
+\[
+\mathcal{G} = \{\,0, s, 2s, \dots, (g-1)s\,\},
+\]
+so a global token is a designated input position rather than an extra learned embedding (the paper's ``addition of a global token''). The attention pattern is
+\[
+M_{ij} = \big[\,|i-j| \le w/2\,\big] \;\vee\; \big[\,j \in \mathcal{G}\,\big] \;\vee\; \big[\,i \in \mathcal{G}\,\big],
+\]
+where the first term is the local window, the second lets every query attend to the global tokens, and the third lets a global token attend to every position; $M$ is intersected with the causal mask in decoder mode. With the effective keys and values
+\[
+\tilde{\mathbf{k}}_j = \begin{cases} \mathbf{k}^{g}_j & j \in \mathcal{G}\ \text{and separate}, \\ \mathbf{k}_j & \text{otherwise}, \end{cases}
+\qquad
+\tilde{\mathbf{v}}_j = \begin{cases} \mathbf{v}^{g}_j & j \in \mathcal{G}\ \text{and separate}, \\ \mathbf{v}_j & \text{otherwise}, \end{cases}
+\]
+the output is standard scaled dot-product attention over the allowed pairs,
+\[
+z_{ij} = \frac{\mathbf{q}_i \cdot \tilde{\mathbf{k}}_j}{\sqrt{d}}, \qquad
+\mathbf{o}_i = \sum_{j:\,M_{ij}} \operatorname{softmax}_j(z_{ij})\,\tilde{\mathbf{v}}_j, \qquad
+\mathbf{Y} = \mathbf{O}\mathbf{W}_O .
+\]
+In the separate variant a global query row is computed with the global projections over the whole causal prefix, $\mathbf{o}_i = \sum_{j \le i} \operatorname{softmax}_j(\mathbf{q}^{g}_i \cdot \mathbf{k}^{g}_j/\sqrt{d})\,\mathbf{v}^{g}_j$, matching Longformer's global-attention design. With shared projections all three cases collapse to one $\mathbf{Q}/\mathbf{K}/\mathbf{V}$ set: the global tokens are simply positions with unmasked rows and columns.
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{Fast Conformer limited-context attention (masked-dense reference form)}
+\begin{algorithmic}[1]
+\Require Input $X$; window $w$; global count $g$; spacing $s$; separate flag
+\Ensure Output $\mathbf{Y}$
+\State $\mathbf{Q},\mathbf{K},\mathbf{V} \gets X\mathbf{W}_Q, X\mathbf{W}_K, X\mathbf{W}_V$
+\If{separate}
+    \State $\mathbf{Q}^{g},\mathbf{K}^{g},\mathbf{V}^{g} \gets X\mathbf{W}_Q^{g}, X\mathbf{W}_K^{g}, X\mathbf{W}_V^{g}$
+    \State $\tilde{\mathbf{K}}, \tilde{\mathbf{V}} \gets \mathbf{K}, \mathbf{V}$; replace rows $\mathcal{G}$ with $\mathbf{K}^{g}, \mathbf{V}^{g}$
+\Else
+    \State $\tilde{\mathbf{K}}, \tilde{\mathbf{V}} \gets \mathbf{K}, \mathbf{V}$
+\EndIf
+\State $\mathcal{G} \gets \{0, s, \dots, (g-1)s\}$ clipped to $n$
+\State $M \gets [\,|i-j| \le w/2\,] \vee [\,j \in \mathcal{G}\,] \vee [\,i \in \mathcal{G}\,]$
+\If{decoder} $M \gets M \wedge [\,j \le i\,]$ \EndIf
+\State $Z \gets \mathbf{Q}\tilde{\mathbf{K}}^{\top}/\sqrt{d}$ masked by $M$
+\If{separate \textbf{and} $\mathcal{G} \ne \emptyset$}
+    \State $Z[\mathcal{G},:] \gets \mathbf{Q}^{g}[\mathcal{G}]\mathbf{K}^{g\top}/\sqrt{d}$ (causal-clipped)
+\EndIf
+\State $\mathbf{O} \gets \operatorname{softmax}(Z)\tilde{\mathbf{V}}$
+\If{separate \textbf{and} $\mathcal{G} \ne \emptyset$}
+    \State $\mathbf{O}[\mathcal{G},:] \gets \operatorname{softmax}(Z[\mathcal{G},:])\mathbf{V}^{g}$ \Comment{global rows aggregate global values}
+\EndIf
+\State $\mathbf{Y} \gets \mathbf{O}\mathbf{W}_O$
+\end{algorithmic}
+\end{algorithm}
+
+In incremental decoding the retained state is a bounded ring: the pinned head region covers $\mathcal{G}$ and the ring keeps the last $w/2+1$ keys, so each step costs $\mathcal{O}(w+g)$. The exact pattern is evaluated against the cached absolute positions (unlike a retention-equals-pattern shortcut, because a spaced global prefix may contain non-global positions).
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: $\mathcal{O}(n\,(w+g)\,d)$ training and $\mathcal{O}(w+g)$ per decoded token with the paper's overlapping-chunk kernel; the reference implementation here masks a dense score matrix, which is mathematically identical but $\mathcal{O}(n^2)$ in compute. Memory is bounded by $w+g$.
+    \item \textbf{Trainable}: Yes, natively from scratch (the pattern runs in both training and evaluation). The paper fineTunes a full-context checkpoint for 10k steps at peak LR $10^{-6}$ with a 1k-step warmup and cosine decay, but the mixer's weights are ordinary attention projections.
+    \item \textbf{Strength}: On long-form benchmarks the global token is the decisive ingredient: normalized greedy WER improves from 9.18 (Conformer) to 8.25 (limited context) to \textbf{7.5} (plus global token) on TED-LIUM v3, and from 18.26 to 16.08 to \textbf{11.85} on Earnings-21, while the single-pass maximum duration grows from 15 to 675 minutes on one A100. The encoder is $2.8\times$ faster and uses $2.9\times$ fewer multiply-accumulates than the original Conformer.
+    \item \textbf{Limitation}: The paper gives no closed-form equations for the global-token path (the formulation above is a documented reconstruction from its prose, Longformer and the authors' NeMo recipe). The default is a single global token with shared projections; the separate-projection variant costs $3H^2$ extra parameters and is only exact in the cached path when the global queries are pre-filled from position zero. The efficient chunked kernel is not implemented.
+\end{itemize}
+
 \subsection{Design Space and Selection Criteria}
 
-The eleven sparse attention methods occupy complementary positions in a multidimensional design space:
+The twelve sparse attention methods occupy complementary positions in a multidimensional design space:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Geometric/fixed patterns} (Sparse Transformer, Longformer): Simple to implement and analyze, but patterns do not adapt to content.
     \item \textbf{Fixed-memory KV eviction} (SWA with sinks): The cheapest possible policy---keep a sink prefix and a recent window, discard everything else. No extra parameters, no training required, bounded memory.
+    \item \textbf{Window + pinned global broadcast} (Fast Conformer): the Longformer pattern with the global tokens fixed at the head of the sequence---bounded-memory long-form decoding with a single always-visible summary channel, proven at 11-hour scale.
     \item \textbf{Learned selection} (SparseK, NSA): Enable adaptation through trainable selection networks, at the cost of higher implementation complexity.
     \item \textbf{Training-free acceleration} (FASA, SpargeAttn): Enable drop-in speedup of existing models without retraining, suited for deployed systems.
     \item \textbf{Semantic selection} (LSA): Clusters keys by content and caches one centroid per bucket, so the indexer scans a small multiple of $T/\bar{n}_b$ instead of $T$; the only member whose per-block statistics are immutable, which makes exact cached decoding possible.

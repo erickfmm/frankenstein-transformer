@@ -321,6 +321,9 @@ class FrankensteinModelConfig:
             the model-wide positional encoding. Default: True.
         swa_attn_use_pe: Whether ``swa_attn`` layers consume the model-wide
             positional encoding. Default: True.
+        fastconformer_attn_use_pe: Whether ``fastconformer_attn`` layers
+            consume the model-wide positional encoding (windowed softmax
+            attention). Default: True.
         bigbird_attn_use_pe: Whether ``bigbird_attn`` layers consume the
             model-wide positional encoding. Default: True.
         sparse_transformer_attn_use_pe: Whether ``sparse_transformer_attn``
@@ -616,6 +619,7 @@ class FrankensteinModelConfig:
     gma_attn_use_pe: bool = True
     longformer_attn_use_pe: bool = True
     swa_attn_use_pe: bool = True
+    fastconformer_attn_use_pe: bool = True
     bigbird_attn_use_pe: bool = True
     sparse_transformer_attn_use_pe: bool = True
     sparsek_attn_use_pe: bool = True
@@ -795,6 +799,19 @@ class FrankensteinModelConfig:
     swa_window_size: int = 256
     # Leading sink tokens s every query always attends to. Paper: s = 4.
     swa_num_sinks: int = 4
+
+    # ---- Fast Conformer limited-context attention (arXiv:2305.05084) ----
+    # Total local span w; the per-side context is ``w // 2``. Paper §3.4:
+    # 128 steps on each side of a token (``w = 256``).
+    fastconformer_window_size: int = 256
+    # Leading global attention tokens g: they attend to all positions and are
+    # attended by all positions. Paper: "a single global attention token".
+    fastconformer_global_tokens: int = 1
+    # Stride s between global positions {0, s, ..., (g-1)s}. Paper/NeMo: 1.
+    fastconformer_global_tokens_spacing: int = 1
+    # Separate global q/k/v projections (§2.2, Longformer-style, +3 H^2) vs
+    # the shared projections of the evaluated §3.4 long-form model.
+    fastconformer_global_attn_separate: bool = False
 
     # ---- Conformer (arXiv:2005.08100) ----
     # Depth-wise convolution kernel size k of the convolution module (paper
@@ -1132,6 +1149,23 @@ class FrankensteinModelConfig:
                 "swa_num_sinks must be smaller than swa_window_size, got "
                 f"num_sinks={self.swa_num_sinks}, "
                 f"window_size={self.swa_window_size}"
+            )
+
+        # ---- Validate Fast Conformer limited-context attention ----
+        if self.fastconformer_window_size < 2:
+            raise ValueError(
+                "fastconformer_window_size must be >= 2, got "
+                f"{self.fastconformer_window_size}"
+            )
+        if self.fastconformer_global_tokens < 0:
+            raise ValueError(
+                "fastconformer_global_tokens must be >= 0, got "
+                f"{self.fastconformer_global_tokens}"
+            )
+        if self.fastconformer_global_tokens_spacing < 1:
+            raise ValueError(
+                "fastconformer_global_tokens_spacing must be >= 1, got "
+                f"{self.fastconformer_global_tokens_spacing}"
             )
 
         # ---- Validate LSA / Latent Sparse Attention (arXiv:2610.42147) ----

@@ -3,7 +3,7 @@
 ``CACHE_SPECS`` is the single declarative source consumed by
 :class:`~src.model.hybrid_layer.HybridLayer` at runtime and by
 ``config_loader`` for static validation. One entry per schema
-``layer_pattern`` enum value (47 total: 46 mixer classes + the ``mamba``
+``layer_pattern`` enum value (48 total: 47 mixer classes + the ``mamba``
 linear placeholder).
 
 Rules (see the KV-cache integration plan, §5.4):
@@ -86,6 +86,7 @@ IMPLEMENTED_MIXERS = frozenset(
         "gta_attn",            # F1 (grouped post-RoPE keys + latent values)
         # ---- F1 sparse family ----
         "swa_attn",            # F1 (ring retention == attention pattern)
+        "fastconformer_attn",  # F1 (ring retention == window + pinned globals)
         "longformer_attn",     # F1 (pattern over positions)
         "bigbird_attn",        # F1 (seeded random links, R2)
         "sparse_transformer_attn",  # F1 (position-based patterns)
@@ -241,6 +242,17 @@ CACHE_SPECS: Dict[str, CacheSpec] = {
         "StreamingLLM arXiv:2309.17453) — the paper IS a cache-eviction "
         "recipe; removing sinks collapses performance. Ring retention "
         "policy equals the attention pattern.",
+    ),
+    "fastconformer_attn": CacheSpec(
+        supported=True,
+        slot_type="ring",
+        extras=("global_tokens",),
+        notes="Fast Conformer limited-context attention (arXiv:2305.05084); "
+        "local window + global attention tokens pinned at the head of the "
+        "sequence (Longformer-inspired, optional separate global projections). "
+        "Global positions live in a bounded head region, so a ring slot whose "
+        "pinned prefix covers G retains exactly the attention pattern (swa "
+        "precedent); the exact pattern is masked over cached positions.",
     ),
     "bigbird_attn": CacheSpec(
         supported=True,

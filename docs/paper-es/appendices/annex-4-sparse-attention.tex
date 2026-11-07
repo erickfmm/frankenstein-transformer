@@ -3,7 +3,7 @@
 
 \subsection{Resumen Ejecutivo}
 
-Los mecanismos de atención dispersa abordan la prohibitiva complejidad computacional y de memoria $\mathcal{O}(n^2)$ de la atención de producto punto escalado estándar al restringir el conjunto de pares clave-valor atendidos. La atención dispersa moderna abarca un rico espacio de diseño distinguido por cuatro dimensiones ortogonales: (i) \textbf{patrón de dispersidad} (geométrico fijo, dependiente de datos o basado en frecuencia), (ii) \textbf{capacidad de entrenamiento} (entrenado de extremo a extremo o solo inferencia), (iii) \textbf{unidad de dispersidad} (tokens individuales, ventanas locales o bloques), y (iv) \textbf{mecanismo} (enmascaramiento, selección, filtrado o compresión). Este anexo sintetiza diez familias principales de atención dispersa---Sparse Transformer, Longformer, SWA con sumideros de atención, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA y SparDA---proporcionando formulaciones matemáticas, pseudocódigo algorítmico y comparaciones arquitectónicas exhaustivas.
+Los mecanismos de atención dispersa abordan la prohibitiva complejidad computacional y de memoria $\mathcal{O}(n^2)$ de la atención de producto punto escalado estándar al restringir el conjunto de pares clave-valor atendidos. La atención dispersa moderna abarca un rico espacio de diseño distinguido por cuatro dimensiones ortogonales: (i) \textbf{patrón de dispersidad} (geométrico fijo, dependiente de datos o basado en frecuencia), (ii) \textbf{capacidad de entrenamiento} (entrenado de extremo a extremo o solo inferencia), (iii) \textbf{unidad de dispersidad} (tokens individuales, ventanas locales o bloques), y (iv) \textbf{mecanismo} (enmascaramiento, selección, filtrado o compresión). Este anexo sintetiza doce métodos principales de atención dispersa---Sparse Transformer, Longformer, SWA con sumideros de atención, Fast Conformer, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, SparDA y LSA---proporcionando formulaciones matemáticas, pseudocódigo algorítmico y comparaciones arquitectónicas exhaustivas.
 
 \subsection{Sparse Transformer: Patrones Estrideados y Fijos Factorizados}
 
@@ -766,13 +766,99 @@ donde el softmax se renormaliza por cabeza sobre la selección compartida. N-LSA
     \item \textbf{Limitación}: El indexador plano sigue siendo cuadrático en la longitud de contexto (con una constante $1/\bar{n}_b$); la búsqueda en árbol queda para trabajo futuro. La lista de índices única del paper asume una sola cabeza KV compartida ($n_{kv}=1$), y N-LSA usa deliberadamente ausencia de codificación posicional.
 \end{itemize}
 
+\subsection{Fast Conformer: Atención de Contexto Limitado con un Token Global Anclado a la Cabecera}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/fastconformer.pdf}}
+\caption{Flujo de datos de la atención de contexto limitado Fast Conformer: cada consulta atiende a una ventana local simétrica, mientras que un pequeño conjunto de tokens de atención globales anclados a la cabecera de la secuencia atiende a todas las posiciones y es atendido por todas ellas; el token global puede usar sus propias proyecciones query/key/value (paper \S2.2).}
+\label{fig:mixer-fastconformer}
+\end{figure}
+
+\subsubsection{Formulación Matemática}
+
+Fast Conformer \citep{rekesh_fastconformer_2023} ataca el costo cuadrático de la autoatención de Conformer de dos formas: eleva el submuestreo del front-end a $8\times$ y, para entradas de forma larga, sustituye la atención global por atención de \emph{contexto limitado}. El paper describe el mezclador en prosa y no con ecuaciones desplegadas: ``usamos un único token de atención global, que atiende a todos los demás tokens y hace que todos los demás tokens lo atiendan, usando un conjunto separado de proyecciones lineales query, key y value, mientras que los demás atienden en una ventana de tamaño fijo alrededor de cada token'' (\S2.2), mientras que el modelo de forma larga evaluado ``tiene capas de proyección query, key y value compartidas que se usan para la atención global y local'' (\S3.4) y fija ``el tamaño del contexto limitado \ldots en 128 pasos a cada lado de un token''. Esta implementación codifica exactamente esa descripción y hereda el flujo de datos de la atención global de Longformer \citep{beltagy_longformer_2020}, que el paper cita explícitamente para el mecanismo y para su kernel de chunks solapados.
+
+Sea $X \in \mathbb{R}^{n \times H}$ la entrada de la capa, $h$ el número de cabezas y $d = H/h$. Las proyecciones compartidas son
+\[
+\mathbf{Q} = X\mathbf{W}_Q, \qquad \mathbf{K} = X\mathbf{W}_K, \qquad \mathbf{V} = X\mathbf{W}_V,
+\]
+con $\mathbf{W}_\ast \in \mathbb{R}^{H \times H}$ y sin sesgo. Las proyecciones globales opcionales de la variante \S2.2 del paper son un segundo conjunto,
+\[
+\mathbf{Q}^{g} = X\mathbf{W}_Q^{g}, \qquad \mathbf{K}^{g} = X\mathbf{W}_K^{g}, \qquad \mathbf{V}^{g} = X\mathbf{W}_V^{g},
+\]
+que añade $3H^2$ parámetros; el modelo evaluado de \S3.4 fija $\mathbf{W}_\ast^{g} = \mathbf{W}_\ast$.
+
+Las posiciones globales son la cabecera de la secuencia, espaciadas $s$,
+\[
+\mathcal{G} = \{\,0, s, 2s, \dots, (g-1)s\,\},
+\]
+de modo que un token global es una posición de entrada designada y no un embedding aprendido adicional (la ``adición de un token global'' del paper). El patrón de atención es
+\[
+M_{ij} = \big[\,|i-j| \le w/2\,\big] \;\vee\; \big[\,j \in \mathcal{G}\,\big] \;\vee\; \big[\,i \in \mathcal{G}\,\big],
+\]
+donde el primer término es la ventana local, el segundo permite que toda consulta atienda a los tokens globales y el tercero permite que un token global atienda a todas las posiciones; $M$ se intersecta con la máscara causal en modo decoder. Con las claves y valores efectivos
+\[
+\tilde{\mathbf{k}}_j = \begin{cases} \mathbf{k}^{g}_j & j \in \mathcal{G}\ \text{y separadas}, \\ \mathbf{k}_j & \text{en otro caso}, \end{cases}
+\qquad
+\tilde{\mathbf{v}}_j = \begin{cases} \mathbf{v}^{g}_j & j \in \mathcal{G}\ \text{y separadas}, \\ \mathbf{v}_j & \text{en otro caso}, \end{cases}
+\]
+la salida es la atención de producto punto escalado estándar sobre los pares permitidos,
+\[
+z_{ij} = \frac{\mathbf{q}_i \cdot \tilde{\mathbf{k}}_j}{\sqrt{d}}, \qquad
+\mathbf{o}_i = \sum_{j:\,M_{ij}} \operatorname{softmax}_j(z_{ij})\,\tilde{\mathbf{v}}_j, \qquad
+\mathbf{Y} = \mathbf{O}\mathbf{W}_O .
+\]
+En la variante separada, la fila de una consulta global se calcula con las proyecciones globales sobre todo el prefijo causal, $\mathbf{o}_i = \sum_{j \le i} \operatorname{softmax}_j(\mathbf{q}^{g}_i \cdot \mathbf{k}^{g}_j/\sqrt{d})\,\mathbf{v}^{g}_j$, igual que el diseño de atención global de Longformer. Con proyecciones compartidas los tres casos colapsan a un único conjunto $\mathbf{Q}/\mathbf{K}/\mathbf{V}$: los tokens globales son simplemente posiciones con filas y columnas sin enmascarar.
+
+\subsubsection{Pseudocódigo Algorítmico}
+
+\begin{algorithm}[H]
+\caption{Atención de contexto limitado Fast Conformer (forma de referencia densa enmascarada)}
+\begin{algorithmic}[1]
+\Require Entrada $X$; ventana $w$; número global $g$; espaciado $s$; bandera de separación
+\Ensure Salida $\mathbf{Y}$
+\State $\mathbf{Q},\mathbf{K},\mathbf{V} \gets X\mathbf{W}_Q, X\mathbf{W}_K, X\mathbf{W}_V$
+\If{separadas}
+    \State $\mathbf{Q}^{g},\mathbf{K}^{g},\mathbf{V}^{g} \gets X\mathbf{W}_Q^{g}, X\mathbf{W}_K^{g}, X\mathbf{W}_V^{g}$
+    \State $\tilde{\mathbf{K}}, \tilde{\mathbf{V}} \gets \mathbf{K}, \mathbf{V}$; reemplazar las filas $\mathcal{G}$ por $\mathbf{K}^{g}, \mathbf{V}^{g}$
+\Else
+    \State $\tilde{\mathbf{K}}, \tilde{\mathbf{V}} \gets \mathbf{K}, \mathbf{V}$
+\EndIf
+\State $\mathcal{G} \gets \{0, s, \dots, (g-1)s\}$ recortado a $n$
+\State $M \gets [\,|i-j| \le w/2\,] \vee [\,j \in \mathcal{G}\,] \vee [\,i \in \mathcal{G}\,]$
+\If{decoder} $M \gets M \wedge [\,j \le i\,]$ \EndIf
+\State $Z \gets \mathbf{Q}\tilde{\mathbf{K}}^{\top}/\sqrt{d}$ enmascarado por $M$
+\If{separadas \textbf{y} $\mathcal{G} \ne \emptyset$}
+    \State $Z[\mathcal{G},:] \gets \mathbf{Q}^{g}[\mathcal{G}]\mathbf{K}^{g\top}/\sqrt{d}$ (recortado causalmente)
+\EndIf
+\State $\mathbf{O} \gets \operatorname{softmax}(Z)\tilde{\mathbf{V}}$
+\If{separadas \textbf{y} $\mathcal{G} \ne \emptyset$}
+    \State $\mathbf{O}[\mathcal{G},:] \gets \operatorname{softmax}(Z[\mathcal{G},:])\mathbf{V}^{g}$ \Comment{las filas globales agregan valores globales}
+\EndIf
+\State $\mathbf{Y} \gets \mathbf{O}\mathbf{W}_O$
+\end{algorithmic}
+\end{algorithm}
+
+En decodificación incremental el estado retenido es un anillo acotado: la región fijada de la cabecera cubre $\mathcal{G}$ y el anillo conserva las últimas $w/2+1$ claves, de modo que cada paso cuesta $\mathcal{O}(w+g)$. El patrón exacto se evalúa contra las posiciones absolutas en caché (a diferencia del atajo ``retención igual a patrón'', porque un prefijo global espaciado puede contener posiciones no globales).
+
+\subsubsection{Características Clave}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad}: $\mathcal{O}(n\,(w+g)\,d)$ en entrenamiento y $\mathcal{O}(w+g)$ por token decodificado con el kernel de chunks solapados del paper; la implementación de referencia aquí enmascara una matriz de puntuaciones densa, matemáticamente idéntica pero $\mathcal{O}(n^2)$ en cómputo. La memoria está acotada por $w+g$.
+    \item \textbf{Entrenable}: Sí, de forma nativa desde cero (el patrón se ejecuta tanto en entrenamiento como en evaluación). El paper ajusta por fine-tuning un checkpoint de contexto completo durante 10k pasos con LR pico $10^{-6}$, calentamiento de 1k pasos y decaimiento coseno, pero los pesos del mezclador son proyecciones de atención ordinarias.
+    \item \textbf{Fortaleza}: En benchmarks de forma larga el token global es el ingrediente decisivo: el WER codicioso normalizado mejora de 9.18 (Conformer) a 8.25 (contexto limitado) a \textbf{7.5} (más token global) en TED-LIUM v3, y de 18.26 a 16.08 a \textbf{11.85} en Earnings-21, mientras que la duración máxima en una sola pasada crece de 15 a 675 minutos en una A100. El encoder es $2.8\times$ más rápido y usa $2.9\times$ menos multiplicaciones-acumulaciones que el Conformer original.
+    \item \textbf{Limitación}: El paper no ofrece ecuaciones en forma cerrada para la ruta del token global (la formulación anterior es una reconstrucción documentada a partir de su prosa, Longformer y la receta NeMo de los autores). El valor por defecto es un único token global con proyecciones compartidas; la variante de proyecciones separadas cuesta $3H^2$ parámetros extra y solo es exacta en la ruta con caché cuando las consultas globales se pre-rellenan desde la posición cero. El kernel eficiente de chunks no está implementado.
+\end{itemize}
+
 \subsection{Espacio de Diseño y Criterios de Selección}
 
-Los once métodos de atención dispersa ocupan posiciones complementarias en un espacio de diseño multidimensional:
+Los doce métodos de atención dispersa ocupan posiciones complementarias en un espacio de diseño multidimensional:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Patrones geométricos/fijos} (Sparse Transformer, Longformer): Simples de implementar y analizar, pero los patrones no se adaptan al contenido.
     \item \textbf{Desalojo de KV con memoria fija} (SWA con sumideros): La política más barata posible---conservar un prefijo sumidero y una ventana reciente, descartar el resto. Sin parámetros extra, sin entrenamiento, memoria acotada.
+    \item \textbf{Ventana + difusión global anclada} (Fast Conformer): el patrón de Longformer con los tokens globales fijados en la cabecera de la secuencia---decodificación de forma larga con memoria acotada y un único canal de resumen siempre visible, probado a escala de 11 horas.
     \item \textbf{Selección aprendida} (SparseK, NSA): Permiten adaptación mediante redes de selección entrenables, a costa de mayor complejidad de implementación.
     \item \textbf{Aceleración sin entrenamiento} (FASA, SpargeAttn): Permiten aceleración directa de modelos existentes sin reentrenamiento, adecuados para sistemas desplegados.
     \item \textbf{Selección semántica} (LSA): Agrupa las claves por contenido y guarda un centroide por bucket, de modo que el indexador recorre un pequeño múltiplo de $T/\bar{n}_b$ en lugar de $T$; es el único miembro cuyas estadísticas por bloque son inmutables, lo que hace posible la decodificación exacta en caché.

@@ -53,6 +53,7 @@ from .attention.sigmoid import SigmoidAttention
 from .attention.sparse import (
     BigBirdAttention,
     FASAAttention,
+    FastConformerAttention,
     LongformerAttention,
     LSAAttention,
     MSAAttention,
@@ -229,6 +230,7 @@ class HybridLayer(nn.Module):
             "conformer_attn": ConformerAttention,
             "memory_attn": MemoryAttention,
             "lsa_attn": LSAAttention,
+            "fastconformer_attn": FastConformerAttention,
         }
 
         if layer_type == "mamba":

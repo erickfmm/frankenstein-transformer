@@ -101,6 +101,8 @@ properties:
         $ref: "_model/_attention_ssog.yaml#/properties/ssog"
       swa:
         $ref: "_model/_attention_swa.yaml#/properties/swa"
+      fastconformer:
+        $ref: "_model/_attention_fastconformer.yaml#/properties/fastconformer"
       falcon:
         $ref: "_model/_attention_falcon.yaml#/properties/falcon"
       ode:

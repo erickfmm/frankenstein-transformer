@@ -17,7 +17,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Model Classes | Training Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-------------:|:--------------:|:-------:|:------------:|
-| **47** | **31** | **11** | **4** | **9** | **168** | **4** |
+| **48** | **31** | **11** | **4** | **9** | **168** | **4** |
 
 ## How It Works
 
@@ -94,7 +94,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | 47 across 10 categories (Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory) |
+| Sequence mixer architectures | 48 across 10 categories (Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory) |
 | Optimizer families | 31 across 8 categories |
 | Positional encodings | 11 model-wide (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`) with per-mixer opt-out |
 | Model classes | `frankenstein_text_encoder`, `frankenstein_text_decoder`, `frankenstein_vit`, `frankenstein_audio` + reusable in-process engine API |
@@ -111,7 +111,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
-| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 47 mixer types |
+| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 48 mixer types |
 | `frankenstein_text_decoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 | `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `vision_dataset:` blocks |
 | `frankenstein_audio` | Encoder (audio) | Audio Transformer for ASR and audio/signal classification; log-mel/spectrogram/raw frontend, conv subsampling, CTC/RNN-T or classification heads; forces `mode: encoder`, requires `audio:` + `audio_dataset:` blocks |
@@ -136,7 +136,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 | **Dense** (2) | `standard_attn`, `sigmoid_attn` | Full quadratic attention variants |
 | **GQA** (1) | `gqa_attn` | Grouped-query attention with configurable KV heads |
 | **Recurrent** (6) | `retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `engram_attn` | Retention networks, state-space models, continuous-depth ODE layers, memory-augmented attention, and n-gram memory |
-| **Sparse** (11) | `sparse_transformer_attn`, `longformer_attn`, `swa_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn` ⚠️, `fasa_attn` ⚠️, `msa_attn`, `sparda_attn`, `lsa_attn` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), and semantic key-clustering patterns |
+| **Sparse** (12) | `sparse_transformer_attn`, `longformer_attn`, `swa_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn` ⚠️, `fasa_attn` ⚠️, `msa_attn`, `sparda_attn`, `lsa_attn`, `fastconformer_attn` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), semantic key-clustering, and head-pinned global-token long-form patterns |
 | **Gated** (8) | `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` | Linear attention with multiplicative gates, delta rules, and gated softmax |
 | **Fast-Weight** (6) | `falcon1_attn`, `falcon2_attn`, `falcon3_attn`, `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn` | Fast-weight / online-learning attention with per-layer fast-weight update rules |
 | **Latent** (10) | `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
@@ -184,7 +184,7 @@ This engine powers the **`dashai-frankenstein` plugin**, which registers Franken
 | [docs/paper-es/paper-es.pdf](docs/paper-es/paper-es.pdf) | Technical report (Spanish) |
 | [docs/architecture.md](docs/architecture.md) | Canonical implementation spec: architecture, state, extension guide |
 | [docs/architecture.md](docs/architecture.md#711-vision-transformer-image-vision_dataset) | Vision Transformer (frankenstein_vit) — patch prediction, classification, segmentation |
-| [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) | Mixer registry (47 variants / 10 families) and selection guide |
+| [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) | Mixer registry (48 variants / 10 families) and selection guide |
 | [docs/dashai-plugin-audit.md](docs/dashai-plugin-audit.md) | DashAI plugin integration design and status |
 | [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specification, API, papers, bibliography) |
 | [docs/transformers_compatibility.md](docs/transformers_compatibility.md) | HuggingFace export compatibility guide |

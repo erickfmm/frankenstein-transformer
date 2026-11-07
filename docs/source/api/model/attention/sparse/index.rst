@@ -14,3 +14,4 @@ Sparse Attention
    msa_attn
    sparda_attn
    lsa_attn
+   fastconformer_attn
