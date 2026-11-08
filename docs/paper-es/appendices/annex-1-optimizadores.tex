@@ -1629,6 +1629,109 @@ mitad del estado del optimizador de Adam, y el sobrecosto por paso es de unos po
 ciento.
 \end{itemize}
 
+\paragraph{Conda (Adam Normalizado por Columnas).}
+Conda~\citep{wang_conda_2025} conserva la adaptividad por coordenada de Adam y añade una
+\textbf{normalización espectral más suave y específica por columna}. Los autores
+reformulan primero Muon como un método de primer/segundo momento cuyo segundo momento es
+la matriz constante por filas $\mathrm{diag}(\mathbf{\Sigma}_t)\mathbf{1}^\top$: Muon
+normaliza cada columna de la actualización con los mismos factores $1/\sigma_i$, lo que
+sobre-amplifica las direcciones con valores singulares diminutos. Conda restringe el
+segundo momento al mismo subespacio que el primer momento proyectando el gradiente
+estocástico, manteniendo una EMA por elemento de los \emph{gradientes proyectados al
+cuadrado} y dividiendo el primer momento proyectado por su raíz cuadrada. Para una matriz
+de pesos $W \in \mathbb{R}^{m \times n}$ con $m \le n$, tasa de aprendizaje $\eta$,
+decaimientos $\beta_1,\beta_2$, periodo de refresco del subespacio $T$, factor de escala
+$\alpha$ y constante de estabilidad $\epsilon$:
+\begin{align}
+M_t &= \beta_1 M_{t-1} + (1-\beta_1) G_t \\
+\bar U_t &=
+\begin{cases}
+\mathrm{SVD}(M_t), & t \bmod T = 0, \\
+\bar U_{t-1}, & \text{en otro caso},
+\end{cases} \\
+M'_t &= \bar U_t^\top M_t, \qquad
+N_t = \beta_2 N_{t-1} + (1-\beta_2)\big(\bar U_t^\top G_t\big)^2, \\
+\widehat M_t &= \frac{M'_t}{1-\beta_1^t}, \qquad
+\widehat N_t = \frac{N_t}{1-\beta_2^t}, \\
+W_t &= W_{t-1} - \eta\,\alpha\,\bar U_t\,
+      \frac{\widehat M_t}{\sqrt{\widehat N_t} + \epsilon}.
+\end{align}
+Para $m > n$ la base singular derecha $V_t$ reemplaza a $\bar U_t$ ($M'_t = M_t V_t$,
+$N_t$ rastrea $(G_t V_t)^2$ y la actualización es
+$(\widehat M_t/\sqrt{\widehat N_t})\,V_t^\top$), exactamente como en la implementación de
+referencia publicada. La SVD es el único paso superlineal y se ejecuta cada $T$ pasos
+($T=2000$ en el preentrenamiento del artículo, $T=200$ en sus ejecuciones LoRA); el
+sobrecosto en tiempo de reloj es despreciable para $T \ge 100$.
+
+\begin{algorithm}[H]
+\caption{Conda (Adam Normalizado por Columnas)}
+\label{alg:conda}
+\begin{algorithmic}[1]
+\Require Parámetros $\theta$, tasa de aprendizaje $\eta$, $\beta_1,\beta_2$, periodo de refresco $T$, escala $\alpha$, $\epsilon$, weight decay $\lambda$
+\Ensure Parámetros actualizados $\theta_T$
+\For{cada parámetro $P$}
+    \If{$P$ es una matriz 2-D $W \in \mathbb{R}^{m\times n}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradiente}
+        \State $M \gets \beta_1 M + (1-\beta_1) G$ \Comment{Primer momento}
+        \If{$t \bmod T = 0$ o $P$ no tiene base}
+            \State $U,\Sigma,V^\top \gets \mathrm{SVD}(M)$;\; $\bar U \gets U$ si $m\le n$, si no $V$ \Comment{Subespacio perezoso}
+        \EndIf
+        \State $G_{\mathrm{proj}} \gets \bar U^\top G$;\; $M_{\mathrm{proj}} \gets \bar U^\top M$ \Comment{Proyectar}
+        \State $N \gets \beta_2 N + (1-\beta_2)\, G_{\mathrm{proj}}^2$ \Comment{Segundo momento proyectado}
+        \State $M_{\mathrm{proj}} \gets M_{\mathrm{proj}}/(1-\beta_1^t)$;\; $N \gets N/(1-\beta_2^t)$ \Comment{Corrección de sesgo}
+        \State $W \gets (1-\eta\lambda) W - \eta\,\alpha\,\bar U\, M_{\mathrm{proj}}/(\sqrt{N}+\epsilon)$ \Comment{Actualización}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Respaldo no matricial}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+En preentrenamiento de LLaMA 60M--1B, Conda alcanza perplejidades de validación de 28.32,
+21.38, 16.44 y 13.59, frente a 34.06/25.08/18.80/15.56 de AdamW y 29.89/22.15/16.51/14.17
+de Muon, es decir, 2--2,5$\times$ la velocidad de convergencia de AdamW en pasos y en
+tiempo de reloj; también lidera en GPT-2 (125M/355M: 17.40/13.92) y en el ajuste fino
+LoRA de sentido común. A diferencia de AdamW y Muon, permanece estable con tasas de
+aprendizaje de hasta $2\times10^{-2}$, y las ablaciones muestran robustez a
+$T \in [2, 20000]$, $\beta_1 \in \{0.9, 0.95\}$ y
+$\beta_2 \in \{0.95,\ldots,0.999\}$. La memoria del optimizador se mantiene a
+0,03--1,3\,GB de AdamW de 60M a 1B. En esta implementación, el sufijo
+\texttt{update\_proj\_gap} es $T$ (por defecto 2000), \texttt{scale} es $\alpha$ (por
+defecto 1.0; el preentrenamiento del artículo usa 0.25), \texttt{correct\_bias} activa o
+desactiva las correcciones $1-\beta^t$, y los \texttt{betas}/\texttt{eps} compartidos por
+grupo son $(\beta_1,\beta_2)$ (el artículo usa 0.9/0.99) y $\epsilon$; el \texttt{wd}
+compartido es desacoplado. Toda matriz 2-D toma la ruta Conda sin distinción de grupo ---
+no hay exclusión de embeddings/pos/heads como en Muon --- mientras que todo parámetro no
+2-D se entrena con AdamW desacoplado.
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item La SVD es un pico de costo por matriz cada $T$ pasos; con $T=2$ eleva el tiempo de
+  reloj de LLaMA-60M de 2h49min a 4h37min.
+\item El segundo momento debe vivir en el mismo subespacio que el primero: el estimador
+  de Adam sin proyectar es inestable a escala y no converge en LLaMA-1B.
+\item El estado del optimizador es del tamaño de Adam (primer momento $m\times n$
+  completo) más la base de proyección; la ventaja de memoria frente a AdamW es pequeña,
+  no el $O(nr)$ de GaLore.
+\item Evaluado solo hasta 1B parámetros y sin Mezcla de Expertos; el artículo señala
+  ambos como trabajo futuro.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Combina la adaptividad por coordenada de Adam con un mejor acondicionamiento
+  espectral en una sola regla de actualización, superando consistentemente a AdamW,
+  Muon, SOAP y Adafactor.
+\item El normalizador por columna es más suave que el escalado uniforme $1/\sigma_i$ de
+  Muon y preserva el orden relativo de los valores singulares, evitando sobrepasos en
+  direcciones de valor singular pequeño.
+\item Un único juego de hiperparámetros se transfiere de 60M a 1B, y el entrenamiento es
+  estable con tasas de aprendizaje 10--20$\times$ mayores que las de AdamW.
+\item La memoria y el costo por paso se mantienen cerca de AdamW para $T \gg 1$; la SVD
+  perezosa hace que el refresco del subespacio sea casi gratuito en tiempo de reloj.
+\end{itemize}
+
 \subsection{Híbridos Evolutivos y Poblacionales}
 
 \paragraph{EvE (Evolutionary Explorer).}

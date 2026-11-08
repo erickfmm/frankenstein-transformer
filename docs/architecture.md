@@ -23,7 +23,7 @@ load.
 | Dimension | Count | Defined in |
 |---|---:|---|
 | `model.dims.layer_pattern` values | **48** (47 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
-| Optimizer families | **32** | `src/schema/_optimizer.yaml` |
+| Optimizer families | **33** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
 | FFN activations | **43** | `src/schema/_model/_ffn.yaml` |
@@ -84,7 +84,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
 | `src/model/activation_function/**` | 43 activations + `ALL_ACTIVATIONS` factory |
-| `src/model/optimizer/**` | 32 optimizers + registry + parameter routing |
+| `src/model/optimizer/**` | 33 optimizers + registry + parameter routing |
 | `src/engine.py` | Framework-neutral `build_model()` used by CLI, DashAI plugin and exports |
 | `src/training/main.py`, `trainer.py` | Task dispatch and training loop |
 | `src/training/streaming_mlm_dataset.py` | Streaming MLM dataset |
@@ -764,7 +764,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 
 ## 8. Training runtime
 
-### 8.1 Optimizers (32)
+### 8.1 Optimizers (33)
 
 `training.optimizer.optimizer_class` selects a family; SBERT uses
 `training.sbert.optimizer.optimizer_class` with the same enum.
@@ -777,7 +777,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 | Auto-LR | `prodigy`, `schedulefree_adamw` | Remove LR tuning/scheduling |
 | Adaptive | `radam`, `adan`, `adopt`, `ademamix`, `mars_adamw`, `cautious_adamw`, `lamb` | Rectification, Nesterov, dual EMA, variance reduction, masking, layer-wise scaling |
 | Second-order | `sophia`, `shampoo`, `soap` | Diagonal Hessian / Kronecker / eigenbasis |
-| Orthogonalized | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `root`, `muon2`, `nor_muon` | Momentum orthogonalization; `muon`/`turbo_muon` follow the hybrid recipe (Newton-Schulz on hidden-layer 2-D matrices, decoupled AdamW on the `embeddings`/`pos`/`head` groups and on every non-2-D parameter, using the group `betas`/`eps`); `ada_muon` adds an element-wise second moment on the orthogonalized direction with RMS-aligned Adam-scale updates; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer); `dion3` orthogonalizes only a fraction of the momentum rows with Gram Newton-Schulz and error feedback (single momentum buffer, optional NorMuon row moments); `root` calibrates the Newton-Schulz coefficients per matrix shape and soft-thresholds momentum outliers before orthogonalization (single momentum buffer, dynamic percentile threshold `quantile`); `muon2` preconditions the momentum with an Adam-style second-moment EMA before orthogonalization (β₁/β₂ from the shared per-group `betas`, `η√(m/n)` update scale, `factored` toggles the Muon²-F row/column moments); `nor_muon` normalizes the orthogonalized update neuron-wise (a per-row second-moment EMA of `O_t`, β₂ from the shared per-group `betas`, ε from the shared `eps`, update rescaled to RMS `0.2η` via `η̂ = 0.2η√(mn)/‖O_t‖_F`) |
+| Orthogonalized | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `root`, `muon2`, `nor_muon`, `conda` | Momentum orthogonalization; `muon`/`turbo_muon` follow the hybrid recipe (Newton-Schulz on hidden-layer 2-D matrices, decoupled AdamW on the `embeddings`/`pos`/`head` groups and on every non-2-D parameter, using the group `betas`/`eps`); `ada_muon` adds an element-wise second moment on the orthogonalized direction with RMS-aligned Adam-scale updates; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer); `dion3` orthogonalizes only a fraction of the momentum rows with Gram Newton-Schulz and error feedback (single momentum buffer, optional NorMuon row moments); `root` calibrates the Newton-Schulz coefficients per matrix shape and soft-thresholds momentum outliers before orthogonalization (single momentum buffer, dynamic percentile threshold `quantile`); `muon2` preconditions the momentum with an Adam-style second-moment EMA before orthogonalization (β₁/β₂ from the shared per-group `betas`, `η√(m/n)` update scale, `factored` toggles the Muon²-F row/column moments); `nor_muon` normalizes the orthogonalized update neuron-wise (a per-row second-moment EMA of `O_t`, β₂ from the shared per-group `betas`, ε from the shared `eps`, update rescaled to RMS `0.2η` via `η̂ = 0.2η√(mn)/‖O_t‖_F`); `conda` runs a full Adam update inside the lazy SVD subspace of the first moment (second moment of the projected gradients, refreshed every `update_proj_gap` steps, `scale` multiplier; every 2-D parameter takes this path and only non-2-D parameters use the decoupled AdamW fallback) |
 | Tunable | `anon` | `gamma` adaptivity |
 | Evolutionary | `eve`, `ea4llm` | Population-based, closure-based step; `eve` is population-of-4 differential evolution with a targeted Adam fallback (12× state), `ea4llm` is gradient-free Gaussian evolution strategies with zero optimizer state and N forward evaluations per step (both require `gradient_accumulation_steps: 1` and are unavailable for SBERT) |
 

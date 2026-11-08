@@ -64,6 +64,7 @@ properties:
       | `root` | Robust orthogonal updates | Dimension-calibrated Newton-Schulz coefficients + soft-threshold outlier suppression on the momentum; AdamW fallback for embeddings, pos, heads and non-matrix params (paper: arxiv:2511.20626) |
       | `muon2` | Adaptive orthogonal updates | Adam-style second-moment preconditioning of the momentum before Newton-Schulz; 40% fewer NS iterations; optional factored moments (Muon²-F); AdamW fallback for embeddings, pos, heads and non-matrix params (paper: arxiv:2604.09967) |
       | `nor_muon` | Balanced neuron updates | Neuron-wise (row) second-moment normalization after Newton-Schulz; Muon memory + m scalars; Adam-RMS-aligned update (paper: arxiv:2510.05491) |
+      | `conda` | Spectral + coordinate-wise adaptive pretraining | Adam update inside the SVD subspace of the first moment; second moment of *projected* gradients (column-wise adaptive); lazy SVD every `update_proj_gap` steps; AdamW fallback for non-matrix params (paper: arxiv:2509.24218) |
 
       **Examples explained:**
       - `adamw`: Start here. Most reliable for transformer training. Works well with default hyperparameters (lr=2e-4, betas=[0.9,0.95], wd=0.01). Best general-purpose choice.
@@ -85,7 +86,7 @@ properties:
       arxiv:2605.02317); `apollo`/`apollo_mini`/`q_apollo` (paper: arxiv:2412.05270); `dion3` (paper:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
       `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
-      arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491)
+      arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218)
     description_es: |-
       Algoritmo optimizador. Resumen por caso de uso:
 
@@ -123,6 +124,7 @@ properties:
       | `root` | Ortogonalización robusta | Coeficientes Newton-Schulz calibrados por dimensión + supresión de atípicos por soft-threshold sobre el momentum; respaldo AdamW para embeddings, pos, heads y parámetros no matriciales (paper: arxiv:2511.20626) |
       | `muon2` | Ortogonalización adaptativa | Precondicionamiento del momentum con segundo momento estilo Adam antes de Newton-Schulz; 40% menos iteraciones NS; momentos factorizados opcionales (Muon²-F); respaldo AdamW para embeddings, pos, heads y parámetros no matriciales (paper: arxiv:2604.09967) |
       | `nor_muon` | Actualizaciones por neurona equilibradas | Normalización por segundo momento de fila (neurona) tras Newton-Schulz; memoria de Muon + m escalares; actualización alineada al RMS de Adam (paper: arxiv:2510.05491) |
+      | `conda` | Preentrenamiento espectral + adaptativo por coordenada | Actualización de Adam dentro del subespacio SVD del primer momento; segundo momento de gradientes *proyectadas* (adaptativo por columna); SVD perezoso cada `update_proj_gap` pasos; respaldo AdamW para parámetros no matriciales (paper: arxiv:2509.24218) |
       **Ejemplos explicados:**
       - `adamw`: Empezar aquí. El más confiable para entrenamiento de transformers. Funciona bien con hiperparámetros por defecto (lr=2e-4, betas=[0.9,0.95], wd=0.01). Mejor opción de propósito general.
       - `sgd_momentum`: Usar para líneas base o cuando se necesita máxima simplicidad y reproducibilidad. Generalmente requiere LR más alto (1e-2 a 1e-1) y ajuste cuidadoso de momentum.
@@ -145,7 +147,7 @@ properties:
       arxiv:2605.02317); `apollo`/`apollo_mini`/`q_apollo` (paper: arxiv:2412.05270); `dion3` (paper:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
       `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
-      arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491)
+      arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218)
     enum:
       - sgd_momentum
       - adamw
@@ -179,6 +181,7 @@ properties:
       - root
       - muon2
       - nor_muon
+      - conda
     examples: [adamw]
   parameters:
     type: object
@@ -213,6 +216,7 @@ properties:
       - `root`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `quantile`, `softthresh`, `ada_newton`. Same hybrid routing as `muon`: only hidden-layer 2-D matrices are orthogonalized, using per-shape calibrated Newton-Schulz coefficients when `ada_newton` is on; `quantile` is the percentile `p` defining the dynamic soft-threshold `ε_t = Quantile(|M_t|, p)` (default 0.90); `softthresh: false` disables outlier suppression; the `embeddings`, `pos` and `head` groups plus every non-2-D parameter use a decoupled AdamW fallback configured by the shared suffixes
       - `muon2`: `ns_steps`, `ns_eps`, `factored`. Adam-style second-moment preconditioning of the momentum before Newton-Schulz (β₁, β₂ from the shared `betas_*`; the Eq. 4 epsilon is the shared `eps_*`); the update scales by η√(m/n); `factored: true` switches to the memory-efficient row/column-factored second moment (Muon²-F). Same hybrid routing as `muon`: only hidden-layer 2-D matrices take the Muon² path; the `embeddings`, `pos` and `head` groups plus every non-2-D parameter use a decoupled AdamW fallback configured by the shared suffixes
       - `nor_muon`: `momentum`, `ns_steps`, `ns_eps`. Muon orthogonalization followed by neuron-wise normalization: a per-row second-moment EMA v_t of the orthogonalized update rescales each neuron row (β2 from the shared `betas_*`, ε from the shared `eps_*`); the update is rescaled to RMS 0.2η via η̂ = 0.2η√(mn)/‖O_t‖_F; same hybrid routing as `muon`
+      - `conda`: `update_proj_gap`, `scale`, `correct_bias`. Adam-style update in the SVD subspace of the first moment: the second moment is an EMA of the squared projected gradients `(P^T G)^2` (β from the shared `betas_*`, ε from the shared `eps_*`); the SVD basis is refreshed every `update_proj_gap` steps (default 2000); `scale` multiplies the update (0.25 in the paper's pretraining, 1.0 in its LoRA runs); every non-2-D parameter uses a decoupled AdamW fallback configured by the shared suffixes
       - `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed`. Population-of-4 differential evolution over the unit cube with a targeted Adam fallback; the shared `lr_*`, `wd_*`, `betas_*`, `eps_*` configure the fallback per group (`wd` is L2 folded into the fallback gradient, not decoupled). Requires `gradient_accumulation_steps: 1`; not available for SBERT; closure-based step supplied by the trainer
       - `ea4llm`: `population`, `sigma`, `antithetic`, `rank_shaping`, `nes_scaling`, `seed`. Gradient-free (zeroth-order) evolution strategies scoring the token-level log-likelihood fitness on the current minibatch; the shared `lr_*` is the per-group step size and `wd_*` a decoupled decay extension (the paper defines no weight decay); `betas_*`/`eps_*` are accepted but unused because no moment buffers exist. Requires `gradient_accumulation_steps: 1`; not available for SBERT; closure-based step supplied by the trainer
       - Others: no specific suffixes (only shared ones)
@@ -258,6 +262,7 @@ properties:
       - `root`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `quantile`, `softthresh`, `ada_newton`. Mismo enrutamiento híbrido que `muon`: solo se ortogonalizan las matrices 2-D de capas ocultas, con coeficientes Newton-Schulz calibrados por forma cuando `ada_newton` está activo; `quantile` es el percentil `p` del umbral dinámico `ε_t = Quantile(|M_t|, p)` (por defecto 0.90); `softthresh: false` desactiva la supresión de atípicos; los grupos `embeddings`, `pos` y `head` más todo parámetro no 2-D usan un respaldo AdamW desacoplado configurado por los sufijos compartidos
       - `muon2`: `ns_steps`, `ns_eps`, `factored`. Precondicionamiento del momentum con segundo momento estilo Adam antes de Newton-Schulz (β₁, β₂ de los `betas_*` compartidos; el épsilon de la Ec. 4 es el `eps_*` compartido); la actualización escala por η√(m/n); `factored: true` activa el segundo momento factorizado por filas/columnas (Muon²-F). Mismo enrutamiento híbrido que `muon`: solo las matrices 2-D de capas ocultas toman la ruta Muon²; los grupos `embeddings`, `pos` y `head` más todo parámetro no 2-D usan un respaldo AdamW desacoplado configurado por los sufijos compartidos
       - `nor_muon`: `momentum`, `ns_steps`, `ns_eps`. Ortogonalización de Muon seguida de normalización por neurona: una EMA de segundo momento por fila v_t de la actualización ortogonalizada reescala cada fila-neurona (β2 de los `betas_*` compartidos, ε de los `eps_*` compartidos); la actualización se reescala a un RMS 0.2η mediante η̂ = 0.2η√(mn)/‖O_t‖_F; mismo enrutamiento híbrido que `muon`
+      - `conda`: `update_proj_gap`, `scale`, `correct_bias`. Actualización estilo Adam en el subespacio SVD del primer momento: el segundo momento es una EMA de los gradientes proyectados al cuadrado `(P^T G)^2` (β de los `betas_*` compartidos, ε de los `eps_*` compartidos); la base SVD se refresca cada `update_proj_gap` pasos (por defecto 2000); `scale` multiplica la actualización (0.25 en el preentrenamiento del paper, 1.0 en sus ejecuciones LoRA); todo parámetro no 2-D usa un respaldo AdamW desacoplado configurado por los sufijos compartidos
       - `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed`. Evolución diferencial con población de 4 sobre el cubo unitario y respaldo Adam dirigido; los sufijos compartidos `lr_*`, `wd_*`, `betas_*`, `eps_*` configuran el respaldo por grupo (`wd` es L2 plegado en el gradiente del respaldo, no desacoplado). Requiere `gradient_accumulation_steps: 1`; no disponible para SBERT; paso basado en closure que aporta el trainer
       - `ea4llm`: `population`, `sigma`, `antithetic`, `rank_shaping`, `nes_scaling`, `seed`. Estrategias evolutivas sin gradientes (orden cero) que puntúan la aptitud de log-verosimilitud por token sobre el minilote actual; el `lr_*` compartido es el tamaño de paso por grupo y `wd_*` un decaimiento desacoplado como extensión (el paper no define weight decay); `betas_*`/`eps_*` se aceptan pero no se usan porque no hay búferes de momentos. Requiere `gradient_accumulation_steps: 1`; no disponible para SBERT; paso basado en closure que aporta el trainer
       - Otros: sin sufijos específicos (solo los compartidos)
@@ -436,3 +441,7 @@ properties:
           prefix: "nor_muon-"
           supports_shared_per_group_suffixes: true
           specific_global_suffixes: [momentum, ns_steps, ns_eps]
+        conda:
+          prefix: "conda-"
+          supports_shared_per_group_suffixes: true
+          specific_global_suffixes: [update_proj_gap, scale, correct_bias]

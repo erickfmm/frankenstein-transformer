@@ -1635,3 +1635,17 @@ allOf:
             additionalProperties: false
             patternProperties:
               ^nor_muon-: { type: [number, boolean, array, string] }
+- if:
+    properties:
+      optimizer:
+        properties:
+          optimizer_class:
+            const: conda
+  then:
+    properties:
+      optimizer:
+        properties:
+          parameters:
+            additionalProperties: false
+            patternProperties:
+              ^conda-: { type: [number, boolean, array, string] }

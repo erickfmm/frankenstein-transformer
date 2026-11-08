@@ -28,7 +28,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon"}
+        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon", "conda"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -537,6 +537,66 @@ class BuildOptimizerNorMuonTests(unittest.TestCase):
         groups = [{"params": [p], "lr": 1e-3, "name": "ffn"}]
         opt = build_optimizer("nor_muon", groups, {"nor_muon-lr_ffn": 0.02})
         self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerCondaTests(unittest.TestCase):
+    """Conda column-normalized projected Adam (arXiv:2509.24218)."""
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("conda", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("conda", groups, {})
+        loss = p.square().mean()
+        loss.backward()
+        opt.step()
+
+    def test_matrix_uses_conda_state(self):
+        p = nn.Parameter(torch.randn(8, 6))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("conda", groups, {})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("exp_avg", state)
+        self.assertIn("exp_avg_sq_proj", state)
+        self.assertIn("proj_basis", state)
+        self.assertIn(state["proj_type"], {"left", "right"})
+
+    def test_vector_param_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(6))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "norms"}]
+        opt = build_optimizer("conda", groups, {})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("exp_avg", state)
+        self.assertIn("exp_avg_sq", state)
+        self.assertNotIn("proj_basis", state)
+
+    def test_custom_suffixes_parsed(self):
+        opt = build_optimizer(
+            "conda",
+            _param_groups(),
+            {
+                "conda-update_proj_gap": 10,
+                "conda-scale": 0.25,
+                "conda-correct_bias": False,
+            },
+        )
+        self.assertEqual(opt.defaults["update_proj_gap"], 10)
+        self.assertAlmostEqual(opt.defaults["scale"], 0.25)
+        self.assertFalse(opt.defaults["correct_bias"])
+
+    def test_default_gap_and_bias_correction(self):
+        opt = build_optimizer("conda", _param_groups(), {})
+        self.assertEqual(opt.defaults["update_proj_gap"], 2000)
+        self.assertAlmostEqual(opt.defaults["scale"], 1.0)
+        self.assertTrue(opt.defaults["correct_bias"])
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

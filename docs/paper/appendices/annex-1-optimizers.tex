@@ -1609,6 +1609,103 @@ so Adam learning-rate schedules apply without retuning.
 optimizer state, and the per-step overhead is a few percent.
 \end{itemize}
 
+\paragraph{Conda (Column-Normalized Adam).}
+Conda~\citep{wang_conda_2025} keeps Adam's coordinate-wise adaptivity and adds a
+\textbf{milder, column-specific spectral normalization}. The authors first reformulate
+Muon as a first/second-moment method whose second moment is the row-constant matrix
+$\mathrm{diag}(\mathbf{\Sigma}_t)\mathbf{1}^\top$: Muon normalizes every column of the
+update by the same $1/\sigma_i$ factors, which over-amplifies directions with tiny
+singular values. Conda instead constrains the second moment to the same subspace as the
+first moment by projecting the stochastic gradient, tracking an element-wise EMA of the
+\emph{squared projected gradients}, and dividing the projected first moment by its square
+root. For a weight matrix $W \in \mathbb{R}^{m \times n}$ with $m \le n$, learning rate
+$\eta$, decay rates $\beta_1,\beta_2$, subspace refresh period $T$, scale factor $\alpha$
+and stability constant $\epsilon$:
+\begin{align}
+M_t &= \beta_1 M_{t-1} + (1-\beta_1) G_t \\
+\bar U_t &=
+\begin{cases}
+\mathrm{SVD}(M_t), & t \bmod T = 0, \\
+\bar U_{t-1}, & \text{otherwise},
+\end{cases} \\
+M'_t &= \bar U_t^\top M_t, \qquad
+N_t = \beta_2 N_{t-1} + (1-\beta_2)\big(\bar U_t^\top G_t\big)^2, \\
+\widehat M_t &= \frac{M'_t}{1-\beta_1^t}, \qquad
+\widehat N_t = \frac{N_t}{1-\beta_2^t}, \\
+W_t &= W_{t-1} - \eta\,\alpha\,\bar U_t\,
+      \frac{\widehat M_t}{\sqrt{\widehat N_t} + \epsilon}.
+\end{align}
+For $m > n$ the right singular basis $V_t$ replaces $\bar U_t$ ($M'_t = M_t V_t$, $N_t$
+tracks $(G_t V_t)^2$, and the update is $(\widehat M_t/\sqrt{\widehat N_t})\,V_t^\top$),
+exactly as in the released reference implementation. The SVD is the only super-linear
+step and runs once every $T$ steps ($T=2000$ in the paper's pretraining runs, $T=200$ in
+its LoRA runs); the wall-clock overhead is negligible for $T \ge 100$.
+
+\begin{algorithm}[H]
+\caption{Conda (Column-Normalized Adam)}
+\label{alg:conda}
+\begin{algorithmic}[1]
+\Require Parameters $\theta$, learning rate $\eta$, $\beta_1,\beta_2$, refresh period $T$, scale $\alpha$, $\epsilon$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\For{each parameter $P$}
+    \If{$P$ is a 2-D matrix $W \in \mathbb{R}^{m\times n}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradient}
+        \State $M \gets \beta_1 M + (1-\beta_1) G$ \Comment{First moment}
+        \If{$t \bmod T = 0$ or $P$ has no basis}
+            \State $U,\Sigma,V^\top \gets \mathrm{SVD}(M)$;\; $\bar U \gets U$ if $m\le n$ else $V$ \Comment{Lazy subspace}
+        \EndIf
+        \State $G_{\mathrm{proj}} \gets \bar U^\top G$;\; $M_{\mathrm{proj}} \gets \bar U^\top M$ \Comment{Project}
+        \State $N \gets \beta_2 N + (1-\beta_2)\, G_{\mathrm{proj}}^2$ \Comment{Projected second moment}
+        \State $M_{\mathrm{proj}} \gets M_{\mathrm{proj}}/(1-\beta_1^t)$;\; $N \gets N/(1-\beta_2^t)$ \Comment{Bias correction}
+        \State $W \gets (1-\eta\lambda) W - \eta\,\alpha\,\bar U\, M_{\mathrm{proj}}/(\sqrt{N}+\epsilon)$ \Comment{Update}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Non-matrix fallback}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+On LLaMA 60M--1B pretraining Conda reaches validation perplexities of 28.32, 21.38,
+16.44 and 13.59, against 34.06/25.08/18.80/15.56 for AdamW and 29.89/22.15/16.51/14.17
+for Muon, i.e.\ 2--2.5$\times$ AdamW's convergence speed in steps and wall-clock time;
+it also leads on GPT-2 (125M/355M: 17.40/13.92) and on LoRA commonsense fine-tuning.
+Unlike AdamW and Muon it remains stable at learning rates up to $2\times10^{-2}$, and the
+ablations show robustness to $T \in [2, 20000]$, $\beta_1 \in \{0.9, 0.95\}$ and
+$\beta_2 \in \{0.95,\ldots,0.999\}$. Optimizer memory stays within 0.03--1.3\,GB of
+AdamW from 60M to 1B. In this implementation the \texttt{update\_proj\_gap} suffix is $T$
+(default 2000), \texttt{scale} is $\alpha$ (default 1.0; the paper's pretraining uses
+0.25), \texttt{correct\_bias} toggles the $1-\beta^t$ corrections, and the shared
+per-group \texttt{betas}/\texttt{eps} are $(\beta_1,\beta_2)$ (the paper uses 0.9/0.99)
+and $\epsilon$; the shared \texttt{wd} is decoupled. Every 2-D parameter takes the Conda
+path regardless of group --- there is no embedding/pos/head exclusion as in Muon ---
+while every non-2-D parameter is trained with decoupled AdamW.
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item The SVD is a per-matrix cost spike every $T$ steps; at $T=2$ it raises LLaMA-60M
+  wall-clock training time from 2h49min to 4h37min.
+\item The second moment must live in the same subspace as the first: the unprojected
+  Adam estimator is unstable at scale and fails to converge on LLaMA-1B.
+\item Optimizer state is Adam-sized (full $m\times n$ first moment) plus the projection
+  basis; the memory advantage over AdamW is small, not the $O(nr)$ of GaLore.
+\item Evaluated only up to 1B parameters and without Mixture-of-Experts; the paper flags
+  both as future work.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Combines Adam's coordinate-wise adaptivity with improved spectral conditioning in
+  a single update rule, consistently beating AdamW, Muon, SOAP and Adafactor.
+\item The column-wise normalizer is milder than Muon's uniform $1/\sigma_i$ scaling and
+  preserves the relative order of singular values, avoiding overshoot in small-singular
+  directions.
+\item A single hyperparameter set transfers across 60M--1B, and training is stable at
+  learning rates 10--20$\times$ larger than AdamW's.
+\item Memory and per-step cost stay close to AdamW for $T \gg 1$; the lazy SVD makes the
+  subspace refresh nearly free in wall-clock terms.
+\end{itemize}
+
 \subsection{Evolutionary and Population-Based Hybrids}
 
 \paragraph{EvE (Evolutionary Explorer).}

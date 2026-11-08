@@ -9,6 +9,7 @@ from .af_muon import AFMuon
 from .apollo import Apollo
 from .apollo_mini import ApolloMini
 from .cautious_adamw import CautiousAdamW
+from .conda import Conda
 from .dion3 import Dion3
 from .ea4llm import EA4LLM
 from .eve import Eve
@@ -43,6 +44,7 @@ __all__ = [
     "AdamWOptimizer",
     "AdaMuon",
     "CautiousAdamW",
+    "Conda",
     "Dion3",
     "EA4LLM",
     "Eve",

@@ -163,6 +163,7 @@ training:
 - `root`
 - `muon2`
 - `nor_muon`
+- `conda`
 
 `training.optimizer.parameters` must use the selected optimizer prefix. Example: when `optimizer_class: adamw`, all keys must start with `adamw-`.
 
@@ -217,6 +218,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `root`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `quantile`, `softthresh`, `ada_newton` (same hybrid routing as `muon`, with per-shape calibrated Newton-Schulz coefficients and a dynamic soft-threshold `epsilon_t = Quantile(|M_t|, p)` on the momentum; `quantile` defaults to 0.90)
 - `muon2`: `ns_steps`, `ns_eps`, `factored` (Adam-style second-moment preconditioning of the momentum before Newton-Schulz; β₁/β₂ come from the shared `betas_*`, the preconditioner epsilon from the shared `eps_*`; update scaled by η√(m/n); same hybrid routing as `muon`; `factored: true` switches to the memory-efficient Muon²-F variant)
 - `nor_muon`: `momentum`, `ns_steps`, `ns_eps` (neuron-wise second-moment normalization after Newton-Schulz; β2 from the shared `betas_*`, ε from the shared `eps_*`; update rescaled to Adam's RMS via η̂ = 0.2η√(mn)/‖O_t‖_F; same hybrid routing as `muon`)
+- `conda`: `update_proj_gap`, `scale`, `correct_bias` (Adam in the SVD subspace of the first moment; the second moment is an EMA of the squared projected gradients `(P^T G)^2` with β from the shared `betas_*` and ε from the shared `eps_*`; the SVD basis is refreshed every `update_proj_gap` steps — default 2000; the paper's pretraining uses `scale: 0.25` and `betas: [0.9, 0.99]`; every 2-D parameter takes the Conda path, and non-2-D parameters use the decoupled AdamW fallback)
 
 Examples:
 - `adafactor-beta2_decay: 0.8`
@@ -232,6 +234,8 @@ Examples:
 - `root-quantile: 0.90`
 - `muon2-ns_steps: 3`
 - `nor_muon-momentum: 0.95`
+- `conda-update_proj_gap: 2000`
+- `conda-scale: 0.25`
 - `adam_pm-group_size: 8`
 - `adam_pm-pool_dim: col`
 

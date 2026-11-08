@@ -34,6 +34,7 @@ from .base import (
     with_named_groups,
 )
 from .cautious_adamw import CautiousAdamW
+from .conda import Conda
 from .dion3 import Dion3
 from .ea4llm import EA4LLM
 from .eve import Eve
@@ -88,6 +89,7 @@ OPTIMIZER_REGISTRY = {
     "root": ROOT,
     "muon2": Muon2,
     "nor_muon": NorMuon,
+    "conda": Conda,
 }
 """Mapping from YAML optimizer class names to concrete Optimizer subclasses.
 
@@ -156,6 +158,7 @@ OPTIMIZER_ALLOWED_KEYS = {
     | {"momentum", "nesterov", "ns_steps", "ns_eps", "quantile", "softthresh", "ada_newton"},
     "muon2": _COMMON_PER_GROUP_KEYS | {"ns_steps", "ns_eps", "factored"},
     "nor_muon": _COMMON_PER_GROUP_KEYS | {"momentum", "ns_steps", "ns_eps"},
+    "conda": _COMMON_PER_GROUP_KEYS | {"update_proj_gap", "scale", "correct_bias"},
 }
 
 
@@ -489,6 +492,17 @@ def build_optimizer(
             momentum=momentum,
             ns_steps=ns_steps,
             ns_eps=ns_eps,
+        )
+
+    if optimizer_name == "conda":
+        update_proj_gap = to_int(scoped.get("update_proj_gap"), 2000)
+        scale = to_float(scoped.get("scale"), 1.0)
+        correct_bias = bool(scoped.get("correct_bias", True))
+        return optimizer_cls(
+            converted_groups,
+            update_proj_gap=update_proj_gap,
+            scale=scale,
+            correct_bias=correct_bias,
         )
 
     return optimizer_cls(converted_groups)
