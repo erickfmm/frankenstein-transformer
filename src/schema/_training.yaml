@@ -1663,3 +1663,31 @@ allOf:
             additionalProperties: false
             patternProperties:
               ^tuon-: { type: [number, boolean, array, string] }
+- if:
+    properties:
+      optimizer:
+        properties:
+          optimizer_class:
+            const: namo
+  then:
+    properties:
+      optimizer:
+        properties:
+          parameters:
+            additionalProperties: false
+            patternProperties:
+              ^namo-: { type: [number, boolean, array, string] }
+- if:
+    properties:
+      optimizer:
+        properties:
+          optimizer_class:
+            const: namo_d
+  then:
+    properties:
+      optimizer:
+        properties:
+          parameters:
+            additionalProperties: false
+            patternProperties:
+              ^namo_d-: { type: [number, boolean, array, string] }

@@ -165,6 +165,8 @@ training:
 - `nor_muon`
 - `conda`
 - `tuon`
+- `namo`
+- `namo_d`
 
 `training.optimizer.parameters` must use the selected optimizer prefix. Example: when `optimizer_class: adamw`, all keys must start with `adamw-`.
 
@@ -221,6 +223,8 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `nor_muon`: `momentum`, `ns_steps`, `ns_eps` (neuron-wise second-moment normalization after Newton-Schulz; β2 from the shared `betas_*`, ε from the shared `eps_*`; update rescaled to Adam's RMS via η̂ = 0.2η√(mn)/‖O_t‖_F; same hybrid routing as `muon`)
 - `conda`: `update_proj_gap`, `scale`, `correct_bias` (Adam in the SVD subspace of the first moment; the second moment is an EMA of the squared projected gradients `(P^T G)^2` with β from the shared `betas_*` and ε from the shared `eps_*`; the SVD basis is refreshed every `update_proj_gap` steps — default 2000; the paper's pretraining uses `scale: 0.25` and `betas: [0.9, 0.99]`; every 2-D parameter takes the Conda path, and non-2-D parameters use the decoupled AdamW fallback)
 - `tuon`: `momentum`, `ns_steps`, `ns_eps`, `refresh_interval`, `rms_eps`, `transform`, `stack` (tensor-aware Muon: same-shape hidden matrices per group are stacked, mixed with a unitary layer transform — `decorq` eigendecomposes the layer Gram matrix refreshed every `refresh_interval` steps, `dct`/`haar`/`dft` are fixed — slice-polarized with Newton-Schulz, inverse-transformed and rescaled to RMS 1/√max(m,n) via `rms_eps`; `stack: full|pairs`; K=1 reduces to `muon`; the shared `betas_*`/`eps_*` configure the AdamW fallback and `wd_*` stays decoupled)
+- `namo`: `betas`, `ns_steps`, `ns_eps` (norm-based Adam-type adaptive stepsize α_t on the orthogonalized momentum: `betas` is (μ₁, μ₂) of the momentum and the scalar norm EMA — default [0.95, 0.99], the paper's GPT-2 values, distinct from the shared per-group `betas_*` that configure only the AdamW fallback; the shared `eps_*` is α_t's denominator epsilon; the shared `wd_*` is decoupled and scaled by α_t; same hybrid routing as `muon`)
+- `namo_d`: `betas`, `ns_steps`, `ns_eps`, `clamp` (diagonal extension of `namo`: a per-column second-moment EMA gives neuron-wise stepsizes that right-multiply the orthogonalized momentum; `clamp` is the bound parameter c ∈ (0,1] — default 0.1, the paper's GPT-2 124M value — keeping the diagonal well-conditioned via `d̃ = clamp(d, c·d̄, d̄/c)`; the shared `eps_*`/`betas_*` configure the AdamW fallback and `wd_*` stays decoupled but is right-multiplied by the diagonal)
 
 Examples:
 - `adafactor-beta2_decay: 0.8`
@@ -242,6 +246,9 @@ Examples:
 - `tuon-transform: decorq`
 - `adam_pm-group_size: 8`
 - `adam_pm-pool_dim: col`
+- `namo-betas: [0.95, 0.99]`
+- `namo-ns_steps: 5`
+- `namo_d-clamp: 0.1`
 
 ## Available Fields (Detailed)
 

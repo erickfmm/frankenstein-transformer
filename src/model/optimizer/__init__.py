@@ -20,6 +20,8 @@ from .lion import Lion
 from .mars_adamw import MARSAdamW
 from .muon import Muon
 from .muon2 import Muon2
+from .namo import NAMO
+from .namo_d import NAMO_D
 from .nor_muon import NorMuon
 from .prodigy import Prodigy
 from .q_apollo import QApollo
@@ -55,6 +57,8 @@ __all__ = [
     "MARSAdamW",
     "Muon",
     "Muon2",
+    "NAMO",
+    "NAMO_D",
     "NorMuon",
     "OPTIMIZER_REGISTRY",
     "Prodigy",

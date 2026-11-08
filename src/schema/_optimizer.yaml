@@ -66,6 +66,8 @@ properties:
       | `nor_muon` | Balanced neuron updates | Neuron-wise (row) second-moment normalization after Newton-Schulz; Muon memory + m scalars; Adam-RMS-aligned update (paper: arxiv:2510.05491) |
       | `conda` | Spectral + coordinate-wise adaptive pretraining | Adam update inside the SVD subspace of the first moment; second moment of *projected* gradients (column-wise adaptive); lazy SVD every `update_proj_gap` steps; AdamW fallback for non-matrix params (paper: arxiv:2509.24218) |
       | `tuon` | Cross-layer orthogonal updates | Tensor-aware Muon: stacks same-shape hidden matrices per group, mixes them with a unitary layer transform (DecorQ from the layer Gram matrix, refreshed every `refresh_interval` steps), polarizes each slice with Newton-Schulz, inverts the transform and rescales the stack to RMS 1/√max(m,n); K=1 reduces to `muon`; AdamW fallback for embeddings, pos, heads and non-matrix params (paper: arxiv:2610.35130) |
+      | `namo` | Noise-adaptive orthogonal updates | Norm-based Adam-type adaptive stepsize α_t on Muon's orthogonalized momentum: a scalar second-moment EMA of the squared Frobenius gradient norm rescales the whole orthogonal update (zero extra memory); AdamW fallback for embeddings, pos, heads and non-matrix params (paper: arxiv:2602.17080) |
+      | `namo_d` | Noise-adaptive orthogonal updates (diagonal) | Diagonal extension of `namo`: a neuron-wise (column) second-moment EMA gives clamped per-column stepsizes that right-multiply the orthogonalized momentum (one extra ℝⁿ vector per matrix); AdamW fallback for embeddings, pos, heads and non-matrix params (paper: arxiv:2602.17080) |
 
       **Examples explained:**
       - `adamw`: Start here. Most reliable for transformer training. Works well with default hyperparameters (lr=2e-4, betas=[0.9,0.95], wd=0.01). Best general-purpose choice.
@@ -88,7 +90,7 @@ properties:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
       `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
       arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
-      `tuon` (paper: arxiv:2610.35130)
+      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080)
     description_es: |-
       Algoritmo optimizador. Resumen por caso de uso:
 
@@ -128,6 +130,8 @@ properties:
       | `nor_muon` | Actualizaciones por neurona equilibradas | Normalización por segundo momento de fila (neurona) tras Newton-Schulz; memoria de Muon + m escalares; actualización alineada al RMS de Adam (paper: arxiv:2510.05491) |
       | `conda` | Preentrenamiento espectral + adaptativo por coordenada | Actualización de Adam dentro del subespacio SVD del primer momento; segundo momento de gradientes *proyectadas* (adaptativo por columna); SVD perezoso cada `update_proj_gap` pasos; respaldo AdamW para parámetros no matriciales (paper: arxiv:2509.24218) |
       | `tuon` | Actualizaciones ortogonales entre capas | Muon consciente de tensores: apila matrices ocultas de la misma forma por grupo, las mezcla con una transformación unitaria de capas (DecorQ desde la matriz de Gram de capas, refrescada cada `refresh_interval` pasos), polariza cada slice con Newton-Schulz, invierte la transformación y reescala la pila a RMS 1/√max(m,n); K=1 reduce a `muon`; respaldo AdamW para embeddings, pos, heads y parámetros no matriciales (paper: arxiv:2610.35130) |
+      | `namo` | Actualizaciones ortogonales adaptativas al ruido | Paso adaptativo estilo Adam basado en normas sobre el momentum ortogonalizado de Muon: una EMA escalar del segundo momento de la norma de Frobenius al cuadrado del gradiente reescala toda la actualización ortogonal (sin memoria extra); respaldo AdamW para embeddings, pos, heads y parámetros no matriciales (paper: arxiv:2602.17080) |
+      | `namo_d` | Actualizaciones ortogonales adaptativas al ruido (diagonal) | Extensión diagonal de `namo`: una EMA por neurona (columna) del segundo momento produce pasos por columna acotados que multiplican por la derecha el momentum ortogonalizado (un vector ℝⁿ extra por matriz); respaldo AdamW para embeddings, pos, heads y parámetros no matriciales (paper: arxiv:2602.17080) |
       **Ejemplos explicados:**
       - `adamw`: Empezar aquí. El más confiable para entrenamiento de transformers. Funciona bien con hiperparámetros por defecto (lr=2e-4, betas=[0.9,0.95], wd=0.01). Mejor opción de propósito general.
       - `sgd_momentum`: Usar para líneas base o cuando se necesita máxima simplicidad y reproducibilidad. Generalmente requiere LR más alto (1e-2 a 1e-1) y ajuste cuidadoso de momentum.
@@ -151,7 +155,7 @@ properties:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
       `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
       arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
-      `tuon` (paper: arxiv:2610.35130)
+      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080)
     enum:
       - sgd_momentum
       - adamw
@@ -187,6 +191,8 @@ properties:
       - nor_muon
       - conda
       - tuon
+      - namo
+      - namo_d
     examples: [adamw]
   parameters:
     type: object
@@ -223,6 +229,8 @@ properties:
       - `nor_muon`: `momentum`, `ns_steps`, `ns_eps`. Muon orthogonalization followed by neuron-wise normalization: a per-row second-moment EMA v_t of the orthogonalized update rescales each neuron row (β2 from the shared `betas_*`, ε from the shared `eps_*`); the update is rescaled to RMS 0.2η via η̂ = 0.2η√(mn)/‖O_t‖_F; same hybrid routing as `muon`
       - `conda`: `update_proj_gap`, `scale`, `correct_bias`. Adam-style update in the SVD subspace of the first moment: the second moment is an EMA of the squared projected gradients `(P^T G)^2` (β from the shared `betas_*`, ε from the shared `eps_*`); the SVD basis is refreshed every `update_proj_gap` steps (default 2000); `scale` multiplies the update (0.25 in the paper's pretraining, 1.0 in its LoRA runs); every non-2-D parameter uses a decoupled AdamW fallback configured by the shared suffixes
       - `tuon`: `momentum`, `ns_steps`, `ns_eps`, `refresh_interval`, `rms_eps`, `transform`, `stack`. Tensor-aware Muon: within each parameter group, same-shape hidden 2-D matrices are stacked along the layer mode; a unitary transform Q (`transform: decorq` diagonalizes the layer Gram matrix via eigendecomposition and refreshes every `refresh_interval` steps — default 200; `dct`/`haar`/`dft` are fixed transforms) mixes the slices, each transformed slice is polarized with Newton-Schulz (`ns_steps`/`ns_eps`), the transform is inverted, and the whole stack is rescaled to RMS 1/√max(m,n) via `gamma_t = s/(RMS(P_t) + rms_eps)` (default 1e-8); `stack: full` groups every same-shape matrix of the group (paper default), `stack: pairs` stacks consecutive pairs (K=2); the momentum β is `momentum` (default 0.95) and `wd_*` stays decoupled; same hybrid routing as `muon` — the shared `betas_*`/`eps_*` configure the AdamW fallback for the `embeddings`/`pos`/`head` groups and every non-2-D parameter
+      - `namo`: `betas`, `ns_steps`, `ns_eps`. Norm-based Adam-type adaptive stepsize α_t on the orthogonalized momentum: `betas` is (μ₁, μ₂) of the momentum and the scalar norm EMA (default [0.95, 0.99], the paper's GPT-2 values; distinct from the shared per-group `betas_*`, which configure only the AdamW fallback); the shared `eps_*` is α_t's denominator epsilon; the shared `wd_*` is decoupled and scaled by α_t; same hybrid routing as `muon` — the `embeddings`/`pos`/`head` groups and every non-2-D parameter take the AdamW fallback
+      - `namo_d`: `betas`, `ns_steps`, `ns_eps`, `clamp`. Diagonal extension of `namo`: a per-column second-moment EMA and the same (μ₁, μ₂) momenta yield neuron-wise stepsizes that right-multiply the orthogonalized momentum; `clamp` is the bound parameter c ∈ (0,1] (default 0.1, the paper's GPT-2 124M value) that keeps the diagonal well-conditioned (`d̃ = clamp(d, c·d̄, d̄/c)`); the shared `eps_*` is the denominator epsilon and, together with the shared `betas_*`, configures the AdamW fallback; the shared `wd_*` is decoupled and right-multiplied by the diagonal; same hybrid routing as `muon`
       - `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed`. Population-of-4 differential evolution over the unit cube with a targeted Adam fallback; the shared `lr_*`, `wd_*`, `betas_*`, `eps_*` configure the fallback per group (`wd` is L2 folded into the fallback gradient, not decoupled). Requires `gradient_accumulation_steps: 1`; not available for SBERT; closure-based step supplied by the trainer
       - `ea4llm`: `population`, `sigma`, `antithetic`, `rank_shaping`, `nes_scaling`, `seed`. Gradient-free (zeroth-order) evolution strategies scoring the token-level log-likelihood fitness on the current minibatch; the shared `lr_*` is the per-group step size and `wd_*` a decoupled decay extension (the paper defines no weight decay); `betas_*`/`eps_*` are accepted but unused because no moment buffers exist. Requires `gradient_accumulation_steps: 1`; not available for SBERT; closure-based step supplied by the trainer
       - Others: no specific suffixes (only shared ones)
@@ -270,6 +278,8 @@ properties:
       - `nor_muon`: `momentum`, `ns_steps`, `ns_eps`. Ortogonalización de Muon seguida de normalización por neurona: una EMA de segundo momento por fila v_t de la actualización ortogonalizada reescala cada fila-neurona (β2 de los `betas_*` compartidos, ε de los `eps_*` compartidos); la actualización se reescala a un RMS 0.2η mediante η̂ = 0.2η√(mn)/‖O_t‖_F; mismo enrutamiento híbrido que `muon`
       - `conda`: `update_proj_gap`, `scale`, `correct_bias`. Actualización estilo Adam en el subespacio SVD del primer momento: el segundo momento es una EMA de los gradientes proyectados al cuadrado `(P^T G)^2` (β de los `betas_*` compartidos, ε de los `eps_*` compartidos); la base SVD se refresca cada `update_proj_gap` pasos (por defecto 2000); `scale` multiplica la actualización (0.25 en el preentrenamiento del paper, 1.0 en sus ejecuciones LoRA); todo parámetro no 2-D usa un respaldo AdamW desacoplado configurado por los sufijos compartidos
       - `tuon`: `momentum`, `ns_steps`, `ns_eps`, `refresh_interval`, `rms_eps`, `transform`, `stack`. Muon consciente de tensores: dentro de cada grupo de parámetros, las matrices 2-D ocultas de la misma forma se apilan por el modo de capas; una transformación unitaria Q (`transform: decorq` diagonaliza la matriz de Gram de capas mediante autodescomposición y se refresca cada `refresh_interval` pasos — 200 por defecto; `dct`/`haar`/`dft` son transformaciones fijas) mezcla los slices, cada slice transformado se polariza con Newton-Schulz (`ns_steps`/`ns_eps`), la transformación se invierte y la pila completa se reescala a RMS 1/√max(m,n) mediante `gamma_t = s/(RMS(P_t) + rms_eps)` (por defecto 1e-8); `stack: full` agrupa toda matriz de la misma forma del grupo (por defecto del paper), `stack: pairs` apila pares consecutivos (K=2); el momentum β es `momentum` (por defecto 0.95) y `wd_*` permanece desacoplado; mismo enrutamiento híbrido que `muon` — los `betas_*`/`eps_*` compartidos configuran el respaldo AdamW para los grupos `embeddings`/`pos`/`head` y todo parámetro no 2-D
+      - `namo`: `betas`, `ns_steps`, `ns_eps`. Paso adaptativo estilo Adam basado en normas sobre el momentum ortogonalizado: `betas` es (μ₁, μ₂) del momentum y de la EMA escalar de normas (por defecto [0.95, 0.99], los valores GPT-2 del artículo; distinto de los `betas_*` compartidos por grupo, que solo configuran el respaldo AdamW); el `eps_*` compartido es el épsilon del denominador de α_t; el `wd_*` compartido es desacoplado y escalado por α_t; mismo enrutamiento híbrido que `muon` — los grupos `embeddings`/`pos`/`head` y todo parámetro no 2-D usan el respaldo AdamW
+      - `namo_d`: `betas`, `ns_steps`, `ns_eps`, `clamp`. Extensión diagonal de `namo`: una EMA del segundo momento por columna y los mismos momenta (μ₁, μ₂) producen pasos por neurona que multiplican por la derecha el momentum ortogonalizado; `clamp` es el parámetro de cota c ∈ (0,1] (por defecto 0.1, el valor GPT-2 124M del artículo) que mantiene la diagonal bien condicionada (`d̃ = clamp(d, c·d̄, d̄/c)`); el `eps_*` compartido es el épsilon del denominador y, junto con los `betas_*` compartidos, configura el respaldo AdamW; el `wd_*` compartido es desacoplado y multiplicado por la derecha por la diagonal; mismo enrutamiento híbrido que `muon`
       - `eve`: `de_weight`, `de_jitter`, `init_sigma`, `adam_steps`, `use_pm`, `pm_eta`, `seed`. Evolución diferencial con población de 4 sobre el cubo unitario y respaldo Adam dirigido; los sufijos compartidos `lr_*`, `wd_*`, `betas_*`, `eps_*` configuran el respaldo por grupo (`wd` es L2 plegado en el gradiente del respaldo, no desacoplado). Requiere `gradient_accumulation_steps: 1`; no disponible para SBERT; paso basado en closure que aporta el trainer
       - `ea4llm`: `population`, `sigma`, `antithetic`, `rank_shaping`, `nes_scaling`, `seed`. Estrategias evolutivas sin gradientes (orden cero) que puntúan la aptitud de log-verosimilitud por token sobre el minilote actual; el `lr_*` compartido es el tamaño de paso por grupo y `wd_*` un decaimiento desacoplado como extensión (el paper no define weight decay); `betas_*`/`eps_*` se aceptan pero no se usan porque no hay búferes de momentos. Requiere `gradient_accumulation_steps: 1`; no disponible para SBERT; paso basado en closure que aporta el trainer
       - Otros: sin sufijos específicos (solo los compartidos)
@@ -456,3 +466,11 @@ properties:
           prefix: "tuon-"
           supports_shared_per_group_suffixes: true
           specific_global_suffixes: [momentum, ns_steps, ns_eps, refresh_interval, rms_eps, transform, stack]
+        namo:
+          prefix: "namo-"
+          supports_shared_per_group_suffixes: true
+          specific_global_suffixes: [betas, ns_steps, ns_eps]
+        namo_d:
+          prefix: "namo_d-"
+          supports_shared_per_group_suffixes: true
+          specific_global_suffixes: [betas, ns_steps, ns_eps, clamp]

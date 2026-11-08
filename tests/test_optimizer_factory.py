@@ -28,7 +28,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon", "conda", "tuon"}
+        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon", "conda", "tuon", "namo", "namo_d"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -831,6 +831,331 @@ class BuildOptimizerTUONTests(unittest.TestCase):
         p = nn.Parameter(torch.randn(4, 4))
         groups = [{"params": [p], "lr": 1e-3, "name": "ffn"}]
         opt = build_optimizer("tuon", groups, {"tuon-lr_ffn": 0.02})
+        self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerNAMOTests(unittest.TestCase):
+    """NAMO defaults, Algorithm 1 invariants and hybrid routing (arXiv:2602.17080)."""
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("namo", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("namo", groups, {})
+        p.square().mean().backward()
+        opt.step()
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_defaults_match_paper(self):
+        opt = build_optimizer("namo", _param_groups(), {})
+        self.assertEqual(opt.betas, (0.95, 0.99))
+        self.assertEqual(opt.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-7)
+        self.assertAlmostEqual(opt.defaults["lr"], 1e-3)
+        # The factory injects per-group betas/eps for the AdamW fallback; they
+        # must not shadow the global (mu1, mu2) momenta.
+        self.assertNotIn("betas", opt.defaults)
+        self.assertEqual(opt.param_groups[0]["betas"], (0.9, 0.95))
+        self.assertAlmostEqual(opt.param_groups[0]["eps"], 1e-8)
+
+    def test_hidden_matrix_uses_namo_state(self):
+        # Algorithm 1: momentum (M), scalar second moment (v) and step counter.
+        p = nn.Parameter(torch.randn(4, 8))
+        groups = [{"params": [p], "lr": 0.02, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("namo", groups, {})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("momentum_buffer", state)
+        self.assertIn("norm_second_moment", state)
+        self.assertEqual(tuple(state["norm_second_moment"].shape), ())
+        self.assertEqual(state["step"], 1)
+        self.assertNotIn("exp_avg", state)
+        self.assertNotIn("exp_avg_sq", state)
+
+    def test_scalar_second_moment_matches_algorithm1(self):
+        # Algorithm 1, line 5: v_1 = (1 - mu_2) * ||G_1||_F^2.
+        p = nn.Parameter(torch.randn(4, 8))
+        p.grad = torch.randn(4, 8)
+        groups = [{"params": [p], "lr": 0.1, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("namo", groups, {})
+        grad = p.grad.clone()
+        opt.step()
+        expected = (1.0 - 0.99) * grad.square().sum()
+        torch.testing.assert_close(
+            opt.state[p]["norm_second_moment"], expected, rtol=1e-6, atol=1e-9
+        )
+
+    def test_first_step_matches_algorithm1(self):
+        # alpha_1 = sqrt(1 - mu_2) / (1 - mu_1) * ||M_1||_F / (sqrt(v_1) + eps).
+        p = nn.Parameter(torch.randn(6, 8))
+        p.grad = torch.randn(6, 8)
+        groups = [{"params": [p], "lr": 0.01, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("namo", groups, {"namo-betas": [0.95, 0.99]})
+        before = p.detach().clone()
+        grad = p.grad.clone()
+        opt.step()
+        m1 = (1.0 - 0.95) * grad
+        o1 = _newton_schulz(m1, 5, 1e-7).to(torch.float32)
+        v1 = (1.0 - 0.99) * grad.square().sum()
+        alpha1 = math.sqrt(0.01) / 0.05 * float(m1.norm()) / (float(v1.sqrt()) + 1e-8)
+        expected = before - 0.01 * alpha1 * o1
+        torch.testing.assert_close(p.detach(), expected, rtol=1e-2, atol=2e-3)
+
+    def test_weight_decay_is_scaled_by_adaptive_stepsize(self):
+        # Paper section 4.1: Theta <- Theta - eta * alpha * (O + lambda * Theta).
+        torch.manual_seed(0)
+        base = torch.randn(5, 5)
+        grad = torch.randn(5, 5)
+
+        def run(wd):
+            q = nn.Parameter(base.clone())
+            q.grad = grad.clone()
+            groups = [{"params": [q], "lr": 0.01, "weight_decay": wd, "name": "attention"}]
+            optimizer = build_optimizer("namo", groups, {})
+            optimizer.step()
+            return q.detach(), optimizer, q
+
+        p_zero, _, _ = run(0.0)
+        p_wd, opt_wd, q_wd = run(0.1)
+        state = opt_wd.state[q_wd]
+        momentum = state["momentum_buffer"]
+        second = state["norm_second_moment"]
+        alpha = (
+            math.sqrt(0.01)
+            / 0.05
+            * float(momentum.norm())
+            / (float(second.sqrt()) + 1e-8)
+        )
+        expected = p_zero - base * (0.01 * alpha * 0.1)
+        torch.testing.assert_close(p_wd, expected, rtol=1e-4, atol=1e-7)
+
+    def test_zero_gradient_is_a_noop(self):
+        # alpha_t = 0 with a zero gradient: neither the update nor the
+        # alpha-scaled decay fires (a documented difference from muon).
+        p = nn.Parameter(torch.randn(4, 4))
+        p.grad = torch.zeros_like(p)
+        groups = [{"params": [p], "lr": 0.1, "weight_decay": 0.5, "name": "attention"}]
+        opt = build_optimizer("namo", groups, {})
+        before = p.detach().clone()
+        opt.step()
+        self.assertTrue(torch.equal(p.detach(), before))
+
+    def test_embedding_group_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "embeddings"}]
+        opt = build_optimizer("namo", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("exp_avg", opt.state[p])
+        self.assertIn("exp_avg_sq", opt.state[p])
+        self.assertNotIn("momentum_buffer", opt.state[p])
+
+    def test_vector_param_is_not_frozen(self):
+        p = nn.Parameter(torch.randn(6))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "norms"}]
+        opt = build_optimizer("namo", groups, {})
+        p.sum().backward()
+        before = p.detach().clone()
+        opt.step()
+        self.assertFalse(torch.equal(p.detach(), before))
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_specific_suffixes_parsed(self):
+        opt = build_optimizer(
+            "namo",
+            _param_groups(),
+            {"namo-betas": [0.9, 0.98], "namo-ns_steps": "3", "namo-ns_eps": "1e-6"},
+        )
+        self.assertEqual(opt.betas, (0.9, 0.98))
+        self.assertEqual(opt.defaults["ns_steps"], 3)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-6)
+        opt_bad = build_optimizer(
+            "namo",
+            _param_groups(),
+            {"namo-ns_steps": "bogus", "namo-ns_eps": "bogus", "namo-betas": "bogus"},
+        )
+        self.assertEqual(opt_bad.betas, (0.95, 0.99))
+        self.assertEqual(opt_bad.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt_bad.defaults["ns_eps"], 1e-7)
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("namo", _param_groups(), {"namo-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
+
+    def test_per_group_lr_routes(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "ffn"}]
+        opt = build_optimizer("namo", groups, {"namo-lr_ffn": 0.02})
+        self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerNAMODTests(unittest.TestCase):
+    """NAMO-D defaults, Algorithm 2 invariants and clamping (arXiv:2602.17080)."""
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("namo_d", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("namo_d", groups, {})
+        p.square().mean().backward()
+        opt.step()
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_defaults_match_paper(self):
+        opt = build_optimizer("namo_d", _param_groups(), {})
+        self.assertEqual(opt.betas, (0.95, 0.99))
+        self.assertEqual(opt.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-7)
+        self.assertAlmostEqual(opt.defaults["clamp"], 0.1)
+        self.assertNotIn("betas", opt.defaults)
+        self.assertEqual(opt.param_groups[0]["betas"], (0.9, 0.95))
+        self.assertAlmostEqual(opt.param_groups[0]["eps"], 1e-8)
+
+    def test_hidden_matrix_uses_column_state(self):
+        # Algorithm 2: momentum (M), column-wise second moment (v in R^n).
+        p = nn.Parameter(torch.randn(4, 8))
+        groups = [{"params": [p], "lr": 0.02, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("namo_d", groups, {})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("momentum_buffer", state)
+        self.assertIn("column_second_moment", state)
+        self.assertEqual(tuple(state["column_second_moment"].shape), (8,))
+        self.assertEqual(state["step"], 1)
+        self.assertNotIn("exp_avg", state)
+
+    def test_column_second_moment_matches_algorithm2(self):
+        # Algorithm 2, line 5:
+        #   v_1 = (1 - mu_2) * N^c(G_1) * N^c(G_1), [N^c(M)]_j = ||M_{:,j}||.
+        p = nn.Parameter(torch.randn(4, 8))
+        p.grad = torch.randn(4, 8)
+        groups = [{"params": [p], "lr": 0.1, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("namo_d", groups, {})
+        grad = p.grad.clone()
+        opt.step()
+        expected = (1.0 - 0.99) * grad.norm(dim=0).square()
+        torch.testing.assert_close(
+            opt.state[p]["column_second_moment"], expected, rtol=1e-6, atol=1e-9
+        )
+
+    def test_first_step_matches_algorithm2(self):
+        # d_1 = sqrt(1 - mu_2)/(1 - mu_1) * N^c(M_1) / (sqrt(v_1) + eps),
+        # clamped toward its average, then Theta <- Theta - eta * O * diag(d).
+        p = nn.Parameter(torch.randn(6, 8))
+        p.grad = torch.randn(6, 8)
+        groups = [{"params": [p], "lr": 0.01, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer(
+            "namo_d", groups, {"namo_d-betas": [0.95, 0.99], "namo_d-clamp": 0.1}
+        )
+        before = p.detach().clone()
+        grad = p.grad.clone()
+        opt.step()
+        m1 = (1.0 - 0.95) * grad
+        o1 = _newton_schulz(m1, 5, 1e-7).to(torch.float32)
+        v1 = (1.0 - 0.99) * grad.norm(dim=0).square()
+        d = math.sqrt(0.01) / 0.05 * m1.norm(dim=0) / (v1.sqrt() + 1e-8)
+        d_bar = float(d.sum()) / d.numel()
+        d_tilde = d.clamp(min=0.1 * d_bar, max=d_bar / 0.1)
+        expected = before - 0.01 * (o1 * d_tilde.unsqueeze(0))
+        torch.testing.assert_close(p.detach(), expected, rtol=1e-2, atol=2e-3)
+
+    def test_clamp_bounds_diagonal(self):
+        # Algorithm 2, line 9: c * d_bar <= d_tilde <= d_bar / c, and the
+        # clamp is active on a deliberately heterogeneous gradient.
+        p = nn.Parameter(torch.zeros(4, 6))
+        groups = [{"params": [p], "lr": 0.01, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("namo_d", groups, {"namo_d-clamp": 0.5})
+        for step in range(4):
+            grad = torch.ones(4, 6)
+            if step % 2 == 1:
+                # Sign-alternating column: its momentum cancels while v_t
+                # accumulates, so its stepsize collapses and the clamp fires.
+                grad[:, 0] = -1.0
+            p.grad = grad
+            opt.step()
+        state = opt.state[p]
+        momentum = state["momentum_buffer"]
+        second = state["column_second_moment"]
+        bc1 = 1.0 - 0.95**4
+        bc2 = 1.0 - 0.99**4
+        d = math.sqrt(bc2) / bc1 * momentum.norm(dim=0) / (second.sqrt() + 1e-8)
+        d_bar = float(d.sum()) / d.numel()
+        d_tilde = d.clamp(min=0.5 * d_bar, max=d_bar / 0.5)
+        self.assertGreaterEqual(float(d_tilde.min()), 0.5 * d_bar - 1e-6)
+        self.assertLessEqual(float(d_tilde.max()), d_bar / 0.5 + 1e-6)
+        self.assertTrue(
+            float(d.min()) < 0.5 * d_bar or float(d.max()) > d_bar / 0.5
+        )
+
+    def test_invalid_clamp_raises(self):
+        with self.assertRaises(ValueError):
+            build_optimizer("namo_d", _param_groups(), {"namo_d-clamp": 1.5})
+        with self.assertRaises(ValueError):
+            build_optimizer("namo_d", _param_groups(), {"namo_d-clamp": 0.0})
+
+    def test_embedding_group_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "embeddings"}]
+        opt = build_optimizer("namo_d", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("exp_avg", opt.state[p])
+        self.assertIn("exp_avg_sq", opt.state[p])
+        self.assertNotIn("momentum_buffer", opt.state[p])
+
+    def test_vector_param_is_not_frozen(self):
+        p = nn.Parameter(torch.randn(6))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "norms"}]
+        opt = build_optimizer("namo_d", groups, {})
+        p.sum().backward()
+        before = p.detach().clone()
+        opt.step()
+        self.assertFalse(torch.equal(p.detach(), before))
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_specific_suffixes_parsed(self):
+        opt = build_optimizer(
+            "namo_d",
+            _param_groups(),
+            {
+                "namo_d-betas": [0.9, 0.98],
+                "namo_d-ns_steps": "3",
+                "namo_d-ns_eps": "1e-6",
+                "namo_d-clamp": "0.5",
+            },
+        )
+        self.assertEqual(opt.betas, (0.9, 0.98))
+        self.assertEqual(opt.defaults["ns_steps"], 3)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-6)
+        self.assertAlmostEqual(opt.defaults["clamp"], 0.5)
+        opt_bad = build_optimizer(
+            "namo_d",
+            _param_groups(),
+            {"namo_d-ns_steps": "bogus", "namo_d-clamp": "bogus"},
+        )
+        self.assertEqual(opt_bad.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt_bad.defaults["clamp"], 0.1)
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("namo_d", _param_groups(), {"namo_d-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
+
+    def test_per_group_lr_routes(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "ffn"}]
+        opt = build_optimizer("namo_d", groups, {"namo_d-lr_ffn": 0.02})
         self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
 
 

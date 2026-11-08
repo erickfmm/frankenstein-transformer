@@ -17,14 +17,14 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Model Classes | Training Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-------------:|:--------------:|:-------:|:------------:|
-| **48** | **34** | **11** | **4** | **9** | **173** | **4** |
+| **48** | **36** | **11** | **4** | **9** | **173** | **4** |
 
 ## How It Works
 
 ```mermaid
 flowchart LR
     A["YAML Config"] --> B{"Schema Validation<br/>(JSON Schema + rules)"}
-    B -- valid --> C["Train<br/>34 optimizer families<br/>AMP · schedulers · thermal guard"]
+    B -- valid --> C["Train<br/>36 optimizer families<br/>AMP · schedulers · thermal guard"]
     B -- error --> A
     C --> D["Checkpoint"]
     D --> E["Deploy<br/>(quantize · export)"]
@@ -95,12 +95,12 @@ List available named presets: `frankenstein-transformer train --list-configs`
 | Feature | Scale |
 |---------|-------|
 | Sequence mixer architectures | 48 across 10 categories (Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory) |
-| Optimizer families | 34 across 8 categories |
+| Optimizer families | 36 across 8 categories |
 | Positional encodings | 11 model-wide (`rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`) with per-mixer opt-out |
 | Model classes | `frankenstein_text_encoder`, `frankenstein_text_decoder`, `frankenstein_vit`, `frankenstein_audio` + reusable in-process engine API |
 | Training tasks | `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`, `asr`, `audio_classification` |
 | Normalization types | `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm` |
-| Config presets | 52 named presets + 121 example configs (schema smoke-tested in CI) |
+| Config presets | 52 named presets + 123 example configs (schema smoke-tested in CI) |
 | CLI subcommands | 4 (`train`, `deploy`, `infer`, `web-server`) |
 | Web configuration UI | Streamlit schema-driven YAML builder |
 | Quantized deployment | BitNet + checkpoint export pipeline (HF Transformers / GGUF) |

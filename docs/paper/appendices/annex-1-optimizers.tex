@@ -1819,6 +1819,175 @@ complexity is $\mathcal{O}(Kmn\min(m,n) + K^2 mn)$, the same dominant term as Mu
   tensor-aware optimizers fail to transfer.
 \end{itemize}
 
+\paragraph{NAMO (Norm-Based Adaptive Moment Estimation with Orthogonalized Momentum).}
+NAMO~\citep{zhang_namo_2026} keeps Muon's orthogonalized update direction and adds an
+Adam-type \textbf{norm-based noise adaptation} on top of it. Matrix orthogonalization is
+an unbounded operation that can amplify stochastic noise, so Muon's effective stepsize
+does not shrink when gradients become noisy. NAMO tracks a single scalar EMA of the
+squared Frobenius norm of the gradient and rescales the whole orthogonalized update by
+the bias-corrected norm ratio $\lVert\widehat M_t\rVert_F/(\sqrt{\widehat v_t}+\epsilon_t)$
+--- an aggregated signal-to-noise statistic analogous to Adam's coordinate-wise ratio.
+Because the scaling is a single scalar, the update direction stays exactly orthogonal,
+and the optimizer state grows by only one scalar per matrix over Muon. For a
+hidden-layer weight matrix $W \in \mathbb{R}^{m\times n}$ with learning rate $\eta$,
+momenta $\mu_1,\mu_2 \in [0,1)$, stability constant $\epsilon$ and decoupled weight
+decay $\lambda$:
+\begin{align}
+M_t &= \mu_1 M_{t-1} + (1-\mu_1) G_t && \text{(momentum)} \\
+v_t &= \mu_2 v_{t-1} + (1-\mu_2)\,\lVert G_t\rVert_F^2 && \text{(scalar norm EMA)} \\
+O_t &= \mathrm{NS}_K(M_t) && \text{(orthogonalization)} \\
+\alpha_t &= \frac{\sqrt{1-\mu_2^t}}{1-\mu_1^t}\cdot\frac{\lVert M_t\rVert_F}{\sqrt{v_t}+\epsilon}
+   = \frac{\lVert\widehat M_t\rVert_F}{\sqrt{\widehat v_t}+\epsilon_t},
+   \qquad \epsilon_t := \frac{\epsilon}{\sqrt{1-\mu_2^t}} && \text{(adaptive stepsize)} \\
+W_t &= W_{t-1} - \eta\,\alpha_t\,\bigl(O_t + \lambda W_{t-1}\bigr) && \text{(update)}
+\end{align}
+with the same quintic Newton--Schulz coefficients $(a,b,c)=(3.4445,-4.7750,2.0315)$ as
+Muon. Under nuclear-norm smoothness and bounded-variance noise, NAMO attains the optimal
+deterministic rate $\mathcal{O}(T^{-1/2})$, and its stochastic bound decomposes into an
+optimization term $\mathcal{O}(T^{-1/4})$ plus a variance term
+$\mathcal{O}(\sqrt{\sigma}\,b^{-1/4}T^{-1/8})$, recovering the optimal $\mathcal{O}(T^{-1/4})$
+once the batch size satisfies $b=\Omega(\sigma^2 T^{1/2})$.
+
+\begin{algorithm}[H]
+\caption{NAMO (Norm-Based Adaptive Moment Estimation with Orthogonalized Momentum)}
+\label{alg:namo}
+\begin{algorithmic}[1]
+\Require Parameters $\theta$, learning rate $\eta$, momenta $\mu_1,\mu_2$, NS iters $K$, stability constant $\epsilon$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\For{each parameter $P$}
+    \If{$P$ is a hidden-layer 2D matrix $W \in \mathbb{R}^{m\times n}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradient}
+        \State $M \gets \mu_1 M + (1-\mu_1) G$ \Comment{Momentum}
+        \State $v \gets \mu_2 v + (1-\mu_2)\,\lVert G\rVert_F^2$ \Comment{Scalar second moment}
+        \State $O \gets \mathrm{NS}_K(M)$ \Comment{Newton--Schulz}
+        \State $\alpha \gets \frac{\sqrt{1-\mu_2^t}}{1-\mu_1^t}\cdot\frac{\lVert M\rVert_F}{\sqrt{v}+\epsilon}$ \Comment{Adaptive stepsize}
+        \State $W \gets W - \eta\,\alpha\,(O + \lambda W)$ \Comment{Update}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Non-matrix fallback}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+On GPT-2 pretraining over OpenWebText (124M/355M, 2000-step linear warmup then constant
+LR), NAMO reaches validation losses of 3.0351/2.9516 versus 3.0643/2.9914 for AdamW and
+3.0435/2.9684 for Muon, with optimal learning rates $\eta=0.012/0.007$ (roughly $9\times$
+AdamW's) at $\mu_1=0.95$, $\mu_2=0.99$, $\lambda=0.01$, and it remains stable over a
+wider learning-rate grid than both baselines. In this implementation the global
+\texttt{namo-betas} suffix is $(\mu_1,\mu_2)$ (default $[0.95,0.99]$),
+\texttt{ns\_steps}/\texttt{ns\_eps} configure Newton--Schulz, the shared per-group
+\texttt{eps} is $\alpha_t$'s $\epsilon$, the shared \texttt{wd} is decoupled and scaled
+by $\alpha_t$ as in the paper's update, and the shared \texttt{betas}/\texttt{eps}
+configure the AdamW fallback for the embeddings/pos/head groups and every non-2-D
+parameter. The reference release additionally exposes Nesterov momentum, an
+effective-stepsize clamp and a $0.2\sqrt{\max(m,n)}$ shape scaling; Algorithm~1 of the
+paper defines none of these, so this module follows the paper.
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item A single scalar stepsize carries no per-neuron information; the paper itself
+  addresses this with the diagonal extension NAMO-D.
+\item The update is not RMS-aligned, so Adam learning-rate schedules do not transfer
+  unchanged: the paper's optima are roughly $9\times$ AdamW's.
+\item The theory assumes exact orthogonalization while practice uses $K{=}5$
+  Newton--Schulz iterations, and the empirical evidence is limited to GPT-2-scale
+  pretraining.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item First principled integration of orthogonalized momentum with Adam-type noise
+  adaptation, with optimal deterministic and noise-adaptive stochastic convergence
+  rates.
+\item The scalar scaling preserves orthogonality exactly, and the effective stepsize
+  shrinks automatically under noise or near stationarity.
+\item Zero additional memory over Muon and negligible per-step overhead; outperforms
+  AdamW and Muon on GPT-2 (124M/355M) over a wider stable learning-rate range.
+\end{itemize}
+
+\paragraph{NAMO-D (Diagonal Extension of NAMO).}
+NAMO-D~\citep{zhang_namo_2026} replaces NAMO's single adaptive scalar with a diagonal
+matrix that right-multiplies the orthogonalized momentum, so every neuron receives its
+own adaptive stepsize. Column-wise scaling aligns with the near block-diagonal Hessian
+of neural networks and yields finer-grained noise adaptation, but it no longer preserves
+strict orthogonality of the update direction. With the column-norm operator
+$[N^c(M)]_j := \lVert M_{:,j}\rVert$ for $j=1,\dots,n$:
+\begin{align}
+M_t &= \mu_1 M_{t-1} + (1-\mu_1) G_t && \text{(momentum)} \\
+[v_t]_j &= \mu_2 [v_{t-1}]_j + (1-\mu_2)\,\lVert [G_t]_{:,j}\rVert^2 && \text{(column norm EMA)} \\
+d_t &= \frac{\sqrt{1-\mu_2^t}}{1-\mu_1^t}\,N^c(M_t) \oslash \bigl(\sqrt{v_t}+\epsilon\bigr) && \text{(column stepsizes)} \\
+\bar d_t &= \lVert d_t\rVert_1/n, \qquad
+\tilde d_t = \min\bigl\{\max\{d_t, c\,\bar d_t \mathbf 1\}, (\bar d_t/c)\,\mathbf 1\bigr\} && \text{(clamp)} \\
+O_t &= \mathrm{NS}_K(M_t), \qquad
+W_t = W_{t-1} - \eta\,\bigl(O_t + \lambda W_{t-1}\bigr)\operatorname{diag}(\tilde d_t) && \text{(update)}
+\end{align}
+By Lemma~7 of the paper the entries satisfy
+$\lVert d_t\rVert_\infty \le \sqrt{(1-\mu_1)/(1-\mu_2)}$, and the clamp bounds the
+diagonal's condition number by $1/c^2$. The additional state over NAMO is one vector of
+length $n$ per matrix; NAMO-D keeps the same optimal deterministic
+$\mathcal{O}(T^{-1/2})$ and noise-adaptive stochastic rates as NAMO (Theorems 5--6).
+The extra clamping constant $c$ balances the two competing goals: small $c$ clamps
+harder toward the average and keeps the direction close to orthogonal, while larger $c$
+allows more neuron-wise variation.
+
+\begin{algorithm}[H]
+\caption{NAMO-D (Diagonal Extension of NAMO)}
+\label{alg:namo-d}
+\begin{algorithmic}[1]
+\Require Parameters $\theta$, learning rate $\eta$, momenta $\mu_1,\mu_2$, NS iters $K$, stability constant $\epsilon$, clamp $c$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\For{each parameter $P$}
+    \If{$P$ is a hidden-layer 2D matrix $W \in \mathbb{R}^{m\times n}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradient}
+        \State $M \gets \mu_1 M + (1-\mu_1) G$ \Comment{Momentum}
+        \State $v \gets \mu_2 v + (1-\mu_2)\,N^c(G)\odot N^c(G)$ \Comment{Column-wise second moment}
+        \State $d \gets \frac{\sqrt{1-\mu_2^t}}{1-\mu_1^t}\,N^c(M) \oslash (\sqrt{v}+\epsilon)$ \Comment{Column stepsizes}
+        \State $\bar d \gets \lVert d\rVert_1/n$; \quad
+               $\tilde d \gets \min(\max(d, c\bar d\mathbf 1), (\bar d/c)\mathbf 1)$ \Comment{Clamp}
+        \State $O \gets \mathrm{NS}_K(M)$ \Comment{Newton--Schulz}
+        \State $W \gets W - \eta\,(O + \lambda W)\operatorname{diag}(\tilde d)$ \Comment{Update}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Non-matrix fallback}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+The paper fixes $c=0.1$ for GPT-2 (124M) and sweeps $c\in\{0.12,0.40,0.75,0.90\}$ for
+GPT-2 (355M), selecting $c=0.9$; the reference implementation defaults to $0.75$.
+NAMO-D reaches validation losses of 3.0246 and 2.9507 on GPT-2 (124M/355M), improving on
+NAMO's 3.0351/2.9516, at optimal learning rates $\eta=0.009$ with the same
+$\mu_1=0.95$, $\mu_2=0.99$ and $\lambda=0.01$. In this implementation the global
+\texttt{namo\_d-betas} suffix is $(\mu_1,\mu_2)$ (default $[0.95,0.99]$),
+\texttt{namo\_d-clamp} is $c$ (default $0.1$), \texttt{ns\_steps}/\texttt{ns\_eps}
+configure Newton--Schulz, the shared per-group \texttt{eps} is the denominator
+$\epsilon$, the shared \texttt{wd} is decoupled and right-multiplied by the diagonal,
+and the shared \texttt{betas}/\texttt{eps} configure the AdamW fallback. As with NAMO,
+the official release's Nesterov momentum, effective-stepsize clamp and
+$0.2\sqrt{\max(m,n)}$ shape scaling are not part of Algorithm~2 and are not implemented.
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item The update no longer preserves strict orthogonality: the diagonal scaling trades
+  the structural guarantee for finer-grained noise adaptation.
+\item The clamp constant $c$ is a new hyperparameter whose optimum varies with model
+  scale ($0.1$ at 124M, $0.9$ at 355M), requiring a sweep.
+\item One extra $\mathbb{R}^n$ state per matrix over NAMO, and the theory still assumes
+  exact orthogonalization.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Neuron-wise adaptation matches the near block-diagonal Hessian of neural networks
+  and improves on NAMO on both GPT-2 sizes.
+\item The clamp bounds the diagonal's condition number by $1/c^2$, keeping the scaled
+  direction well-conditioned under heavy-tailed or noisy gradients.
+\item Optimal deterministic and noise-adaptive stochastic convergence rates carry over
+  from NAMO, with the same Newton--Schulz cost and hybrid AdamW routing.
+\end{itemize}
+
 \subsection{Evolutionary and Population-Based Hybrids}
 
 \paragraph{EvE (Evolutionary Explorer).}

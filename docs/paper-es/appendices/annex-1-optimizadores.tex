@@ -1852,6 +1852,181 @@ $\mathcal{O}(Kmn\min(m,n) + K^2 mn)$, el mismo término dominante que Muon.
   donde los optimizadores tensoriales previos no se transfieren.
 \end{itemize}
 
+\paragraph{NAMO (Estimación Adaptativa de Momentos Basada en Normas con Momentum Ortogonalizado).}
+NAMO~\citep{zhang_namo_2026} conserva la dirección de actualización ortogonalizada de
+Muon y le añade una \textbf{adaptación al ruido tipo Adam basada en normas}. La
+ortogonalización de matrices es una operación no acotada que puede amplificar el ruido
+estocástico, por lo que el tamaño de paso efectivo de Muon no se reduce cuando los
+gradientes se vuelven ruidosos. NAMO rastrea una EMA escalar del cuadrado de la norma de
+Frobenius del gradiente y reescala toda la actualización ortogonalizada mediante el
+cociente de normas con corrección de sesgo
+$\lVert\widehat M_t\rVert_F/(\sqrt{\widehat v_t}+\epsilon_t)$ --- un estadístico de
+señal-ruido agregado análogo al cociente por coordenada de Adam. Como el escalado es un
+único escalar, la dirección de actualización permanece exactamente ortogonal, y el
+estado del optimizador crece en un solo escalar por matriz respecto de Muon. Para una
+matriz de pesos de capa oculta $W \in \mathbb{R}^{m\times n}$ con tasa de aprendizaje
+$\eta$, momenta $\mu_1,\mu_2 \in [0,1)$, constante de estabilidad $\epsilon$ y weight
+decay desacoplado $\lambda$:
+\begin{align}
+M_t &= \mu_1 M_{t-1} + (1-\mu_1) G_t && \text{(momentum)} \\
+v_t &= \mu_2 v_{t-1} + (1-\mu_2)\,\lVert G_t\rVert_F^2 && \text{(EMA escalar de normas)} \\
+O_t &= \mathrm{NS}_K(M_t) && \text{(ortogonalización)} \\
+\alpha_t &= \frac{\sqrt{1-\mu_2^t}}{1-\mu_1^t}\cdot\frac{\lVert M_t\rVert_F}{\sqrt{v_t}+\epsilon}
+   = \frac{\lVert\widehat M_t\rVert_F}{\sqrt{\widehat v_t}+\epsilon_t},
+   \qquad \epsilon_t := \frac{\epsilon}{\sqrt{1-\mu_2^t}} && \text{(paso adaptativo)} \\
+W_t &= W_{t-1} - \eta\,\alpha_t\,\bigl(O_t + \lambda W_{t-1}\bigr) && \text{(actualización)}
+\end{align}
+con los mismos coeficientes quínticos de Newton--Schulz $(a,b,c)=(3.4445,-4.7750,2.0315)$
+que Muon. Bajo suavidad en norma nuclear y ruido de varianza acotada, NAMO alcanza la
+tasa determinista óptima $\mathcal{O}(T^{-1/2})$, y su cota estocástica se descompone en
+un término de optimización $\mathcal{O}(T^{-1/4})$ más un término de varianza
+$\mathcal{O}(\sqrt{\sigma}\,b^{-1/4}T^{-1/8})$, recuperando la óptima $\mathcal{O}(T^{-1/4})$
+cuando el tamaño de lote cumple $b=\Omega(\sigma^2 T^{1/2})$.
+
+\begin{algorithm}[H]
+\caption{NAMO (Estimación Adaptativa de Momentos Basada en Normas con Momentum Ortogonalizado)}
+\label{alg:namo-es}
+\begin{algorithmic}[1]
+\Require Parámetros $\theta$, tasa de aprendizaje $\eta$, momenta $\mu_1,\mu_2$, iteraciones NS $K$, constante de estabilidad $\epsilon$, weight decay $\lambda$
+\Ensure Parámetros actualizados $\theta_T$
+\For{cada parámetro $P$}
+    \If{$P$ es una matriz 2D de capa oculta $W \in \mathbb{R}^{m\times n}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradiente}
+        \State $M \gets \mu_1 M + (1-\mu_1) G$ \Comment{Momentum}
+        \State $v \gets \mu_2 v + (1-\mu_2)\,\lVert G\rVert_F^2$ \Comment{Segundo momento escalar}
+        \State $O \gets \mathrm{NS}_K(M)$ \Comment{Newton--Schulz}
+        \State $\alpha \gets \frac{\sqrt{1-\mu_2^t}}{1-\mu_1^t}\cdot\frac{\lVert M\rVert_F}{\sqrt{v}+\epsilon}$ \Comment{Paso adaptativo}
+        \State $W \gets W - \eta\,\alpha\,(O + \lambda W)$ \Comment{Actualización}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Respaldo no matricial}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+En el preentrenamiento de GPT-2 sobre OpenWebText (124M/355M, calentamiento lineal de
+2000 pasos y LR constante después), NAMO alcanza pérdidas de validación de 3.0351/2.9516
+frente a 3.0643/2.9914 de AdamW y 3.0435/2.9684 de Muon, con tasas óptimas
+$\eta=0.012/0.007$ (unas $9\times$ la de AdamW) en $\mu_1=0.95$, $\mu_2=0.99$,
+$\lambda=0.01$, y permanece estable en una rejilla de tasas más amplia que ambas líneas
+base. En esta implementación el sufijo global \texttt{namo-betas} es $(\mu_1,\mu_2)$
+(por defecto $[0.95,0.99]$), \texttt{ns\_steps}/\texttt{ns\_eps} configuran
+Newton--Schulz, el \texttt{eps} compartido por grupo es el $\epsilon$ de $\alpha_t$, el
+\texttt{wd} compartido es desacoplado y escalado por $\alpha_t$ como en la
+actualización del artículo, y los \texttt{betas}/\texttt{eps} compartidos configuran el
+respaldo AdamW para los grupos embeddings/pos/head y todo parámetro no 2-D. La
+implementación de referencia expone además momentum de Nesterov, un tope del paso
+efectivo y un escalado de forma $0.2\sqrt{\max(m,n)}$; el Algoritmo~1 del artículo no
+define ninguno de ellos, así que este módulo sigue el artículo.
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Un único paso escalar no porta información por neurona; el propio artículo lo
+  aborda con la extensión diagonal NAMO-D.
+\item La actualización no está alineada por RMS, por lo que los esquemas de tasa de
+  Adam no se transfieren sin ajuste: los óptimos del artículo son unas $9\times$ los de
+  AdamW.
+\item La teoría asume ortogonalización exacta mientras la práctica usa $K{=}5$
+  iteraciones de Newton--Schulz, y la evidencia empírica se limita al preentrenamiento
+  a escala GPT-2.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Primera integración principiada del momentum ortogonalizado con la adaptación al
+  ruido tipo Adam, con tasas de convergencia deterministas y estocásticas óptimas.
+\item El escalado escalar preserva la ortogonalidad exactamente, y el paso efectivo se
+  reduce automáticamente bajo ruido o cerca de la estacionariedad.
+\item Cero memoria adicional sobre Muon y sobrecosto por paso insignificante; supera a
+  AdamW y Muon en GPT-2 (124M/355M) en un rango estable de tasas más amplio.
+\end{itemize}
+
+\paragraph{NAMO-D (Extensión Diagonal de NAMO).}
+NAMO-D~\citep{zhang_namo_2026} sustituye el único escalar adaptativo de NAMO por una
+matriz diagonal que multiplica por la derecha el momentum ortogonalizado, de modo que
+cada neurona recibe su propio paso adaptativo. El escalado por columna se alinea con la
+estructura casi diagonal por bloques del Hessiano de las redes neuronales y produce una
+adaptación al ruido más fina, pero ya no preserva estrictamente la ortogonalidad de la
+dirección de actualización. Con el operador de normas por columna
+$[N^c(M)]_j := \lVert M_{:,j}\rVert$ para $j=1,\dots,n$:
+\begin{align}
+M_t &= \mu_1 M_{t-1} + (1-\mu_1) G_t && \text{(momentum)} \\
+[v_t]_j &= \mu_2 [v_{t-1}]_j + (1-\mu_2)\,\lVert [G_t]_{:,j}\rVert^2 && \text{(EMA de normas por columna)} \\
+d_t &= \frac{\sqrt{1-\mu_2^t}}{1-\mu_1^t}\,N^c(M_t) \oslash \bigl(\sqrt{v_t}+\epsilon\bigr) && \text{(pasos por columna)} \\
+\bar d_t &= \lVert d_t\rVert_1/n, \qquad
+\tilde d_t = \min\bigl\{\max\{d_t, c\,\bar d_t \mathbf 1\}, (\bar d_t/c)\,\mathbf 1\bigr\} && \text{(acotado)} \\
+O_t &= \mathrm{NS}_K(M_t), \qquad
+W_t = W_{t-1} - \eta\,\bigl(O_t + \lambda W_{t-1}\bigr)\operatorname{diag}(\tilde d_t) && \text{(actualización)}
+\end{align}
+Por el Lema~7 del artículo las entradas satisfacen
+$\lVert d_t\rVert_\infty \le \sqrt{(1-\mu_1)/(1-\mu_2)}$, y el acotado limita el número
+de condición de la diagonal a $1/c^2$. El estado adicional respecto de NAMO es un
+vector de longitud $n$ por matriz; NAMO-D conserva las mismas tasas determinista
+$\mathcal{O}(T^{-1/2})$ y estocástica adaptativa al ruido que NAMO (Teoremas 5--6). La
+constante de acotado $c$ equilibra los dos objetivos en competencia: un $c$ pequeño
+acota con más fuerza hacia la media y mantiene la dirección cerca de la ortogonal,
+mientras que un $c$ mayor permite más variación por neurona.
+
+\begin{algorithm}[H]
+\caption{NAMO-D (Extensi\'on Diagonal de NAMO)}
+\label{alg:namo-d-es}
+\begin{algorithmic}[1]
+\Require Parámetros $\theta$, tasa de aprendizaje $\eta$, momenta $\mu_1,\mu_2$, iteraciones NS $K$, constante de estabilidad $\epsilon$, acotado $c$, weight decay $\lambda$
+\Ensure Parámetros actualizados $\theta_T$
+\For{cada parámetro $P$}
+    \If{$P$ es una matriz 2D de capa oculta $W \in \mathbb{R}^{m\times n}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradiente}
+        \State $M \gets \mu_1 M + (1-\mu_1) G$ \Comment{Momentum}
+        \State $v \gets \mu_2 v + (1-\mu_2)\,N^c(G)\odot N^c(G)$ \Comment{Segundo momento por columna}
+        \State $d \gets \frac{\sqrt{1-\mu_2^t}}{1-\mu_1^t}\,N^c(M) \oslash (\sqrt{v}+\epsilon)$ \Comment{Pasos por columna}
+        \State $\bar d \gets \lVert d\rVert_1/n$; \quad
+               $\tilde d \gets \min(\max(d, c\bar d\mathbf 1), (\bar d/c)\mathbf 1)$ \Comment{Acotado}
+        \State $O \gets \mathrm{NS}_K(M)$ \Comment{Newton--Schulz}
+        \State $W \gets W - \eta\,(O + \lambda W)\operatorname{diag}(\tilde d)$ \Comment{Actualización}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Respaldo no matricial}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+El artículo fija $c=0.1$ para GPT-2 (124M) y barre $c\in\{0.12,0.40,0.75,0.90\}$ para
+GPT-2 (355M), seleccionando $c=0.9$; la implementación de referencia usa $0.75$ por
+defecto. NAMO-D alcanza pérdidas de validación de 3.0246 y 2.9507 en GPT-2 (124M/355M),
+mejorando las 3.0351/2.9516 de NAMO, con tasas óptimas $\eta=0.009$ y los mismos
+$\mu_1=0.95$, $\mu_2=0.99$ y $\lambda=0.01$. En esta implementación el sufijo global
+\texttt{namo\_d-betas} es $(\mu_1,\mu_2)$ (por defecto $[0.95,0.99]$),
+\texttt{namo\_d-clamp} es $c$ (por defecto $0.1$), \texttt{ns\_steps}/\texttt{ns\_eps}
+configuran Newton--Schulz, el \texttt{eps} compartido por grupo es el $\epsilon$ del
+denominador, el \texttt{wd} compartido es desacoplado y multiplicado por la derecha por
+la diagonal, y los \texttt{betas}/\texttt{eps} compartidos configuran el respaldo
+AdamW. Como en NAMO, el momentum de Nesterov, el tope del paso efectivo y el escalado
+de forma $0.2\sqrt{\max(m,n)}$ de la implementación oficial no forman parte del
+Algoritmo~2 y no se implementan.
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item La actualización ya no preserva la ortogonalidad estricta: el escalado diagonal
+  cambia la garantía estructural por una adaptación al ruido más fina.
+\item La constante de acotado $c$ es un hiperparámetro nuevo cuyo óptimo varía con la
+  escala del modelo ($0.1$ en 124M, $0.9$ en 355M), y requiere un barrido.
+\item Un estado $\mathbb{R}^n$ adicional por matriz respecto de NAMO, y la teoría sigue
+  asumiendo ortogonalización exacta.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item La adaptación por neurona coincide con la estructura casi diagonal por bloques del
+  Hessiano y mejora a NAMO en ambos tamaños de GPT-2.
+\item El acotado limita el número de condición de la diagonal a $1/c^2$, manteniendo la
+  dirección escalada bien condicionada bajo gradientes ruidosos o de colas pesadas.
+\item Las tasas de convergencia determinista y estocástica adaptativa al ruido se
+  conservan desde NAMO, con el mismo costo de Newton--Schulz y el mismo enrutamiento
+  híbrido con respaldo AdamW.
+\end{itemize}
+
 \subsection{Híbridos Evolutivos y Poblacionales}
 
 \paragraph{EvE (Evolutionary Explorer).}

@@ -44,6 +44,8 @@ from .lion import Lion
 from .mars_adamw import MARSAdamW
 from .muon import Muon
 from .muon2 import Muon2
+from .namo import NAMO
+from .namo_d import NAMO_D
 from .nor_muon import NorMuon
 from .prodigy import Prodigy
 from .q_apollo import QApollo
@@ -92,6 +94,8 @@ OPTIMIZER_REGISTRY = {
     "nor_muon": NorMuon,
     "conda": Conda,
     "tuon": TUON,
+    "namo": NAMO,
+    "namo_d": NAMO_D,
 }
 """Mapping from YAML optimizer class names to concrete Optimizer subclasses.
 
@@ -171,6 +175,8 @@ OPTIMIZER_ALLOWED_KEYS = {
         "transform",
         "stack",
     },
+    "namo": _COMMON_PER_GROUP_KEYS | {"betas", "ns_steps", "ns_eps"},
+    "namo_d": _COMMON_PER_GROUP_KEYS | {"betas", "ns_steps", "ns_eps", "clamp"},
 }
 
 
@@ -534,6 +540,30 @@ def build_optimizer(
             rms_eps=rms_eps,
             transform=transform,
             stack=stack,
+        )
+
+    if optimizer_name == "namo":
+        betas = to_betas(scoped.get("betas"), (0.95, 0.99))
+        ns_steps = to_int(scoped.get("ns_steps"), 5)
+        ns_eps = to_float(scoped.get("ns_eps"), 1e-7)
+        return optimizer_cls(
+            converted_groups,
+            betas=betas,
+            ns_steps=ns_steps,
+            ns_eps=ns_eps,
+        )
+
+    if optimizer_name == "namo_d":
+        betas = to_betas(scoped.get("betas"), (0.95, 0.99))
+        ns_steps = to_int(scoped.get("ns_steps"), 5)
+        ns_eps = to_float(scoped.get("ns_eps"), 1e-7)
+        clamp = to_float(scoped.get("clamp"), 0.1)
+        return optimizer_cls(
+            converted_groups,
+            betas=betas,
+            ns_steps=ns_steps,
+            ns_eps=ns_eps,
+            clamp=clamp,
         )
 
     return optimizer_cls(converted_groups)

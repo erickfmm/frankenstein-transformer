@@ -269,7 +269,7 @@ OPTIMIZERS = [
     "sophia", "muon", "turbo_muon", "af_muon", "ada_muon", "radam", "adan", "adopt", "ademamix",
     "mars_adamw", "cautious_adamw", "lamb", "schedulefree_adamw", "shampoo",
     "soap", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm",
-    "root", "muon2", "adam_pm", "nor_muon", "conda", "tuon",
+    "root", "muon2", "adam_pm", "nor_muon", "conda", "tuon", "namo", "namo_d",
 ]
 
 NORMS = ["layer_norm", "dynamic_tanh", "derf", "rms_norm", "prms_norm", "flash_norm"]
@@ -662,7 +662,7 @@ def _with_optimizer(training: dict, optimizer_class: str) -> dict:
     if optimizer_class in {
         "adamw", "galore_adamw", "prodigy", "radam", "adan", "adopt", "ademamix",
         "mars_adamw", "cautious_adamw", "schedulefree_adamw", "soap", "lion",
-        "conda", "tuon",
+        "conda", "tuon", "namo", "namo_d",
     }:
         for group in ["embeddings", "norms", "attention", "other"]:
             params[f"{prefix}betas_{group}"] = [0.9, 0.999]
@@ -723,6 +723,15 @@ def _with_optimizer(training: dict, optimizer_class: str) -> dict:
         params[f"{prefix}momentum"] = 0.95
         params[f"{prefix}ns_steps"] = 5
         params[f"{prefix}refresh_interval"] = 4
+    if optimizer_class == "namo":
+        params[f"{prefix}betas"] = [0.95, 0.99]
+        params[f"{prefix}ns_steps"] = 5
+        params[f"{prefix}ns_eps"] = 1e-7
+    if optimizer_class == "namo_d":
+        params[f"{prefix}betas"] = [0.95, 0.99]
+        params[f"{prefix}ns_steps"] = 5
+        params[f"{prefix}ns_eps"] = 1e-7
+        params[f"{prefix}clamp"] = 0.1
 
     # Drop keys this optimizer family does not accept (e.g. `rank` for
     # apollo_mini). The factory is the contract; an unknown key would fail
