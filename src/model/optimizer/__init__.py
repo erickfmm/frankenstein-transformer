@@ -30,6 +30,7 @@ from .sgd_momentum import SGDMomentum
 from .shampoo import Shampoo
 from .sophia import Sophia
 from .soap import SOAP
+from .tuon import TUON
 from .turbo_muon import TurboMuon
 
 __all__ = [
@@ -65,6 +66,7 @@ __all__ = [
     "ScheduleFreeAdamW",
     "Shampoo",
     "Sophia",
+    "TUON",
     "TurboMuon",
     "build_optimizer",
 ]

@@ -28,7 +28,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon", "conda"}
+        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon", "conda", "tuon"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -597,6 +597,241 @@ class BuildOptimizerCondaTests(unittest.TestCase):
         self.assertEqual(opt.defaults["update_proj_gap"], 2000)
         self.assertAlmostEqual(opt.defaults["scale"], 1.0)
         self.assertTrue(opt.defaults["correct_bias"])
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerTUONTests(unittest.TestCase):
+    """TUON defaults, paper invariants and hybrid routing (arXiv:2610.35130)."""
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("tuon", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("tuon", groups, {})
+        p.square().mean().backward()
+        opt.step()
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_step_runs_stack(self):
+        gen = torch.Generator().manual_seed(0)
+        first = nn.Parameter(torch.randn(4, 8, generator=gen))
+        second = nn.Parameter(torch.randn(4, 8, generator=gen))
+        groups = [
+            {"params": [first, second], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}
+        ]
+        opt = build_optimizer("tuon", groups, {})
+        (first.square().mean() + second.square().mean()).backward()
+        opt.step()
+        self.assertFalse(torch.isnan(first).any())
+        self.assertFalse(torch.isnan(second).any())
+        # K=2 stack: the layer basis is cached on the first parameter.
+        self.assertIn("tuon_basis", opt.state[first])
+        self.assertEqual(tuple(opt.state[first]["tuon_basis"].shape), (2, 2))
+
+    def test_defaults_match_paper(self):
+        opt = build_optimizer("tuon", _param_groups(), {})
+        self.assertAlmostEqual(opt.defaults["momentum"], 0.95)
+        self.assertEqual(opt.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-7)
+        self.assertEqual(opt.defaults["refresh_interval"], 200)
+        self.assertAlmostEqual(opt.defaults["rms_eps"], 1e-8)
+        self.assertEqual(opt.defaults["transform"], "decorq")
+        self.assertEqual(opt.defaults["stack"], "full")
+        self.assertEqual(opt.defaults["betas"], (0.9, 0.95))
+        self.assertAlmostEqual(opt.defaults["eps"], 1e-8)
+
+    def test_hidden_matrix_uses_tuon_state(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 0.02, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("tuon", groups, {})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("momentum_buffer", state)
+        self.assertNotIn("exp_avg", state)
+
+    def test_embedding_group_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "embeddings"}]
+        opt = build_optimizer("tuon", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("exp_avg", opt.state[p])
+        self.assertIn("exp_avg_sq", opt.state[p])
+        self.assertNotIn("momentum_buffer", opt.state[p])
+
+    def test_vector_param_is_not_frozen(self):
+        p = nn.Parameter(torch.ones(6))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "norms"}]
+        opt = build_optimizer("tuon", groups, {})
+        before = p.detach().clone()
+        p.sum().backward()
+        opt.step()
+        self.assertFalse(torch.equal(before, p.detach()))
+        self.assertIn("exp_avg", opt.state[p])
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_k1_matches_muon(self):
+        """Paper Proposition 2: for K = 1 the transform cancels and TUON is Muon."""
+        gen = torch.Generator().manual_seed(0)
+        base = torch.randn(8, 8, generator=gen)
+        grad = torch.randn(8, 8, generator=gen)
+        p_muon = nn.Parameter(base.clone())
+        p_tuon = nn.Parameter(base.clone())
+        p_muon.grad = grad.clone()
+        p_tuon.grad = grad.clone()
+        build_optimizer(
+            "muon",
+            [{"params": [p_muon], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}],
+            {},
+        ).step()
+        build_optimizer(
+            "tuon",
+            [{"params": [p_tuon], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}],
+            {},
+        ).step()
+        delta_muon = (p_muon.detach() - base).flatten()
+        delta_tuon = (p_tuon.detach() - base).flatten()
+        cosine = torch.nn.functional.cosine_similarity(delta_muon, delta_tuon, dim=0)
+        self.assertGreater(cosine.item(), 0.99)
+        # The direction is identical (Prop. 2); the magnitude differs only
+        # because the fixed target RMS s = 1/sqrt(max(m, n)) assumes perfectly
+        # orthogonal slices, while 5 bfloat16 Newton-Schulz steps leave the
+        # raw polar factor slightly below that envelope.
+        self.assertAlmostEqual(
+            delta_muon.norm().item() / delta_tuon.norm().item(), 1.0, delta=0.3
+        )
+
+    def test_update_rms_matches_stack_scale(self):
+        """Eqs. 100-102: the stack update has RMS s = 1/sqrt(max(m, n))."""
+        gen = torch.Generator().manual_seed(0)
+        first = nn.Parameter(torch.randn(4, 8, generator=gen))
+        second = nn.Parameter(torch.randn(4, 8, generator=gen))
+        groups = [
+            {"params": [first, second], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}
+        ]
+        opt = build_optimizer("tuon", groups, {})
+        (first.square().mean() + second.square().mean()).backward()
+        before_first = first.detach().clone()
+        before_second = second.detach().clone()
+        opt.step()
+        total_sq = (first.detach() - before_first).pow(2).sum() + (
+            second.detach() - before_second
+        ).pow(2).sum()
+        target = (1e-2**2) * (1.0 / 8.0) * 4 * 8 * 2
+        self.assertAlmostEqual((total_sq / target).item(), 1.0, delta=1e-4)
+
+    def test_decorq_basis_orthogonalizes_gram(self):
+        """DecorQ diagonalizes the layer Gram matrix (Algorithm 1, lines 3-5)."""
+        gen = torch.Generator().manual_seed(0)
+        params = [nn.Parameter(torch.randn(4, 6, generator=gen)) for _ in range(3)]
+        groups = [
+            {"params": params, "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}
+        ]
+        opt = build_optimizer("tuon", groups, {"tuon-refresh_interval": 1})
+        for param in params:
+            param.grad = torch.randn_like(param)
+        opt.step()
+        basis = opt.state[params[0]]["tuon_basis"]
+        self.assertEqual(tuple(basis.shape), (3, 3))
+        momentum = torch.stack(
+            [opt.state[param]["momentum_buffer"] for param in params], dim=-1
+        )
+        mixed = torch.einsum("jk,mnk->mnj", basis, momentum)
+        flat = mixed.reshape(-1, 3)
+        gram = flat.T @ flat
+        off_diagonal = gram - torch.diag(torch.diagonal(gram))
+        self.assertLess(off_diagonal.abs().max().item(), 1e-4)
+
+    def test_fixed_transforms_step_runs(self):
+        for transform in ("dct", "haar", "dft"):
+            gen = torch.Generator().manual_seed(0)
+            params = [nn.Parameter(torch.randn(4, 6, generator=gen)) for _ in range(3)]
+            groups = [
+                {"params": params, "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}
+            ]
+            opt = build_optimizer("tuon", groups, {"tuon-transform": transform})
+            for param in params:
+                param.grad = torch.randn_like(param)
+            before = [param.detach().clone() for param in params]
+            opt.step()
+            for param, prior in zip(params, before):
+                self.assertFalse(torch.isnan(param).any(), transform)
+                self.assertFalse(torch.equal(param.detach(), prior), transform)
+
+    def test_pairs_stack_step_runs(self):
+        gen = torch.Generator().manual_seed(0)
+        params = [nn.Parameter(torch.randn(4, 6, generator=gen)) for _ in range(3)]
+        groups = [
+            {"params": params, "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}
+        ]
+        opt = build_optimizer("tuon", groups, {"tuon-stack": "pairs"})
+        for param in params:
+            param.grad = torch.randn_like(param)
+        opt.step()
+        for param in params:
+            self.assertFalse(torch.isnan(param).any())
+        self.assertEqual(tuple(opt.state[params[0]]["tuon_basis"].shape), (2, 2))
+        self.assertEqual(tuple(opt.state[params[2]]["tuon_basis"].shape), (1, 1))
+
+    def test_specific_suffixes_parsed(self):
+        opt = build_optimizer(
+            "tuon",
+            _param_groups(),
+            {
+                "tuon-momentum": "0.9",
+                "tuon-ns_steps": "3",
+                "tuon-ns_eps": "1e-6",
+                "tuon-refresh_interval": "50",
+                "tuon-rms_eps": "1e-7",
+                "tuon-transform": "DCT",
+                "tuon-stack": "PAIRS",
+            },
+        )
+        self.assertAlmostEqual(opt.defaults["momentum"], 0.9)
+        self.assertEqual(opt.defaults["ns_steps"], 3)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-6)
+        self.assertEqual(opt.defaults["refresh_interval"], 50)
+        self.assertAlmostEqual(opt.defaults["rms_eps"], 1e-7)
+        self.assertEqual(opt.defaults["transform"], "dct")
+        self.assertEqual(opt.defaults["stack"], "pairs")
+
+        opt_bad = build_optimizer(
+            "tuon",
+            _param_groups(),
+            {
+                "tuon-momentum": "bad",
+                "tuon-ns_steps": "bad",
+                "tuon-ns_eps": "bad",
+                "tuon-refresh_interval": "bad",
+                "tuon-rms_eps": "bad",
+            },
+        )
+        self.assertAlmostEqual(opt_bad.defaults["momentum"], 0.95)
+        self.assertEqual(opt_bad.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt_bad.defaults["ns_eps"], 1e-7)
+        self.assertEqual(opt_bad.defaults["refresh_interval"], 200)
+        self.assertAlmostEqual(opt_bad.defaults["rms_eps"], 1e-8)
+
+    def test_invalid_enums_raise(self):
+        with self.assertRaises(ValueError):
+            build_optimizer("tuon", _param_groups(), {"tuon-transform": "bogus"})
+        with self.assertRaises(ValueError):
+            build_optimizer("tuon", _param_groups(), {"tuon-stack": "bogus"})
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("tuon", _param_groups(), {"tuon-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
+
+    def test_per_group_lr_routes(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "ffn"}]
+        opt = build_optimizer("tuon", groups, {"tuon-lr_ffn": 0.02})
+        self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

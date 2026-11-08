@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 48 mezcladores de secuencia en diez familias, 33 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 48 mezcladores de secuencia en diez familias, 34 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -108,7 +108,7 @@ memory\_attn & Memoria & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Valore
 
 \subsection{Resumen de Optimizadores}
 
-La Tabla~\ref{tab:all-optimizers} cataloga los 33 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
+La Tabla~\ref{tab:all-optimizers} cataloga los 34 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -169,6 +169,7 @@ ROOT & Ortogonalidad (robusta) & 1 ($m$); + $v$ en el respaldo AdamW & $\mathcal
 Muon² & Ortogonalidad + adaptativa & 2 ($m$, $v$); factorizado: 1 ($m$) + fila/col; + $v$ en el respaldo AdamW & $\mathcal{O}(n \cdot k)$ & lr, $\beta_1$, $\beta_2$, eps, wd, pasos NS $k$, factored & \citep{liu_muon2_2026} \\
 NorMuon & Ortogonalidad + adaptativa por neurona & 2 ($m$, $v$ por filas); + $v$ en el respaldo AdamW & $\mathcal{O}(n \cdot k)$ & lr, momentum, $\beta_2$, eps, wd, pasos NS $k$ & \citep{li_normuon_2025} \\
 Conda & Ortogonalidad + adaptativa por columna & 3 ($m$, $v_{\mathrm{proj}}$, base $P$); + $v$ en el respaldo AdamW & $\mathcal{O}(mn\,r)$, $r=\min(m,n)$; SVD cada $T$ pasos & lr, $\beta_1$, $\beta_2$, eps, wd, hueco $T$, escala $\alpha$ & \citep{wang_conda_2025} \\
+TUON & Ortogonalidad (tensorial, entre capas) & 1 ($m$ por slice); + base $K{\times}K$ por pila (refresco $T$); + $v$ en el respaldo AdamW & $\mathcal{O}(Kmn\cdot\min(m,n) + K^2 mn)$; eigh cada $T$ pasos & lr, momentum, wd, pasos NS $k$, refresco $T$, transformada $Q$, pila $K$ & \citep{tang_tuon_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Adaptativos de Bajo Rango y Adaptividad Ajustable}} \\

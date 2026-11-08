@@ -54,6 +54,7 @@ from .sgd_momentum import SGDMomentum
 from .shampoo import Shampoo
 from .sophia import Sophia
 from .soap import SOAP
+from .tuon import TUON
 from .turbo_muon import TurboMuon
 
 OPTIMIZER_REGISTRY = {
@@ -90,6 +91,7 @@ OPTIMIZER_REGISTRY = {
     "muon2": Muon2,
     "nor_muon": NorMuon,
     "conda": Conda,
+    "tuon": TUON,
 }
 """Mapping from YAML optimizer class names to concrete Optimizer subclasses.
 
@@ -159,6 +161,16 @@ OPTIMIZER_ALLOWED_KEYS = {
     "muon2": _COMMON_PER_GROUP_KEYS | {"ns_steps", "ns_eps", "factored"},
     "nor_muon": _COMMON_PER_GROUP_KEYS | {"momentum", "ns_steps", "ns_eps"},
     "conda": _COMMON_PER_GROUP_KEYS | {"update_proj_gap", "scale", "correct_bias"},
+    "tuon": _COMMON_PER_GROUP_KEYS
+    | {
+        "momentum",
+        "ns_steps",
+        "ns_eps",
+        "refresh_interval",
+        "rms_eps",
+        "transform",
+        "stack",
+    },
 }
 
 
@@ -503,6 +515,25 @@ def build_optimizer(
             update_proj_gap=update_proj_gap,
             scale=scale,
             correct_bias=correct_bias,
+        )
+
+    if optimizer_name == "tuon":
+        momentum = to_float(scoped.get("momentum"), 0.95)
+        ns_steps = to_int(scoped.get("ns_steps"), 5)
+        ns_eps = to_float(scoped.get("ns_eps"), 1e-7)
+        refresh_interval = to_int(scoped.get("refresh_interval"), 200)
+        rms_eps = to_float(scoped.get("rms_eps"), 1e-8)
+        transform = str(scoped.get("transform", "decorq")).strip().lower()
+        stack = str(scoped.get("stack", "full")).strip().lower()
+        return optimizer_cls(
+            converted_groups,
+            momentum=momentum,
+            ns_steps=ns_steps,
+            ns_eps=ns_eps,
+            refresh_interval=refresh_interval,
+            rms_eps=rms_eps,
+            transform=transform,
+            stack=stack,
         )
 
     return optimizer_cls(converted_groups)

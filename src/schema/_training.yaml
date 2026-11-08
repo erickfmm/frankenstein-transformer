@@ -1649,3 +1649,17 @@ allOf:
             additionalProperties: false
             patternProperties:
               ^conda-: { type: [number, boolean, array, string] }
+- if:
+    properties:
+      optimizer:
+        properties:
+          optimizer_class:
+            const: tuon
+  then:
+    properties:
+      optimizer:
+        properties:
+          parameters:
+            additionalProperties: false
+            patternProperties:
+              ^tuon-: { type: [number, boolean, array, string] }

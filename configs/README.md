@@ -164,6 +164,7 @@ training:
 - `muon2`
 - `nor_muon`
 - `conda`
+- `tuon`
 
 `training.optimizer.parameters` must use the selected optimizer prefix. Example: when `optimizer_class: adamw`, all keys must start with `adamw-`.
 
@@ -219,6 +220,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `muon2`: `ns_steps`, `ns_eps`, `factored` (Adam-style second-moment preconditioning of the momentum before Newton-Schulz; β₁/β₂ come from the shared `betas_*`, the preconditioner epsilon from the shared `eps_*`; update scaled by η√(m/n); same hybrid routing as `muon`; `factored: true` switches to the memory-efficient Muon²-F variant)
 - `nor_muon`: `momentum`, `ns_steps`, `ns_eps` (neuron-wise second-moment normalization after Newton-Schulz; β2 from the shared `betas_*`, ε from the shared `eps_*`; update rescaled to Adam's RMS via η̂ = 0.2η√(mn)/‖O_t‖_F; same hybrid routing as `muon`)
 - `conda`: `update_proj_gap`, `scale`, `correct_bias` (Adam in the SVD subspace of the first moment; the second moment is an EMA of the squared projected gradients `(P^T G)^2` with β from the shared `betas_*` and ε from the shared `eps_*`; the SVD basis is refreshed every `update_proj_gap` steps — default 2000; the paper's pretraining uses `scale: 0.25` and `betas: [0.9, 0.99]`; every 2-D parameter takes the Conda path, and non-2-D parameters use the decoupled AdamW fallback)
+- `tuon`: `momentum`, `ns_steps`, `ns_eps`, `refresh_interval`, `rms_eps`, `transform`, `stack` (tensor-aware Muon: same-shape hidden matrices per group are stacked, mixed with a unitary layer transform — `decorq` eigendecomposes the layer Gram matrix refreshed every `refresh_interval` steps, `dct`/`haar`/`dft` are fixed — slice-polarized with Newton-Schulz, inverse-transformed and rescaled to RMS 1/√max(m,n) via `rms_eps`; `stack: full|pairs`; K=1 reduces to `muon`; the shared `betas_*`/`eps_*` configure the AdamW fallback and `wd_*` stays decoupled)
 
 Examples:
 - `adafactor-beta2_decay: 0.8`
@@ -236,6 +238,8 @@ Examples:
 - `nor_muon-momentum: 0.95`
 - `conda-update_proj_gap: 2000`
 - `conda-scale: 0.25`
+- `tuon-refresh_interval: 200`
+- `tuon-transform: decorq`
 - `adam_pm-group_size: 8`
 - `adam_pm-pool_dim: col`
 

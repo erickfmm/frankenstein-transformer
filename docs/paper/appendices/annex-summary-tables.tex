@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 48 sequence mixers across ten families, 33 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 48 sequence mixers across ten families, 34 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -108,7 +108,7 @@ memory\_attn & Memory & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Token-ID
 
 \subsection{Optimizer Summary}
 
-Table~\ref{tab:all-optimizers} catalogs all 33 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
+Table~\ref{tab:all-optimizers} catalogs all 34 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -169,6 +169,7 @@ ROOT & Orthogonality (robust) & 1 ($m$); + $v$ on the AdamW fallback & $\mathcal
 Muon² & Orthogonality + adaptive & 2 ($m$, $v$); factored: 1 ($m$) + row/col; + $v$ on the AdamW fallback & $\mathcal{O}(n \cdot k)$ & lr, $\beta_1$, $\beta_2$, eps, wd, NS steps $k$, factored & \citep{liu_muon2_2026} \\
 NorMuon & Orthogonality + neuron-wise adaptive & 2 ($m$, row $v$); + $v$ on the AdamW fallback & $\mathcal{O}(n \cdot k)$ & lr, momentum, $\beta_2$, eps, wd, NS steps $k$ & \citep{li_normuon_2025} \\
 Conda & Orthogonality + column-wise adaptive & 3 ($m$, $v_{\mathrm{proj}}$, basis $P$); + $v$ on the AdamW fallback & $\mathcal{O}(mn\,r)$, $r=\min(m,n)$; SVD every $T$ steps & lr, $\beta_1$, $\beta_2$, eps, wd, gap $T$, scale $\alpha$ & \citep{wang_conda_2025} \\
+TUON & Orthogonality (tensor, cross-layer) & 1 ($m$ per slice); + $K{\times}K$ basis per stack (refresh $T$); + $v$ on the AdamW fallback & $\mathcal{O}(Kmn\cdot\min(m,n) + K^2 mn)$; eigh every $T$ steps & lr, momentum, wd, NS steps $k$, refresh $T$, transform $Q$, stack $K$ & \citep{tang_tuon_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Low-Rank Adaptive \& Tunable Adaptivity}} \\

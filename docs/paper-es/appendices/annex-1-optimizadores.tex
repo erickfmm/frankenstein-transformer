@@ -1732,6 +1732,126 @@ no hay exclusión de embeddings/pos/heads como en Muon --- mientras que todo par
   perezosa hace que el refresco del subespacio sea casi gratuito en tiempo de reloj.
 \end{itemize}
 
+\paragraph{TUON (Optimización Consciente de Tensores vía T-SVD y Polarización).}
+TUON~\citep{tang_tuon_2026} eleva la ortogonalización por capa de Muon a
+\textbf{tensores entre capas} mediante un álgebra tensorial basada en transformaciones,
+derivada del Tensor-SVD. Los mapas polares por capa descartan las correlaciones entre
+capas, mientras que los optimizadores tensoriales basados en despliegue (TEON) sufren
+desequilibrio de dimensiones y desalineación entre capas, y degradan más allá de dos
+capas apiladas o de los módulos QKV. TUON en cambio \emph{mezcla y luego separa}: para
+un grupo compatible de $K$ matrices de la misma forma con momentum apilado
+$\mathcal{M}_t \in \mathbb{R}^{m \times n \times K}$:
+\begin{align}
+\mathcal{M}_t &= \beta \mathcal{M}_{t-1} + (1-\beta)\, \mathcal{G}_t
+  && \text{(tensor de momentum, Alg.~1 línea 2)} \\
+C_t &= \mathsf{M}_t \mathsf{M}_t^{\top} \in \mathbb{R}^{K \times K}, \qquad
+C_t = U_t \Lambda_t U_t^{\top}, \qquad Q_t = U_t^{\top}
+  && \text{(Gram de capas + autodescomposición, líneas 3--5)} \\
+\widetilde{\mathcal{M}}_t &= \mathcal{M}_t \times_3 Q_t, \qquad
+\widetilde{P}_{t,j} = \operatorname{polar}\!\big(\widetilde{\mathcal{M}}_{t,j}\big)
+  && \text{(transformación + polarización por slice, líneas 6--9)} \\
+\mathcal{P}_t &= \widetilde{\mathcal{P}}_t \times_3 Q_t^{H}
+  && \text{(transformación inversa, línea 10)} \\
+W_{t+1} &= (1 - \eta_t \lambda)\, W_t - \eta_t \gamma_t \mathcal{P}_t, \qquad
+\gamma_t = \frac{s}{\operatorname{RMS}(\mathcal{P}_t) + \epsilon}
+  && \text{(actualización escalada por RMS, línea 11)}
+\end{align}
+donde $\mathsf{M}_t$ es el despliegue por modo 3 (la $k$-ésima fila es
+$\operatorname{vec}(\mathcal{M}_t^{(k)})^{\top}$), el producto por modo 3 mezcla los
+slices como $\widetilde{\mathcal{M}}_{t,j} = \sum_k (Q_t)_{jk} \mathcal{M}_t^{(k)}$,
+$\operatorname{RMS}(\mathcal{P}_t) = \sqrt{(mnK)^{-1} \sum_{i,j,k} |\mathcal{P}_t(i,j,k)|^2}$
+y el RMS objetivo de la pila es $s = 1/\sqrt{\max(m,n)}$ (identidad rango--energía: slices
+de rango completo dan $\operatorname{RMS} = 1/\sqrt{\max(m,n)}$, de modo que $\gamma_t
+\approx 1$ y la magnitud de la actualización por matriz coincide con Muon). La
+transformación por defecto \textbf{DecorQ} toma los autovectores de la matriz de Gram de
+capas ($Q_t = U_t^{\top}$) y se refresca cada $T$ pasos (200 por defecto); diagonaliza la
+Gram transformada, por lo que los slices transformados son mutuamente ortogonales en
+Frobenius y cada mapa polar actúa en su propio subespacio: el problema acoplado de $K$
+capas se desacopla en $K$ problemas de un solo canal. Las transformaciones unitarias
+fijas (DCT, Haar, DFT) son válidas pero imponen un prior ajeno a la estadística de las
+capas; en la ablación del artículo DecorQ (2.7598) supera a DFT (2.7631), Haar (2.7635),
+DecorQ estático (2.7658) y DCT (2.8100) en Qwen3-4B. La polarización por slice usa la
+misma iteración quíntica de Newton--Schulz que Muon, $(a,b,c) = (3.4445, -4.7750,
+2.0315)$ con $J = 5$ pasos tras una normalización Frobenius y una transposición cuando la
+matriz es alta.
+
+\begin{algorithm}[H]
+\caption{TUON (Optimización Consciente de Tensores vía T-SVD y Polarización)}
+\label{alg:tuon}
+\begin{algorithmic}[1]
+\Require Matrices compatibles $\{W^{(k)}\}_{k=1}^{K}$, tasa de aprendizaje $\eta$, momentum $\beta$, weight decay $\lambda$, iteraciones NS $J$, intervalo de refresco $T$, $\epsilon$ del RMS
+\Ensure Parámetros actualizados
+\For{cada grupo compatible}
+    \State $\mathcal{G} \gets \operatorname{stack}_3(\nabla f(W^{(1)}), \ldots, \nabla f(W^{(K)}))$ \Comment{Tensor de gradientes (línea 1)}
+    \State $\mathcal{M} \gets \beta \mathcal{M} + (1-\beta)\, \mathcal{G}$ \Comment{Tensor de momentum (línea 2)}
+    \State $C \gets \mathsf{M}\mathsf{M}^{\top}$; $C = U \Lambda U^{\top}$; $Q \gets U^{\top}$ \Comment{Gram + autodescomposición, refrescada cada $T$ pasos (líneas 3--5)}
+    \State $\widetilde{\mathcal{M}} \gets \mathcal{M} \times_3 Q$ \Comment{Mezcla de slices (línea 6)}
+    \For{$j = 1, \ldots, K$ en paralelo}
+        \State $\widetilde{P}_{:, :, j} \gets \mathrm{NS}_J(\widetilde{\mathcal{M}}_{:, :, j})$ \Comment{Polarización por slice (líneas 7--9)}
+    \EndFor
+    \State $\mathcal{P} \gets \widetilde{\mathcal{P}} \times_3 Q^{H}$ \Comment{Transformación inversa (línea 10)}
+    \State $\gamma \gets s / (\operatorname{RMS}(\mathcal{P}) + \epsilon)$ \Comment{Escala compartida de la pila (línea 11)}
+    \State $W \gets (1-\eta\lambda) W - \eta \gamma \mathcal{P}$ \Comment{Actualización desacoplada (línea 11)}
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+Esta implementación mapea el «grupo compatible» del artículo a cada cubeta
+\emph{(grupo de parámetros, forma de matriz)}: las matrices 2-D ocultas de la misma forma
+de un grupo se apilan por el modo de capas en orden de registro (\texttt{stack: full});
+\texttt{stack: pairs} restringe la pila a pares consecutivos ($K=2$). El sufijo
+\texttt{transform} selecciona $Q$ (\texttt{decorq} por defecto;
+\texttt{dct}/\texttt{haar}/\texttt{dft} fijas), \texttt{momentum} es $\beta$,
+\texttt{refresh\_interval} es $T$, \texttt{ns\_steps}/\texttt{ns\_eps} dirigen
+Newton--Schulz y \texttt{rms\_eps} es el $\epsilon$ de $\gamma_t$. Con $K=1$ la
+transformación se cancela exactamente y TUON se reduce a Muon (Prop.~2 del artículo);
+siguiendo la receta híbrida de Muon, solo las matrices 2-D de capas ocultas toman la ruta
+TUON: las tablas de embeddings, los encoding posicionales aprendidos, los heads de salida
+y todo parámetro no matricial se entrenan con AdamW desacoplado usando el learning rate,
+weight decay, $\beta_1, \beta_2$ y $\epsilon$ del grupo. Teoría: TUON es descenso máximo
+bajo la norma espectral tensorial transformada por $Q$ (par dual
+$\|\cdot\|_{Q,Ts}$ / $\|\cdot\|_{Q,Tn}$), su actualización es el factor polar tensorial
+de una T-SVD de producto-T, ninguna transformación unitaria de capas distorsiona la
+geometría de Muon en más de $\sqrt{K}$, y a radio de operador común el oráculo de TUON
+nunca es más débil que el de TEON y puede ser hasta $\sqrt{K}$ más fuerte, con un
+certificado de convergencia $O(T^{-1/2})$. Empíricamente TUON supera a Muon y TEON en
+GPT-124M/350M y Qwen-0.6B/4B (pérdida de validación 2.9357/2.6925/2.8887/2.7598), es el
+único método que mejora al pasar de $K{=}2$ a $K{=}\mathrm{full}$ en los cuatro modelos,
+se transfiere de QKV a QKVO+MLP, y cuesta 0,2--1,1\% de tiempo de paso sobre TEON y a lo
+sumo 12,5\% sobre AdamW; la complejidad por iteración es
+$\mathcal{O}(Kmn\min(m,n) + K^2 mn)$, el mismo término dominante que Muon.
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item La mezcla entre capas asume matrices genuinamente compatibles; esta implementación
+  apila por forma exacta dentro de un grupo de parámetros, la realización fiel más
+  cercana disponible a partir de las listas de parámetros sin nombre de la factoría.
+\item La Gram/autodescomposición añade $\mathcal{O}(K^2 mn)$ por paso y una base
+  $K \times K$ por cubeta; despreciable para $K \ll \min(m, n)$, pero es un costo por
+  cubeta que Muon no paga.
+\item $\beta$ es requerido por el Algoritmo 1 pero su valor por defecto no aparece en el
+  artículo; esta implementación hereda la convención de la familia Muon del repositorio
+  ($0.95$).
+\item La transformación \texttt{dft} ejecuta Newton--Schulz sobre slices complejos
+  (Gram hermítica); se toma la parte real tras la transformación inversa, justificado por
+  la simetría conjugada de la DFT de una pila real.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Explota la estructura entre capas que el Muon por capa descarta, con garantía de
+  convergencia e interpretación exacta de descenso máximo bajo la norma tensorial
+  inducida.
+\item DecorQ depende de los datos y se refresca cada $T$ pasos; apilar
+  $K{=}\mathrm{full}$ \emph{mejora} con la profundidad en lugar de degradar como ocurre
+  con los métodos de despliegue.
+\item La memoria se mantiene al nivel de Muon (un búfer de momentum por matriz más una
+  base $K \times K$) y el escalado RMS de la pila conserva la magnitud de Muon, por lo que
+  los learning rates existentes se transfieren.
+\item Se aplica uniformemente más allá de QKV (atención, MLP y proyecciones de salida),
+  donde los optimizadores tensoriales previos no se transfieren.
+\end{itemize}
+
 \subsection{Híbridos Evolutivos y Poblacionales}
 
 \paragraph{EvE (Evolutionary Explorer).}

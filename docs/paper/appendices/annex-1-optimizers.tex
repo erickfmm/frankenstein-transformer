@@ -1706,6 +1706,119 @@ while every non-2-D parameter is trained with decoupled AdamW.
   subspace refresh nearly free in wall-clock terms.
 \end{itemize}
 
+\paragraph{TUON (Tensor-Aware Optimization via T-SVD and Polarization).}
+TUON~\citep{tang_tuon_2026} lifts Muon's layer-wise orthogonalization to
+\textbf{cross-layer tensors} using a transform-based tensor algebra derived from the
+Tensor-SVD. Layer-wise polar maps discard cross-layer correlations, while
+unfolding-based tensor optimizers (TEON) suffer dimension imbalance and cross-layer
+misalignment and degrade beyond two stacked layers or QKV-only modules. TUON instead
+\emph{mixes then separates}: for one compatible group of $K$ same-shape matrices with
+stacked momentum $\mathcal{M}_t \in \mathbb{R}^{m \times n \times K}$:
+\begin{align}
+\mathcal{M}_t &= \beta \mathcal{M}_{t-1} + (1-\beta)\, \mathcal{G}_t
+  && \text{(momentum tensor, Alg.~1 line 2)} \\
+C_t &= \mathsf{M}_t \mathsf{M}_t^{\top} \in \mathbb{R}^{K \times K}, \qquad
+C_t = U_t \Lambda_t U_t^{\top}, \qquad Q_t = U_t^{\top}
+  && \text{(layer Gram + eigendecomposition, lines 3--5)} \\
+\widetilde{\mathcal{M}}_t &= \mathcal{M}_t \times_3 Q_t, \qquad
+\widetilde{P}_{t,j} = \operatorname{polar}\!\big(\widetilde{\mathcal{M}}_{t,j}\big)
+  && \text{(transform + slice polarization, lines 6--9)} \\
+\mathcal{P}_t &= \widetilde{\mathcal{P}}_t \times_3 Q_t^{H}
+  && \text{(inverse transform, line 10)} \\
+W_{t+1} &= (1 - \eta_t \lambda)\, W_t - \eta_t \gamma_t \mathcal{P}_t, \qquad
+\gamma_t = \frac{s}{\operatorname{RMS}(\mathcal{P}_t) + \epsilon}
+  && \text{(RMS-scaled update, line 11)}
+\end{align}
+where $\mathsf{M}_t$ is the mode-3 unfolding ($k$-th row
+$= \operatorname{vec}(\mathcal{M}_t^{(k)})^{\top}$), the mode-3 product mixes slices as
+$\widetilde{\mathcal{M}}_{t,j} = \sum_k (Q_t)_{jk} \mathcal{M}_t^{(k)}$,
+$\operatorname{RMS}(\mathcal{P}_t) = \sqrt{(mnK)^{-1} \sum_{i,j,k} |\mathcal{P}_t(i,j,k)|^2}$,
+and the target stack RMS is $s = 1/\sqrt{\max(m,n)}$ (the rank--energy identity: full-rank
+slices give $\operatorname{RMS} = 1/\sqrt{\max(m,n)}$, so $\gamma_t \approx 1$ and
+per-matrix update magnitudes match Muon). The default transform \textbf{DecorQ} takes the
+eigenvectors of the layer Gram matrix ($Q_t = U_t^{\top}$) and is refreshed every $T$
+steps (default 200); it diagonalizes the transformed Gram, so the transformed slices are
+mutually Frobenius-orthogonal and each polar map acts in its own subspace --- the coupled
+$K$-layer problem decouples into $K$ independent single-channel problems. Fixed unitary
+transforms (DCT, Haar, DFT) are valid but impose a prior mismatched to layer statistics;
+in the paper's ablation DecorQ (2.7598) beats DFT (2.7631), Haar (2.7635), static DecorQ
+(2.7658) and DCT (2.8100) on Qwen3-4B. Slice polarization uses the same quintic
+Newton--Schulz iteration as Muon, $(a,b,c) = (3.4445, -4.7750, 2.0315)$ with $J = 5$
+steps after a Frobenius normalization and a transpose-when-tall.
+
+\begin{algorithm}[H]
+\caption{TUON (Tensor-Aware Optimization via T-SVD and Polarization)}
+\label{alg:tuon}
+\begin{algorithmic}[1]
+\Require Compatible matrices $\{W^{(k)}\}_{k=1}^{K}$, learning rate $\eta$, momentum $\beta$, weight decay $\lambda$, NS iters $J$, refresh interval $T$, RMS $\epsilon$
+\Ensure Updated parameters
+\For{each compatible group}
+    \State $\mathcal{G} \gets \operatorname{stack}_3(\nabla f(W^{(1)}), \ldots, \nabla f(W^{(K)}))$ \Comment{Gradient tensor (line 1)}
+    \State $\mathcal{M} \gets \beta \mathcal{M} + (1-\beta)\, \mathcal{G}$ \Comment{Momentum tensor (line 2)}
+    \State $C \gets \mathsf{M}\mathsf{M}^{\top}$; $C = U \Lambda U^{\top}$; $Q \gets U^{\top}$ \Comment{Gram + eigendecomposition, refreshed every $T$ steps (lines 3--5)}
+    \State $\widetilde{\mathcal{M}} \gets \mathcal{M} \times_3 Q$ \Comment{Mix slices (line 6)}
+    \For{$j = 1, \ldots, K$ in parallel}
+        \State $\widetilde{P}_{:, :, j} \gets \mathrm{NS}_J(\widetilde{\mathcal{M}}_{:, :, j})$ \Comment{Slice polarization (lines 7--9)}
+    \EndFor
+    \State $\mathcal{P} \gets \widetilde{\mathcal{P}} \times_3 Q^{H}$ \Comment{Inverse transform (line 10)}
+    \State $\gamma \gets s / (\operatorname{RMS}(\mathcal{P}) + \epsilon)$ \Comment{Shared stack scale (line 11)}
+    \State $W \gets (1-\eta\lambda) W - \eta \gamma \mathcal{P}$ \Comment{Decoupled update (line 11)}
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+This implementation maps the paper's ``one compatible group'' to each
+\emph{(parameter group, matrix shape)} bucket: same-shape hidden 2-D matrices of a group
+are stacked along the layer mode in registration order (\texttt{stack: full});
+\texttt{stack: pairs} restricts the stack to consecutive pairs ($K=2$). The
+\texttt{transform} suffix selects $Q$ (\texttt{decorq} default;
+\texttt{dct}/\texttt{haar}/\texttt{dft} fixed transforms), \texttt{momentum} is $\beta$,
+\texttt{refresh\_interval} is $T$, \texttt{ns\_steps}/\texttt{ns\_eps} drive the
+Newton--Schulz iteration, and \texttt{rms\_eps} is the $\epsilon$ of $\gamma_t$. For
+$K=1$ the transform cancels exactly and TUON reduces to Muon (paper Prop.~2); following
+the hybrid recipe of Muon, only hidden-layer 2-D matrices take the TUON path ---
+embedding tables, learned positional encodings, output heads and every non-matrix
+parameter are trained with decoupled AdamW using the group-level learning rate, weight
+decay, $\beta_1, \beta_2$ and $\epsilon$ settings. Theory: TUON is steepest descent under
+the $Q$-transformed tensor spectral norm (dual norm pair $\|\cdot\|_{Q,Ts}$ /
+$\|\cdot\|_{Q,Tn}$), its update equals the tensor polar factor of a T-product T-SVD, no
+unitary layer transform distorts the Muon geometry by more than $\sqrt{K}$, and at equal
+operator radius the TUON oracle is never weaker than TEON's and up to $\sqrt{K}$
+stronger, with an $O(T^{-1/2})$ convergence certificate. Empirically TUON beats Muon and
+TEON on all of GPT-124M/350M and Qwen-0.6B/4B (validation loss
+2.9357/2.6925/2.8887/2.7598), is the only method that improves from $K{=}2$ to
+$K{=}\mathrm{full}$ stacking on all four models, transfers from QKV to QKVO+MLP, and
+costs 0.2--1.1\% step-time over TEON and at most 12.5\% over AdamW; per-iteration
+complexity is $\mathcal{O}(Kmn\min(m,n) + K^2 mn)$, the same dominant term as Muon.
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item Cross-layer mixing assumes the stacked matrices are genuinely compatible; this
+  implementation stacks by exact shape within a parameter group, which is the closest
+  faithful realization available from the unnamed factory param lists.
+\item The Gram/eigendecomposition adds $\mathcal{O}(K^2 mn)$ per step and a $K \times K$
+  cached basis per bucket; negligible for $K \ll \min(m, n)$, but a per-bucket cost that
+  Muon does not pay.
+\item $\beta$ is required by Algorithm 1 but its default value is not stated in the
+  paper; this implementation inherits the repo Muon-family convention ($0.95$).
+\item The \texttt{dft} transform runs the Newton--Schulz iteration over complex slices
+  (Hermitian Gram); the real part is taken after the inverse transform, justified by the
+  conjugate symmetry of the DFT of a real stack.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Exploits cross-layer structure that layer-wise Muon discards, with a convergence
+  guarantee and exact steepest-descent interpretation under the induced tensor norm.
+\item DecorQ is data-dependent and refreshed every $T$ steps; stacking $K{=}\mathrm{full}$
+  \emph{improves} with depth instead of degrading as unfolding methods do.
+\item Memory stays at Muon's level (one momentum buffer per matrix plus a $K \times K$
+  basis), and the RMS stack scaling keeps updates at Muon's magnitude so existing
+  learning rates transfer.
+\item Applies uniformly beyond QKV (attention, MLP and output projections), where prior
+  tensor-aware optimizers fail to transfer.
+\end{itemize}
+
 \subsection{Evolutionary and Population-Based Hybrids}
 
 \paragraph{EvE (Evolutionary Explorer).}
