@@ -17,61 +17,27 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Model Classes | Training Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-------------:|:--------------:|:-------:|:------------:|
-| **48** | **36** | **11** | **4** | **9** | **173** | **4** |
+| **48** | **36** | **11** | **4** | **9** | **175** | **4** |
 
 ## How It Works
 
-```mermaid
-flowchart LR
-    A["YAML Config"] --> B{"Schema Validation<br/>(JSON Schema + rules)"}
-    B -- valid --> C["Train<br/>36 optimizer families<br/>AMP · schedulers · thermal guard"]
-    B -- error --> A
-    C --> D["Checkpoint"]
-    D --> E["Deploy<br/>(quantize · export)"]
-    E --> F["Infer<br/>batch · interactive · benchmark"]
-    E --> G["Export<br/>HuggingFace · GGUF"]
-
-    style A fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a
-    style B fill:#fff4d6,stroke:#f4b400,color:#1a1a1a
-    style C fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
-    style D fill:#f1f3f4,stroke:#9aa0a6,color:#1a1a1a
-    style E fill:#fce8e6,stroke:#ea4335,color:#1a1a1a
-    style F fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
-    style G fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
-```
+| Stage | What happens |
+|-------|--------------|
+| **1. YAML config** | Describe the model, task and optimizer in one schema-first file |
+| **2. Schema validation** | Strict JSON Schema plus cross-field rules; invalid configs are rejected before any compute |
+| **3. Train** | 36 optimizer families, AMP, schedulers and a GPU thermal guard |
+| **4. Checkpoint** | Save rolling checkpoints for resuming or deployment |
+| **5. Deploy** | Quantize (`quantized`/`standard`) or export to HuggingFace Transformers / GGUF |
+| **6. Infer / Export** | Batch, interactive and benchmark inference; SBERT similarity/search/cluster/encode |
 
 ## Model Classes & Tasks
 
-```mermaid
-flowchart TB
-    subgraph CLASSES["Model Classes"]
-        direction LR
-        E["frankenstein_text_encoder<br/><i>encoder (mixed attention)</i>"]
-        D["frankenstein_text_decoder<br/><i>causal decoder</i>"]
-        V["frankenstein_vit<br/><i>vision transformer</i>"]
-        A["frankenstein_audio<br/><i>audio encoder</i>"]
-    end
-    subgraph TASKS["Training Tasks"]
-        direction LR
-        T1["mlm · sbert · text_classification"]
-        T2["causal_lm"]
-        T3["patch_prediction · classification · segmentation"]
-        T4["asr · audio_classification"]
-    end
-    E --> T1
-    D --> T2
-    V --> T3
-    A --> T4
-
-    style E fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a
-    style D fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a
-    style V fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a
-    style A fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a
-    style T1 fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
-    style T2 fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
-    style T3 fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
-    style T4 fill:#e6f4ea,stroke:#34a853,color:#1a1a1a
-```
+| Model Class | Role | Training Tasks |
+|-------------|------|----------------|
+| `frankenstein_text_encoder` | Encoder (mixed attention) | `mlm`, `sbert`, `text_classification` |
+| `frankenstein_text_decoder` | Causal decoder | `causal_lm` |
+| `frankenstein_vit` | Vision transformer | `patch_prediction`, `classification`, `segmentation` |
+| `frankenstein_audio` | Audio encoder | `asr`, `audio_classification` |
 
 ## Quick Start
 
@@ -157,7 +123,7 @@ Configure via `layer_pattern` in YAML. See [src/schema.yaml](src/schema.yaml) fo
 | **Memory-Efficient & Low-Rank** | `adafactor`, `galore_adamw`, `lion`, `apollo`, `apollo_mini`, `q_apollo`, `adam_pm` | 7 |
 | **Schedule-Free & Parameter-Free** | `schedulefree_adamw`, `prodigy`, `lamb` | 3 |
 | **Second-Order** | `sophia`, `shampoo`, `soap` | 3 |
-| **Geometry-Oriented** | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `root`, `muon2` | 7 |
+| **Geometry-Oriented** | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `root`, `muon2`, `nor_muon`, `conda`, `tuon`, `namo`, `namo_d` | 12 |
 | **Adaptivity-Tunable** | `anon` | 1 |
 | **Evolutionary** | `eve`, `ea4llm` | 2 |
 
