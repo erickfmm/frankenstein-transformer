@@ -1536,6 +1536,99 @@ con la misma pérdida.
 $\sim$0.3\% de Muon conservando la mayor parte del beneficio.
 \end{itemize}
 
+\paragraph{NorMuon (Muon Normalizado por Neurona).}
+NorMuon~\citep{li_normuon_2025} conserva la actualización ortogonalizada de Muon y añade
+sobre ella una \textbf{tasa de aprendizaje adaptativa por neurona (por fila)}. La
+iteración Newton--Schulz de Muon iguala los valores singulares de la actualización, pero
+la norma $L_2$ de las filas-neurona individuales sigue siendo muy no uniforme: algunas
+neuronas reciben actualizaciones desproporcionadamente grandes mientras otras apenas se
+entrenan. NorMuon registra la magnitud cuadrática media de cada fila de la dirección
+\emph{ortogonalizada} en una EMA de segundo momento, divide cada fila-neurona por su RMS
+y reescala toda la actualización a la escala empírica de Adam para que los schedules de
+tasa de aprendizaje existentes se transfieran sin cambios. Para una matriz de pesos de
+capa oculta $W \in \mathbb{R}^{m \times n}$ con tasa de aprendizaje $\eta$:
+\begin{align}
+M_t &= \beta_1 M_{t-1} + (1-\beta_1) G_t && \text{(momentum, línea 5)} \\
+O_t &= \mathrm{NS}_5(M_t) && \text{(ortogonalización, línea 6)} \\
+v_t &= \beta_2 v_{t-1} + (1-\beta_2)\,\mathrm{mean}_{\mathrm{cols}}(O_t \odot O_t) && \text{(EMA por neurona, línea 7)} \\
+V_t &= \mathrm{ExpandRows}(v_t), \qquad \widehat{O}_t = O_t \oslash \big(\sqrt{V_t} + \epsilon\big) && \text{(normalización por fila, líneas 8--9)} \\
+\hat\eta &= \frac{0.2\,\eta\,\sqrt{mn}}{\lVert \widehat{O}_t \rVert_F}, \qquad
+W_{t+1} = W_t - \eta\lambda W_t - \hat\eta\,\widehat{O}_t && \text{(actualización, líneas 10--11)}
+\end{align}
+con $v_t \in \mathbb{R}^m$ (un escalar por neurona) y los mismos coeficientes quínticos
+de Newton--Schulz $(a,b,c)=(3.4445,-4.7750,2.0315)$ que Muon. El estadístico por neurona
+cuesta $m$ escalares frente al primer momento $m \times n$, así que el estado del
+optimizador es $m(n+1)$ --- dentro de un factor $1/n$ de Muon y aproximadamente la mitad
+del $2mn$ de Adam. En preentrenamiento de 1.1B y 5.4B, NorMuon necesita 21.74\% y 13.91\%
+menos pasos que AdamW para alcanzar la misma pérdida de validación; en Modded-NanoGPT
+(124M/350M) alcanza la pérdida de Muon con 6\% y 15\% menos iteraciones, con un sobrecosto
+de 2.9\% en el tiempo por paso respecto de AdamW y 21.19 GB de estado del optimizador
+frente a 40.56 GB de AdamW a 5.4B.
+
+\begin{algorithm}[H]
+\caption{NorMuon (Muon Normalizado por Neurona)}
+\label{alg:normuon}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta$, tasa de aprendizaje $\eta$, $\beta_1, \beta_2$, iteraciones NS $K$, $\epsilon$ de normalización por fila, weight decay $\lambda$
+\Ensure Parámetros actualizados $\theta_T$
+\For{cada parámetro $P$}
+    \If{$P$ es una matriz 2D de capa oculta $W \in \mathbb{R}^{m\times n}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradiente}
+        \State $M \gets \beta_1 M + (1-\beta_1) G$ \Comment{Momentum (línea 5)}
+        \State $O \gets \mathrm{NS}_K(M)$ \Comment{Newton--Schulz (línea 6)}
+        \State $v \gets \beta_2 v + (1-\beta_2)\,\mathrm{mean}_{\mathrm{cols}}(O \odot O)$ \Comment{Segundo momento por neurona (línea 7)}
+        \State $\widehat{O} \gets O \oslash (\sqrt{\mathrm{ExpandRows}(v)} + \epsilon\mathbf{1})$ \Comment{Normalización por fila (líneas 8--9)}
+        \State $\hat\eta \gets 0.2\,\eta\,\sqrt{mn} / (\|\widehat{O}\|_F + \epsilon)$ \Comment{Alineación de RMS (línea 10)}
+        \State $W \gets (1-\eta\lambda)\,W - \hat\eta\,\widehat{O}$ \Comment{Actualización (línea 11)}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Respaldo híbrido: embeddings, pos, heads, no matriciales}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+Siguiendo la receta híbrida de Muon, solo las matrices 2-D de capas ocultas toman la ruta
+NorMuon; las tablas de embeddings, los encodings posicionales aprendidos, los heads de
+salida y todo parámetro no matricial se entrenan con AdamW desacoplado usando la tasa de
+aprendizaje, el weight decay, $\beta_1, \beta_2$ y $\epsilon$ por grupo. Esta
+implementación mapea los parámetros del artículo al registro así: el sufijo
+\texttt{momentum} es $\beta_1$, el \texttt{betas[1]} compartido por grupo es $\beta_2$,
+el \texttt{eps} compartido por grupo es $\epsilon$, y \texttt{ns\_steps}/\texttt{ns\_eps}
+controlan la iteración Newton--Schulz. Como NS5 comienza con una normalización de
+Frobenius, el escalado $(1-\beta_1)$ del momentum del artículo y la acumulación estándar
+de momentum de este repositorio producen actualizaciones idénticas. El segundo aporte del
+artículo, el Algoritmo~2, distribuye la ortogonalización entre rangos FSDP2 (asignación
+round-robin de parámetros, gather/NS5/scatter y normalización por fila local al shard)
+para evitar trabajo replicado; esa estrategia de despliegue es ortogonal a la regla de
+actualización y no se implementa aquí.
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Un vector de estado adicional por fila y por parámetro matricial (almacenado en
+float32); pequeño frente al momentum $m \times n$, pero no nulo.
+\item La normalización debe ir después de la ortogonalización: la ablación ``NorMuon
+(Front)'' del artículo, que la aplica antes de NS5, es ligeramente peor.
+\item $\epsilon$ se coloca fuera de la raíz ($\sqrt{V_t}+\epsilon$), siguiendo el
+Algoritmo~2; la representación de la línea 9 en el Algoritmo~1 es tipográficamente
+ambigua.
+\item Los estadísticos por neurona no sustituyen el respaldo AdamW: embeddings, pos,
+heads y tensores no 2-D siguen llevando primeros y segundos momentos completos.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Combina el bajo número de condición de Muon con normas de actualización por neurona
+uniformes al estilo AdamW, superando consistentemente a ambos en preentrenamiento de
+124M--5.4B.
+\item El reescalado $0.2\eta\sqrt{mn}/\lVert\widehat{O}\rVert_F$ apunta a un RMS de
+$0.2\eta$, por lo que los schedules de tasa de aprendizaje de Adam se aplican sin
+reajuste.
+\item La memoria se mantiene cerca de Muon ($m(n+1)$ frente a $mn$), aproximadamente la
+mitad del estado del optimizador de Adam, y el sobrecosto por paso es de unos pocos por
+ciento.
+\end{itemize}
+
 \subsection{Híbridos Evolutivos y Poblacionales}
 
 \paragraph{EvE (Evolutionary Explorer).}

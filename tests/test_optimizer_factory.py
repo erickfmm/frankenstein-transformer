@@ -9,6 +9,7 @@ if TORCH_AVAILABLE:
     import torch
     import torch.nn as nn
     from src.model.optimizer.factory import build_optimizer, OPTIMIZER_REGISTRY
+    from src.model.optimizer.nor_muon import _newton_schulz
     from src.model.optimizer.root import _shape_coefficients
 
 
@@ -27,7 +28,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root"}
+        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -403,6 +404,138 @@ class BuildOptimizerMuon2Tests(unittest.TestCase):
         p = nn.Parameter(torch.randn(4, 4))
         groups = [{"params": [p], "lr": 1e-3, "name": "ffn"}]
         opt = build_optimizer("muon2", groups, {"muon2-lr_ffn": 0.02})
+        self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerNorMuonTests(unittest.TestCase):
+    """NorMuon defaults, paper invariants and hybrid routing (arXiv:2510.05491)."""
+
+    def test_builds_without_error(self):
+        opt = build_optimizer("nor_muon", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("nor_muon", groups, {})
+        p.square().mean().backward()
+        opt.step()
+        self.assertFalse(torch.isnan(p).any())
+
+    def test_defaults_match_paper(self):
+        opt = build_optimizer("nor_muon", _param_groups(), {})
+        self.assertAlmostEqual(opt.defaults["momentum"], 0.95)
+        self.assertEqual(opt.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-7)
+        self.assertEqual(opt.defaults["betas"], (0.9, 0.95))
+        self.assertAlmostEqual(opt.defaults["eps"], 1e-8)
+
+    def test_hidden_matrix_uses_normuon_state(self):
+        # Algorithm 1: momentum (M) and per-neuron second moment (v).
+        p = nn.Parameter(torch.randn(4, 8))
+        groups = [{"params": [p], "lr": 0.02, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("nor_muon", groups, {})
+        p.sum().backward()
+        opt.step()
+        state = opt.state[p]
+        self.assertIn("momentum_buffer", state)
+        self.assertIn("row_second_moment", state)
+        self.assertEqual(tuple(state["row_second_moment"].shape), (4,))
+        self.assertNotIn("exp_avg", state)
+        self.assertNotIn("exp_avg_sq", state)
+
+    def test_row_second_moment_matches_first_step_ema(self):
+        # Eq. (line 7): v_1 = (1 - beta2) * mean_cols(O * O).
+        p = nn.Parameter(torch.randn(4, 8))
+        p.grad = torch.randn(4, 8)
+        groups = [{"params": [p], "lr": 0.1, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("nor_muon", groups, {})
+        opt.step()
+        buffer = opt.state[p]["momentum_buffer"]
+        orth = _newton_schulz(buffer, 5, 1e-7).to(torch.float32)
+        expected = (1.0 - 0.95) * orth.square().mean(dim=1)
+        torch.testing.assert_close(
+            opt.state[p]["row_second_moment"], expected, rtol=1e-5, atol=1e-7
+        )
+
+    def test_embedding_group_uses_adamw_fallback(self):
+        p = nn.Parameter(torch.randn(8, 4))
+        groups = [{"params": [p], "lr": 1e-3, "weight_decay": 0.0, "name": "embeddings"}]
+        opt = build_optimizer("nor_muon", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("exp_avg", opt.state[p])
+        self.assertIn("exp_avg_sq", opt.state[p])
+        self.assertNotIn("momentum_buffer", opt.state[p])
+
+    def test_update_rms_matches_paper_alignment(self):
+        # Line 10: ||dW||_F = eta_hat * ||O_hat||_F = 0.2 * eta * sqrt(m n).
+        p = nn.Parameter(torch.randn(4, 6))
+        p.grad = torch.randn(4, 6)
+        before = p.detach().clone()
+        groups = [{"params": [p], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("nor_muon", groups, {})
+        opt.step()
+        delta = p.detach() - before
+        expected = 0.2 * 1e-2 * math.sqrt(4 * 6)
+        self.assertAlmostEqual(delta.norm().item(), expected, delta=1e-6)
+
+    def test_normalized_rows_have_uniform_norms(self):
+        # The NorMuon property: after row normalization every neuron receives
+        # the same update magnitude regardless of its raw orthogonalized norm.
+        gen = torch.Generator().manual_seed(0)
+        p = nn.Parameter(torch.randn(8, 16, generator=gen))
+        scales = torch.logspace(-2, 2, 8).unsqueeze(1)
+        p.grad = torch.randn(8, 16, generator=gen) * scales
+        before = p.detach().clone()
+        groups = [{"params": [p], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("nor_muon", groups, {})
+        opt.step()
+        row_norms = (p.detach() - before).norm(dim=1)
+        self.assertLess((row_norms.max() / row_norms.min()).item(), 1.05)
+
+    def test_beta2_from_shared_betas_routes(self):
+        p = nn.Parameter(torch.randn(4, 8))
+        p.grad = torch.randn(4, 8)
+        groups = [{"params": [p], "lr": 1e-2, "weight_decay": 0.0, "name": "attention"}]
+        opt = build_optimizer("nor_muon", groups, {"nor_muon-betas_attention": [0.9, 0.8]})
+        opt.step()
+        buffer = opt.state[p]["momentum_buffer"]
+        orth = _newton_schulz(buffer, 5, 1e-7).to(torch.float32)
+        expected = (1.0 - 0.8) * orth.square().mean(dim=1)
+        torch.testing.assert_close(
+            opt.state[p]["row_second_moment"], expected, rtol=1e-5, atol=1e-7
+        )
+
+    def test_specific_suffixes_parsed(self):
+        opt = build_optimizer(
+            "nor_muon",
+            _param_groups(),
+            {"nor_muon-momentum": "0.9", "nor_muon-ns_steps": "3", "nor_muon-ns_eps": "1e-6"},
+        )
+        self.assertAlmostEqual(opt.defaults["momentum"], 0.9)
+        self.assertEqual(opt.defaults["ns_steps"], 3)
+        self.assertAlmostEqual(opt.defaults["ns_eps"], 1e-6)
+
+        opt_bad = build_optimizer(
+            "nor_muon",
+            _param_groups(),
+            {"nor_muon-momentum": "bad", "nor_muon-ns_steps": "bad", "nor_muon-ns_eps": "bad"},
+        )
+        self.assertAlmostEqual(opt_bad.defaults["momentum"], 0.95)
+        self.assertEqual(opt_bad.defaults["ns_steps"], 5)
+        self.assertAlmostEqual(opt_bad.defaults["ns_eps"], 1e-7)
+
+    def test_unknown_group_suffix_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("nor_muon", _param_groups(), {"nor_muon-lr_bogus": 1.0})
+        self.assertIn("lr_bogus", str(ctx.exception))
+
+    def test_per_group_lr_routes(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "ffn"}]
+        opt = build_optimizer("nor_muon", groups, {"nor_muon-lr_ffn": 0.02})
         self.assertAlmostEqual(opt.param_groups[0]["lr"], 0.02)
 
 

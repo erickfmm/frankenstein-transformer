@@ -1522,6 +1522,93 @@ to 13B parameters, with up to a quarter of training time saved at matched loss.
 $\sim$0.3\% of Muon while preserving most of the benefit.
 \end{itemize}
 
+\paragraph{NorMuon (Neuron-wise Normalized Muon).}
+NorMuon~\citep{li_normuon_2025} keeps Muon's orthogonalized update and adds a
+\textbf{neuron-wise (row-wise) adaptive learning rate} on top of it. Muon's
+Newton--Schulz iteration equalizes the singular values of the update, but the $L_2$ norm
+of the individual neuron rows remains highly non-uniform: some neurons receive
+disproportionately large updates while others are barely trained. NorMuon tracks the
+mean squared magnitude of each row of the \emph{orthogonalized} direction in a
+second-moment EMA, divides every neuron row by its RMS, and rescales the whole update to
+Adam's empirical update scale so existing learning-rate schedules transfer unchanged.
+For a hidden-layer weight matrix $W \in \mathbb{R}^{m \times n}$ with learning rate
+$\eta$:
+\begin{align}
+M_t &= \beta_1 M_{t-1} + (1-\beta_1) G_t && \text{(momentum, line 5)} \\
+O_t &= \mathrm{NS}_5(M_t) && \text{(orthogonalization, line 6)} \\
+v_t &= \beta_2 v_{t-1} + (1-\beta_2)\,\mathrm{mean}_{\mathrm{cols}}(O_t \odot O_t) && \text{(neuron EMA, line 7)} \\
+V_t &= \mathrm{ExpandRows}(v_t), \qquad \widehat{O}_t = O_t \oslash \big(\sqrt{V_t} + \epsilon\big) && \text{(row normalization, lines 8--9)} \\
+\hat\eta &= \frac{0.2\,\eta\,\sqrt{mn}}{\lVert \widehat{O}_t \rVert_F}, \qquad
+W_{t+1} = W_t - \eta\lambda W_t - \hat\eta\,\widehat{O}_t && \text{(update, lines 10--11)}
+\end{align}
+with $v_t \in \mathbb{R}^m$ (one scalar per neuron) and the same quintic Newton--Schulz
+coefficients $(a,b,c)=(3.4445,-4.7750,2.0315)$ as Muon. The per-neuron statistic costs
+$m$ scalars against the $m \times n$ first moment, so optimizer state is $m(n+1)$ ---
+within a $1/n$ factor of Muon and roughly half of Adam's $2mn$. On 1.1B and 5.4B
+pretraining NorMuon needs 21.74\% and 13.91\% fewer steps than AdamW to reach the same
+validation loss; on Modded-NanoGPT (124M/350M) it reaches Muon's loss with 6\% and 15\%
+fewer iterations, at a 2.9\% training-step-time overhead over AdamW and 21.19 GB of
+optimizer state versus 40.56 GB for AdamW at 5.4B.
+
+\begin{algorithm}[H]
+\caption{NorMuon (Neuron-wise Normalized Muon)}
+\label{alg:normuon}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta$, learning rate $\eta$, $\beta_1, \beta_2$, NS iters $K$, row-normalization $\epsilon$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\For{each parameter $P$}
+    \If{$P$ is a hidden-layer 2D matrix $W \in \mathbb{R}^{m\times n}$}
+        \State $G \gets \nabla f(W)$ \Comment{Gradient}
+        \State $M \gets \beta_1 M + (1-\beta_1) G$ \Comment{Momentum (line 5)}
+        \State $O \gets \mathrm{NS}_K(M)$ \Comment{Newton--Schulz (line 6)}
+        \State $v \gets \beta_2 v + (1-\beta_2)\,\mathrm{mean}_{\mathrm{cols}}(O \odot O)$ \Comment{Per-neuron second moment (line 7)}
+        \State $\widehat{O} \gets O \oslash (\sqrt{\mathrm{ExpandRows}(v)} + \epsilon\mathbf{1})$ \Comment{Row normalization (lines 8--9)}
+        \State $\hat\eta \gets 0.2\,\eta\,\sqrt{mn} / (\|\widehat{O}\|_F + \epsilon)$ \Comment{RMS alignment (line 10)}
+        \State $W \gets (1-\eta\lambda)\,W - \hat\eta\,\widehat{O}$ \Comment{Update (line 11)}
+    \Else
+        \State $P \gets \operatorname{AdamW}(P, \nabla f(P); \eta, \beta_1, \beta_2, \epsilon, \lambda)$ \Comment{Hybrid fallback: embeddings, pos, heads, non-matrices}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+Following the hybrid recipe of Muon, only hidden-layer 2-D matrices take the NorMuon
+path; embedding tables, learned positional encodings, output heads and every non-matrix
+parameter are trained with decoupled AdamW using the group-level learning rate, weight
+decay, $\beta_1, \beta_2$ and $\epsilon$ settings. This implementation maps the paper's
+parameters to the registry as follows: the \texttt{momentum} suffix is $\beta_1$, the
+shared per-group \texttt{betas[1]} is $\beta_2$, the shared per-group \texttt{eps} is
+$\epsilon$, and \texttt{ns\_steps}/\texttt{ns\_eps} drive the Newton--Schulz iteration.
+Because NS5 starts with a Frobenius normalization, the paper's $(1-\beta_1)$ momentum
+scaling and this repository's standard momentum accumulation produce identical updates.
+The paper's second contribution, Algorithm~2, distributes the orthogonalization across
+FSDP2 ranks (round-robin parameter assignment, gather/NS5/scatter, shard-local row
+normalization) to avoid replicated work; that deployment strategy is orthogonal to the
+update rule and is not implemented here.
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item One extra per-row state vector per matrix parameter (stored in float32); small
+next to the $m \times n$ momentum, but non-zero.
+\item The normalization must follow orthogonalization: the paper's ``NorMuon (Front)''
+ablation, which applies it before NS5, is slightly worse.
+\item $\epsilon$ is placed outside the root ($\sqrt{V_t}+\epsilon$), following
+Algorithm~2; Algorithm~1's rendering of line 9 is typographically ambiguous.
+\item The neuron-wise statistics do not replace the AdamW fallback: embeddings, pos,
+heads and non-2-D tensors still carry full first/second moments.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Combines Muon's low condition number with AdamW-like uniform per-neuron update
+norms, consistently outperforming both on 124M--5.4B pretraining.
+\item The $0.2\eta\sqrt{mn}/\lVert\widehat{O}\rVert_F$ rescaling targets RMS $0.2\eta$,
+so Adam learning-rate schedules apply without retuning.
+\item Memory stays close to Muon ($m(n+1)$ versus $mn$), roughly halving Adam's
+optimizer state, and the per-step overhead is a few percent.
+\end{itemize}
+
 \subsection{Evolutionary and Population-Based Hybrids}
 
 \paragraph{EvE (Evolutionary Explorer).}

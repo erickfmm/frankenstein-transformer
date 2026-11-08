@@ -43,6 +43,7 @@ from .lion import Lion
 from .mars_adamw import MARSAdamW
 from .muon import Muon
 from .muon2 import Muon2
+from .nor_muon import NorMuon
 from .prodigy import Prodigy
 from .q_apollo import QApollo
 from .radam import RAdamOptimizer
@@ -86,6 +87,7 @@ OPTIMIZER_REGISTRY = {
     "eve": Eve,
     "root": ROOT,
     "muon2": Muon2,
+    "nor_muon": NorMuon,
 }
 """Mapping from YAML optimizer class names to concrete Optimizer subclasses.
 
@@ -153,6 +155,7 @@ OPTIMIZER_ALLOWED_KEYS = {
     "root": _COMMON_PER_GROUP_KEYS
     | {"momentum", "nesterov", "ns_steps", "ns_eps", "quantile", "softthresh", "ada_newton"},
     "muon2": _COMMON_PER_GROUP_KEYS | {"ns_steps", "ns_eps", "factored"},
+    "nor_muon": _COMMON_PER_GROUP_KEYS | {"momentum", "ns_steps", "ns_eps"},
 }
 
 
@@ -475,6 +478,17 @@ def build_optimizer(
             ns_steps=ns_steps,
             ns_eps=ns_eps,
             factored=factored,
+        )
+
+    if optimizer_name == "nor_muon":
+        momentum = to_float(scoped.get("momentum"), 0.95)
+        ns_steps = to_int(scoped.get("ns_steps"), 5)
+        ns_eps = to_float(scoped.get("ns_eps"), 1e-7)
+        return optimizer_cls(
+            converted_groups,
+            momentum=momentum,
+            ns_steps=ns_steps,
+            ns_eps=ns_eps,
         )
 
     return optimizer_cls(converted_groups)
