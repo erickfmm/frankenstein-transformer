@@ -1,0 +1,37 @@
+%%{init: {"theme":"base","themeVariables":{"background":"transparent","fontFamily":"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace","fontSize":"20px","primaryColor":"#EEF2FF","primaryTextColor":"#0F172A","primaryBorderColor":"#6366F1","lineColor":"#64748B","secondaryColor":"#ECFDF5","tertiaryColor":"#F5F3FF","edgeLabelBackground":"#F1F5F9"},"flowchart":{"curve":"basis","nodeSpacing":30,"rankSpacing":44,"padding":10,"useMaxWidth":false}}}%%
+flowchart LR
+  subgraph LEFT["1 · AUTHOR  →  2 · RUN"]
+    direction TB
+    W["web-server<br/>Streamlit builder"]
+    Y["configs/*.yaml"]
+    S["schema + rules<br/><i>invalid → edit</i>"]
+    T["train --config …<br/>9 tasks · 36 optimizers"]
+    C[("checkpoints/<br/>rolling + resumable")]
+    W --> Y --> S
+    S -.-> Y
+    S -- "valid" --> T --> C
+  end
+  subgraph RIGHT["3 · SHIP + USE"]
+    direction TB
+    D["deploy --format<br/>standard · quantized<br/>transformers · gguf"]
+    I["infer --task<br/>mlm · causal_lm · sbert<br/>similarity · search · cluster · encode"]
+    D --> I
+  end
+  CEN["47 mixers · 36 optimizers · 43 activations · 12 PEs"]
+  C --> D
+  classDef define fill:#EEF2FF,stroke:#6366F1,stroke-width:2px,color:#0F172A
+  classDef validate fill:#FFF7ED,stroke:#F59E0B,stroke-width:2px,color:#0F172A
+  classDef train fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#0F172A
+  classDef checkpoint fill:#F8FAFC,stroke:#64748B,stroke-width:2px,color:#0F172A
+  classDef ship fill:#ECFEFF,stroke:#06B6D4,stroke-width:2px,color:#0F172A
+  classDef use fill:#F5F3FF,stroke:#8B5CF6,stroke-width:2px,color:#0F172A
+  classDef census fill:#0F172A,stroke:#22D3EE,stroke-width:2px,color:#E0F2FE
+  class W,Y define
+  class S validate
+  class T train
+  class C checkpoint
+  class D ship
+  class I use
+  class CEN census
+  style LEFT fill:transparent,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#64748B
+  style RIGHT fill:transparent,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:6 4,color:#64748B

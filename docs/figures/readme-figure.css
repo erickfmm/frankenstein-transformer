@@ -1,0 +1,10 @@
+/* README figure: keep edge labels readable over connector lines. */
+.edgeLabel rect {
+  opacity: 1 !important;
+  fill: #f1f5f9 !important;
+}
+.edgeLabel p,
+.edgeLabel span {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
