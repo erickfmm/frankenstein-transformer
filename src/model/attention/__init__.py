@@ -18,6 +18,7 @@ from .sparse import (
 )
 from .conformer import ConformerAttention
 from .grouped_query_attention import GroupedQueryAttention
+from .ca import ContinuumAttention
 from .memory import MemoryAttention
 from .standard import StandardAttention
 from .ssog import SSOGAttention
@@ -58,6 +59,7 @@ __all__ = [
     "GroupedQueryAttention",
     "TitanAttention",
     "StandardAttention",
+    "ContinuumAttention",
     "MemoryAttention",
     "SigmoidAttention",
     "ODEAttentionBlock",

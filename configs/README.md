@@ -352,7 +352,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 
 #### model.attention.<mixer>
 
-Per-mixer sub-objects: `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
+Per-mixer sub-objects: `ca`, `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
 `cca`, `ccgqa`, `msa`, `sparda`, `lsa`, `fastconformer`, `engram`, `gma`, `ssog`, `conformer`,
 `falcon`, `ode` (`solver`, `steps`), `retnet` (`heads`). Optional rank fields
 accept `null` (= derive from `hidden_size` / `num_heads`).
@@ -392,6 +392,21 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
   `checkpoint`, `full_prec_under_bitnet`, `hyperloop*`.
 - `residuals`: `type`, `full_attn.*`, `block_attn.*`, `mhc_stream_mode`,
   `gradient_checkpoint`.
+
+### Continuum Attention (model.attention.ca)
+
+- `model.attention.ca.learned_gain`: learn the per-head positive score gain
+  `γ = exp(ρ)` (default `true`, the paper's 101M flagship; each layer adds one
+  scalar per head). `false` keeps the gain fixed and is parameter-identical to
+  `standard` (the paper's CA-P configuration).
+- `model.attention.ca.gain_init`: initial (learned) or fixed score gain
+  `γ = 1/τ` (default `1.0`; CA-P uses `3.3333` ≈ 1/0.30).
+- `positional_encoding_parameters.use_pe.ca`: per-mixer PE opt-out (default
+  `true`; the paper uses RoPE / learned absolute positions).
+- Exact segment integration over piecewise-linear key/value trajectories
+  (arXiv:2610.20586); classic KV cache. Examples:
+  `configs/examples/es_arch_ca_adamw.yaml` and the 101M reference preset
+  `configs/ca.yaml`.
 
 ### Latent / KV-compression family (model.attention.*)
 

@@ -247,6 +247,11 @@ ATTENTIONS = [
     # natively in encoder and decoder modes; exact ring-cache incremental
     # decoding.
     "fastconformer",
+    # Continuum Attention (arXiv:2610.20586): exact integration of an
+    # exponential relevance density over piecewise-linear key/value
+    # trajectories; trains natively in encoder and decoder modes; exact
+    # KV-cache incremental decoding.
+    "ca",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).

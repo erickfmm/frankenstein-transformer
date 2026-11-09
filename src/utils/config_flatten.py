@@ -40,6 +40,7 @@ The hierarchical schema groups keys as:
         ssog:       {num_atoms, lookat, max_offset, cold_init, sigma_floor,
                     grid_h, grid_w}
         swa:        {window_size, num_sinks}
+        ca:         {learned_gain, gain_init}
         fastconformer: {window_size, global_tokens, global_tokens_spacing,
                     global_attn_separate}
         falcon:     {chunk_size, qk_norm, beta_mode, lambda_mode, beta,
@@ -165,6 +166,10 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
     "swa": {
         "window_size": "swa_window_size",
         "num_sinks": "swa_num_sinks",
+    },
+    "ca": {
+        "learned_gain": "ca_learned_gain",
+        "gain_init": "ca_gain_init",
     },
     "fastconformer": {
         "window_size": "fastconformer_window_size",

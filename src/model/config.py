@@ -283,6 +283,8 @@ class FrankensteinModelConfig:
             model-wide positional encoding. Default: True.
         sigmoid_use_pe: Whether ``sigmoid`` layers consume the
             model-wide positional encoding. Default: True.
+        ca_use_pe: Whether ``ca`` (Continuum Attention) layers consume the
+            model-wide positional encoding. Default: True.
         memory_use_pe: Whether ``memory`` layers consume the
             model-wide positional encoding (RoPE on the scoring pair only;
             values are built from the unrotated keys). Default: True.
@@ -597,6 +599,7 @@ class FrankensteinModelConfig:
     standard_use_pe: bool = True
     titan_use_pe: bool = True
     sigmoid_use_pe: bool = True
+    ca_use_pe: bool = True
     memory_use_pe: bool = True
     gated_softmax_use_pe: bool = True
     gqa_use_pe: bool = True
@@ -807,6 +810,16 @@ class FrankensteinModelConfig:
     # Separate global q/k/v projections (§2.2, Longformer-style, +3 H^2) vs
     # the shared projections of the evaluated §3.4 long-form model.
     fastconformer_global_attn_separate: bool = False
+
+    # ---- Continuum Attention (arXiv:2610.20586) ----
+    # Learn the per-head positive score gain gamma = exp(rho). The paper's
+    # 101M byte-level decoder learns all head gains, initialised at gamma=1;
+    # False keeps the fixed-gain CA-P configuration (no extra parameters).
+    ca_learned_gain: bool = True
+    # Initial (learned) or fixed (unlearned) score gain gamma = 1/tau. The
+    # paper uses gamma = 1 for the 101M model and gamma = 1/0.30 for the
+    # fixed CA-P variant (and the CA-H small-model initialisation).
+    ca_gain_init: float = 1.0
 
     # ---- Conformer (arXiv:2005.08100) ----
     # Depth-wise convolution kernel size k of the convolution module (paper
@@ -1144,6 +1157,12 @@ class FrankensteinModelConfig:
                 "swa_num_sinks must be smaller than swa_window_size, got "
                 f"num_sinks={self.swa_num_sinks}, "
                 f"window_size={self.swa_window_size}"
+            )
+
+        # ---- Validate Continuum Attention (arXiv:2610.20586) ----
+        if self.ca_gain_init <= 0.0:
+            raise ValueError(
+                f"ca_gain_init must be > 0, got {self.ca_gain_init}"
             )
 
         # ---- Validate Fast Conformer limited-context attention ----

@@ -1,0 +1,64 @@
+# Continuum Attention (arXiv:2610.20586) — paper reference configuration,
+# adapted to this toolkit's model class and vocab defaults.
+# Paper: byte-level decoder, width 1024, 8 layers, 16 heads (head dim 64),
+# context 2048, feedforward expansion 4, RMS norm, RoPE, untied input/output
+# embeddings, learned per-head score gains initialised at gamma = 1.
+model_class: frankenstein_text_decoder
+model:
+  dims:
+    vocab_size: 32000
+    hidden_size: 1024
+    num_layers: 8
+    num_loops: 1
+    num_heads: 16
+    num_kv_heads: 16
+    dropout: 0.0
+    mode: decoder
+    layer_pattern:
+    - ca
+  norm:
+    type: rms_norm
+  attention:
+    ca:
+      learned_gain: true
+      gain_init: 1.0
+    retnet:
+      heads: 16
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 4096
+    activation: gelu
+  positional_encoding: rope
+training:
+  task: causal_lm
+  seed: 42
+  batch_size: 8
+  dataloader_workers: 2
+  max_length: 2048
+  gradient_accumulation_steps: 8
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_other: 3.0e-4
+      adamw-lr_attention: 3.0e-4
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-eps_other: 1.0e-8
+      adamw-eps_attention: 1.0e-8
+      adamw-wd_other: 0.1
+      adamw-wd_attention: 0.01
+  scheduler_total_steps: 50000
+  scheduler_warmup_ratio: 0.04
+  scheduler_type: cosine
+  grad_clip_max_norm: 1.0
+  max_nan_retries: 4
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_ca.csv
+  telemetry_log_interval: 5

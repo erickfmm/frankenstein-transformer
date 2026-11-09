@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 47 mezcladores de secuencia en diez familias, 36 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 48 mezcladores de secuencia en diez familias, 36 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -25,11 +25,12 @@ La Tabla~\ref{tab:all-mixers} enumera cada mezclador de secuencia soportado por 
 \label{tab:all-mixers}
 \endlastfoot
 
-\multicolumn{6}{c}{\textbf{Densos y aumentados con convolución (4)}} \\
+\multicolumn{6}{c}{\textbf{Densos y aumentados con convolución (5)}} \\
 \midrule
 standard & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Contexto global completo; cuello de botella KV en secuencias largas & \citep{vaswani_attention_2017} \\
 sigmoid & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Compuerta elemento a elemento; reemplazo eficiente en hardware para softmax & \citep{ramapuram_theory_2024} \\
 gqa & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Compresión KV ajustable; reducción de caché $G\times$ mediante cabezas compartidas & \citep{ainslie_gqa_2023} \\
+ca & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Integración exacta sobre trayectorias clave/valor lineales por tramos; extensiones de medio token; pesos efectivos normalizados no negativos & \citep{khadangi_continuum_2026} \\
 conformer & Aumentado conv. & $\mathcal{O}(n^2 d + n K d)$ & $\mathcal{O}(n)$ (recómputo completo) & FFN Macaron alrededor de MHSA sinusoidal relativa y un módulo conv depthwise ($K=32$); contexto local y global en un solo bloque & \citep{Gulati2020} \\
 \midrule
 

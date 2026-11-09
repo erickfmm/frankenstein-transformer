@@ -48,7 +48,7 @@ dims.num\_layers & int $\ge 1$ (required) & Number of physical transformer layer
 dims.num\_loops & int $\ge 1$ & Logical loop count. Each layer in \texttt{layer\_pattern} runs \texttt{num\_loops} times. Default: 1. \\
 dims.num\_heads & int $\ge 1$ (required) & Number of parallel attention heads. Must divide \texttt{hidden\_size} evenly. \\
 dims.dropout & float [0,1] & Global dropout rate. Typical: 0.1 (BERT standard). \\
-dims.layer\_pattern & array of enum (required) & Ordered sequence of layer types. Length must equal \texttt{num\_layers}. 47 mixer codes available (see Table~\ref{tab:layer-pattern}). \\
+dims.layer\_pattern & array of enum (required) & Ordered sequence of layer types. Length must equal \texttt{num\_layers}. 48 mixer codes available (see Table~\ref{tab:layer-pattern}). \\
 \midrule
 \multicolumn{3}{l}{\textit{model.norm.*}} \\
 \midrule
@@ -223,7 +223,7 @@ Fields are grouped under hierarchical sub-objects (\texttt{dims}, \texttt{norm},
 \subsubsection{Layer Pattern Enumeration}
 \label{tab:layer-pattern}
 
-The \texttt{model.dims.layer\_pattern} array accepts the following 47 mixer codes. Each element defines one physical layer in the model stack. Table~\ref{tab:layer-pattern-enum} lists all available types with their training and inference support.
+The \texttt{model.dims.layer\_pattern} array accepts the following 48 mixer codes. Each element defines one physical layer in the model stack. Table~\ref{tab:layer-pattern-enum} lists all available types with their training and inference support.
 
 \begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{4.7cm}>{\raggedright\arraybackslash}p{5.0cm}cc}
 \toprule
@@ -243,6 +243,7 @@ The \texttt{model.dims.layer\_pattern} array accepts the following 47 mixer code
 \endlastfoot
 standard & Classic multi-head self-attention (BERT-style) & \checkmark & \checkmark \\
 sigmoid & Sigmoid-gated attention & \checkmark & \checkmark \\
+ca & Continuum Attention --- exact continuous integration over piecewise-linear memory trajectories & \checkmark & \checkmark \\
 memory & Memory Attention — token-ID memory values (V = K + Norm(E[s])) & \checkmark & \checkmark \\
 gated\_softmax & Gated softmax attention with post-SDPA sigmoid & \checkmark & \checkmark \\
 titan & Titan attention with positional encoding (HoPE/RoPE) & \checkmark & \checkmark \\

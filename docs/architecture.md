@@ -35,7 +35,7 @@ load.
 | Deployment formats | **4** | `src/cli.py` (`deploy --format`) |
 
 > The schema enums are the executable contract for code. README badges say
-> "47 mixers / 11 positional encodings": the mixer badge follows the schema
+> "48 mixers / 11 positional encodings": the mixer badge follows the schema
 > enum (including the `mamba` placeholder), while the PE badge excludes the
 > `none` encoding. The mathematical definitions stay in the paper; this
 > document tracks what is actually wired up.
@@ -348,13 +348,14 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-47 enum values in 10 families. `config subkey` is the optional
+48 enum values in 10 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
 |---|---|---|---|
 | `standard` | Dense | — | yes |
 | `sigmoid` | Dense | — | yes |
+| `ca` | Dense | `ca.*` | yes |
 | `gqa` | GQA | `dims.num_kv_heads` | yes |
 | `retnet` | Recurrent | `retnet.heads` | yes |
 | `mamba` | Recurrent | — (linear placeholder) | yes |
@@ -446,6 +447,17 @@ long-form model). The reference implementation masks a dense score matrix; the
 paper's overlapping-chunk kernel is out of scope. The mixer adds no parameters
 by default, trains its windowed pattern in both train and eval, and caches in a
 `RingSlot` whose pinned head prefix covers the global positions (exact decode).
+
+`ca` implements Continuum Attention from arXiv:2610.20586: adjacent keys and
+values define a piecewise-linear memory trajectory and each query retrieves by
+exact normalized integration of an exponential relevance density over its
+visible prefix (half-token endpoint caps included). The closed-form exponential
+moments J0/J1 replace the softmax (J2 is only needed for the paper's analytic
+backward); with `ca.learned_gain: true` each head learns a gain gamma = exp(rho)
+initialized at `ca.gain_init` (+nH parameters per layer), while the fixed-gain
+form adds no parameters. The KV cache is a plain `KVSlot`: the effective weights
+are recomputed row-locally over the cached prefix each decode step (sigmoid
+re-normalization precedent).
 
 Registry: the local `mixer_registry` dict in `src/model/hybrid_layer.py` maps
 names to classes; `mamba` is handled as a linear projection special case.
@@ -657,7 +669,7 @@ the cache**; `config_loader` warns about the fallback mixers.
 
 Implemented cached branches (parity-tested in
 `tests/test_kv_cache_mixers.py`): `standard`, `gqa`,
-`sigmoid`, `gated_softmax`, `titan`, `fox`,
+`sigmoid`, `ca`, `gated_softmax`, `titan`, `fox`,
 `mla`, `gqla`, `mlra`, `tucker`, `iha`,
 `gta`, `swa`, `longformer`, `bigbird`,
 `sparse_transformer`, `fasa`, `retnet`, `retnet`,

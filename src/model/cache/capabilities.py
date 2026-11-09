@@ -73,6 +73,7 @@ IMPLEMENTED_MIXERS = frozenset(
         "mamba",               # F0 passthrough (stateless; runs unchanged)
         # ---- F1 dense / softmax ----
         "sigmoid",        # F1 (L1 normalizer re-summed over the cache)
+        "ca",             # F1 (row-local moment normalizer, re-summed over the cache)
         "gated_softmax",  # F1
         "memory",         # F1 (standard KV; values built at append time)
         "titan",          # F1
@@ -105,7 +106,7 @@ IMPLEMENTED_MIXERS = frozenset(
 )
 
 
-#: mixer_key -> CacheSpec. One entry per schema enum value (47).
+#: mixer_key -> CacheSpec. One entry per schema enum value (48).
 CACHE_SPECS: Dict[str, CacheSpec] = {
     # ---- Dense / softmax family (plan §6.2) ----
     "standard": CacheSpec(
@@ -125,6 +126,15 @@ CACHE_SPECS: Dict[str, CacheSpec] = {
         slot_type="kv",
         notes="Sigmoid attention (arXiv:2409.04431); not shift-invariant — the "
         "L1 normalizer must be re-summed over the full cache each step.",
+    ),
+    "ca": CacheSpec(
+        supported=True,
+        slot_type="kv",
+        notes="Continuum Attention (arXiv:2610.20586); class (i) — the "
+        "effective weights are a closed-form (exponential-moment) function of "
+        "the endpoint score row, so decode recomputes the segment integrals "
+        "over the whole cached prefix each step; row-local like sigmoid's "
+        "re-summed L1 normalizer, hence exact.",
     ),
     "gated_softmax": CacheSpec(
         supported=True,

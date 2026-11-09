@@ -3,7 +3,7 @@
 
 This annex synthesizes the dense, recurrent, and memory-augmented transformer families. The field has evolved toward several primary paradigms: dense global attention with variants, key-value head compression via grouped-query attention, recurrent state compression with decay, selective state-space models, continuous-depth numerical integration, token-indexed value memory, and memory-augmented architectures. Understanding this taxonomy illuminates fundamental tradeoffs between expressiveness, computational cost, memory footprint, and deployment simplicity.
 
-\subsection{Dense Attention Baselines: Standard and Sigmoid}
+\subsection{Dense Attention Baselines: Standard, Sigmoid, and Continuum}
 
 \subsubsection{Standard Softmax Attention}
 
@@ -83,6 +83,53 @@ GQA interpolates smoothly between MHA ($h_k = h$, $G = 1$) and MQA ($h_k = 1$, $
     \item \textbf{Inference complexity}: $\mathcal{O}(n)$ per token, $\mathcal{O}(h_k \cdot n \cdot d_h)$ KV-cache space.
     \item \textbf{Strengths}: Flexible head-count tradeoff; proven at scale (Llama 2 \& 3 use $h_k = 8$ KV heads with $h = 32$ query heads); reduces KV-cache by $G \times$; supports fast inference with FlashAttention.
     \item \textbf{Weaknesses}: Fewer KV heads can reduce representational capacity in small models; requiring $h_k$ to divide $h$ constrains architectural choices.
+\end{itemize}
+
+\subsubsection{Continuum Attention}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/ca.pdf}}
+\caption{Dataflow of Continuum Attention: endpoint scores from the piecewise-linear key trajectory, exact segment integration through exponential moments, half-token boundary caps, and normalized effective weights on the original values.}
+\label{fig:mixer-ca}
+\end{figure}
+Continuum Attention \citep{khadangi_continuum_2026} replaces discrete softmax retrieval with exact integration over a continuous, piecewise-linear memory trajectory. Adjacent keys and values are interpolated so that $\mathbf{k}(t)$ and $\mathbf{v}(t)$ are defined at every position of the visible domain:
+\begin{equation}
+\mathbf{k}_j(u) = (1-u)\,\mathbf{k}_{j-1} + u\,\mathbf{k}_j, \qquad
+\mathbf{v}_j(u) = (1-u)\,\mathbf{v}_{j-1} + u\,\mathbf{v}_j,
+\end{equation}
+with $u = t-(j-1)\in[0,1]$ on the interval $[j-1,j]$; constant half-token extensions cover $[-1/2,0]$ and $[i,i+1/2]$. Each query induces an exponential relevance density over the visible prefix,
+\begin{equation}
+s_i(t) = \frac{\gamma}{\sqrt{d_h}}\,\mathbf{q}_i^\top \mathbf{k}(t), \qquad
+p_i(t) = \frac{\exp(s_i(t))}{Z_i}, \qquad
+\mathbf{o}_i = \int_{-1/2}^{i+1/2} p_i(t)\,\mathbf{v}(t)\,dt,
+\end{equation}
+where $\gamma>0$ is the score gain ($\gamma=1/\tau$). Since the key trajectory is linear within a segment, the score is affine, $s_{ij}(u) = a_{ij} + u\,\Delta_{ij}$ with $a_{ij}=s_i(j-1)$, $b_{ij}=s_i(j)$ and $\Delta_{ij}=b_{ij}-a_{ij}$, so the integrals have closed forms in the exponential moments $J_n(\Delta)=\int_0^1 u^n e^{\Delta u}\,du$:
+\begin{align}
+J_0(\Delta) &= \frac{e^{\Delta}-1}{\Delta}, \qquad
+J_1(\Delta) = \frac{(\Delta-1)e^{\Delta}+1}{\Delta^2}, \\
+M_{ij} &= e^{a_{ij}} J_0(\Delta_{ij}), \qquad
+\mathbf{U}_{ij} = e^{a_{ij}}\big[(J_0-J_1)\,\mathbf{v}_{j-1} + J_1\,\mathbf{v}_j\big], \\
+Z_i &= \tfrac12 e^{s_i(0)} + \tfrac12 e^{s_i(i)} + \sum_{j=1}^{i} M_{ij}, \qquad
+\mathbf{o}_i = \frac{\mathbf{U}_i^{\mathrm{cap}} + \sum_{j=1}^{i}\mathbf{U}_{ij}}{Z_i},
+\end{align}
+with $\mu(\Delta)=J_1/J_0$ the normalized retrieval position inside a segment. Because the contributions are nonnegative, CA is equivalently a normalized nonnegative weighted sum of the original values, $\mathbf{o}_i = \sum_{j\le i} w_{ij}\mathbf{v}_j$ with $w_{ij}\ge 0$ and $\sum_j w_{ij}=1$; equal visible scores reduce exactly to uniform causal attention and $o_0=v_0$. The learned-gain variant adds one scalar per head ($\gamma=\exp(\rho)$, initialized at $\gamma=1$ in the 101M model; the fixed CA-P variant uses $\gamma=1/0.30$ and adds no parameters). The encoder (bidirectional) form integrates over the full trajectory $[-1/2,n-1/2]$ -- the natural symmetric extension of the causal-only paper.
+
+\begin{algorithmic}[1]
+\State \textbf{Input:} $\mathbf{Q}, \mathbf{K}, \mathbf{V} \in \mathbb{R}^{n \times d_h}$, gain $\gamma>0$
+\State $\mathbf{S} \gets \gamma\,\mathbf{Q}\mathbf{K}^\top/\sqrt{d_h}$ \Comment{endpoint scores, Eq. (4)}
+\State mask $\mathbf{S}$ to the visible prefix; subtract the row maximum $m$ (stability)
+\State $\Delta_{ij} \gets \mathbf{S}_{j}-\mathbf{S}_{j-1}$; \quad $J_0,J_1 \gets$ Eqs. (11)--(12) (series near $\Delta=0$)
+\State $M_{ij} \gets e^{a_{ij}-m}J_0$, \quad $w^{(L)}_{ij}\gets M_{ij}(1-\mu)$, \quad $w^{(R)}_{ij}\gets M_{ij}\mu$
+\State add the half-token caps $\tfrac12 e^{s_i(0)-m}$ and $\tfrac12 e^{s_i(i)-m}$; normalize by $Z_i$
+\State \textbf{Output:} $\mathbf{o}_i = \sum_{j\le i} w_{ij}\mathbf{v}_j$ \Comment{Eq. (24)}
+\end{algorithmic}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n^2 d)$ -- identical to dense softmax; the closed-form moments replace the softmax (no quadrature).
+    \item \textbf{Inference complexity}: $\mathcal{O}(n)$ per token with a KV cache; the effective weights are recomputed row-locally over the cached prefix each step (exact).
+    \item \textbf{Strengths}: Exact continuous retrieval with normalized nonnegative effective weights; zero parameters beyond the projections in the fixed-gain form; strong multilingual and zero-shot results (FLORES macro 1.8915 BPB, a 5.8\% reduction versus the strongest baseline and the best score in every language; HellaSwag and ARC-Challenge best among the baselines); 42\% fewer training bytes to a matched 1.10 BPB threshold than a matched Transformer.
+    \item \textbf{Weaknesses}: The quadratic attention arithmetic persists; source-code performance is the weakest of the five architectures (Stack-smol 3.3451 BPB); reduced robustness to byte deletion and ``antspeak'' perturbations.
 \end{itemize}
 
 \subsection{Token-Indexed Memory: Memory Attention}
@@ -293,6 +340,8 @@ The codebase selects a mixer per block from the configured \texttt{layer\_patter
     \State $H \gets \text{softmax-attention}(H)$
 \ElsIf{$m=\texttt{sigmoid}$}
     \State $H \gets \text{sigmoid-attention}(H)$
+\ElsIf{$m=\texttt{ca}$}
+    \State $H \gets \text{continuum-attention}(H)$ \Comment{exact segment integration}
 \ElsIf{$m=\texttt{memory}$}
     \State $H \gets \text{memory-attention}(H)$
 \ElsIf{$m\in\{\texttt{retnet},\texttt{retnet}\}$}

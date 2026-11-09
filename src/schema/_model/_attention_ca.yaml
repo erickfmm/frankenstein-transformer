@@ -1,0 +1,87 @@
+type: object
+additionalProperties: false
+properties:
+  ca:
+    type: object
+    additionalProperties: false
+    title: "Continuum Attention"
+    title_es: "Atención Continua"
+    description: |-
+      Hyperparameters for `ca` (Continuum Attention (paper: arxiv:2610.20586)).
+      Adjacent keys and values define a piecewise-linear memory trajectory;
+      each query retrieves by normalized integration of exp(score) over its
+      visible prefix, computed exactly through the exponential moments J0/J1
+      (no quadrature). With `learned_gain: true` every head learns a positive
+      score gain γ = exp(ρ) initialized at `gain_init` (the paper's 101M
+      flagship); with `learned_gain: false` the gain stays fixed at
+      `gain_init` (CA-P uses γ = 1/0.30) and the mixer adds no parameters
+      beyond the standard Q/K/V/O projections. Only applies when `ca`
+      appears in `layer_pattern`.
+
+      **References:** (paper: arxiv:2610.20586)
+    description_es: |-
+      Hiperparámetros para `ca` (Atención Continua (paper: arxiv:2610.20586)).
+      Las claves y valores adyacentes definen una trayectoria de memoria
+      lineal por tramos; cada consulta recupera mediante la integración
+      normalizada de exp(puntaje) sobre su prefijo visible, calculada de
+      forma exacta con los momentos exponenciales J0/J1 (sin cuadratura).
+      Con `learned_gain: true` cada cabeza aprende una ganancia de puntaje
+      positiva γ = exp(ρ) inicializada en `gain_init` (el modelo insignia de
+      101M del paper); con `learned_gain: false` la ganancia queda fija en
+      `gain_init` (CA-P usa γ = 1/0.30) y el mixer no añade parámetros más
+      allá de las proyecciones Q/K/V/O estándar. Solo aplica cuando `ca`
+      está en `layer_pattern`.
+
+      **Referencias:** (paper: arxiv:2610.20586)
+    properties:
+      learned_gain:
+        type: boolean
+        title: "Learned Score Gain"
+        title_es: "Ganancia de Puntaje Aprendida"
+        description: |-
+          Learn the per-head positive score gain γ = exp(ρ) of `ca`
+          (paper: arxiv:2610.20586, §2.7/§3.1). The paper's 101M byte-level
+          decoder learns all 128 head gains initialized at γ = 1; the
+          small-model CA-H variant learns them initialized at γ = 1/0.30
+          (set `gain_init`). `false` keeps the gain fixed at `gain_init`,
+          which is the parameter-free CA-P configuration. Only applies when
+          `ca` is in `layer_pattern`.
+
+          **References:** (paper: arxiv:2610.20586)
+        description_es: |-
+          Aprende la ganancia de puntaje positiva por cabeza γ = exp(ρ) de
+          `ca` (paper: arxiv:2610.20586, §2.7/§3.1). El decoder de bytes de
+          101M del paper aprende las 128 ganancias inicializadas en γ = 1;
+          la variante CA-H del modelo pequeño las aprende inicializadas en
+          γ = 1/0.30 (ajusta `gain_init`). `false` mantiene la ganancia fija
+          en `gain_init`, la configuración CA-P sin parámetros extra. Solo
+          aplica cuando `ca` está en `layer_pattern`.
+
+          **Referencias:** (paper: arxiv:2610.20586)
+        default: true
+        examples: [true, false]
+      gain_init:
+        type: number
+        exclusiveMinimum: 0
+        title: "Initial / Fixed Score Gain"
+        title_es: "Ganancia de Puntaje Inicial / Fija"
+        description: |-
+          Initial (when learned) or fixed (when not) score gain γ = 1/τ of
+          `ca` (paper: arxiv:2610.20586). The paper uses γ = 1 for the 101M
+          model (effective τ = 1), γ = 1/0.30 ≈ 3.3333 for the fixed CA-P
+          and the CA-H small-model initialization. Larger γ sharpens the
+          relevance density (lower temperature τ). Must be positive. Only
+          applies when `ca` is in `layer_pattern`.
+
+          **References:** (paper: arxiv:2610.20586)
+        description_es: |-
+          Ganancia de puntaje inicial (si se aprende) o fija (si no) γ = 1/τ
+          de `ca` (paper: arxiv:2610.20586). El paper usa γ = 1 para el
+          modelo de 101M (τ efectiva = 1), γ = 1/0.30 ≈ 3.3333 para la CA-P
+          fija y la inicialización CA-H del modelo pequeño. Un γ mayor
+          afila la densidad de relevancia (menor temperatura τ). Debe ser
+          positiva. Solo aplica cuando `ca` está en `layer_pattern`.
+
+          **Referencias:** (paper: arxiv:2610.20586)
+        default: 1.0
+        examples: [1.0, 3.3333]

@@ -198,6 +198,8 @@ _DEFAULT_PAIRS = {
     "properties.model.properties.attention.properties.retnet.properties.heads": "retention_heads",
     "properties.model.properties.attention.properties.swa.properties.window_size": "swa_window_size",
     "properties.model.properties.attention.properties.swa.properties.num_sinks": "swa_num_sinks",
+    "properties.model.properties.attention.properties.ca.properties.learned_gain": "ca_learned_gain",
+    "properties.model.properties.attention.properties.ca.properties.gain_init": "ca_gain_init",
     "properties.model.properties.attention.properties.fastconformer.properties.window_size": "fastconformer_window_size",
     "properties.model.properties.attention.properties.fastconformer.properties.global_tokens": "fastconformer_global_tokens",
     "properties.model.properties.attention.properties.fastconformer.properties.global_tokens_spacing": "fastconformer_global_tokens_spacing",

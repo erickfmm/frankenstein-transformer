@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,nH,n,hd]"]
+  k["K = Wk·x<br/>[B,nH,n,hd]"]
+  v["V = Wv·x<br/>[B,nH,n,hd]"]
+  s["a,b = γ·QKᵀ/√hd at endpoints<br/>[B,nH,n,n]"]
+  j["M = eᵃ·J₀(Δ), μ = J₁/J₀<br/>[B,nH,n,n−1]"]
+  w["w = ½e^{s(0)} + ½e^{s(i)} + Σ segments<br/>Σw = 1, w ≥ 0"]
+  o["O = Wo·(w·V)<br/>[B,n,H]"]
+
+  x -- "Wq" --> q
+  x -- "Wk" --> k
+  x -- "Wv" --> v
+  q -- "γQKᵀ/√hd" --> s
+  k -- "γQKᵀ/√hd" --> s
+  s -- "Δ = b−a, moments" --> j
+  j -- "caps + normalize (Z)" --> w
+  v -- "w·V" --> o
+  w -- "w·V" --> o

@@ -17,7 +17,7 @@ Con caché, el prefill cuesta $\mathcal{O}(S^2)$ una vez y cada paso de decodifi
 \]
 La diferencia es la conocida entre re-codificar una conversación y continuarla.
 
-El subsistema cubre los cuarenta y siete tipos de capa despachables. Veintinueve tienen ramas incrementales verificadas por paridad; el resto queda registrado con una justificación explícita, basada en el artículo, para ejecutarse sin caché (\S\ref{sec:kv-fallbacks}). La cuantización y la expulsión son ortogonales a la matemática del mezclador: los códecs transforman tensores en \emph{escritura} y las políticas actúan en \emph{lectura}, de modo que el mismo códec \texttt{int8} o \texttt{int4\_kivi} sirve a un slot denso, latente o de anillo sin código por mezclador \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
+El subsistema cubre los cuarenta y ocho tipos de capa despachables. Treinta tienen ramas incrementales verificadas por paridad; el resto queda registrado con una justificación explícita, basada en el artículo, para ejecutarse sin caché (\S\ref{sec:kv-fallbacks}). La cuantización y la expulsión son ortogonales a la matemática del mezclador: los códecs transforman tensores en \emph{escritura} y las políticas actúan en \emph{lectura}, de modo que el mismo códec \texttt{int8} o \texttt{int4\_kivi} sirve a un slot denso, latente o de anillo sin código por mezclador \citep{kivi_liu_2024,kvquant_hooper_2024,skvq_duanmu_2024}.
 
 \subsection{Arquitectura de la Caché}
 \label{sec:kv-architecture}
@@ -158,6 +158,7 @@ con $\mathbf{B}$ el sesgo posicional de \S\ref{sec:kv-correctness}. La atención
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Atención sigmoide.} El normalizador se sustituye por una normalización $\ell_1$ por fila, $\hat{\mathbf{S}}_{ij} = \sigma(\mathbf{S}_{ij}) / \big(\sum_{j'}\sigma(\mathbf{S}_{ij'}) + \varepsilon\big)$. Como la sigmoide no es invariante a desplazamientos, el denominador debe re-sumarse sobre todo el prefijo cacheado en cada paso; no existe truco de máximo estilo softmax en línea \citep{ramapuram_theory_2024}.
+    \item \textbf{Atención continua.} El normalizador se sustituye por la integración exacta por tramos: los pesos efectivos son una función de forma cerrada (momentos exponenciales de las diferencias de puntajes de extremo) de la fila completa de puntajes, de modo que la decodificación los recalcula sobre todo el prefijo cacheado en cada paso --- locales a la fila, por tanto exactos, en el patrón de re-normalización de la sigmoide \citep{khadangi_continuum_2026}.
     \item \textbf{Softmax con compuerta.} La compuerta $\sigma(\mathbf{x}\mathbf{W}_g)$ multiplica la salida de atención y depende sólo del token actual, así que no se cachea nada extra \citep{qiu_gated_attention_2025}.
     \item \textbf{Atención con olvido.} El sesgo de logits es $D_{ij} = c_i - c_j$ con $c_i = \sum_{l\le i}\log f_l$ la suma acumulada de log-olvido. La caché guarda un escalar por token y cabeza como extra; la decodificación extiende la suma corrida desde el último token cacheado y evalúa una sola fila de $D$ contra la columna cacheada \citep{lin_forgetting_transformer_2025}.
     \item \textbf{Titans.} La capa implementada es la ventana de atención; el módulo de memoria queda fuera de la ruta cacheada. Se aplica el append/read estándar \citep{behrouz_titans_2025}.

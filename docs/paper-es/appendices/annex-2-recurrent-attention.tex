@@ -3,7 +3,7 @@
 
 Este anexo sintetiza las familias densas, recurrentes y aumentadas con memoria de transformers. El campo ha evolucionado hacia varios paradigmas principales: atención densa global con variantes, compresión de cabezas clave-valor mediante atención por consultas agrupadas, compresión de estado recurrente con decaimiento, modelos de espacio de estado selectivos, integración numérica de profundidad continua, memoria de valores indexada por token y arquitecturas aumentadas con memoria. Comprender esta taxonomía ilumina las compensaciones fundamentales entre expresividad, costo computacional, huella de memoria y simplicidad de despliegue.
 
-\subsection{Atención Densa de Referencia: Estándar y Sigmoide}
+\subsection{Atención Densa de Referencia: Estándar, Sigmoide y Continua}
 
 \subsubsection{Atención Softmax Estándar}
 
@@ -83,6 +83,53 @@ GQA interpola suavemente entre MHA ($h_k = h$, $G = 1$) y MQA ($h_k = 1$, $G = h
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token, espacio de caché KV $\mathcal{O}(h_k \cdot n \cdot d_h)$.
     \item \textbf{Fortalezas}: Balance flexible de cabezas; probado a escala (Llama 2 y 3 usan $h_k = 8$ cabezas KV con $h = 32$ cabezas de consulta); reduce el caché KV en factor $G \times$; soporta inferencia rápida con FlashAttention.
     \item \textbf{Debilidades}: Menos cabezas KV pueden reducir la capacidad representacional en modelos pequeños; requerir que $h_k$ divida a $h$ restringe las opciones arquitectónicas.
+\end{itemize}
+
+\subsubsection{Atención Continua}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/ca.pdf}}
+\caption{Flujo de datos de la Atención Continua: puntajes de extremo de la trayectoria lineal de claves, integración exacta por tramos mediante momentos exponenciales, extensiones de medio token en los bordes y pesos efectivos normalizados sobre los valores originales.}
+\label{fig:mixer-ca-es}
+\end{figure}
+La Atención Continua \citep{khadangi_continuum_2026} reemplaza la recuperación softmax discreta por la integración exacta sobre una trayectoria de memoria continua, lineal por tramos. Las claves y valores adyacentes se interpolan de modo que $\mathbf{k}(t)$ y $\mathbf{v}(t)$ quedan definidos en toda posición del dominio visible:
+\begin{equation}
+\mathbf{k}_j(u) = (1-u)\,\mathbf{k}_{j-1} + u\,\mathbf{k}_j, \qquad
+\mathbf{v}_j(u) = (1-u)\,\mathbf{v}_{j-1} + u\,\mathbf{v}_j,
+\end{equation}
+con $u = t-(j-1)\in[0,1]$ en el intervalo $[j-1,j]$; extensiones constantes de medio token cubren $[-1/2,0]$ y $[i,i+1/2]$. Cada consulta induce una densidad de relevancia exponencial sobre su prefijo visible,
+\begin{equation}
+s_i(t) = \frac{\gamma}{\sqrt{d_h}}\,\mathbf{q}_i^\top \mathbf{k}(t), \qquad
+p_i(t) = \frac{\exp(s_i(t))}{Z_i}, \qquad
+\mathbf{o}_i = \int_{-1/2}^{i+1/2} p_i(t)\,\mathbf{v}(t)\,dt,
+\end{equation}
+donde $\gamma>0$ es la ganancia de puntaje ($\gamma=1/\tau$). Como la trayectoria de claves es lineal dentro de cada tramo, el puntaje es afín, $s_{ij}(u) = a_{ij} + u\,\Delta_{ij}$ con $a_{ij}=s_i(j-1)$, $b_{ij}=s_i(j)$ y $\Delta_{ij}=b_{ij}-a_{ij}$, de modo que las integrales tienen forma cerrada en los momentos exponenciales $J_n(\Delta)=\int_0^1 u^n e^{\Delta u}\,du$:
+\begin{align}
+J_0(\Delta) &= \frac{e^{\Delta}-1}{\Delta}, \qquad
+J_1(\Delta) = \frac{(\Delta-1)e^{\Delta}+1}{\Delta^2}, \\
+M_{ij} &= e^{a_{ij}} J_0(\Delta_{ij}), \qquad
+\mathbf{U}_{ij} = e^{a_{ij}}\big[(J_0-J_1)\,\mathbf{v}_{j-1} + J_1\,\mathbf{v}_j\big], \\
+Z_i &= \tfrac12 e^{s_i(0)} + \tfrac12 e^{s_i(i)} + \sum_{j=1}^{i} M_{ij}, \qquad
+\mathbf{o}_i = \frac{\mathbf{U}_i^{\mathrm{cap}} + \sum_{j=1}^{i}\mathbf{U}_{ij}}{Z_i},
+\end{align}
+con $\mu(\Delta)=J_1/J_0$ la posición de recuperación normalizada dentro de un tramo. Como las contribuciones no son negativas, la atención continua equivale a una suma ponderada normalizada y no negativa de los valores originales, $\mathbf{o}_i = \sum_{j\le i} w_{ij}\mathbf{v}_j$ con $w_{ij}\ge 0$ y $\sum_j w_{ij}=1$; puntajes visibles iguales se reducen exactamente a atención causal uniforme y $o_0=v_0$. La variante con ganancia aprendida añade un escalar por cabeza ($\gamma=\exp(\rho)$, inicializada en $\gamma=1$ en el modelo de 101M; la variante fija CA-P usa $\gamma=1/0.30$ y no añade parámetros). La forma encoder (bidireccional) integra sobre la trayectoria completa $[-1/2,n-1/2]$ --- la extensión simétrica natural del artículo, que sólo define el caso causal.
+
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} $\mathbf{Q}, \mathbf{K}, \mathbf{V} \in \mathbb{R}^{n \times d_h}$, ganancia $\gamma>0$
+\State $\mathbf{S} \gets \gamma\,\mathbf{Q}\mathbf{K}^\top/\sqrt{d_h}$ \Comment{puntajes de extremo, Ec. (4)}
+\State enmascarar $\mathbf{S}$ al prefijo visible; restar el máximo de fila $m$ (estabilidad)
+\State $\Delta_{ij} \gets \mathbf{S}_{j}-\mathbf{S}_{j-1}$; \quad $J_0,J_1 \gets$ Ecs. (11)--(12) (serie cerca de $\Delta=0$)
+\State $M_{ij} \gets e^{a_{ij}-m}J_0$, \quad $w^{(L)}_{ij}\gets M_{ij}(1-\mu)$, \quad $w^{(R)}_{ij}\gets M_{ij}\mu$
+\State sumar las extensiones de medio token $\tfrac12 e^{s_i(0)-m}$ y $\tfrac12 e^{s_i(i)-m}$; normalizar por $Z_i$
+\State \textbf{Salida:} $\mathbf{o}_i = \sum_{j\le i} w_{ij}\mathbf{v}_j$ \Comment{Ec. (24)}
+\end{algorithmic}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 d)$ --- idéntica al softmax denso; los momentos en forma cerrada reemplazan al softmax (sin cuadratura).
+    \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token con caché KV; los pesos efectivos se recalculan localmente por fila sobre el prefijo cacheado en cada paso (exacto).
+    \item \textbf{Fortalezas}: Recuperación continua exacta con pesos efectivos normalizados no negativos; cero parámetros más allá de las proyecciones en la forma de ganancia fija; resultados multilingües y zero-shot sólidos (macro FLORES 1.8915 BPB, una reducción del 5.8\% frente al mejor baseline y el mejor puntaje en todos los idiomas; HellaSwag y ARC-Challenge los mejores entre los baselines); 42\% menos bytes de entrenamiento para alcanzar el umbral de 1.10 BPB que un Transformer emparejado.
+    \item \textbf{Debilidades}: La aritmética cuadrática de atención persiste; el desempeño en código fuente es el más débil de las cinco arquitecturas (Stack-smol 3.3451 BPB); robustez reducida a la eliminación de bytes y a perturbaciones ``antspeak''.
 \end{itemize}
 
 \subsection{Memoria Indexada por Token: Memory Attention}
@@ -292,6 +339,8 @@ El código base selecciona un mezclador por bloque a partir del \texttt{layer\_p
     \State $H \gets \text{softmax-attention}(H)$ \Comment{atención densa sustituta, mismas proyecciones}
 \ElsIf{$m=\texttt{standard}$}
     \State $H \gets \text{softmax-attention}(H)$
+\ElsIf{$m=\texttt{ca}$}
+    \State $H \gets \text{atención-continua}(H)$ \Comment{integración exacta por tramos}
 \ElsIf{$m=\texttt{sigmoid}$}
     \State $H \gets \text{sigmoid-attention}(H)$
 \ElsIf{$m=\texttt{memory}$}

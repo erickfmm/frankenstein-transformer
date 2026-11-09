@@ -23,6 +23,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "titan",
             "standard",
             "sigmoid",
+            "ca",
             "sparse_transformer",
             "longformer",
             "swa",
@@ -120,6 +121,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "sigma_floor", "grid_h", "grid_w",
             },
             "swa": {"window_size", "num_sinks"},
+            "ca": {"learned_gain", "gain_init"},
             "fastconformer": {
                 "window_size", "global_tokens", "global_tokens_spacing",
                 "global_attn_separate",
@@ -157,7 +159,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "layer_pattern"
             ]["items"]["enum"]
         )
-        self.assertEqual(len(enum_values), 47)
+        self.assertEqual(len(enum_values), 48)
         self.assertEqual(set(CACHE_SPECS), enum_values)
 
     def test_inference_schema_is_referenced(self):

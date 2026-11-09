@@ -109,6 +109,8 @@ properties:
         $ref: "_model/_attention_ode.yaml"
       retnet:
         $ref: "_model/_attention_retnet.yaml"
+      ca:
+        $ref: "_model/_attention_ca.yaml#/properties/ca"
   moe:
     $ref: "_model/_moe.yaml"
   bitnet:

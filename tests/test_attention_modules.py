@@ -9,6 +9,7 @@ if TORCH_AVAILABLE:
     from src.model.config import FrankensteinModelConfig
     from src.model.attention.standard import StandardAttention
     from src.model.attention.sigmoid import SigmoidAttention
+    from src.model.attention.ca import ContinuumAttention, _exp_moments
     from src.model.attention.titan import TitanAttention
     from src.model.attention.ode import ODEAttentionBlock, ODEFunc
     from src.model.attention.retnet import MultiScaleRetention
@@ -123,6 +124,127 @@ class SigmoidAttentionTests(unittest.TestCase):
         x = self._x().requires_grad_(True)
         attn(x).sum().backward()
         self.assertIsNotNone(x.grad)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class ContinuumAttentionTests(unittest.TestCase):
+    """Continuum Attention: exact segment integration over linear memory."""
+
+    def _make(self, **kw):
+        return ContinuumAttention(_cfg(**kw))
+
+    def _x(self):
+        return torch.randn(BSZ, SEQ, DIM)
+
+    def test_encoder_output_shape(self):
+        attn = self._make()
+        y = attn(self._x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_output_shape(self):
+        attn = self._make(mode="decoder")
+        y = attn(self._x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_is_causal(self):
+        attn = self._make(mode="decoder")
+        attn.eval()
+        x = self._x()
+        with torch.no_grad():
+            y = attn(x)
+            x2 = x.clone()
+            x2[:, -1, :] += 10.0
+            y2 = attn(x2)
+        # Perturbing the last token must not change any earlier output.
+        self.assertTrue(torch.allclose(y[:, :-1, :], y2[:, :-1, :], atol=1e-5))
+
+    def test_equal_scores_reduce_to_uniform(self):
+        attn = self._make(mode="decoder")
+        seq = 6
+        scores = torch.zeros(1, 1, seq, seq)
+        mask = torch.triu(torch.ones(seq, seq, dtype=torch.bool), diagonal=1)
+        scores = scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
+        with torch.no_grad():
+            w = attn._effective_weights(scores)
+        for i in range(seq):
+            expected = torch.full((i + 1,), 1.0 / (i + 1))
+            self.assertTrue(torch.allclose(w[0, 0, i, : i + 1], expected, atol=1e-5))
+            self.assertTrue(torch.allclose(w[0, 0, i, :].sum(), torch.tensor(1.0), atol=1e-5))
+
+    def test_first_token_output_is_value(self):
+        # Paper section 2.4: for i = 0 the two half caps give o_0 = v_0.
+        attn = self._make(mode="decoder")
+        scores = torch.zeros(1, 1, 4, 4).masked_fill(
+            torch.triu(torch.ones(4, 4, dtype=torch.bool), diagonal=1)
+            .unsqueeze(0).unsqueeze(0), float("-inf")
+        )
+        with torch.no_grad():
+            w = attn._effective_weights(scores)
+        self.assertAlmostEqual(float(w[0, 0, 0, 0]), 1.0, places=6)
+        self.assertTrue(torch.allclose(w[0, 0, 0, 1:], torch.zeros(3), atol=1e-6))
+
+    def test_moments_match_quadrature(self):
+        u = torch.linspace(0, 1, 20001, dtype=torch.float64)
+        for d in (-8.0, -0.9, -1e-4, 0.0, 1e-4, 0.9, 8.0):
+            j0, j1, j2 = _exp_moments(torch.tensor([d]))
+            e = torch.exp(torch.tensor(d, dtype=torch.float64) * u)
+            self.assertTrue(torch.allclose(j0, torch.trapz(e, u).float(), rtol=1e-4, atol=1e-5))
+            self.assertTrue(torch.allclose(j1, torch.trapz(u * e, u).float(), rtol=1e-4, atol=1e-5))
+            self.assertTrue(torch.allclose(j2, torch.trapz(u * u * e, u).float(), rtol=1e-4, atol=1e-5))
+
+    def test_learned_gain_parameter_count(self):
+        attn = self._make(ca_learned_gain=True)
+        n_proj = sum(p.numel() for n, p in attn.named_parameters() if n.endswith("_proj.weight"))
+        gain = dict(attn.named_parameters())["log_gain"]
+        self.assertEqual(gain.numel(), attn.num_heads)
+        self.assertEqual(n_proj + gain.numel(), 4 * DIM * DIM + attn.num_heads)
+
+    def test_fixed_gain_has_no_extra_parameters(self):
+        attn = self._make(ca_learned_gain=False)
+        self.assertIsNone(attn.log_gain)
+        self.assertEqual(
+            sum(p.numel() for p in attn.parameters()), 4 * DIM * DIM
+        )
+
+    def test_gradient_flows(self):
+        attn = self._make(ca_learned_gain=True)
+        x = self._x().requires_grad_(True)
+        attn(x).sum().backward()
+        self.assertIsNotNone(x.grad)
+        self.assertIsNotNone(dict(attn.named_parameters())["log_gain"].grad)
+
+    def test_with_bitnet(self):
+        attn = self._make(use_bitnet=True)
+        y = attn(self._x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_no_nans_long_sequence(self):
+        attn = self._make(mode="decoder")
+        attn.eval()
+        x = torch.randn(1, 64, DIM)
+        with torch.no_grad():
+            y = attn(x)
+        self.assertTrue(torch.isfinite(y).all())
+
+    def test_use_pe_flag(self):
+        # ALiBi is a score-bias PE: enabling it for `ca` must change the
+        # output, and disabling it must reproduce the NoPE run.
+        from src.model.embeddings.factory import build_pos_encoder
+
+        cfg_on = _cfg(positional_encoding="alibi", ca_use_pe=True)
+        cfg_off = _cfg(positional_encoding="alibi", ca_use_pe=False)
+        cfg_none = _cfg(positional_encoding="nope", ca_use_pe=False)
+        x = self._x()
+        torch.manual_seed(0)
+        on = ContinuumAttention(cfg_on, pos_encoder=build_pos_encoder(cfg_on))
+        off = ContinuumAttention(cfg_off, pos_encoder=build_pos_encoder(cfg_off))
+        none = ContinuumAttention(cfg_none, pos_encoder=build_pos_encoder(cfg_none))
+        off.load_state_dict(on.state_dict())
+        none.load_state_dict(on.state_dict())
+        with torch.no_grad():
+            y_on, y_off, y_none = on(x), off(x), none(x)
+        self.assertFalse(torch.allclose(y_on, y_off, atol=1e-5))
+        self.assertTrue(torch.allclose(y_off, y_none, atol=1e-6))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

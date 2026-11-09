@@ -54,6 +54,7 @@ def _make(bitnet_routers: bool, mode: str = "encoder"):
             "ode",
             "gated_softmax",
             "sigmoid",
+            "ca",
             "gqa",
             "memory",
             "mla",

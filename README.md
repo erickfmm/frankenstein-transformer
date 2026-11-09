@@ -25,7 +25,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 |:------:|:----------:|:--------------:|:-----------:|:-----:|:-------------:|:-----:|:-------:|:------------:|
 | **47** | **36** | **12** | **43** | **6** | **4** | **9** | **175** | **4** |
 
-> **47 mixer architectures** — the schema exposes 47 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
+> **48 mixer architectures** — the schema exposes 48 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
 
 ## How It Works
 
@@ -92,7 +92,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
-| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 47 mixer architectures |
+| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 48 mixer architectures |
 | `frankenstein_text_decoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 | `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `vision_dataset:` blocks |
 | `frankenstein_audio` | Encoder (audio) | Audio Transformer for ASR and audio/signal classification; log-mel/spectrogram/raw frontend, conv subsampling, CTC/RNN-T or classification heads; forces `mode: encoder`, requires `audio:` + `audio_dataset:` blocks |
@@ -114,7 +114,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 | Category | Code Names | Description |
 |----------|------------|-------------|
-| **Dense** (2) | `standard`, `sigmoid` | Full quadratic attention variants |
+| **Dense** (3) | `standard`, `sigmoid`, `ca` | Full quadratic attention variants: softmax, sigmoid gating, and exact continuum integration |
 | **GQA** (1) | `gqa` | Grouped-query attention with configurable KV heads |
 | **Recurrent** (5) | `retnet`, `mamba`, `ode`, `titan`, `engram` | Retention networks, state-space models, continuous-depth ODE layers, memory-augmented attention, and n-gram memory |
 | **Sparse** (12) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa`, `fastconformer` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), semantic key-clustering, and head-pinned global-token long-form patterns |
@@ -127,7 +127,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 ⚠️ `sparge` and `fasa` are **inference-sparse**: they train as dense attention over their own projections, then activate their sparse heuristic in `eval()`. They are valid in training presets.
 
-Configure via `layer_pattern` in YAML. The schema accepts 47 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
+Configure via `layer_pattern` in YAML. The schema accepts 48 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
 
 ## Optimizer Categories
 

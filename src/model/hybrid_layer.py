@@ -64,6 +64,7 @@ from .attention.sparse import (
     SlidingWindowAttention,
 )
 from .attention.standard import StandardAttention
+from .attention.ca import ContinuumAttention
 from .attention.memory import MemoryAttention
 from .attention.ssog import SSOGAttention
 from .attention.titan import TitanAttention
@@ -187,6 +188,7 @@ class HybridLayer(nn.Module):
             "retnet": MultiScaleRetention,
             "titan": TitanAttention,
             "standard": StandardAttention,
+            "ca": ContinuumAttention,
             "sigmoid": SigmoidAttention,
             "sparse_transformer": SparseTransformerAttention,
             "longformer": LongformerAttention,

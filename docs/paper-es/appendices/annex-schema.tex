@@ -48,7 +48,7 @@ dims.num\_layers & int $\ge 1$ (obligatorio) & Número de capas físicas del tra
 dims.num\_loops & int $\ge 1$ & Número de bucles lógicos. Cada capa en \texttt{layer\_pattern} se ejecuta \texttt{num\_loops} veces. Por defecto: 1. \\
 dims.num\_heads & int $\ge 1$ (obligatorio) & Número de cabezas de atención paralelas. Debe dividir \texttt{hidden\_size} exactamente. \\
 dims.dropout & float [0,1] & Tasa de dropout global. Típico: 0.1 (estándar BERT). \\
-dims.layer\_pattern & array of enum (obligatorio) & Secuencia ordenada de tipos de capa. La longitud debe igualar \texttt{num\_layers}. 47 códigos de mezclador disponibles (ver Tabla~\ref{tab:layer-pattern}). \\
+dims.layer\_pattern & array of enum (obligatorio) & Secuencia ordenada de tipos de capa. La longitud debe igualar \texttt{num\_layers}. 48 códigos de mezclador disponibles (ver Tabla~\ref{tab:layer-pattern}). \\
 \midrule
 \multicolumn{3}{l}{\textit{model.norm.*}} \\
 \midrule
@@ -223,7 +223,7 @@ Los campos se agrupan bajo sub-objetos jerárquicos (\texttt{dims}, \texttt{norm
 \subsubsection{Enumeración del Patrón de Capas}
 \label{tab:layer-pattern}
 
-El array \texttt{model.dims.layer\_pattern} acepta los siguientes 47 códigos de mezclador. Cada elemento define una capa física en la pila del modelo. La Tabla~\ref{tab:layer-pattern-enum} enumera todos los tipos disponibles con su soporte de entrenamiento e inferencia.
+El array \texttt{model.dims.layer\_pattern} acepta los siguientes 48 códigos de mezclador. Cada elemento define una capa física en la pila del modelo. La Tabla~\ref{tab:layer-pattern-enum} enumera todos los tipos disponibles con su soporte de entrenamiento e inferencia.
 
 \begin{longtable}{>{\ttfamily\footnotesize\raggedright\arraybackslash}p{4.7cm}>{\raggedright\arraybackslash}p{5.0cm}cc}
 \toprule
@@ -243,6 +243,7 @@ El array \texttt{model.dims.layer\_pattern} acepta los siguientes 47 códigos de
 \endlastfoot
 standard & Atención multi-cabeza clásica (estilo BERT) & \checkmark & \checkmark \\
 sigmoid & Atención con compuerta sigmoide & \checkmark & \checkmark \\
+ca & Atención Continua --- integración continua exacta sobre trayectorias de memoria lineales por tramos & \checkmark & \checkmark \\
 memory & Atención con memoria — valores por ID de token (V = K + Norm(E[s])) & \checkmark & \checkmark \\
 gated\_softmax & Atención softmax con compuerta sigmoide post-SDPA & \checkmark & \checkmark \\
 titan & Atención Titan con codificación posicional (HoPE/RoPE) & \checkmark & \checkmark \\
