@@ -22,4 +22,4 @@ The Frankenstein JSON Schema remains the single source of truth instead of trans
 
 \subsection{Status}
 
-The three implementation phases---classification MVP, generative decoder and ViT classifier, and ViT segmenter---are complete, but the package has not yet run inside a live dashAI instance and PyPI publication is pending. Known limitations include a direct classification loop rather than MLM pretraining, deferred native form fields for high-leverage knobs, and unconfirmed rendering of segmentation masks. The adapter deliberately leaves dashAI's core untouched, so future releases cannot break it through coupling.
+The three implementation phases---classification MVP, generative decoder and ViT classifier, and ViT segmenter---are complete, verified inside a live dashAI instance (0.10.x and 0.11.0), and published on PyPI. Known limitations include a direct classification loop rather than MLM pretraining, deferred native form fields for high-leverage knobs, and unconfirmed rendering of segmentation masks. The adapter deliberately leaves dashAI's core untouched, so future releases cannot break it through coupling.

@@ -8,7 +8,8 @@ Covers:
 - End-to-end: a tiny MLM pretraining through ``engine.train_from_config``
   streams STEP/EPOCH telemetry into a real DashAI SQLite DB.
 
-Run with the DashAI project's uv env:
+The fixtures are version-tolerant: run against the DashAI clone (0.10.x) or
+any DashAI 0.11+ environment (e.g. a PyPI install), for example:
     cd /home/erickfmm/programas/dashAI
     uv run --extra cpu pytest \
         /home/erickfmm/programas/transformer-encoder-frankestein/dashai-frankenstein/tests/test_mlm_pretraining.py -v
@@ -25,6 +26,35 @@ _FRANKENSTEIN_ROOT = Path(__file__).resolve().parents[2]
 for _p in (str(_PLUGIN_SRC), str(_FRANKENSTEIN_ROOT)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+
+def _model_session_kwargs(inputs, outputs):
+    """Build ``ModelSession`` kwargs valid on both DashAI schema generations.
+
+    DashAI 0.11 replaced the flat ``input_columns`` / ``output_columns``
+    columns with a single ``column_roles`` JSON mapping (``features`` /
+    ``target`` roles); both generations require a non-null
+    ``evaluation_strategy``. Branch on the installed model so the suite runs
+    against a DashAI 0.10 clone and a 0.11+ PyPI install alike.
+    """
+    from DashAI.back.dependencies.database.models import ModelSession
+
+    kwargs = {"evaluation_strategy": "holdout"}
+    if hasattr(ModelSession, "column_roles"):  # DashAI >= 0.11 roles schema
+        kwargs["column_roles"] = {
+            "features": {
+                "refs": [{"kind": "raw", "name": c} for c in inputs],
+                "columns": list(inputs),
+            },
+            "target": {
+                "refs": [{"kind": "raw", "name": c} for c in outputs],
+                "columns": list(outputs),
+            },
+        }
+    else:  # DashAI <= 0.10 flat x/y schema
+        kwargs["input_columns"] = list(inputs)
+        kwargs["output_columns"] = list(outputs)
+    return kwargs
 
 import pyarrow as pa
 import torch
@@ -153,9 +183,15 @@ class TestMLMTask:
     def test_metadata_types(self):
         t = MaskedLanguageModelingTask()
         md = t.get_metadata()
-        assert md["inputs_types"] == ["Text"]
-        assert md["outputs_types"] == ["Text"]
-        assert md["inputs_cardinality"] == 1
+        if "column_roles" in md:  # DashAI >= 0.11 roles contract
+            assert [r["name"] for r in md["column_roles"]] == ["features", "target"]
+            assert md["io_roles"] == {"inputs": ["features"], "outputs": ["target"]}
+            assert [r["types"] for r in md["column_roles"]] == [["Text"], ["Text"]]
+            assert MaskedLanguageModelingTask.inputs_cardinality() == 1
+        else:  # DashAI <= 0.10 flat x/y contract
+            assert md["inputs_types"] == ["Text"]
+            assert md["outputs_types"] == ["Text"]
+            assert md["inputs_cardinality"] == 1
 
     def test_schema_binds_pretrainer(self):
         t = MaskedLanguageModelingTask()
@@ -250,7 +286,7 @@ def dashai_db(tmp_path):
         ms = ModelSession(
             dataset_id=ds.id, name="mlm-e2e-session",
             task_name="MaskedLanguageModelingTask",
-            input_columns=["text"], output_columns=["text"], splits="{}",
+            **_model_session_kwargs(["text"], ["text"]), splits="{}",
         )
         db.add(ms)
         db.flush()

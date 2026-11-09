@@ -1,6 +1,6 @@
 # DashAI Plugin Integration Audit — Frankenstein Transformer
 
-**Status:** Phase 0 **implemented** (commits `b4c1437` + `5e23630`; `1.0.0` on PyPI but predates the engine — `1.1.0` republish pending, §7.6). Phases 1–3 (the `dashai-frankenstein` plugin) **implemented** (`dashai-frankenstein/`, 5 entry points) but **not yet run inside a live DashAI instance** — see §12 for the launch procedure.
+**Status:** Phases 0–3 **implemented and verified**. Phase 0 (engine API) ships in `frankenstein-transformer` ≥ 1.6.0 on PyPI. The `dashai-frankenstein` plugin (`dashai-frankenstein/`, **9** `dashai.plugins` entry points) is published on PyPI (0.7.0, superseded by 0.7.1) and has been run end-to-end inside a live DashAI instance — `dashai` 0.11.0 from PyPI and the 0.10.x development clone: all nine entry points discover and register, every model schema generates, and the plugin test suite passes **43/43**, including e2e engine training with native DashAI SQLite telemetry. See §12.
 **Scope:** Turn Frankenstein Transformer into a `dashai-frankenstein` plugin that registers Frankenstein's model classes as DashAI components, with **minimal changes to DashAI** and **contained, well-defined refactors to Frankenstein**.
 **Decisions locked with the author:**
 
@@ -8,9 +8,9 @@
 2. **Component scope:** *All four* — MLM text classifier, causal decoder (generative), ViT image classifier, and ViT segmentation (+ a plugin-provided segmentation task).
 3. **Delivery:** Frankenstein is **published to PyPI** and consumed by the plugin as a normal dependency.
 
-> **Implementation status of Phase 0 (Frankenstein side).** Items §7.1–§7.5 landed in commit `b4c1437` ("feat: add reusable engine API and encoder classification head for DashAI integration") and are marked ✅ in the §7 summary table. The follow-up commit routes the SBERT task through the engine (`_train_sbert` in `src/engine.py`, removing the CLI special-case in `src/training/main.py`) and adds `tests/test_engine_api.py` (14 tests) plus `examples/engine_demo.py` to satisfy the Phase 0 exit criterion. `1.0.0` is on PyPI (<https://pypi.org/project/frankenstein-transformer/>) but **predates Phase 0** — only §7.6 remains: bump to `1.1.0` and republish so the engine API is consumable as a dependency. The "Today" prose in §7.1–§7.5 is preserved as the original design rationale but no longer describes HEAD — trust the summary table and `git show b4c1437` for current state.
+> **Implementation status of Phase 0 (Frankenstein side).** Items §7.1–§7.5 landed in commit `b4c1437` ("feat: add reusable engine API and encoder classification head for DashAI integration") and are marked ✅ in the §7 summary table. The follow-up commit routes the SBERT task through the engine (`_train_sbert` in `src/engine.py`, removing the CLI special-case in `src/training/main.py`) and adds `tests/test_engine_api.py` (14 tests) plus `examples/engine_demo.py` to satisfy the Phase 0 exit criterion. `frankenstein-transformer` 1.6.0 (engine API included) is on PyPI (<https://pypi.org/project/frankenstein-transformer/>); §7.6 is complete and the plugin consumes it as a dependency (`>=1.6.0`). The "Today" prose in §7.1–§7.5 is preserved as the original design rationale but no longer describes HEAD — trust the summary table and `git show b4c1437` for current state.
 >
-> **Implementation status of Phases 1–3 (the `dashai-frankenstein` plugin).** The plugin package (`dashai-frankenstein/`, 16 modules, 5 `dashai.plugins` entry points) is implemented: `FrankensteinMLMModel` (Phase 1), `FrankensteinDecoderModel` + `FrankensteinViTClassifier` (Phase 2), `FrankensteinViTSegmenter` + `SegmentationTask` (Phase 3). It is not yet published to PyPI and has not been run inside a live DashAI instance. See §12 for the launch procedure.
+> **Implementation status of Phases 1–3 (the `dashai-frankenstein` plugin).** The plugin now registers **9** `dashai.plugins` entry points: `FrankensteinMLMModel`, `FrankensteinDecoderModel`, `FrankensteinPretrainer`, `FrankensteinCausalLMModel`, `FrankensteinViTClassifier`, `FrankensteinViTSegmenter`, plus the plugin-provided `MaskedLanguageModelingTask`, `CausalLMPretrainingTask` and `SegmentationTask`. It is published on PyPI (`dashai-frankenstein` 0.7.0 → 0.7.1) and verified end-to-end against `dashai` 0.11.0 and the 0.10.x clone (43/43 tests; see §12.5–§12.7).
 
 ---
 
@@ -312,7 +312,7 @@ These are the **required** modifications in this repository. Each is scoped to b
 - **Why:** DashAI's classification tasks require sequence/image-level probabilities (see §5.4, Strategy A).
 
 ### 7.6 Publish to PyPI
-- **Status:** `1.0.0` is **published** on PyPI (<https://pypi.org/project/frankenstein-transformer/>, `requires_python = >=3.9,<3.13`), but that release predates Phase 0 — it does **not** contain `src/engine.py`, the classification head, or the SBERT engine routing. Those landed in commits `b4c1437` + `5e23630` and must ship as **`1.1.0`**.
+- **Status:** complete. `frankenstein-transformer` 1.6.0 is on PyPI (<https://pypi.org/project/frankenstein-transformer/>) with `src/engine.py`, the classification head and the SBERT engine routing (landed in `b4c1437` + `5e23630`). The plugin depends on `>=1.6.0`; the next repo release is `1.7.0`.
 - **Change:** bump `version` in `pyproject.toml` from `1.0.0` → `1.1.0`, tag `v1.1.0`, and publish (`uv build && uv publish`, or `python -m build && twine upload`). The plugin's `dependencies` entry is already `frankenstein-transformer>=1.1.0` (see `dashai-frankenstein/pyproject.toml`). DashAI requires Python `>=3.10`; the `>=3.9` floor is compatible.
 - **Why:** locked decision (PyPI dependency). The package name is already correct — no rename needed. The `1.1.0` release is the **only** remaining Phase-0 item before the plugin can install against a real DashAI instance.
 
@@ -331,7 +331,7 @@ Status legend: ✅ landed in `b4c1437`; ✅+ landed in the `b4c1437` follow-up (
 | 7.3 | new `src/engine.py`, rewrite `src/training/main.py` | Extract non-CLI engine façade (`build_model` / `build_tokenizer` / `build_dataloader` / `train_from_config` / `save_checkpoint` / `load_checkpoint` / `TrainResult`). SBERT now routed through the engine via `_train_sbert` (CLI special-case removed). | ✅ / ✅+ | Medium | Yes (CLI delegates, behavior preserved) |
 | 7.4 | `src/training/trainer.py:52` (TrainingConfig), `src/training/main.py:1043`, `src/schema/_training.yaml`, `src/engine.py` | Add `supervisor: auto\|off` field + schema entry; `off` runs `TitanTrainer` in-process; `metrics_callback` hook added to `TitanTrainer` | ✅ | Low-Medium | Yes (default `auto` unchanged) |
 | 7.5 | `src/model/frankenstein_encoder.py:84/126`, `src/model/config.py:91`, `src/schema/_model/_model_flat.yaml`, `src/engine.py` | Optional non-BitNet classification head (`num_labels`, `classification_head`, `encoder_pooling_mode`) on encoder; ViT already has heads | ✅ | Low | Yes (opt-in, default `False`) |
-| 7.6 | release | PyPI publish as `frankenstein-transformer==1.1.0` (engine API). `1.0.0` is already on PyPI but predates Phase 0 — **bump + republish required**. | ⬜ (1.1.0 pending) | Low | n/a |
+| 7.6 | release | PyPI publish of the engine API (`frankenstein-transformer` ≥ 1.6.0). | ✅ (1.6.0 on PyPI) | Low | n/a |
 | 7.7 | build-time generator | Field-metadata JSON (v2) | ⬜ | Low | Yes (additive) |
 
 **Phase 0 exit criterion verification:** `tests/test_engine_api.py` (14 tests, CPU) covers `build_model` shapes, the Strategy-A classification head (including full-precision-under-BitNet), `save_checkpoint`/`load_checkpoint` round-trip (state-dict equality + `num_labels` head rebuild), and SBERT engine dispatch. `examples/engine_demo.py` is the human-runnable proof: build → train 3 steps → head → save/load, no `src/cli.py`. Run: `uv run --extra cpu --extra train python -m pytest tests/test_engine_api.py -v`.
@@ -408,20 +408,16 @@ DashAI:
 
 This is the procedure to make the five Frankenstein components appear and run in a live DashAI instance. It assumes a working DashAI deployment (backend + frontend, with its database and job queue) — see the DashAI repo's own setup instructions for that.
 
-### 12.1 Prerequisite — publish Frankenstein `1.1.0` (engine API)
+### 12.1 Prerequisite — Frankenstein engine API on PyPI
 
-`1.0.0` on PyPI predates Phase 0 and has **no** `src/engine.py`. The plugin depends on `frankenstein-transformer>=1.1.0`. From this repo:
+`frankenstein-transformer` **1.6.0** on PyPI already ships `src/engine.py`; the plugin depends on `>=1.6.0`. The next repo release is **1.7.0** (hatch-vcs derives the version from the tag — no manual `pyproject.toml` bump):
 
 ```bash
-# 1. Bump the version (pyproject.toml: version = "1.1.0")
-# 2. Build + publish the Frankenstein package
-uv build                        # produces dist/frankenstein_transformer-1.1.0-*.whl + .tar.gz
-uv publish                      # or: twine upload dist/*
-# 3. Tag the release
-git tag v1.1.0 && git push --tags
+uv build                        # dist/frankenstein_transformer-1.7.0-*.whl + .tar.gz
+git tag v1.7.0 && git push origin v1.7.0   # CI publishes via Trusted Publishing
 ```
 
-Verify: `pip download frankenstein-transformer==1.1.0` resolves, and `python -c "from src.engine import build_model, train_from_config"` succeeds.
+Verify: `pip download frankenstein-transformer==1.7.0` resolves, and `python -c "from src.engine import build_model, train_from_config"` succeeds.
 
 ### 12.2 Publish (or editable-install) the plugin
 
@@ -475,20 +471,50 @@ for each. The five Frankenstein classes register with these base types:
    - **Image classification** → `ImageClassificationTask` + `FrankensteinViTClassifier`. Use a ViT preset (`configs/frankenstein_vit_base.yaml`) or a YAML with `model_class: frankenstein_vit`.
    - **Segmentation** → `SegmentationTask` (provided by this plugin) + `FrankensteinViTSegmenter`. Use a ViT YAML with a segmentation head.
 
-### 12.5 Verification checklist (without running)
+### 12.5 Verification results
 
-If you cannot run the full stack, verify the wiring statically:
+Verified against `dashai` **0.11.0** (fresh `uv` venv, PyPI install, Python 3.12) and the DashAI **0.10.x** development clone:
 
-- **Entry points resolve:** `importlib.metadata.entry_points(group="dashai.plugins")` lists all five names pointing at `dashai_frankenstein:<Class>`.
-- **Imports clean:** with both `frankenstein-transformer==1.1.0` and `DashAI` installed, `python -c "import dashai_frankenstein"` and `python -c "from dashai_frankenstein import FrankensteinMLMModel, FrankensteinDecoderModel, FrankensteinViTClassifier, FrankensteinViTSegmenter, SegmentationTask"` succeed.
-- **Base-type detection:** each model's MRO contains exactly one `"Base"`-named ancestor with a `TYPE` attribute (`BaseModel`→`"Model"`, `BaseGenerativeModel`→`"GenerativeModel"`, `BaseTask`→`"Task"`). No class introduces a second `TYPE`-bearing base (would raise `TypeError` at registration — see `component_registry.py:153`).
-- **Schema generates:** `<Class>.get_schema()` returns a JSON Schema dict for each component (via `ConfigObject.get_schema` → pydantic `model_json_schema`).
-- **Engine round-trip:** `examples/engine_demo.py` from this repo builds → trains 3 steps → save/load in-process, no CLI (Phase-0 exit criterion).
+- **Entry points resolve:** `importlib.metadata.entry_points(group="dashai.plugins")` lists all **nine** names pointing at `dashai_frankenstein:<Class>`.
+- **Discovery + registration:** `DashAI.back.plugins.utils.get_available_plugins()` loads all nine classes and `register_plugin_components()` registers them as `Model` (5), `GenerativeModel` (1) and `Task` (3). Base-type detection accepts every class (exactly one `"Base"`-named `TYPE` ancestor).
+- **Imports clean:** `import dashai_frankenstein` succeeds with `frankenstein-transformer` (local HEAD, and the 1.6.0 PyPI floor) and a PyPI `DashAI` install.
+- **Schema generates:** `get_schema()` returns `use_dashai_dataset`, `use_dashai_dataset_for_tokenizer` and `frankenstein_json` for all six model components. The three Tasks expose no schema, matching DashAI's own built-in Tasks.
+- **Test suite:** `dashai-frankenstein/tests` passes **43/43**, including the e2e engine trainings that stream STEP/EPOCH rows into DashAI's SQLite metric store.
+- **Co-install:** `uv pip check` reports all 298 packages compatible; `datasets` resolves to 3.6.0 (see §12.7).
 - **Vocab constraint:** the text components inject `model.dims.vocab_size = len(tokenizer)` before building so the embedding matches the tokenizer (AGENTS.md constraint #2).
 
-### 12.6 Known limitations (v0.1.0)
+### 12.6 Known limitations (v0.7.1)
 
-- The plugin has **not** been run against a live DashAI instance; the contract is implemented from the audited DashAI source (§3.1, §11) but integration testing is pending.
+- In-process discovery/registration and the full plugin test suite are verified against `dashai` 0.11.0 and the 0.10.x clone; a walkthrough in a running backend + frontend deployment is still pending.
 - `FrankensteinMLMModel` runs a direct supervised classification loop (Strategy A head) rather than MLM-pretraining-then-finetune (audit §10 Q1); the two-stage recipe is a quality follow-up.
 - Segmentation mask columns: `FrankensteinViTSegmenter.predict` returns per-pixel class maps; DashAI frontend rendering of a mask output column is unconfirmed (audit §10 Q4) and may need a local frontend addition.
 - The passthrough schema (v1) defers curated native form fields to v2 (audit §5.1).
+
+### 12.7 DashAI 0.11 schema changes (handled)
+
+DashAI 0.11 reworked two contracts the plugin touches. The plugin **runtime**
+needed no changes; only the test fixtures were made version-tolerant:
+
+- **`ModelSession` columns:** `input_columns` / `output_columns` were replaced
+  by a single `column_roles` JSON mapping
+  (`{"features": {"refs": [...], "columns": [...]}, "target": {...}}`), and
+  `evaluation_strategy` is required in both generations. The test fixtures now
+  build the kwargs through a `_model_session_kwargs()` helper that branches on
+  `hasattr(ModelSession, "column_roles")`.
+- **Task metadata:** `BaseTask.get_metadata()` now emits `column_roles`,
+  `io_roles`, `prediction_mode`, `requires_target`, `takes_preprocessing` and
+  `icon`; the flat `inputs_types` / `outputs_types` / `*_cardinality` view is
+  gone. The plugin's Tasks keep declaring the legacy x/y short form, which
+  DashAI still reads through its `XYRoles` compatibility shim, so
+  registration and `prepare_for_task` work unchanged. The metadata test
+  branches on the installed contract.
+- **Unchanged:** `BaseModel`'s abstract contract (`train` / `save` / `load` /
+  `prepare_dataset` / `prepare_output` / `calculate_metrics`) and
+  `_save_metrics` are identical; `Metric.value` became nullable and gained
+  `unavailable_reason` (backwards compatible for writers).
+
+**Co-install caveat:** `frankenstein-transformer` pins `datasets>=3,<4`, so
+installing the plugin into a DashAI environment that ships `datasets` 5.x
+downgrades it to 3.x. DashAI's floor (`>=2.20.0`) still holds and the suite
+passes with 3.6.0; resync/relock DashAI afterwards if newer `datasets`
+behavior is required.

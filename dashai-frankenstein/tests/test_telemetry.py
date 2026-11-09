@@ -7,7 +7,8 @@ Two layers:
   (``setup_sqlite_db`` + ``Metric`` model), exercising the native
   ``BaseModel._save_metrics`` path.
 
-Run with the DashAI project's uv env (DashAI importable):
+The fixtures are version-tolerant: run against the DashAI clone (0.10.x) or
+any DashAI 0.11+ environment (e.g. a PyPI install), for example:
     cd /home/erickfmm/programas/dashAI
     uv run --extra cpu pytest \
         /home/erickfmm/programas/transformer-encoder-frankestein/dashai-frankenstein/tests/test_telemetry.py -v
@@ -25,6 +26,35 @@ _FRANKENSTEIN_ROOT = Path(__file__).resolve().parents[2]
 for _p in (str(_PLUGIN_SRC), str(_FRANKENSTEIN_ROOT)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+
+def _model_session_kwargs(inputs, outputs):
+    """Build ``ModelSession`` kwargs valid on both DashAI schema generations.
+
+    DashAI 0.11 replaced the flat ``input_columns`` / ``output_columns``
+    columns with a single ``column_roles`` JSON mapping (``features`` /
+    ``target`` roles); both generations require a non-null
+    ``evaluation_strategy``. Branch on the installed model so the suite runs
+    against a DashAI 0.10 clone and a 0.11+ PyPI install alike.
+    """
+    from DashAI.back.dependencies.database.models import ModelSession
+
+    kwargs = {"evaluation_strategy": "holdout"}
+    if hasattr(ModelSession, "column_roles"):  # DashAI >= 0.11 roles schema
+        kwargs["column_roles"] = {
+            "features": {
+                "refs": [{"kind": "raw", "name": c} for c in inputs],
+                "columns": list(inputs),
+            },
+            "target": {
+                "refs": [{"kind": "raw", "name": c} for c in outputs],
+                "columns": list(outputs),
+            },
+        }
+    else:  # DashAI <= 0.10 flat x/y schema
+        kwargs["input_columns"] = list(inputs)
+        kwargs["output_columns"] = list(outputs)
+    return kwargs
 
 from dashai_frankenstein.adapters.telemetry import (  # noqa: E402
     EPOCH_FIELDS,
@@ -273,8 +303,7 @@ def dashai_db(tmp_path):
             dataset_id=ds.id,
             name="telemetry-test-session",
             task_name="TextClassificationTask",
-            input_columns=["text"],
-            output_columns=["label"],
+            **_model_session_kwargs(["text"], ["label"]),
             splits='{"train": [0, 1], "test": [2]}',
         )
         db.add(ms)

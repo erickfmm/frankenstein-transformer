@@ -11,7 +11,8 @@ Covers:
 - End-to-end: tiny causal-LM pretraining (decoder) through
   ``engine.train_from_config`` streams STEP telemetry into DashAI's DB.
 
-Run with the DashAI project's uv env:
+The fixtures are version-tolerant: run against the DashAI clone (0.10.x) or
+any DashAI 0.11+ environment (e.g. a PyPI install), for example:
     cd /home/erickfmm/programas/dashAI
     uv run --extra cpu pytest \
         /home/erickfmm/programas/transformer-encoder-frankestein/dashai-frankenstein/tests/test_dashai_dataset_toggle.py -v
@@ -29,6 +30,35 @@ _FRANKENSTEIN_ROOT = Path(__file__).resolve().parents[2]
 for _p in (str(_PLUGIN_SRC), str(_FRANKENSTEIN_ROOT)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+
+def _model_session_kwargs(inputs, outputs):
+    """Build ``ModelSession`` kwargs valid on both DashAI schema generations.
+
+    DashAI 0.11 replaced the flat ``input_columns`` / ``output_columns``
+    columns with a single ``column_roles`` JSON mapping (``features`` /
+    ``target`` roles); both generations require a non-null
+    ``evaluation_strategy``. Branch on the installed model so the suite runs
+    against a DashAI 0.10 clone and a 0.11+ PyPI install alike.
+    """
+    from DashAI.back.dependencies.database.models import ModelSession
+
+    kwargs = {"evaluation_strategy": "holdout"}
+    if hasattr(ModelSession, "column_roles"):  # DashAI >= 0.11 roles schema
+        kwargs["column_roles"] = {
+            "features": {
+                "refs": [{"kind": "raw", "name": c} for c in inputs],
+                "columns": list(inputs),
+            },
+            "target": {
+                "refs": [{"kind": "raw", "name": c} for c in outputs],
+                "columns": list(outputs),
+            },
+        }
+    else:  # DashAI <= 0.10 flat x/y schema
+        kwargs["input_columns"] = list(inputs)
+        kwargs["output_columns"] = list(outputs)
+    return kwargs
 
 import pyarrow as pa  # noqa: E402
 import torch  # noqa: E402
@@ -428,7 +458,7 @@ def dashai_db(tmp_path):
         ms = ModelSession(
             dataset_id=ds.id, name="clm-e2e-session",
             task_name="CausalLMPretrainingTask",
-            input_columns=["text"], output_columns=["text"], splits="{}",
+            **_model_session_kwargs(["text"], ["text"]), splits="{}",
         )
         db.add(ms)
         db.flush()

@@ -16,7 +16,6 @@ from typing import Any, Union
 
 from DashAI.back.core.utils import MultilingualString
 from DashAI.back.models.base_model import BaseModel
-from DashAI.back.models.base_model import BaseModel
 
 from dashai_frankenstein.config import FrankensteinClassifierSchema
 from dashai_frankenstein.engine import (

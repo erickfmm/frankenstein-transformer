@@ -91,7 +91,7 @@ for them).
 ## Install
 
 ```bash
-pip install dashai-frankenstein            # from PyPI once published
+pip install dashai-frankenstein            # published on PyPI (0.7.1+)
 # or, from this repo:
 pip install -e ./dashai-frankenstein
 ```
@@ -111,6 +111,25 @@ If your environment must stay on transformers 4.x, pin
 `diffusers<0.40` alongside it — diffusers 0.40.0 requires
 `huggingface-hub>=1.23`, which transformers 4.x (hub `<1.0`) cannot provide;
 diffusers 0.39 works with either hub series.
+
+One dependency *is* capped: `frankenstein-transformer` requires
+`datasets>=3,<4`, so installing the plugin into a DashAI environment that
+already ships `datasets` 5.x downgrades it to 3.x. DashAI's own floor
+(`datasets>=2.20.0`) is still satisfied and the plugin's full suite passes
+with 3.6.0, but resync/relock DashAI afterwards if your environment relies on
+newer `datasets` behavior.
+
+## Testing
+
+The suite is version-tolerant: it runs against a DashAI 0.10.x clone and any
+DashAI 0.11+ environment (PyPI install included). From a DashAI environment:
+
+```bash
+cd /path/to/DashAI
+uv run --extra cpu pytest /path/to/dashai-frankenstein/tests -v
+```
+
+Verified 43/43 against `dashai` 0.11.0 (PyPI) and the DashAI 0.10.x clone.
 
 ## Architecture
 

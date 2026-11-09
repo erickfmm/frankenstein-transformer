@@ -220,7 +220,7 @@ Beyond the CLI, a thin **in-process engine API** ([src/engine.py](src/engine.py)
 from src.engine import build_model, train_from_config, save_checkpoint, load_checkpoint
 ```
 
-This engine powers the **`dashai-frankenstein` plugin**, which registers Frankenstein's model classes as [DashAI](https://github.com/DashAIOpen/DashAI) components (5 `dashai.plugins` entry points): `FrankensteinMLMModel` (text classification via MLM encoder), `FrankensteinDecoderModel` (generative), `FrankensteinViTClassifier`, and `FrankensteinViTSegmenter` (+ `SegmentationTask`). The package is published on [PyPI](https://pypi.org/project/frankenstein-transformer/); see [docs/dashai-plugin-audit.md](docs/dashai-plugin-audit.md) for the integration design.
+This engine powers the **`dashai-frankenstein` plugin**, which registers Frankenstein's model classes as [DashAI](https://github.com/DashAIOpen/DashAI) components (9 `dashai.plugins` entry points): `FrankensteinMLMModel` (classification via the MLM encoder), `FrankensteinPretrainer` (MLM pre-training), `FrankensteinDecoderModel` (generative), `FrankensteinCausalLMModel` (causal-LM pre-training), `FrankensteinViTClassifier`, `FrankensteinViTSegmenter`, plus the plugin-provided `MaskedLanguageModelingTask`, `CausalLMPretrainingTask` and `SegmentationTask`. Both packages are published on PyPI ([frankenstein-transformer](https://pypi.org/project/frankenstein-transformer/), [dashai-frankenstein](https://pypi.org/project/dashai-frankenstein/)); see [docs/dashai-plugin-audit.md](docs/dashai-plugin-audit.md) for the integration design.
 
 ## Documentation Map
 

@@ -18,6 +18,35 @@ for _p in (str(_PLUGIN_SRC), str(_FRANKENSTEIN_ROOT)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+
+def _model_session_kwargs(inputs, outputs):
+    """Build ``ModelSession`` kwargs valid on both DashAI schema generations.
+
+    DashAI 0.11 replaced the flat ``input_columns`` / ``output_columns``
+    columns with a single ``column_roles`` JSON mapping (``features`` /
+    ``target`` roles); both generations require a non-null
+    ``evaluation_strategy``. Branch on the installed model so the suite runs
+    against a DashAI 0.10 clone and a 0.11+ PyPI install alike.
+    """
+    from DashAI.back.dependencies.database.models import ModelSession
+
+    kwargs = {"evaluation_strategy": "holdout"}
+    if hasattr(ModelSession, "column_roles"):  # DashAI >= 0.11 roles schema
+        kwargs["column_roles"] = {
+            "features": {
+                "refs": [{"kind": "raw", "name": c} for c in inputs],
+                "columns": list(inputs),
+            },
+            "target": {
+                "refs": [{"kind": "raw", "name": c} for c in outputs],
+                "columns": list(outputs),
+            },
+        }
+    else:  # DashAI <= 0.10 flat x/y schema
+        kwargs["input_columns"] = list(inputs)
+        kwargs["output_columns"] = list(outputs)
+    return kwargs
+
 from DashAI.back.core.enums.metrics import LevelEnum, SplitEnum  # noqa: E402
 from DashAI.back.models.base_model import BaseModel  # noqa: E402
 
@@ -60,7 +89,7 @@ def dashai_db(tmp_path):
         db.flush()
         ms = ModelSession(
             dataset_id=ds.id, name="e2e-session", task_name="ImageClassificationTask",
-            input_columns=["img"], output_columns=["label"], splits="{}",
+            **_model_session_kwargs(["img"], ["label"]), splits="{}",
         )
         db.add(ms)
         db.flush()
