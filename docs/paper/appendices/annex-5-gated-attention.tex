@@ -557,15 +557,116 @@ Memory & Constant $\mathcal{O}(d^2)$ inference state (matrix recurrent). & Log-d
 
 \normalsize
 
+\subsection{9. First Passage Attention (FPA): Forgetting by Path Extrema}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/fpa.pdf}}
+\caption{Dataflow of FPA: one linear map yields the per-head increment $\delta$ and the offsets $g,h$; the walk $W$ is their prefix sum, the field is $\phi=W+g$, the key level is $\psi=W+h$, and the bias is $\beta$ times the deepest dip of the field below the level over the span after each key.}
+\label{fig:mixer-fpa}
+\end{figure}
+
+\subsubsection{Mathematical Foundation}
+
+First Passage Attention \citep{liu_first_passage_2026} keeps the softmax attention of Vaswani et al.~\citep{vaswani_attention_2017} but replaces FoX's path \emph{sum} of forget gates with a path \emph{extremum}. A causal head of dimension $d$ with queries $\mathbf{q}_t$, keys $\mathbf{k}_s$ and values $\mathbf{v}_s$ computes
+\[
+\mathbf{o}_t=\sum_{s\le t}w_{ts}\mathbf{v}_s,\qquad w_{ts}\propto e^{\ell_{ts}},\qquad
+\ell_{ts}=\frac{\mathbf{q}_t^\top\mathbf{k}_s}{\sqrt{d}}+b_{ts},
+\]
+where the \textbf{first-passage bias} is
+\[
+b_{ts}=\beta\min\Bigl(0,\ \min_{s<u\le t}\phi_u-\psi_s\Bigr),\qquad b_{tt}=0,
+\]
+with a learned positive strength $\beta$ per head, a scalar field $\phi_u$ at every position and a scalar level $\psi_s$ for every key. We write $\bar{\phi}_{ts}=\min_{s<u\le t}\phi_u$ for the range minimum. A key is \emph{alive} at time $t$ when $b_{ts}=0$, and \emph{dead} otherwise; a dead key's bias is $-\beta$ times the depth $\psi_s-\bar{\phi}_{ts}$ of its deepest dip. Death is permanent: $b_{t's}\le b_{ts}$ for all $t'<t$ (Proposition 2.3(a)), so the decoder can drop a dead key once its bias passes a threshold.
+
+Each head derives the three scalars per position from the layer input $\mathbf{x}_t$ through one linear map, with a walk $W_t$ and the field/level
+\[
+W_t=\sum_{u\le t}\delta_u,\qquad \phi_u=W_u+g_u,\qquad \psi_s=W_s+h_s .
+\]
+The increments $\delta$ move the reference of every later comparison, while $g$ and $h$ let a token dip or set a level without moving it. A layer of width $D$ with $H$ heads therefore gains $3H(D+1)+H$ parameters --- $27{,}696$ per layer at $D=768$, $H=12$, i.e.\ $332{,}352$ over twelve layers, and $+1.56\%$ over keys and values in the cache.
+
+\paragraph{Special cases (Proposition 2.2).} The linear parameterisation contains several families:
+\begin{itemize}[leftmargin=*]
+    \item (a) If $g=h=0$, then $b_{ts}=-\beta L_{ts}$ with $L_{ts}=\max\bigl(0,\max_{s<u\le t}(W_s-W_u)\bigr)$, the regulator of a queue that starts empty at time $s$ (the \emph{stack form}).
+    \item (b) If in addition $\delta_u\le 0$ for all $u$, then $b_{ts}=\sum_{s<u\le t}\log f_u$ with $f_u=e^{\beta\delta_u}\in(0,1]$ --- \textbf{exactly FoX} with forget gates $f_u$. A rising walk is what lets FPA keep an old key while removing newer ones, which no forget gate can do.
+    \item (c) If $\delta=0$, $h=0$, $g\le 0$ and $\beta=1$, then $b_{ts}=\min_{s<u\le t}g_u$, a bottleneck bias.
+    \item (d) If $\delta_u=-1$, $g=0$ and $\psi_s=W_s-e_s$ with $e_s\ge 0$, then $b_{ts}=\beta\min(0,e_s-(t-s))$, the expiry rule of Expire-Span.
+\end{itemize}
+In the stack form the levels of the alive keys do not decrease with the time of writing, and a dip kills a suffix in time of the alive keys: the alive set evolves as a \textbf{stack} (Proposition 2.3(b)).
+
+\paragraph{Depth, not duration.} Selective Attention subtracts a sum of per-pair selections, so its suppression grows with the number of intervening steps, confounding the \emph{depth} of an event with its \emph{duration}. FPA's bias is $-\beta$ times the deepest dip and is unchanged when a dip no deeper than the deepest is held longer or inserted (Proposition 3.4); among aggregations of dips, functions of the maximum are the only ones with this duration invariance (Proposition 3.4(iii)).
+
+\paragraph{Training (straight-through).} The bias is piecewise linear in the field and the levels, and on the closed side of the outer minimum it passes no gradient to the field; in pilot runs that minimum could close for every key of a head early in training. FPA therefore trains with a straight-through estimator: the forward pass takes the hard range minimum and the backward pass takes, in its place, the gradient of the soft minimum $-\tau\log\sum_{s<u\le t}e^{-\phi_u/\tau}$ with $\tau=1$. The outer minimum acts on the hard value, and evaluation uses the hard bias unchanged.
+
+\begin{algorithm}[H]
+\caption{First Passage Attention (Parallel Reference Form)}
+\begin{algorithmic}[1]
+\Require Normalised input $\mathbf{x}\in\mathbb{R}^{n\times D}$; heads $H$; strength $\beta$; temperature $\tau$
+\Ensure Output $\mathbf{O}\in\mathbb{R}^{n\times D}$
+\State $\mathbf{Q},\mathbf{K},\mathbf{V}\gets W_q\mathbf{x},\,W_k\mathbf{x},\,W_v\mathbf{x}$ \Comment{per-head projections}
+\State $(\boldsymbol{\delta},\mathbf{g},\mathbf{h})\gets W_f\mathbf{x}+ \mathbf{b}_f$ \Comment{one map, three scalars per head}
+\State $W_t\gets\sum_{u\le t}\delta_u$;\quad $\phi_u\gets W_u+g_u$;\quad $\psi_s\gets W_s+h_s$
+\State $\bar{\phi}_{ts}\gets\min_{s<u\le t}\phi_u$ \Comment{range minimum after each key}
+\State $b_{ts}\gets\beta\min(0,\bar{\phi}_{ts}-\psi_s)$;\quad $b_{tt}\gets 0$
+\State $\mathbf{A}\gets\mathrm{softmax}\bigl(\mathbf{Q}\mathbf{K}^\top/\sqrt{d}+\mathbf{B}\bigr)$;\quad $\mathbf{O}\gets W_o(\mathbf{A}\mathbf{V})$
+\State \Return $\mathbf{O}$ \Comment{backward uses $\partial$ of the soft minimum $-\tau\log\sum e^{-\phi_u/\tau}$}
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cost and exact decoding.} In a blocked computation with block size $B$, the bias between a query block and an earlier key block needs only the suffix minima of $\phi$ within the key block, the minimum over the blocks strictly between, and the prefix minima of $\phi$ within the query block: $O(B^2)$ operations per pair of blocks, as an element-wise bias such as FoX's, plus $O(T/B)$ block minima (Proposition 2.4(a)). In autoregressive decoding $\bar{\phi}_{ts}=\min(\bar{\phi}_{t-1,s},\phi_t)$ for $s<t-1$ and $\bar{\phi}_{t,t-1}=\phi_t$, so each step updates the bias row in $O(t)$ and stores \emph{two scalars per cached key and head} (Proposition 2.4(b)) --- an exact plain-KV incremental branch, implemented in this repository as slot extras.
+
+\subsubsection{Empirical Performance and Trade-offs}
+
+The paper trains four 110M-parameter decoders (12 layers, width 768, 12 heads of dimension 64, SwiGLU-2048, RMSNorm, context 2048, 2.7B SlimPajama tokens) that differ only in attention. FPA (without positional encoding) matches or beats FoX in perplexity and extrapolates further:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Method} & \textbf{SlimPajama} & \textbf{WikiText-103} & \textbf{PG-19 2k--4k} & \textbf{Passkey 8k--16k} & \textbf{RULER 8k} \\
+\midrule
+FPA & \textbf{2.8640} & \textbf{3.1001} & \textbf{3.282} & \textbf{1.00} & \textbf{0.202} \\
+FoX & 2.8832 & 3.1425 & 3.316 & 0.20 & 0.117 \\
+Selective Attention & 2.8686 & 3.1197 & 3.805 & 0.04 & 0.008 \\
+Softmax + RoPE & 2.8908 & 3.1374 & 5.064 & 0.00 & 0.002 \\
+\bottomrule
+\end{tabular}
+\caption{110M language models (losses in nats per token; passkey and RULER accuracies) \citep{liu_first_passage_2026}. FPA retrieves every passkey at lengths up to $8\times$ its training context, even when its cache is compressed to about a quarter.}
+\label{tab:fpa-lm}
+\end{table}
+
+The cost is close to standard attention: one FPA layer takes $0.97\times$ the forward-plus-backward time of PyTorch SDPA and $1.50\times$ that of FoX, whose bias needs no range minimum; at batch size 1 and length 8192 decoding takes 22.0\,ms per token against 20.2\,ms for FoX and 23.9\,ms for softmax. Because the bias of a key never rises again, a decoder can drop a key once its bias falls below a threshold: at $\theta=10$ the FPA model loses $0.00044$ nats at length 2048 and keeps 34\% of its keys (26\% at 8192), and it still retrieves every passkey at 8192 and 16{,}384 tokens with 24--27\% of its cache.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabularx}{\linewidth}{lXX}
+\toprule
+\textbf{Aspect} & \textbf{Strength} & \textbf{Limitation} \\
+\midrule
+Expressivity & One constant-dimension head realises every dip-induced alive set; softmax heads with positional biases or token-level forget gates need head dimension linear in the number of keys (Theorem 3.1). & In the hard limit Selective Attention and DCP realise the same alive sets; the separation is in the scalar-per-position bias and in depth versus duration. \\
+Selectivity & A later token can erase a newer key while preserving older ones (the alive set is a stack); FoX is the special case of a non-rising walk. & Requires the straight-through soft-minimum gradient; the inner minimum can otherwise close early in training. \\
+Cost & $0.97\times$ SDPA training time; two extra scalars per cached key/head ($+1.56\%$); exact $O(t)$ decode; dead keys are evictable down to $\sim$26--34\% of the cache at negligible loss. & Quadratic attention remains; the paper's fused Triton kernel is not reproduced here (the reference implementation materialises the $T\times T$ bias). \\
+Evidence & 110M LM matches FoX in perplexity and retrieves passkeys at $8\times$--$16\times$ the training length; preregistered one-layer probes agree with the theory. & One seed per 110M model; a first-layer bias hurt multi-query associative recall unless removed. \\
+\bottomrule
+\end{tabularx}
+\caption{FPA trade-offs \citep{liu_first_passage_2026}. The repository integrates the causal head exactly; encoder mode symmetrises the open-span range minimum (the paper defines only the causal head).}
+\label{tab:fpa-tradeoffs}
+\end{table}
+
+\normalsize
+
 \subsection{Unified Gating Principle}
 
-All eight architectures share a common principle: \textbf{gating is a mechanism to control information flow and selective memory retention}. The specific design choices diverge along several dimensions:
+All nine architectures share a common principle: \textbf{gating is a mechanism to control information flow and selective memory retention}. The specific design choices diverge along several dimensions:
 
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Location of gating}: Recurrent state updates (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2) versus softmax logit/output space (FoX, Gated Softmax, RetNet).
-    \item \textbf{Granularity of control}: Dimension-wise (GLA, HGRN2 diagonal), key-specific (DeltaNet), token-wise (FoX), head-wise (Gated Softmax), or channel-wise decoupled erase/write (Gated DeltaNet-2).
-    \item \textbf{Data dependence}: Fully data-dependent (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, FoX, Gated Softmax) versus fixed schedules (RetNet with exponential decay).
-    \item \textbf{Expressiveness trade-off}: Linear recurrent efficiency (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, RetNet) versus full softmax expressiveness (FoX, Gated Softmax).
+    \item \textbf{Location of gating}: Recurrent state updates (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2) versus softmax logit/output space (FoX, Gated Softmax, FPA, RetNet).
+    \item \textbf{Granularity of control}: Dimension-wise (GLA, HGRN2 diagonal), key-specific (DeltaNet), token-wise (FoX), head-wise (Gated Softmax), channel-wise decoupled erase/write (Gated DeltaNet-2), or a per-key level compared against a head-specific field (FPA).
+    \item \textbf{Data dependence}: Fully data-dependent (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, FoX, Gated Softmax, FPA) versus fixed schedules (RetNet with exponential decay).
+    \item \textbf{Aggregation along the key--query path}: No path term (Gated Softmax), a sum of log-forget gates (FoX), or a range minimum of a learned field (FPA) --- sums accumulate with duration, extrema depend only on the deepest dip.
+    \item \textbf{Expressiveness trade-off}: Linear recurrent efficiency (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, RetNet) versus full softmax expressiveness (FoX, Gated Softmax, FPA).
 \end{enumerate}
 
 \subsection{Implementation and Practical Guidance}
@@ -581,6 +682,7 @@ All eight architectures share a common principle: \textbf{gating is a mechanism 
     \item \textbf{HGRN2}: Multi-scale temporal hierarchies; when layer-specific forget bounds are desirable.
     \item \textbf{FoX}: Length extrapolation and long-context understanding; when quadratic training is acceptable and replacing softmax is not desired.
     \item \textbf{Gated Softmax}: Quick improvement to existing softmax models with minimal code changes; best for practitioners wanting immediate gains without major refactoring.
+    \item \textbf{FPA}: Long-context and structured sequences where a later event invalidates recent tokens but not older ones (delimiters, backspaces, reassignment); when softmax quality and exact KV decoding are required and a small per-head scalar state is acceptable.
 \end{enumerate}
 
 \subsubsection{Hardware Considerations}

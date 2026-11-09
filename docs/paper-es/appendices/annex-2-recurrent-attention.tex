@@ -345,7 +345,7 @@ El código base selecciona un mezclador por bloque a partir del \texttt{layer\_p
     \State $H \gets \text{sigmoid-attention}(H)$
 \ElsIf{$m=\texttt{memory}$}
     \State $H \gets \text{memory-attention}(H)$
-\ElsIf{$m\in\{\texttt{retnet},\texttt{retnet}\}$}
+\ElsIf{$m=\texttt{retnet}$}
     \State $H \gets \text{retention}(H)$
 \ElsIf{$m=\texttt{mamba}$}
     \State $H \gets \text{selective-ssm}(H)$

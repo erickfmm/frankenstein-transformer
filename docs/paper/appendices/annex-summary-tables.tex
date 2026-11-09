@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 48 sequence mixers across ten families, 36 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 49 sequence mixers across ten families, 36 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -59,7 +59,7 @@ lsa & Sparse & $\mathcal{O}(N^2/\bar{n}_b + N\,(k+n_w+n_{\text{sink}})\,d_h)$ & 
 fastconformer & Sparse & $\mathcal{O}(n \cdot (w + g) \cdot d)$ & $\mathcal{O}(w + g)$ & Limited-context window + head-pinned global token; optional separate global projections; linear-memory long-form & \citep{rekesh_fastconformer_2023} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Gated (8)}} \\
+\multicolumn{6}{c}{\textbf{Gated (9)}} \\
 \midrule
 gla & Gated & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Data-dependent diagonal decay; linear attention with gating & \citep{yang_gla_2023} \\
 deltanet & Gated & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Delta rule; error-correcting linear attention & \citep{yang_deltanet_2024} \\
@@ -69,6 +69,7 @@ hgrn2 & Gated & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Hierarchical bounded
 fox & Gated & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Logit-space recency bias; FlashAttn compatible & \citep{lin_forgetting_transformer_2025} \\
 gated\_softmax & Gated & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Post-SDPA sigmoid gating; attention-sink mitigation & \citep{qiu_gated_attention_2025} \\
 kda & Gated & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Channel-wise decay + scalar write; Kimi Linear design & \citep{kimi_kda_2025} \\
+fpa & Gated & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Path-extremum (range-min) forget bias; contains FoX; two extra scalars per cached key/head & \citep{liu_first_passage_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Fast-Weight (6)}} \\

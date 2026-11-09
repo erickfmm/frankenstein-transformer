@@ -344,7 +344,7 @@ The codebase selects a mixer per block from the configured \texttt{layer\_patter
     \State $H \gets \text{continuum-attention}(H)$ \Comment{exact segment integration}
 \ElsIf{$m=\texttt{memory}$}
     \State $H \gets \text{memory-attention}(H)$
-\ElsIf{$m\in\{\texttt{retnet},\texttt{retnet}\}$}
+\ElsIf{$m=\texttt{retnet}$}
     \State $H \gets \text{retention}(H)$
 \ElsIf{$m=\texttt{mamba}$}
     \State $H \gets \text{selective-ssm}(H)$

@@ -171,6 +171,10 @@ _ATTENTION_MIXER_RENAMES: Dict[str, Dict[str, str]] = {
         "learned_gain": "ca_learned_gain",
         "gain_init": "ca_gain_init",
     },
+    "fpa": {
+        "beta_init": "fpa_beta_init",
+        "tau": "fpa_tau",
+    },
     "fastconformer": {
         "window_size": "fastconformer_window_size",
         "global_tokens": "fastconformer_global_tokens",

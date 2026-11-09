@@ -40,6 +40,7 @@ def _make(bitnet_routers: bool, mode: str = "encoder"):
             "deltanet",
             "gated_deltanet",
             "fox",
+            "fpa",
             "hgrn2",
             "gated_deltanet2",
             "kda",

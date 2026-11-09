@@ -72,7 +72,7 @@ attention.ode.steps & int $\ge 1$ & Integration steps between consecutive transf
 \midrule
 \multicolumn{3}{l}{\textit{model.attention.retnet.*}} \\
 \midrule
-attention.retnet.heads & int $\ge 1$ & Retention heads for \texttt{retnet}/\texttt{retnet} layers. Must divide \texttt{hidden\_size}. Default: 8. \\
+attention.retnet.heads & int $\ge 1$ & Retention heads for \texttt{retnet} layers. Must divide \texttt{hidden\_size}. Default: 8. \\
 \midrule
 \multicolumn{3}{l}{\textit{model.attention.mla.*}} \\
 \midrule
@@ -255,6 +255,7 @@ deltanet / gated\_deltanet & DeltaNet with corrective delta rule & \checkmark & 
 gated\_deltanet2 & Gated DeltaNet-2 with decoupled channel-wise erase/write gates & \checkmark & \checkmark \\
 hgrn2 & HGRN2 with hierarchical forget gates & \checkmark & \checkmark \\
 fox & Forgetting Transformer (FoX) with forget bias in logits & \checkmark & \checkmark \\
+fpa & First Passage Attention with a range-minimum forget bias & \checkmark & \checkmark \\
 nsa & Native Sparse Attention (three-branch) & \checkmark & \checkmark \\
 engram & N-gram conditional memory lookup & \checkmark & \checkmark \\
 gqa & Grouped-Query Attention with configurable KV heads & \checkmark & \checkmark \\

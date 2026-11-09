@@ -263,6 +263,7 @@ properties:
       | `memory` | Memory Attention — value projection replaced by layer-specific token-ID memory, V = K + Norm(E[s]) (paper: arxiv:2609.28399) | ✅ | ✅ |
       | `lsa` | Latent Sparse Attention — semantic Ward clustering of keys + top-k long-range selection; natively trainable, no extra parameters, no PE (paper: arxiv:2610.42147) | ✅ | ✅ |
       | `fastconformer` | Fast Conformer limited-context attention — local window + head-pinned global token(s), optional separate global projections (paper: arxiv:2305.05084) | ✅ | ✅ |
+      | `fpa` | First Passage Attention — softmax + first-passage (range-min) forget bias β·min(0, φ̄ₜₛ − ψₛ); contains FoX as δ≤0 special case (paper: arxiv:2610.22714) | ✅ | ✅ |
 
       **Examples explained:**
       - `[standard]` repeated 12 times: Classic BERT-like encoder. Simplest configuration, serves as a reliable baseline. All layers use full quadratic attention.
@@ -323,6 +324,7 @@ properties:
       | `memory` | Memory Attention — proyección de valores reemplazada por memoria token-ID por capa, V = K + Norm(E[s]) (paper: arxiv:2609.28399) | ✅ | ✅ |
       | `lsa` | Atención Dispersa Latente — clustering Ward semántica de claves + selección top-k de largo alcance; entrenable de forma nativa, sin parámetros extra, sin PE (paper: arxiv:2610.42147) | ✅ | ✅ |
       | `fastconformer` | Atención de contexto limitado Fast Conformer — ventana local + token(s) global(es) anclado(s) a la cabecera, proyecciones globales separadas opcionales (paper: arxiv:2305.05084) | ✅ | ✅ |
+      | `fpa` | First Passage Attention — softmax + sesgo de olvido de primer paso (mínimo de rango) β·min(0, φ̄ₜₛ − ψₛ); contiene a FoX como caso especial δ≤0 (paper: arxiv:2610.22714) | ✅ | ✅ |
       **Ejemplos explicados:**
       - `[standard]` repetido 12 veces: Encoder clásico tipo BERT. Configuración más simple, sirve como línea base confiable. Todas las capas usan atención cuadrática completa.
       - `[retnet, titan, retnet, mamba, titan, ode]` con `num_layers=6`: Arquitectura mixta que combina retención recurrente (largo alcance eficiente), atención Titan con codificación posicional (atención local precisa), Mamba SSM (modelado de secuencias en tiempo lineal) y ODE de profundidad continua. Cada posición recibe un tipo diferente de cómputo, permitiendo representaciones diversas.
@@ -384,6 +386,7 @@ properties:
         - memory
         - lsa
         - fastconformer
+        - fpa
     examples:
       - [retnet, titan, retnet, mamba, titan, ode]
       - [standard]

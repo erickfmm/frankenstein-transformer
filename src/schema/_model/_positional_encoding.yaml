@@ -21,7 +21,7 @@ properties:
       - `learned_absolute`: Learnable absolute PE (paper: arxiv:2010.11929). nn.Parameter added to token embeddings. Standard in BERT and ViT.
       - `none`: No positional encoding. Explicitly disables PE.
 
-      **Per-mixer control:** Each mixer has a `<mixer>_use_pe` flag (default True for attention mixers, False for recurrent/decay mixers like retnet, mamba, ode, gla, deltanet, hgrn2, fox, kda, mtla, falcon*, lsa). Set to False to opt a specific mixer out of the model-wide PE.
+      **Per-mixer control:** Each mixer has a `<mixer>_use_pe` flag (default True for attention mixers, False for recurrent/decay mixers like retnet, mamba, ode, gla, deltanet, hgrn2, fox, fpa, kda, mtla, falcon*, lsa). Set to False to opt a specific mixer out of the model-wide PE.
 
       **References:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805) (paper: arxiv:2104.09864)
       (paper: arxiv:2509.05218) (paper: arxiv:2305.19466) (paper: arxiv:2108.12409) (paper:
@@ -382,7 +382,7 @@ properties:
           Per-mixer boolean flags to enable/disable the model-wide positional encoding
           for specific mixers. Defaults: True for attention mixers, False for
           recurrent/decay mixers (retnet, mamba, ode, gla, deltanet, gated_deltanet,
-          gated_deltanet2, hgrn2, fox, kda, mtla, falcon*) and for `lsa`
+          gated_deltanet2, hgrn2, fox, fpa, kda, mtla, falcon*) and for `lsa`
           (Native-LSA trains without positional encoding). Override to force PE
           on/off per mixer. `ssog` is a positional-field mixer; it defaults to
           True and the flag is documented for completeness.
@@ -432,6 +432,7 @@ properties:
           gated_deltanet2: { type: boolean, title: "gated_deltanet2", description: "Model-wide PE for `gated_deltanet2` layers (paper: arxiv:2605.22791).", default: false, description_es: "PE a nivel de modelo para capas `gated_deltanet2` (paper: arxiv:2605.22791)." }
           hgrn2: { type: boolean, title: "hgrn2", description: "Model-wide PE for `hgrn2` layers (paper: arxiv:2404.07904).", default: false, description_es: "PE a nivel de modelo para capas `hgrn2` (paper: arxiv:2404.07904)." }
           fox: { type: boolean, title: "fox", description: "Model-wide PE for `fox` layers (paper: arxiv:2503.02130).", default: false, description_es: "PE a nivel de modelo para capas `fox` (paper: arxiv:2503.02130)." }
+          fpa: { type: boolean, title: "fpa", description: "Model-wide PE for `fpa` layers (FPA trains without positional encoding; the walk is positional) (paper: arxiv:2610.22714).", default: false, description_es: "PE a nivel de modelo para capas `fpa` (FPA entrena sin codificación posicional; la caminata es posicional) (paper: arxiv:2610.22714)." }
           kda: { type: boolean, title: "kda", description: "Model-wide PE for `kda` layers (paper: arxiv:2510.26692).", default: false, description_es: "PE a nivel de modelo para capas `kda` (paper: arxiv:2510.26692)." }
           falcon1: { type: boolean, title: "falcon1", description: "Model-wide PE for `falcon1` layers (paper: arxiv:2608.27763).", default: false, description_es: "PE a nivel de modelo para capas `falcon1` (paper: arxiv:2608.27763)." }
           falcon2: { type: boolean, title: "falcon2", description: "Model-wide PE for `falcon2` layers (paper: arxiv:2608.27763).", default: false, description_es: "PE a nivel de modelo para capas `falcon2` (paper: arxiv:2608.27763)." }

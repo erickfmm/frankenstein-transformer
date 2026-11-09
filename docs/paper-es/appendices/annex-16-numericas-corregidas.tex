@@ -160,7 +160,7 @@ Un único interruptor debe llegar a cada lugar donde el toolkit materializa prob
 \toprule
 \textbf{Superficie} & \textbf{Puntos cubiertos} \\
 \midrule
-Mixers de atención & \texttt{standard}, \texttt{titan}, \texttt{gqa}, \texttt{ode}; familia latente (\texttt{mla}, \texttt{gqla}, \texttt{mlra}, \texttt{tucker}, \texttt{iha}, \texttt{gta}, \texttt{mtla}, \texttt{cca}, \texttt{ccgqa}, \texttt{gma}); con compuerta (\texttt{gated\_softmax}, \texttt{fox}); dispersos (\texttt{fasa}, \texttt{sparge}, \texttt{msa}, \texttt{nsa}, \texttt{bigbird}, \texttt{longformer}, \texttt{sparse\_transformer}, \texttt{sparsek}, \texttt{swa}, \texttt{sparda}); sustituto denso de los mixers sin entrenamiento \\
+Mixers de atención & \texttt{standard}, \texttt{titan}, \texttt{gqa}, \texttt{ode}; familia latente (\texttt{mla}, \texttt{gqla}, \texttt{mlra}, \texttt{tucker}, \texttt{iha}, \texttt{gta}, \texttt{mtla}, \texttt{cca}, \texttt{ccgqa}, \texttt{gma}); con compuerta (\texttt{gated\_softmax}, \texttt{fox}, \texttt{fpa}); dispersos (\texttt{fasa}, \texttt{sparge}, \texttt{msa}, \texttt{nsa}, \texttt{bigbird}, \texttt{longformer}, \texttt{sparse\_transformer}, \texttt{sparsek}, \texttt{swa}, \texttt{sparda}); sustituto denso de los mixers sin entrenamiento \\
 Routers & softmax top-$k$ de MoE y Mixture-of-Depths \\
 Residuales & softmax en profundidad de Full y Block AttnRes \\
 Caché KV & normalizador de recomputación/fallback en \texttt{src/model/cache/hooks.py} \\

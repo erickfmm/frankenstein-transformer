@@ -4,12 +4,12 @@
 \subsection{Familias de Atención y Mezcladores de Secuencia}
 \label{sec:attention-families}
 
-El sistema implementa cuarenta y ocho mezcladores de secuencia organizados en diez categorías funcionales que reflejan cómo cada método equilibra expresividad, costo computacional y memoria.
+El sistema implementa cuarenta y nueve mezcladores de secuencia organizados en diez categorías funcionales que reflejan cómo cada método equilibra expresividad, costo computacional y memoria.
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Líneas base densas} (4): atención softmax estándar, atención sigmoide, Atención Continua y Grouped-Query Attention (GQA) ofrecen enrutamiento global completo a costo cuadrático.
     \item \textbf{Recurrentes y retentivas} (4): RetNet, Mamba, bloques tipo ODE y Titans mantienen estado para inferencia en tiempo constante mediante recurrencia, espacios de estados selectivos, profundidad continua o memoria en tiempo de prueba.
     \item \textbf{Patrones dispersos} (12): Sparse Transformer, Longformer, SWA con sumideros de atención, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA, SparDA, LSA y Fast Conformer reducen el costo cuadrático mediante dispersión estructurada, selección de tokens, poda sin entrenamiento o clustering semántico de claves.
-    \item \textbf{Mecanismos con compuerta} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax y KDA introducen control dependiente de los datos sobre retención, olvido y fuerza de actualización.
+    \item \textbf{Mecanismos con compuerta} (9): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, KDA y First Passage Attention (FPA) introducen control dependiente de los datos sobre retención, olvido y fuerza de actualización.
     \item \textbf{Compresión latente} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA y GMA comprimen el estado clave--valor en cuellos de botella de bajo rango o enrutan mediante una memoria latente de mezcla gaussiana.
     \item \textbf{Memoria condicional} (1): Engram proporciona memoria de lectura/escritura en tiempo de prueba mediante búsquedas aprendidas.
     \item \textbf{Memoria indexada por token} (1): Memory Attention reemplaza la proyección de valores dedicada por memoria de tokens específica de capa, construyendo valores como \(V = K + \mathrm{Norm}(E[s])\) y manteniendo la ponderación softmax sin cambios \citep{kang_memory_attention_2026}.
@@ -21,7 +21,7 @@ El sistema implementa cuarenta y ocho mezcladores de secuencia organizados en di
 \begin{figure}[t]
 \centering
 \fitfigure{\includegraphics{../paper/figures/mixer-taxonomy.pdf}}
-\caption{Taxonomía de los cuarenta y ocho mezcladores de secuencia en diez categorías funcionales. Las líneas base densas ofrecen enrutamiento global completo a costo cuadrático; los métodos recurrentes comprimen el estado para inferencia en tiempo constante; las variantes dispersas restringen el patrón de atención; los mecanismos con compuerta modulan retención y olvido; los métodos latentes comprimen las representaciones clave--valor; la memoria condicional añade búsquedas de lectura/escritura en tiempo de prueba; la memoria indexada por token traslada capacidad de valores a tablas de búsqueda; los métodos de peso rápido formulan la transición de estado como una regla de aprendizaje en línea; los métodos geométricos codifican priors estructurados.}
+\caption{Taxonomía de los cuarenta y nueve mezcladores de secuencia en diez categorías funcionales. Las líneas base densas ofrecen enrutamiento global completo a costo cuadrático; los métodos recurrentes comprimen el estado para inferencia en tiempo constante; las variantes dispersas restringen el patrón de atención; los mecanismos con compuerta modulan retención y olvido; los métodos latentes comprimen las representaciones clave--valor; la memoria condicional añade búsquedas de lectura/escritura en tiempo de prueba; la memoria indexada por token traslada capacidad de valores a tablas de búsqueda; los métodos de peso rápido formulan la transición de estado como una regla de aprendizaje en línea; los métodos geométricos codifican priors estructurados.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -73,7 +73,7 @@ El registro incluye doce bloques dispersos \citep{child_sparse_transformer_2019,
 \end{figure}
 
 \subsection{Atención con Compuerta y de Peso Rápido}
-La familia con compuerta contiene ocho bloques \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025}. La compuerta controla qué información sobrevive, ya sea en las actualizaciones de estado recurrente (GLA, variantes de DeltaNet, HGRN2, KDA) o en la ruta de atención completa (FoX, Gated Softmax). Las formulaciones, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-gated}.
+La familia con compuerta contiene nueve bloques \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025,liu_first_passage_2026}. La compuerta controla qué información sobrevive, ya sea en las actualizaciones de estado recurrente (GLA, variantes de DeltaNet, HGRN2, KDA) o en la ruta de atención completa (FoX, Gated Softmax, FPA). FPA reemplaza la suma de camino de una compuerta de olvido por un mínimo de rango de un campo aprendido, de modo que un token posterior puede borrar claves más nuevas preservando las más antiguas: las claves vivas forman una pila y FoX es su caso especial de caminata no creciente. Las formulaciones, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-gated}.
 
 La atención de peso rápido reformula la actualización recurrente como una regla de aprendizaje continuo en línea; las seis variantes Falcon \citep{zhang_falcon_2026} unifican la regresión estilo DeltaNet y las escrituras de atención lineal bajo semántica de lectura-tras-escritura con tamaños de paso normalizados y olvido explícito. Cada variante incluye un escaneo recurrente de referencia y un kernel paralelo por fragmentos. Las formulaciones, los parámetros de configuración y los resultados publicados se recopilan en el Apéndice~\ref{sec:annex-fast-weight}.
 

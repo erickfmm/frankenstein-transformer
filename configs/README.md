@@ -283,9 +283,9 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - `dropout`: global dropout.
 - `layer_pattern`: list of blocks.
 - `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankenstein_text_decoder`, which forces decoder).
-- Legacy blocks: `retnet`, `retnet`, `mamba`, `ode`, `titan`, `standard`, `sigmoid`.
+- Legacy blocks: `retnet`, `mamba`, `ode`, `titan`, `standard`, `sigmoid`.
 - Sparse blocks: `sparse_transformer`, `longformer`, `bigbird`, `sparsek`, `nsa`, `sparge`, `fasa`, `msa` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda` (SparDA, arXiv:2606.04511), `lsa` (Latent Sparse Attention, arXiv:2610.42147), `fastconformer` (Fast Conformer limited-context attention, arXiv:2305.05084).
-- Gated blocks: `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `gated_softmax`, `kda` (Kimi Delta Attention, arXiv:2510.26692).
+- Gated blocks: `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa` (First Passage Attention, arXiv:2610.22714), `gated_softmax`, `kda` (Kimi Delta Attention, arXiv:2510.26692).
 - Latent blocks (KV-compression / head-mixing, generalising GQA):
   - `mla` — Multi-Head Latent Attention + RoPE (arXiv:2506.09342).
   - `gqla` — Group-Query Latent Attention, two decoding paths (arXiv:2605.15250).
@@ -320,7 +320,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   `standard`, `sigmoid`, `gqa`, `mla`, `swa`,
   `longformer`, `bigbird`, `sparse_transformer`, `gta`,
   `iha`, `mtla`, `gma`, `nsa`, `sparsek`, `msa`,
-  `sparda`, `lsa`, `fastconformer`, `conformer`, `fox`, `gated_softmax`,
+  `sparda`, `lsa`, `fastconformer`, `conformer`, `fox`, `fpa`, `gated_softmax`,
   `titan`, `gqla`, `mlra`, `memory`; `qk_clip` additionally excludes
   `gma`. Recurrent/state-space mixers (`retnet`, `gla`, `mamba`, …)
   are rejected at load time. Examples: `norm_qknorm_rms.yaml`,
@@ -407,6 +407,26 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
   (arXiv:2610.20586); classic KV cache. Examples:
   `configs/examples/es_arch_ca_adamw.yaml` and the 101M reference preset
   `configs/ca.yaml`.
+
+### First Passage Attention (model.attention.fpa)
+
+- `model.attention.fpa.beta_init`: initial value of the learned per-head
+  first-passage strength `β` (default `1.0`, the paper's initialization). `β`
+  always stays learnable and multiplies the deepest-dip depth in
+  `b_ts = β·min(0, min_{s<u≤t} φ_u − ψ_s)`.
+- `model.attention.fpa.tau`: temperature `τ` of the soft-minimum
+  **straight-through gradient** (default `1.0`). The forward pass and
+  evaluation always use the hard range minimum; `τ` only scales the
+  differentiable surrogate.
+- `positional_encoding_parameters.use_pe.fpa`: per-mixer PE opt-out (default
+  `false`; FPA trains without positional encoding — the learned walk is
+  positional).
+- Softmax attention with a range-minimum (path-extremum) forget bias
+  (arXiv:2610.22714); contains FoX as the non-rising-walk special case. The
+  bias adds `3·nH·(H+1) + nH` parameters per layer and the cache stores two
+  extra scalars per key and head. Examples:
+  `configs/examples/es_arch_fpa_adamw.yaml` and the 110M reference preset
+  `configs/fpa.yaml`.
 
 ### Latent / KV-compression family (model.attention.*)
 

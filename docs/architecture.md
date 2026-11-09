@@ -348,7 +348,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-48 enum values in 10 families. `config subkey` is the optional
+49 enum values in 10 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -380,6 +380,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `fox` | Gated | — | yes |
 | `gated_softmax` | Gated | — | yes |
 | `kda` | Gated | — | yes |
+| `fpa` | Gated | `fpa.*` | yes |
 | `falcon1` | Fast-weight | `falcon.*` | yes |
 | `falcon2` | Fast-weight | `falcon.*` | yes |
 | `falcon3` | Fast-weight | `falcon.*` | yes |
@@ -458,6 +459,23 @@ initialized at `ca.gain_init` (+nH parameters per layer), while the fixed-gain
 form adds no parameters. The KV cache is a plain `KVSlot`: the effective weights
 are recomputed row-locally over the cached prefix each decode step (sigmoid
 re-normalization precedent).
+
+`fpa` implements First Passage Attention from arXiv:2610.22714: every head
+computes a scalar field φ and a scalar level ψ per key from a shared learned
+walk (the prefix sum of per-token increments), and lowers a key's logit by
+β times the deepest dip of the field below the key's level,
+`b_ts = β·min(0, min_{s<u≤t} φ_u − ψ_s)`. FoX is the special case of a walk
+that never rises (δ ≤ 0). The mixer adds a `3·nH`-wide field projection with
+bias and one learned strength β per head (`3·nH·(H+1) + nH` parameters per
+layer); `fpa.beta_init` sets β's initialization (paper: 1) and `fpa.tau` the
+temperature of the straight-through soft-minimum gradient (paper: 1; the
+forward and eval paths always use the hard range minimum). It defaults
+`fpa_use_pe` to `false` (the walk is positional) and builds the bias with a
+masked flip+cummin over the `T×T` scores (the paper's fused Triton kernel is
+out of scope); encoder mode symmetrises the open-span minimum, a repo-side
+generalisation of the paper's causal head. Decoding is exact: the `KVSlot`
+stores the per-token field and level as extras and updates
+`φ̄_{t,s} = min(φ̄_{t−1,s}, φ_t)` in O(t) (Proposition 2.4b).
 
 Registry: the local `mixer_registry` dict in `src/model/hybrid_layer.py` maps
 names to classes; `mamba` is handled as a linear projection special case.
@@ -661,7 +679,7 @@ logical roles). Per-layer storage is typed:
 | `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
 
 **Capability registry (D5).** `src/model/cache/capabilities.py` holds one
-`CacheSpec` per `layer_pattern` enum value (47). A layer caches only when
+`CacheSpec` per `layer_pattern` enum value (48). A layer caches only when
 the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
 (incremental branch implemented + parity-tested). Everything else receives
 `cache=None` and runs the legacy path — **inference never fails because of
@@ -672,12 +690,13 @@ Implemented cached branches (parity-tested in
 `sigmoid`, `ca`, `gated_softmax`, `titan`, `fox`,
 `mla`, `gqla`, `mlra`, `tucker`, `iha`,
 `gta`, `swa`, `longformer`, `bigbird`,
-`sparse_transformer`, `fasa`, `retnet`, `retnet`,
+`sparse_transformer`, `fasa`, `retnet`,
 `gla`, `deltanet`, `gated_deltanet`,
 `gated_deltanet2`, `hgrn2`, `kda`, `gma`, `memory`,
 `lsa` (`BucketKVSlot`: KV + immutable per-block bucket centroids/index
 table, never quantized), `fastconformer` (`RingSlot`: pinned head prefix
-covers the global tokens).
+covers the global tokens), `fpa` (`KVSlot` + two per-token scalars, exact by
+Prop. 2.4b of arXiv:2610.22714).
 Documented fallbacks: `mamba` (stateless), `ssog` (bidirectional
 vision grid, no causal formulation), `ode` (solver re-derives all
 intermediate states each step), `falcon*` (chunk-parallel rehearsal FIFO),

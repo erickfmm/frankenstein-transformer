@@ -12,4 +12,5 @@ Gated Attention
    fox
    gated_softmax
    kda
+   fpa
    retnet

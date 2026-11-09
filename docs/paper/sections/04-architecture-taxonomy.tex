@@ -4,12 +4,12 @@
 \subsection{Attention and Sequence-Mixer Families}
 \label{sec:attention-families}
 
-The system implements forty-eight sequence mixers organized into ten functional categories that reflect how each method balances expressivity, computational cost, and memory.
+The system implements forty-nine sequence mixers organized into ten functional categories that reflect how each method balances expressivity, computational cost, and memory.
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Dense baselines} (4): standard softmax attention, sigmoid attention, Continuum Attention, and Grouped-Query Attention (GQA) provide full global routing at quadratic cost.
     \item \textbf{Recurrent and retentive} (4): RetNet, Mamba, ODE-style blocks, and Titans maintain state for constant-time inference through recurrence, selective state spaces, continuous depth, or test-time memory.
     \item \textbf{Sparse patterns} (12): Sparse Transformer, Longformer, SWA with attention sinks, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA, SparDA, LSA, and Fast Conformer reduce quadratic cost through structured sparsity, token selection, training-free pruning, or semantic key clustering.
-    \item \textbf{Gated mechanisms} (8): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, and KDA introduce data-dependent control over retention, forgetting, and update strength.
+    \item \textbf{Gated mechanisms} (9): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, KDA, and First Passage Attention (FPA) introduce data-dependent control over retention, forgetting, and update strength.
     \item \textbf{Latent compression} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA, and GMA compress key--value state into low-rank bottlenecks or route through a Gaussian-mixture latent memory.
     \item \textbf{Conditional memory} (1): Engram provides test-time read/write memory through learned lookups.
     \item \textbf{Token-indexed memory} (1): Memory Attention replaces the dedicated value projection with layer-specific token memory, constructing values as \(V = K + \mathrm{Norm}(E[s])\) while keeping the softmax weighting unchanged \citep{kang_memory_attention_2026}.
@@ -21,7 +21,7 @@ The system implements forty-eight sequence mixers organized into ten functional 
 \begin{figure}[t]
 \centering
 \fitfigure{\includegraphics{figures/mixer-taxonomy.pdf}}
-\caption{Taxonomy of the forty-eight sequence mixers across ten functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; conditional memory adds test-time read/write lookups; token-indexed memory relocates value capacity into lookup tables; fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors.}
+\caption{Taxonomy of the forty-nine sequence mixers across ten functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; conditional memory adds test-time read/write lookups; token-indexed memory relocates value capacity into lookup tables; fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -78,7 +78,7 @@ The registry includes twelve sparse blocks \citep{child_sparse_transformer_2019,
 \end{figure}
 
 \subsection{Gated and Fast-Weight Attention}
-The gated family contains eight blocks \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025}. Gating controls what information survives, either in recurrent state updates (GLA, DeltaNet variants, HGRN2, KDA) or in the full attention path (FoX, Gated Softmax). Formulations, pseudocode, and a comparison table are collected in Appendix~\ref{sec:annex-gated}.
+The gated family contains nine blocks \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,hatamizadeh_gated_deltanet2_2026,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025,kimi_kda_2025,liu_first_passage_2026}. Gating controls what information survives, either in recurrent state updates (GLA, DeltaNet variants, HGRN2, KDA) or in the full attention path (FoX, Gated Softmax, FPA). FPA replaces the path sum of a forget gate with a range minimum of a learned field, so a later token can erase newer keys while preserving older ones: the alive keys form a stack, and FoX is its non-rising-walk special case. Formulations, pseudocode, and a comparison table are collected in Appendix~\ref{sec:annex-gated}.
 
 Fast-weight attention recasts the recurrent update as an online continual-learning rule; the six Falcon variants \citep{zhang_falcon_2026} unify DeltaNet-style regression and linear-attention writes under read-after-write semantics with normalized step sizes and explicit forgetting. Each variant ships a recurrent reference scan and a chunk-parallel kernel. Formulations, configuration knobs, and published results are collected in Appendix~\ref{sec:annex-fast-weight}.
 

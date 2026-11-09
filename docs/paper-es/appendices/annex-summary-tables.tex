@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 48 mezcladores de secuencia en diez familias, 36 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 49 mezcladores de secuencia en diez familias, 36 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -59,7 +59,7 @@ lsa & Disperso & $\mathcal{O}(N^2/\bar{n}_b + N\,(k+n_w+n_{\text{sink}})\,d_h)$ 
 fastconformer & Disperso & $\mathcal{O}(n \cdot (w + g) \cdot d)$ & $\mathcal{O}(w + g)$ & Ventana de contexto limitado + token global anclado a la cabecera; proyecciones globales separadas opcionales; forma larga de memoria lineal & \citep{rekesh_fastconformer_2023} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Con Compuerta (8)}} \\
+\multicolumn{6}{c}{\textbf{Con Compuerta (9)}} \\
 \midrule
 gla & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimiento diagonal dependiente de datos; atención lineal con compuerta & \citep{yang_gla_2023} \\
 deltanet & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Regla delta; atención lineal con corrección de errores & \citep{yang_deltanet_2024} \\
@@ -67,6 +67,7 @@ gated\_deltanet & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & S�
 gated\_deltanet2 & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Compuertas de borrado/escritura canalizadas desacopladas; compuerta mejorada & \citep{hatamizadeh_gated_deltanet2_2026} \\
 hgrn2 & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Compuertas de olvido acotadas jerárquicas; recurrencia multi-escala & \citep{qin_hgrn2_2024} \\
 fox & Con compuerta & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Sesgo de recencia en espacio de logits; compatible con FlashAttn & \citep{lin_forgetting_transformer_2025} \\
+fpa & Con compuerta & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Sesgo de olvido por extremos de camino (mínimo de rango); contiene a FoX & \citep{liu_first_passage_2026} \\
 gated\_softmax & Con compuerta & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Compuerta sigmoide post-SDPA; mitigación del sumidero de atención & \citep{qiu_gated_attention_2025} \\
 kda & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimiento por canal + escritura escalar; diseño Kimi Linear & \citep{kimi_kda_2025} \\
 \midrule

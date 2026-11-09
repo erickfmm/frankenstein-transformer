@@ -23,9 +23,9 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Activations | Norms | Model Classes | Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-----------:|:-----:|:-------------:|:-----:|:-------:|:------------:|
-| **47** | **36** | **12** | **43** | **6** | **4** | **9** | **175** | **4** |
+| **48** | **36** | **12** | **43** | **6** | **4** | **9** | **177** | **4** |
 
-> **48 mixer architectures** — the schema exposes 48 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
+> **49 mixer architectures** — the schema exposes 49 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
 
 ## How It Works
 
@@ -72,7 +72,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | **47** across 10 families: Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
+| Sequence mixer architectures | **48** across 10 families: Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
 | Optimizer families | 36 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
 | FFN activations | 43 (40 elementwise + `swiglu`, `geglu`, `reglu`) |
@@ -92,7 +92,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
-| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 48 mixer architectures |
+| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 49 mixer architectures |
 | `frankenstein_text_decoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 | `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `vision_dataset:` blocks |
 | `frankenstein_audio` | Encoder (audio) | Audio Transformer for ASR and audio/signal classification; log-mel/spectrogram/raw frontend, conv subsampling, CTC/RNN-T or classification heads; forces `mode: encoder`, requires `audio:` + `audio_dataset:` blocks |
@@ -118,7 +118,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 | **GQA** (1) | `gqa` | Grouped-query attention with configurable KV heads |
 | **Recurrent** (5) | `retnet`, `mamba`, `ode`, `titan`, `engram` | Retention networks, state-space models, continuous-depth ODE layers, memory-augmented attention, and n-gram memory |
 | **Sparse** (12) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa`, `fastconformer` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), semantic key-clustering, and head-pinned global-token long-form patterns |
-| **Gated** (8) | `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `gated_softmax`, `kda` | Linear attention with multiplicative gates, delta rules, and gated softmax |
+| **Gated** (9) | `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa`, `gated_softmax`, `kda` | Linear attention with multiplicative gates, delta rules, gated softmax, and path-extremum forgetting |
 | **Fast-Weight** (6) | `falcon1`, `falcon2`, `falcon3`, `falcon1a`, `falcon2a`, `falcon3a` | Fast-weight / online-learning attention with per-layer fast-weight update rules |
 | **Latent** (10) | `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`, `cca`, `ccgqa`, `gma` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
 | **Geometric** (1) | `ssog` | Separable Sum of Gaussians — geometric field attention |
@@ -127,7 +127,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 ⚠️ `sparge` and `fasa` are **inference-sparse**: they train as dense attention over their own projections, then activate their sparse heuristic in `eval()`. They are valid in training presets.
 
-Configure via `layer_pattern` in YAML. The schema accepts 48 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
+Configure via `layer_pattern` in YAML. The schema accepts 49 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
 
 ## Optimizer Categories
 

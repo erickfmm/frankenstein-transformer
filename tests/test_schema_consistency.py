@@ -200,6 +200,8 @@ _DEFAULT_PAIRS = {
     "properties.model.properties.attention.properties.swa.properties.num_sinks": "swa_num_sinks",
     "properties.model.properties.attention.properties.ca.properties.learned_gain": "ca_learned_gain",
     "properties.model.properties.attention.properties.ca.properties.gain_init": "ca_gain_init",
+    "properties.model.properties.attention.properties.fpa.properties.beta_init": "fpa_beta_init",
+    "properties.model.properties.attention.properties.fpa.properties.tau": "fpa_tau",
     "properties.model.properties.attention.properties.fastconformer.properties.window_size": "fastconformer_window_size",
     "properties.model.properties.attention.properties.fastconformer.properties.global_tokens": "fastconformer_global_tokens",
     "properties.model.properties.attention.properties.fastconformer.properties.global_tokens_spacing": "fastconformer_global_tokens_spacing",

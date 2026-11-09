@@ -252,6 +252,10 @@ ATTENTIONS = [
     # trajectories; trains natively in encoder and decoder modes; exact
     # KV-cache incremental decoding.
     "ca",
+    # First Passage Attention (arXiv:2610.22714): softmax + path-extremum
+    # (range-min) forget bias; trains natively in encoder and decoder modes;
+    # exact KV-cache incremental decoding (two per-key/head scalars).
+    "fpa",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).

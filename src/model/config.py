@@ -635,6 +635,7 @@ class FrankensteinModelConfig:
     gated_deltanet2_use_pe: bool = False
     hgrn2_use_pe: bool = False
     fox_use_pe: bool = False
+    fpa_use_pe: bool = False
     kda_use_pe: bool = False
     falcon1_use_pe: bool = False
     falcon2_use_pe: bool = False
@@ -820,6 +821,15 @@ class FrankensteinModelConfig:
     # paper uses gamma = 1 for the 101M model and gamma = 1/0.30 for the
     # fixed CA-P variant (and the CA-H small-model initialisation).
     ca_gain_init: float = 1.0
+
+    # ---- First Passage Attention (arXiv:2610.22714) ----
+    # Initial value of the learned per-head strength beta (paper Table 16:
+    # beta = 1). beta stays learnable; the paper excludes strengths from
+    # weight decay (a training-schedule detail this repo does not enforce).
+    fpa_beta_init: float = 1.0
+    # Temperature tau of the soft-minimum straight-through gradient (paper §2
+    # "Training": tau = 1). Forward/eval always use the hard range minimum.
+    fpa_tau: float = 1.0
 
     # ---- Conformer (arXiv:2005.08100) ----
     # Depth-wise convolution kernel size k of the convolution module (paper
@@ -1163,6 +1173,16 @@ class FrankensteinModelConfig:
         if self.ca_gain_init <= 0.0:
             raise ValueError(
                 f"ca_gain_init must be > 0, got {self.ca_gain_init}"
+            )
+
+        # ---- Validate First Passage Attention (arXiv:2610.22714) ----
+        if self.fpa_beta_init <= 0.0:
+            raise ValueError(
+                f"fpa_beta_init must be > 0, got {self.fpa_beta_init}"
+            )
+        if self.fpa_tau <= 0.0:
+            raise ValueError(
+                f"fpa_tau must be > 0, got {self.fpa_tau}"
             )
 
         # ---- Validate Fast Conformer limited-context attention ----

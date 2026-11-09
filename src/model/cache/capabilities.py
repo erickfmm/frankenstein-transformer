@@ -3,7 +3,7 @@
 ``CACHE_SPECS`` is the single declarative source consumed by
 :class:`~src.model.hybrid_layer.HybridLayer` at runtime and by
 ``config_loader`` for static validation. One entry per schema
-``layer_pattern`` enum value (48 total: 47 mixer classes + the ``mamba``
+``layer_pattern`` enum value (49 total: 48 mixer classes + the ``mamba``
 linear placeholder).
 
 Rules (see the KV-cache integration plan, §5.4):
@@ -78,6 +78,7 @@ IMPLEMENTED_MIXERS = frozenset(
         "memory",         # F1 (standard KV; values built at append time)
         "titan",          # F1
         "fox",            # F1 (cumulative log-forget extras)
+        "fpa",            # F1 (range-minimum field extras; exact, Prop. 2.4b)
         # ---- F1 latent family ----
         "mla",            # F1 (latent cached, expand + RoPE per step)
         "gqla",           # F1
@@ -155,6 +156,19 @@ CACHE_SPECS: Dict[str, CacheSpec] = {
         notes="FoX (arXiv:2503.02130); caches (K, V, c_j) with c_j the "
         "cumulative log-forget per token/head; D_ij = c_i - c_j is "
         "pairwise-relative.",
+    ),
+    "fpa": CacheSpec(
+        supported=True,
+        slot_type="kv",
+        extras=("field_phi", "key_level_psi"),
+        notes="First Passage Attention (arXiv:2610.22714); class (i) with "
+        "per-token extras: the logit bias is beta*min(0, min_{s<u<=t} phi_u "
+        "- psi_s), a range minimum over the cached field, so decode stores "
+        "two scalars per key/head (phi_u, psi_s) and updates "
+        "phi_bar_{t,s} = min(phi_bar_{t-1,s}, phi_t) in O(t) (Prop. 2.4b) "
+        "- exact. Dead keys (bias < -theta) are evictable in principle "
+        "(paper §4.3: theta=10 keeps ~26-34% of keys); eviction policy is a "
+        "D14 follow-up.",
     ),
     "ode": CacheSpec(
         supported=True,

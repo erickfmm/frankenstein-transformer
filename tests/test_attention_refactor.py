@@ -159,6 +159,7 @@ class AttentionRefactorTests(unittest.TestCase):
             "gated_deltanet2",
             "hgrn2",
             "fox",
+            "fpa",
             "gated_softmax",
             "engram",
             "gqa",

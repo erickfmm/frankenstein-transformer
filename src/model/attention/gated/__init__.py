@@ -8,6 +8,7 @@ from .falcon import (
     Falcon3AAttention,
 )
 from .fox import ForgettingAttention
+from .fpa import FirstPassageAttention
 from .gated_deltanet2 import GatedDeltaNet2Attention
 from .gated_deltanet import GatedDeltaNetAttention
 from .gated_softmax import GatedSoftmaxAttention
@@ -22,6 +23,7 @@ __all__ = [
     "GatedDeltaNet2Attention",
     "HGRN2Attention",
     "ForgettingAttention",
+    "FirstPassageAttention",
     "GatedSoftmaxAttention",
     "KDAAttention",
     "Falcon1Attention",

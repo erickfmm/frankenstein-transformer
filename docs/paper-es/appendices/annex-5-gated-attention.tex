@@ -562,15 +562,116 @@ Memoria & Estado de inferencia constante $\mathcal{O}(d^2)$ (recurrente matricia
 
 \normalsize
 
+\subsection{9. First Passage Attention (FPA): Olvido por Extremos de Camino}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/fpa.pdf}}
+\caption{Flujo de datos de FPA: un mapa lineal produce el incremento $\delta$ por cabeza y los desplazamientos $g,h$; la caminata $W$ es su suma prefija, el campo es $\phi=W+g$, el nivel de clave es $\psi=W+h$, y el sesgo es $\beta$ veces la caída más profunda del campo por debajo del nivel en el tramo posterior a cada clave.}
+\label{fig:mixer-fpa-es}
+\end{figure}
+
+\subsubsection{Fundamento Matemático}
+
+First Passage Attention \citep{liu_first_passage_2026} conserva la atención softmax de Vaswani et al.~\citep{vaswani_attention_2017} pero reemplaza la \emph{suma} de camino de las compuertas de olvido de FoX por un \emph{extremo} de camino. Una cabeza causal de dimensión $d$ con consultas $\mathbf{q}_t$, claves $\mathbf{k}_s$ y valores $\mathbf{v}_s$ calcula
+\[
+\mathbf{o}_t=\sum_{s\le t}w_{ts}\mathbf{v}_s,\qquad w_{ts}\propto e^{\ell_{ts}},\qquad
+\ell_{ts}=\frac{\mathbf{q}_t^\top\mathbf{k}_s}{\sqrt{d}}+b_{ts},
+\]
+donde el \textbf{sesgo de primer paso} es
+\[
+b_{ts}=\beta\min\Bigl(0,\ \min_{s<u\le t}\phi_u-\psi_s\Bigr),\qquad b_{tt}=0,
+\]
+con una fuerza positiva aprendida $\beta$ por cabeza, un campo escalar $\phi_u$ en cada posición y un nivel escalar $\psi_s$ por clave. Escribimos $\bar{\phi}_{ts}=\min_{s<u\le t}\phi_u$ para el mínimo de rango. Una clave está \emph{viva} en el tiempo $t$ cuando $b_{ts}=0$ y \emph{muerta} en caso contrario; el sesgo de una clave muerta es $-\beta$ veces la profundidad $\psi_s-\bar{\phi}_{ts}$ de su caída más profunda. La muerte es permanente: $b_{t's}\le b_{ts}$ para todo $t'>t$ (Proposición 2.3(a)), de modo que el decodificador puede descartar una clave muerta cuando su sesgo cruza un umbral.
+
+Cada cabeza deriva los tres escalares por posición de la entrada de la capa $\mathbf{x}_t$ mediante un único mapa lineal, con una caminata $W_t$ y el campo/nivel
+\[
+W_t=\sum_{u\le t}\delta_u,\qquad \phi_u=W_u+g_u,\qquad \psi_s=W_s+h_s .
+\]
+Los incrementos $\delta$ mueven la referencia de toda comparación posterior, mientras que $g$ y $h$ permiten que un token hunda o fije un nivel sin moverla. Una capa de ancho $D$ con $H$ cabezas gana por tanto $3H(D+1)+H$ parámetros --- $27{,}696$ por capa con $D=768$, $H=12$, es decir $332{,}352$ en doce capas, y $+1{,}56\%$ sobre claves y valores en la caché.
+
+\paragraph{Casos especiales (Proposición 2.2).} La parametrización lineal contiene varias familias:
+\begin{itemize}[leftmargin=*]
+    \item (a) Si $g=h=0$, entonces $b_{ts}=-\beta L_{ts}$ con $L_{ts}=\max\bigl(0,\max_{s<u\le t}(W_s-W_u)\bigr)$, el regulador de una cola que arranca vacía en el tiempo $s$ (la \emph{forma de pila}).
+    \item (b) Si además $\delta_u\le 0$ para todo $u$, entonces $b_{ts}=\sum_{s<u\le t}\log f_u$ con $f_u=e^{\beta\delta_u}\in(0,1]$ --- \textbf{exactamente FoX} con compuertas de olvido $f_u$. Una caminata que sube es lo que permite a FPA conservar una clave antigua mientras elimina otras más nuevas, algo que ninguna compuerta de olvido puede hacer.
+    \item (c) Si $\delta=0$, $h=0$, $g\le 0$ y $\beta=1$, entonces $b_{ts}=\min_{s<u\le t}g_u$, un sesgo de cuello de botella.
+    \item (d) Si $\delta_u=-1$, $g=0$ y $\psi_s=W_s-e_s$ con $e_s\ge 0$, entonces $b_{ts}=\beta\min(0,e_s-(t-s))$, la regla de expiración de Expire-Span.
+\end{itemize}
+En la forma de pila los niveles de las claves vivas no decrecen con el tiempo de escritura, y una caída elimina un sufijo temporal de las claves vivas: el conjunto vivo evoluciona como una \textbf{pila} (Proposición 2.3(b)).
+
+\paragraph{Profundidad, no duración.} Selective Attention resta una suma de selecciones por par, así que su supresión crece con el número de pasos intermedios y confunde la \emph{profundidad} de un evento con su \emph{duración}. El sesgo de FPA es $-\beta$ veces la caída más profunda y no cambia cuando una caída no más profunda que la máxima se mantiene más tiempo o se inserta (Proposición 3.4); entre las agregaciones de caídas, las funciones del máximo son las únicas con esta invariancia de duración (Proposición 3.4(iii)).
+
+\paragraph{Entrenamiento (straight-through).} El sesgo es lineal por tramos en el campo y en los niveles, y del lado cerrado del mínimo exterior no pasa gradiente al campo; en ejecuciones piloto ese mínimo podía cerrarse para todas las claves de una cabeza al inicio del entrenamiento. FPA entrena por tanto con un estimador directo: la pasada hacia adelante toma el mínimo de rango duro y la pasada hacia atrás toma, en su lugar, el gradiente del mínimo suave $-\tau\log\sum_{s<u\le t}e^{-\phi_u/\tau}$ con $\tau=1$. El mínimo exterior actúa sobre el valor duro, y la evaluación usa el sesgo duro sin cambios.
+
+\begin{algorithm}[H]
+\caption{First Passage Attention (Forma Paralela de Referencia)}
+\begin{algorithmic}[1]
+\Require Entrada normalizada $\mathbf{x}\in\mathbb{R}^{n\times D}$; cabezas $H$; fuerza $\beta$; temperatura $\tau$
+\Ensure Salida $\mathbf{O}\in\mathbb{R}^{n\times D}$
+\State $\mathbf{Q},\mathbf{K},\mathbf{V}\gets W_q\mathbf{x},\,W_k\mathbf{x},\,W_v\mathbf{x}$ \Comment{proyecciones por cabeza}
+\State $(\boldsymbol{\delta},\mathbf{g},\mathbf{h})\gets W_f\mathbf{x}+ \mathbf{b}_f$ \Comment{un mapa, tres escalares por cabeza}
+\State $W_t\gets\sum_{u\le t}\delta_u$;\quad $\phi_u\gets W_u+g_u$;\quad $\psi_s\gets W_s+h_s$
+\State $\bar{\phi}_{ts}\gets\min_{s<u\le t}\phi_u$ \Comment{mínimo de rango tras cada clave}
+\State $b_{ts}\gets\beta\min(0,\bar{\phi}_{ts}-\psi_s)$;\quad $b_{tt}\gets 0$
+\State $\mathbf{A}\gets\mathrm{softmax}\bigl(\mathbf{Q}\mathbf{K}^\top/\sqrt{d}+\mathbf{B}\bigr)$;\quad $\mathbf{O}\gets W_o(\mathbf{A}\mathbf{V})$
+\State \Return $\mathbf{O}$ \Comment{la retropropagación usa $\partial$ del mínimo suave $-\tau\log\sum e^{-\phi_u/\tau}$}
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Costo y decodificación exacta.} En un cómputo por bloques de tamaño $B$, el sesgo entre un bloque de consultas y un bloque de claves anterior sólo necesita los mínimos de sufijo de $\phi$ dentro del bloque de claves, el mínimo sobre los bloques estrictamente intermedios y los mínimos de prefijo de $\phi$ dentro del bloque de consultas: $\mathcal{O}(B^2)$ operaciones por par de bloques, como un sesgo elemento a elemento al estilo de FoX, más $\mathcal{O}(T/B)$ mínimos de bloque (Proposición 2.4(a)). En decodificación autorregresiva $\bar{\phi}_{ts}=\min(\bar{\phi}_{t-1,s},\phi_t)$ para $s<t-1$ y $\bar{\phi}_{t,t-1}=\phi_t$, así que cada paso actualiza la fila de sesgo en $\mathcal{O}(t)$ y guarda \emph{dos escalares por clave y cabeza cacheadas} (Proposición 2.4(b)) --- una rama incremental KV exacta, implementada en este repositorio como extras del slot.
+
+\subsubsection{Rendimiento Empírico y Compromisos}
+
+El artículo entrena cuatro decodificadores de 110M parámetros (12 capas, ancho 768, 12 cabezas de dimensión 64, SwiGLU-2048, RMSNorm, contexto 2048, 2.7B tokens de SlimPajama) que difieren sólo en la atención. FPA (sin codificación posicional) iguala o supera a FoX en perplejidad y extrapola más lejos:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Método} & \textbf{SlimPajama} & \textbf{WikiText-103} & \textbf{PG-19 2k--4k} & \textbf{Passkey 8k--16k} & \textbf{RULER 8k} \\
+\midrule
+FPA & \textbf{2.8640} & \textbf{3.1001} & \textbf{3.282} & \textbf{1.00} & \textbf{0.202} \\
+FoX & 2.8832 & 3.1425 & 3.316 & 0.20 & 0.117 \\
+Selective Attention & 2.8686 & 3.1197 & 3.805 & 0.04 & 0.008 \\
+Softmax + RoPE & 2.8908 & 3.1374 & 5.064 & 0.00 & 0.002 \\
+\bottomrule
+\end{tabular}
+\caption{Modelos de lenguaje de 110M (pérdidas en nats por token; precisiones de passkey y RULER) \citep{liu_first_passage_2026}. FPA recupera todas las passkeys hasta longitudes $8\times$ su contexto de entrenamiento, incluso con la caché comprimida a cerca de un cuarto.}
+\label{tab:fpa-lm-es}
+\end{table}
+
+El costo se acerca al de la atención estándar: una capa FPA tarda $0{,}97\times$ el tiempo de ida y vuelta de SDPA de PyTorch y $1{,}50\times$ el de FoX, cuyo sesgo no necesita mínimo de rango; con lote 1 y longitud 8192 la decodificación tarda 22{,}0\,ms por token frente a 20{,}2\,ms de FoX y 23{,}9\,ms de softmax. Como el sesgo de una clave nunca vuelve a subir, un decodificador puede descartar una clave cuando su sesgo cae bajo un umbral: con $\theta=10$ el modelo FPA pierde $0{,}00044$ nats a longitud 2048 y conserva el 34\% de sus claves (26\% a 8192), y sigue recuperando todas las passkeys a 8192 y 16{,}384 tokens con 24--27\% de su caché.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabularx}{\linewidth}{lXX}
+\toprule
+\textbf{Aspecto} & \textbf{Fortaleza} & \textbf{Limitación} \\
+\midrule
+Expresividad & Una cabeza constante-dimensional realiza todo conjunto vivo inducido por caídas; las cabezas softmax con sesgos posicionales o compuertas por token necesitan dimensión de cabeza lineal en el número de claves (Teorema 3.1). & En el límite duro Selective Attention y DCP realizan los mismos conjuntos vivos; la separación está en el sesgo escalar por posición y en profundidad frente a duración. \\
+Selectividad & Un token posterior puede borrar una clave más nueva preservando las antiguas (el conjunto vivo es una pila); FoX es el caso especial de caminata no creciente. & Requiere el gradiente del mínimo suave directo; de lo contrario el mínimo interior puede cerrarse temprano en el entrenamiento. \\
+Costo & $0{,}97\times$ el tiempo de entrenamiento de SDPA; dos escalares extra por clave y cabeza cacheadas ($+1{,}56\%$); decodificación exacta $\mathcal{O}(t)$; las claves muertas son expulsables hasta $\sim$26--34\% de la caché con pérdida despreciable. & La atención cuadrática permanece; el kernel Triton fusionado del artículo no se reproduce aquí (la implementación de referencia materializa el sesgo $T\times T$). \\
+Evidencia & El LM de 110M iguala a FoX en perplejidad y recupera passkeys a $8\times$--$16\times$ la longitud de entrenamiento; las sondas preregistradas de una capa concuerdan con la teoría. & Una semilla por modelo de 110M; un sesgo en la primera capa perjudicó el recuerdo asociativo multiconsulta salvo que se eliminara. \\
+\bottomrule
+\end{tabularx}
+\caption{Compromisos de FPA \citep{liu_first_passage_2026}. El repositorio integra la cabeza causal de forma exacta; el modo encoder simetriza el mínimo de rango del tramo abierto (el artículo define sólo la cabeza causal).}
+\label{tab:fpa-tradeoffs-es}
+\end{table}
+
+\normalsize
+
 \subsection{Principio Unificado de Compuerta}
 
-Las ocho arquitecturas comparten un principio común: \textbf{la compuerta es un mecanismo para controlar el flujo de información y la retención selectiva de memoria}. Las decisiones de diseño específicas divergen a lo largo de varias dimensiones:
+Las nueve arquitecturas comparten un principio común: \textbf{la compuerta es un mecanismo para controlar el flujo de información y la retención selectiva de memoria}. Las decisiones de diseño específicas divergen a lo largo de varias dimensiones:
 
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Ubicación de la compuerta}: Actualizaciones de estado recurrente (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2) versus espacio de logits/salida softmax (FoX, Gated Softmax, RetNet).
-    \item \textbf{Granularidad de control}: Por dimensión (GLA, HGRN2 diagonal), por clave (DeltaNet), por token (FoX), por cabeza (Gated Softmax) o borrado/escritura canalizados decouplados (Gated DeltaNet-2).
-    \item \textbf{Dependencia de datos}: Completamente dependiente de datos (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, FoX, Gated Softmax) versus esquemas fijos (RetNet con decaimiento exponencial).
-    \item \textbf{Compensación de expresividad}: Eficiencia recurrente lineal (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, RetNet) versus expresividad completa de softmax (FoX, Gated Softmax).
+    \item \textbf{Ubicación de la compuerta}: Actualizaciones de estado recurrente (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2) versus espacio de logits/salida softmax (FoX, Gated Softmax, FPA, RetNet).
+    \item \textbf{Granularidad de control}: Por dimensión (GLA, HGRN2 diagonal), por clave (DeltaNet), por token (FoX), por cabeza (Gated Softmax), borrado/escritura canalizados decouplados (Gated DeltaNet-2), o un nivel por clave comparado con un campo por cabeza (FPA).
+    \item \textbf{Dependencia de datos}: Completamente dependiente de datos (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, FoX, Gated Softmax, FPA) versus esquemas fijos (RetNet con decaimiento exponencial).
+    \item \textbf{Agregación a lo largo del camino clave--consulta}: Sin término de camino (Gated Softmax), una suma de log-compuertas de olvido (FoX), o un mínimo de rango de un campo aprendido (FPA) --- las sumas acumulan duración, los extremos dependen sólo de la caída más profunda.
+    \item \textbf{Compensación de expresividad}: Eficiencia recurrente lineal (GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, RetNet) versus expresividad completa de softmax (FoX, Gated Softmax, FPA).
 \end{enumerate}
 
 \subsection{Implementación y Orientación Práctica}
@@ -586,6 +687,7 @@ Las ocho arquitecturas comparten un principio común: \textbf{la compuerta es un
     \item \textbf{HGRN2}: Jerarquías temporales multi-escala; cuando los límites de olvido específicos por capa son deseables.
     \item \textbf{FoX}: Extrapolación de longitud y comprensión de contexto largo; cuando el entrenamiento cuadrático es aceptable y no se desea reemplazar softmax.
     \item \textbf{Gated Softmax}: Mejora rápida para modelos softmax existentes con cambios mínimos de código; mejor para profesionales que desean ganancias inmediatas sin una reestructuración importante.
+    \item \textbf{FPA}: Contextos largos y secuencias estructuradas donde un evento posterior invalida tokens recientes pero no los más antiguos (delimitadores, retrocesos, reasignaciones); cuando se requiere calidad softmax y decodificación KV exacta y es aceptable un pequeño estado escalar por cabeza.
 \end{enumerate}
 
 \subsubsection{Consideraciones de Hardware}

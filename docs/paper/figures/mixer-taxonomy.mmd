@@ -1,6 +1,6 @@
 %%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
 flowchart TD
-  root["Sequence Mixer Registry (48 variants)"]
+  root["Sequence Mixer Registry (49 variants)"]
 
   d["Dense (4)"] --> d1["standard"] --> d2["sigmoid"] --> d2b["ca"] --> d3["gqa"]
 
@@ -8,7 +8,7 @@ flowchart TD
 
   s["Sparse (12)"] --> s1["sparse_transformer"] --> s2["longformer"] --> s3["bigbird"] --> s4["sparsek"] --> s5["nsa"] --> s6["sparge"] --> s7["fasa"] --> s8["msa"] --> s9["sparda"] --> s10["swa"] --> s11["lsa"] --> s12["fastconformer"]
 
-  g["Gated (8)"] --> g1["gla"] --> g2["deltanet"] --> g3["gated_deltanet"] --> g4["gated_deltanet2"] --> g5["hgrn2"] --> g6["fox"] --> g7["gated_softmax"] --> g8["kda"]
+  g["Gated (9)"] --> g1["gla"] --> g2["deltanet"] --> g3["gated_deltanet"] --> g4["gated_deltanet2"] --> g5["hgrn2"] --> g6["fox"] --> g7["gated_softmax"] --> g8["kda"] --> g9["fpa"]
 
   l["Latent (10)"] --> l1["mla"] --> l2["gqla"] --> l3["mlra"] --> l4["tucker"] --> l5["iha"] --> l6["gta"] --> l7["mtla"] --> l8["cca"] --> l9["ccgqa"] --> l10["gma"]
 

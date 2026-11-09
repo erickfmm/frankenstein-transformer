@@ -65,6 +65,7 @@ QK_NORM_MIXERS = frozenset(
         "sparda",
         "conformer",
         "fox",
+        "fpa",
         "gated_softmax",
         "titan",
         "gqla",

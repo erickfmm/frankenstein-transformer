@@ -161,7 +161,7 @@ A single switch must reach every place where the toolkit materialises probabilit
 \toprule
 \textbf{Surface} & \textbf{Covered sites} \\
 \midrule
-Attention mixers & \texttt{standard}, \texttt{titan}, \texttt{gqa}, \texttt{ode}; latent family (\texttt{mla}, \texttt{gqla}, \texttt{mlra}, \texttt{tucker}, \texttt{iha}, \texttt{gta}, \texttt{mtla}, \texttt{cca}, \texttt{ccgqa}, \texttt{gma}); gated (\texttt{gated\_softmax}, \texttt{fox}); sparse (\texttt{fasa}, \texttt{sparge}, \texttt{msa}, \texttt{nsa}, \texttt{bigbird}, \texttt{longformer}, \texttt{sparse\_transformer}, \texttt{sparsek}, \texttt{swa}, \texttt{sparda}); dense surrogate of training-free mixers \\
+Attention mixers & \texttt{standard}, \texttt{titan}, \texttt{gqa}, \texttt{ode}; latent family (\texttt{mla}, \texttt{gqla}, \texttt{mlra}, \texttt{tucker}, \texttt{iha}, \texttt{gta}, \texttt{mtla}, \texttt{cca}, \texttt{ccgqa}, \texttt{gma}); gated (\texttt{gated\_softmax}, \texttt{fox}, \texttt{fpa}); sparse (\texttt{fasa}, \texttt{sparge}, \texttt{msa}, \texttt{nsa}, \texttt{bigbird}, \texttt{longformer}, \texttt{sparse\_transformer}, \texttt{sparsek}, \texttt{swa}, \texttt{sparda}); dense surrogate of training-free mixers \\
 Routers & MoE and Mixture-of-Depths top-$k$ softmax \\
 Residuals & Full and Block AttnRes depth-wise softmax \\
 KV cache & recompute/fallback normaliser in \texttt{src/model/cache/hooks.py} \\

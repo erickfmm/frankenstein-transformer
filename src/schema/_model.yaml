@@ -111,6 +111,8 @@ properties:
         $ref: "_model/_attention_retnet.yaml"
       ca:
         $ref: "_model/_attention_ca.yaml#/properties/ca"
+      fpa:
+        $ref: "_model/_attention_fpa.yaml#/properties/fpa"
   moe:
     $ref: "_model/_moe.yaml"
   bitnet:

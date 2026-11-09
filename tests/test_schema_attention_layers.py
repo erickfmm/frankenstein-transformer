@@ -65,6 +65,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "falcon2a",
             "falcon3a",
             "fastconformer",
+            "fpa",
         }
 
         self.assertTrue(expected.issubset(set(enum_values)))
@@ -149,7 +150,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             )
 
     def test_cache_specs_match_layer_pattern_enum(self):
-        """T12: CACHE_SPECS covers exactly the layer_pattern enum (47)."""
+        """T12: CACHE_SPECS covers exactly the layer_pattern enum (48)."""
         from src.model.cache.capabilities import CACHE_SPECS
 
         schema_path = pathlib.Path(__file__).parent.parent / "src" / "schema.yaml"
@@ -159,7 +160,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "layer_pattern"
             ]["items"]["enum"]
         )
-        self.assertEqual(len(enum_values), 48)
+        self.assertEqual(len(enum_values), 49)
         self.assertEqual(set(CACHE_SPECS), enum_values)
 
     def test_inference_schema_is_referenced(self):

@@ -1,0 +1,88 @@
+type: object
+additionalProperties: false
+properties:
+  fpa:
+    type: object
+    additionalProperties: false
+    title: "First Passage Attention"
+    title_es: "Atención de Primer Paso"
+    description: |-
+      Hyperparameters for `fpa` (First Passage Attention (paper: arxiv:2610.22714)).
+      Each head computes a scalar field φ at every position and a scalar level
+      ψ per key from a shared learned walk (a prefix sum of per-token
+      increments), and lowers a key's logit by the depth of the deepest dip of
+      the field below the key's level over the span after the key:
+      `b_ts = β·min(0, min_{s<u≤t} φ_u − ψ_s)`. FoX is the special case of a
+      walk that never rises (δ ≤ 0). The mixer adds one field projection
+      (`3·H` scalars) and one learned strength `β` per head. Only applies when
+      `fpa` appears in `layer_pattern`.
+
+      **References:** (paper: arxiv:2610.22714)
+    description_es: |-
+      Hiperparámetros para `fpa` (Atención de Primer Paso (paper: arxiv:2610.22714)).
+      Cada cabeza calcula un campo escalar φ en cada posición y un nivel escalar
+      ψ por clave a partir de una caminata aprendida compartida (suma prefija de
+      incrementos por token), y reduce el logit de una clave según la
+      profundidad de la caída más profunda del campo por debajo del nivel de la
+      clave en el tramo posterior a ella:
+      `b_ts = β·min(0, min_{s<u≤t} φ_u − ψ_s)`. FoX es el caso especial de una
+      caminata que nunca sube (δ ≤ 0). El mixer añade una proyección de campo
+      (`3·H` escalares) y una fuerza aprendida `β` por cabeza. Solo aplica
+      cuando `fpa` está en `layer_pattern`.
+
+      **Referencias:** (paper: arxiv:2610.22714)
+    properties:
+      beta_init:
+        type: number
+        exclusiveMinimum: 0
+        title: "Initial First-Passage Strength"
+        title_es: "Fuerza Inicial de Primer Paso"
+        description: |-
+          Initial value of the learned per-head first-passage strength β of
+          `fpa` (paper: arxiv:2610.22714, §2 and Table 16: β = 1 at
+          initialisation). β always stays learnable; it is the multiplier of
+          the deepest-dip depth in the bias `b_ts = β·min(0, φ̄ₜₛ − ψₛ)`.
+          Larger β hardens the alive/dead separation (β → ∞ makes dead keys
+          exactly invisible). Must be positive. Only applies when `fpa` is in
+          `layer_pattern`.
+
+          **References:** (paper: arxiv:2610.22714)
+        description_es: |-
+          Valor inicial de la fuerza de primer paso aprendida por cabeza β de
+          `fpa` (paper: arxiv:2610.22714, §2 y Tabla 16: β = 1 en la
+          inicialización). β siempre permanece aprendible; multiplica la
+          profundidad de la caída más profunda en el sesgo
+          `b_ts = β·min(0, φ̄ₜₛ − ψₛ)`. Un β mayor endurece la separación
+          viva/muerta (β → ∞ hace que las claves muertas sean exactamente
+          invisibles). Debe ser positiva. Solo aplica cuando `fpa` está en
+          `layer_pattern`.
+
+          **Referencias:** (paper: arxiv:2610.22714)
+        default: 1.0
+        examples: [1.0, 2.0]
+      tau:
+        type: number
+        exclusiveMinimum: 0
+        title: "Soft-Minimum Temperature"
+        title_es: "Temperatura del Mínimo Suave"
+        description: |-
+          Temperature τ of the soft-minimum **straight-through gradient** of
+          `fpa` (paper: arxiv:2610.22714, §2 "Training": τ = 1). The forward
+          pass and evaluation always use the hard range minimum; τ only scales
+          the differentiable surrogate `−τ·log Σ_{s<u≤t} exp(−φ_u/τ)` whose
+          gradient is substituted in the backward pass. Must be positive. Only
+          applies when `fpa` is in `layer_pattern`.
+
+          **References:** (paper: arxiv:2610.22714)
+        description_es: |-
+          Temperatura τ del **gradiente directo (straight-through)** del mínimo
+          suave de `fpa` (paper: arxiv:2610.22714, §2 "Training": τ = 1). La
+          pasada hacia adelante y la evaluación siempre usan el mínimo de rango
+          duro; τ solo escala el sustituto diferenciable
+          `−τ·log Σ_{s<u≤t} exp(−φ_u/τ)` cuyo gradiente se sustituye en la
+          pasada hacia atrás. Debe ser positiva. Solo aplica cuando `fpa` está
+          en `layer_pattern`.
+
+          **Referencias:** (paper: arxiv:2610.22714)
+        default: 1.0
+        examples: [1.0, 0.5]
