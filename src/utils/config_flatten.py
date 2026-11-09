@@ -566,6 +566,8 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
         _flatten_pe_parameters(pe_params, out)
 
     # ---- Feature blocks moved out of the flat model namespace ----
+    # MoE (arXiv:2407.06204): the sub-blocks mirror the layer anatomy and
+    # flatten to ``moe_*`` fields on ``FrankensteinModelConfig``.
     moe = model_data.get("moe")
     if isinstance(moe, dict):
         if "enabled" in moe:
@@ -574,6 +576,79 @@ def flatten_model_dict(model_data: Dict[str, Any]) -> Dict[str, Any]:
             out["num_experts"] = moe["num_experts"]
         if "top_k" in moe:
             out["top_k_experts"] = moe["top_k"]
+        if "expert_hidden_size" in moe:
+            out["moe_expert_hidden_size"] = moe["expert_hidden_size"]
+
+        _moe_router = moe.get("router")
+        if isinstance(_moe_router, dict):
+            for key, flat in (
+                ("scoring", "moe_router_scoring"),
+                ("pre_softmax", "moe_router_pre_softmax"),
+                ("renormalize", "moe_router_renormalize"),
+                ("routed_scaling_factor", "moe_routed_scaling_factor"),
+                ("dtype", "moe_router_dtype"),
+                ("jitter_eps", "moe_router_jitter_eps"),
+                ("z_loss_coeff", "moe_router_z_loss_coeff"),
+            ):
+                if key in _moe_router:
+                    out[flat] = _moe_router[key]
+
+        _moe_routing = moe.get("routing")
+        if isinstance(_moe_routing, dict):
+            for key, flat in (
+                ("type", "moe_routing_type"),
+                ("capacity_factor", "moe_capacity_factor"),
+                ("hash_layers", "moe_hash_layers"),
+                ("hash_table", "moe_hash_table"),
+                ("hash_seed", "moe_hash_seed"),
+            ):
+                if key in _moe_routing:
+                    out[flat] = _moe_routing[key]
+
+        _moe_balancing = moe.get("balancing")
+        if isinstance(_moe_balancing, dict):
+            for key, flat in (
+                ("aux_loss", "moe_aux_loss_type"),
+                ("aux_loss_coeff", "moe_aux_loss_coeff"),
+                ("bias_update", "moe_bias_update"),
+                ("bias_update_rate", "moe_bias_update_rate"),
+            ):
+                if key in _moe_balancing:
+                    out[flat] = _moe_balancing[key]
+
+        _moe_shared = moe.get("shared")
+        if isinstance(_moe_shared, dict):
+            for key, flat in (
+                ("count", "moe_shared_experts_count"),
+                ("hidden_size", "moe_shared_expert_hidden_size"),
+                ("gate", "moe_shared_expert_gate"),
+            ):
+                if key in _moe_shared:
+                    out[flat] = _moe_shared[key]
+
+        _moe_latent = moe.get("latent")
+        if isinstance(_moe_latent, dict):
+            for key, flat in (
+                ("enabled", "moe_latent_enabled"),
+                ("dim", "moe_latent_dim"),
+                ("norm_before_up_proj", "moe_latent_norm_before_up_proj"),
+            ):
+                if key in _moe_latent:
+                    out[flat] = _moe_latent[key]
+
+        _moe_layout = moe.get("layout")
+        if isinstance(_moe_layout, dict):
+            for key, flat in (
+                ("dense_layers", "moe_dense_layers"),
+                ("every_n_layers", "moe_layer_frequency"),
+            ):
+                if key in _moe_layout:
+                    out[flat] = _moe_layout[key]
+
+        _moe_experts = moe.get("experts")
+        if isinstance(_moe_experts, dict):
+            if "activation_clamp" in _moe_experts:
+                out["moe_activation_clamp"] = _moe_experts["activation_clamp"]
 
     bitnet = model_data.get("bitnet")
     if isinstance(bitnet, dict):

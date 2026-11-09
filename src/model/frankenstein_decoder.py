@@ -151,11 +151,13 @@ class FrankensteinDecoder(nn.Module):
             self.last_mixture_of_depths_stats = dict(
                 getattr(self.backbone, "last_mixture_of_depths_stats", {})
             )
+            self.last_moe_stats = dict(getattr(self.backbone, "last_moe_stats", {}))
             return logits, cache
         self.last_auxiliary_losses = dict(getattr(self.backbone, "last_auxiliary_losses", {}))
         self.last_mixture_of_depths_stats = dict(
             getattr(self.backbone, "last_mixture_of_depths_stats", {})
         )
+        self.last_moe_stats = dict(getattr(self.backbone, "last_moe_stats", {}))
         return output
 
     def _sample_next(self, logits, temperature: float, top_k: int, top_p: float, greedy: bool):

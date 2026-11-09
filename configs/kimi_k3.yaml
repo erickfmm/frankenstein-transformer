@@ -116,11 +116,34 @@ model:
     enabled: true
     num_experts: 896
     top_k: 16
+    expert_hidden_size: 3072
+    router:
+      scoring: sigmoid
+      routed_scaling_factor: 1.0
+    balancing:
+      # Kimi K3 uses quantile balancing over the global batch; approximated
+      # with the centred sign rule (documented deviation: quantile needs
+      # cross-rank histograms, out of scope for the single-device runtime).
+      aux_loss: none
+      bias_update: centered_sign
+      bias_update_rate: 0.001
+    shared:
+      count: 2
+      hidden_size: 3072
+    latent:
+      enabled: true
+      dim: 3584
+      norm_before_up_proj: true
+    layout:
+      dense_layers: 1
+    experts:
+      # SiTU-GLU gate cap (4) approximation; the exact smooth cap is future work.
+      activation_clamp: 4.0
   bitnet:
     enabled: false
   ffn:
     hidden_size: 3072
-    activation: silu
+    activation: swiglu
 training:
   task: mlm
   seed: 42

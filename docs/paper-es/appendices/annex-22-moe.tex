@@ -1,0 +1,444 @@
+\section{Mezcla de Expertos: teoría e implementación}
+\label{app:moe}
+
+Este anexo documenta el contrato de Mezcla de Expertos (MoE) implementado en
+\texttt{src/model/moe/} y declarado en
+\texttt{src/schema/\_model/\_moe.yaml}. El esquema es la fuente de verdad
+ejecutable: cada clave discutida aquí existe en el esquema, se aplana a un campo
+de \texttt{FrankensteinModelConfig} y está cubierta por la suite de pruebas. El
+texto sigue la anatomía de una capa MoE---router, estrategia de ruteo, balanceo
+de carga, expertos, disposición por capas, capacidad y monitoreo---y cierra con
+las tablas del contrato de esquema y de los presets.
+
+\subsection{Visión general y taxonomía}
+\label{app:moe-overview-es}
+
+Una capa feed-forward densa aplica una única función a cada token. Una capa MoE
+la reemplaza por $E$ redes expertas $\{E_e\}_{e=1}^{E}$ y un router que
+selecciona $k$ de ellas por token,
+\begin{equation}
+  y_t = g \sum_{j=1}^{k} \hat w_{t,j}\, E_{i_{t,j}}(x_t) + y^{\text{shared}}_t ,
+  \label{eq:moe-layer-es}
+\end{equation}
+donde $i_{t,j}$ son los índices de expertos seleccionados, $\hat w_{t,j}$ sus
+pesos de mezcla, $g$ el factor de escala ruteado y $y^{\text{shared}}_t$ la rama
+opcional de expertos compartidos siempre activa. Solo se ejecutan los expertos
+seleccionados, así que los parámetros totales crecen con $E$ mientras el cómputo
+por token queda proporcional a $k$
+\citep{shazeer2017moe,fedus2021switch}. El espacio de diseño tiene cinco ejes:
+(i) cómo los logits se convierten en pesos (Sección~\ref{app:moe-router-es}),
+(ii) quién selecciona los expertos (Sección~\ref{app:moe-routing-es}),
+(iii) cómo se balancea la carga (Sección~\ref{app:moe-balancing-es}),
+(iv) cómo son los expertos (Sección~\ref{app:moe-experts-es}) y
+(v) qué capas son MoE (Sección~\ref{app:moe-layout-es}).
+
+\subsection{Puntuación del router: de logits a pesos}
+\label{app:moe-router-es}
+
+El router proyecta cada token a un logit por experto,
+$z_t = W_r x_t \in \mathbb{R}^{E}$, con $W_r \in \mathbb{R}^{E \times d}$.
+Una función de compuerta mapea logits a puntuaciones, y el top-$k$ selecciona
+los expertos. La implementación soporta las tres funciones de compuerta usadas
+por los modelos abiertos actuales:
+\begin{align}
+  \text{softmax}:&\quad s_{t,e} = \frac{e^{z_{t,e}}}{\sum_{e'} e^{z_{t,e'}}}, \\
+  \text{sigmoid}:&\quad s_{t,e} = \sigma(z_{t,e}), \\
+  \text{sqrt-softplus}:&\quad s_{t,e} = \sqrt{\operatorname{softplus}(z_{t,e})}.
+\end{align}
+Las tres son monótonas en $z_{t,e}$, por lo que ordenan los expertos de forma
+idéntica; difieren en cuánto peso recibe cada experto seleccionado
+\citep{deepseek2024v3,deepseek2026v4}. \texttt{router.scoring} elige la función
+(por defecto \texttt{softmax}).
+
+\paragraph{Escala de salida.}
+Dos controles fijan la magnitud de la rama ruteada. Con
+\texttt{router.renormalize} (por defecto verdadero), las puntuaciones
+seleccionadas se reescalan para sumar uno,
+\begin{equation}
+  \hat w_{t,j} = \frac{s_{t,i_{t,j}}}{\sum_{l=1}^{k} s_{t,i_{t,l}}},
+\end{equation}
+lo que elimina la variación entre tokens de la masa de probabilidad top-$k$;
+renormalizar redujo la pérdida de validación en el estudio de granularidad de
+\citet{krajewski2025scaling}. El factor de escala ruteado $g$
+(\texttt{router.routed\_scaling\_factor}, por defecto $1$) restaura luego el
+valor eficaz esperado de la salida ruteada: con $k$ expertos incorrelacionados de
+igual RMS, pesos iguales reducen la salida a $1/\sqrt{k}$ del RMS de un experto,
+así que $g \approx \sqrt{k}$ lo recupera. DeepSeek-V3 usa $g = 2.5$ con
+$k = 8$ \citep{deepseek2024v3}; Kimi K2 usa $2.827 \approx \sqrt{8}$ y Kimi K3
+usa $g = 1.0$ con $k = 16$ \citep{kimiteam2026k3}.
+
+\paragraph{Pre-softmax.}
+Con \texttt{router.pre\_softmax} el softmax se calcula sobre todos los expertos
+antes de la selección top-$k$, de modo que los pesos conservados son
+probabilidades crudas y no se renormalizan. Esto es necesario para ruteo softmax
+con $k=1$: el softmax sobre un único logit siempre vale uno, así que un peso
+top-1 post-softmax no tiene gradiente. La capa de configuración detecta esa
+combinación, activa \texttt{pre\_softmax} automáticamente y emite una advertencia
+en vez de rechazar configuraciones heredadas.
+
+\paragraph{Agudeza y precisión.}
+Tres mecanismos controlan cuán puntiagudo es el router. El jitter multiplicativo
+estilo Switch (\texttt{router.jitter\_eps}) suma
+$x \cdot (1 + \epsilon(2u-1))$ antes de la proyección
+\citep{fedus2021switch}. La precisión del router (\texttt{router.dtype}) es
+\texttt{float32} por defecto: un router bf16 divergió en Switch Transformers y
+los empates del top-$k$ se rompen arbitrariamente \citep{fedus2021switch}.
+Finalmente, la z-loss de ST-MoE penaliza la deriva de logits,
+\begin{equation}
+  \mathcal{L}_z = \beta\,\frac{1}{T}\sum_{t=1}^{T}
+  \Bigl(\log \sum_{e=1}^{E} e^{z_{t,e}}\Bigr)^{2},
+  \label{eq:zloss-es}
+\end{equation}
+donde $\beta$ es \texttt{router.z\_loss\_coeff} (por defecto $0$; ST-MoE usa
+$10^{-3}$) \citep{zoph2022stmoe}. La pérdida se devuelve como
+\texttt{moe\_router\_z\_loss} y se suma a la pérdida de tarea.
+
+\subsection{Estrategia de ruteo: quién selecciona y cómo}
+\label{app:moe-routing-es}
+
+\paragraph{Elección por token.}
+La opción por defecto (\texttt{routing.type: token\_choice}) hace que cada token
+conserve sus $k$ mejores expertos bajo $s_t + b$, donde $b$ es el sesgo de
+balanceo de la Sección~\ref{app:moe-balancing-es}. Es la estrategia entrenada por
+Megatron y usada por la mayoría de los modelos abiertos
+\citep{fedus2021switch,deepseek2024v3}.
+
+\paragraph{Elección por experto.}
+Con \texttt{routing.type: expert\_choice}, cada experto conserva sus mejores
+$Tk/E$ tokens \citep{zhou2022expertchoice}. Las cargas son iguales por
+construcción, pero la asignación de un token depende de tokens posteriores, así
+que el ruteo en inferencia difiere del de entrenamiento. El esquema prohíbe por
+ello combinar elección por experto con una pérdida auxiliar o un sesgo de
+experto (se autobalancea), y el anexo la recomienda para experimentos de encoder
+o de entrenamiento, no para serving autorregresivo.
+
+\paragraph{Capas hash.}
+Las primeras \texttt{routing.hash\_layers} capas MoE pueden seleccionar expertos
+desde una tabla fija id de token $\rightarrow (e_1,\dots,e_k)$
+\citep{roller2021hash}, como hace DeepSeek-V4 en sus tres primeras capas MoE
+\citep{deepseek2026v4}. El router aprendido se sigue usando para los pesos pero
+no recibe gradiente de la selección. La tabla se construye con una asignación
+aleatoria con semilla (\texttt{hash\_table: random}) o un ciclo round-robin
+(\texttt{round\_robin}); Roller et al.\ hallaron que las tablas aleatorias y las
+voraces por frecuencia alcanzan perplejidad similar, con mejor balance la voraz
+\citep{roller2021hash}. Una tabla hash no puede rebalancearse, así que el esquema
+prohíbe combinarla con \texttt{balancing.bias\_update}.
+
+\subsection{Balanceo de carga}
+\label{app:moe-balancing-es}
+
+Cuando muchos tokens eligen el mismo experto, el experto más ocupado fija el
+tiempo del paso y los demás quedan subentrenados. Se implementan dos mecanismos
+independientes; cualquiera puede usarse solo o combinarse, como hace DeepSeek-V3
+\citep{deepseek2024v3}.
+
+\paragraph{Pérdida auxiliar.}
+La pérdida auxiliar multiplica la fracción de asignaciones de cada experto por su
+probabilidad media de router,
+\begin{equation}
+  \mathcal{L}_{\text{aux}} = \alpha\,E \sum_{e=1}^{E} f_e P_e,
+  \qquad
+  f_e = \frac{1}{Tk}\sum_{t,j}\mathbb{1}[i_{t,j}=e],
+  \qquad
+  P_e = \frac{1}{T}\sum_{t} s_{t,e},
+  \label{eq:aux-es}
+\end{equation}
+con $\alpha$ = \texttt{balancing.aux\_loss\_coeff}. El alcance se elige con
+\texttt{balancing.aux\_loss}: \texttt{batch} (un micro-batch, por defecto),
+\texttt{sequence} (una pérdida por secuencia, la guarda de DeepSeek-V3 contra que
+una sola secuencia se apile en pocos expertos) o \texttt{none}. Balancear por
+secuencia o por micro-batch puede impedir que se formen expertos de dominio,
+mientras que balancear sobre el batch global deja desigual la carga por
+dispositivo \citep{qiu2025demons}; el runtime de un solo dispositivo implementa
+los dos primeros alcances y documenta el global como trabajo futuro. Un
+coeficiente demasiado grande cuesta pérdida de lenguaje, y uno demasiado pequeño
+deja MaxVio alto \citep{wang2024auxfree}; el valor por defecto es $0.01$, cercano
+a Switch y DeepSeekMoE \citep{fedus2021switch,dai2024deepseekmoe}.
+
+\paragraph{Sesgo libre de pérdida auxiliar.}
+Con \texttt{balancing.bias\_update} en \texttt{sign} o \texttt{centered\_sign},
+un sesgo por experto $b_e$ se suma a las puntuaciones solo antes de la selección
+---nunca a los pesos de mezcla--- y se mueve una vez por paso de optimizador:
+\begin{equation}
+  b_e \leftarrow b_e + \gamma\,\operatorname{sign}\!\left(\bar c - c_e\right),
+  \qquad
+  \bar c = \frac{1}{E}\sum_{e'} c_{e'},
+  \label{eq:bias-es}
+\end{equation}
+donde $c_e$ cuenta las asignaciones del paso y $\gamma$ es
+\texttt{balancing.bias\_update\_rate} (por defecto $10^{-3}$). Los expertos
+sobrecargados ($c_e > \bar c$) bajan y los subcargados suben. La variante
+\texttt{centered\_sign} resta el paso medio para que la media del sesgo no
+derive, lo que importa cuando el sesgo se guarda en precisión reducida
+\citep{wang2024auxfree}. El sesgo es un buffer fp32 no persistente: es estado de
+entrenamiento, nunca un parámetro de inferencia, y \texttt{eval()} lo congela.
+La actualización la aplica \texttt{update\_moe\_expert\_bias()} después de
+\texttt{optimizer.step()} en el entrenador.
+
+\paragraph{MaxVio.}
+El balance se lee con la violación máxima,
+\begin{equation}
+  \mathrm{MaxVio} = \frac{\max_e c_e - \bar c}{\bar c},
+\end{equation}
+donde $0$ es perfectamente parejo y $1$ significa que el experto más ocupado
+recibe el doble de la carga media \citep{wang2024auxfree}. Se registra por capa
+como \texttt{moe/max\_vio}.
+
+\subsection{Expertos: cantidad, ancho, espacio latente y compartición}
+\label{app:moe-experts-es}
+
+\paragraph{Cantidad y ancho.}
+\texttt{num\_experts} fija el pool ruteado y \texttt{top\_k} cuántos se usan por
+token. \texttt{expert\_hidden\_size} fija el ancho intermedio de cada experto;
+cuando no se define, cae a \texttt{ffn.hidden\_size}. Mantener ambos separados es
+esencial para las arquitecturas reales: DeepSeek-V3 tiene ancho denso 18432 pero
+expertos de ancho 2048 \citep{deepseek2024v3}. Una granularidad más fina (más
+expertos, más angostos, con igual total y activos) mejoró la pérdida hasta 128
+expertos de $d/4$ con top-8 en un estudio \citep{liew2026principled}, mientras
+que con igual total y activos se predice favorecer una configuración menos
+dispersa al contabilizar el throughput de entrenamiento
+\citep{krajewski2025scaling}.
+
+\paragraph{MoE latente.}
+LatentMoE proyecta cada token de $d$ a un ancho latente $\ell$ antes del despacho
+y de vuelta después de combinar, así que cada copia del token lleva $\ell$
+números en vez de $d$ \citep{elango2026latentmoe}:
+\begin{equation}
+  \ell_t = W_\downarrow x_t,\qquad
+  y_t = W_\uparrow \sum_{j=1}^{k} \hat w_{t,j} E_{i_{t,j}}(\ell_t).
+  \label{eq:latent-es}
+\end{equation}
+Con $\alpha = d/\ell$, los mismos parámetros, cómputo y tráfico de expertos
+permiten $\alpha$ veces más expertos y un top-$k$ mayor; NVIDIA reporta +5.65
+puntos de MMLU-Pro a 95B totales con $\alpha = 4$, y la calidad se conserva
+hasta $\alpha \leqslant 4$ \citep{elango2026latentmoe}. Kimi K3 agrega un
+RMSNorm antes de la proyección de salida para detener el crecimiento de
+activaciones de la rama ruteada a 2.8T parámetros, expuesto como
+\texttt{latent.norm\_before\_up\_proj} \citep{kimiteam2026k3}.
+
+\paragraph{Expertos compartidos.}
+Los expertos siempre activos de \texttt{shared.count} corren fuera del router
+sobre cada token, aprenden patrones comunes y dejan libres a los expertos
+ruteados para especializarse \citep{dai2024deepseekmoe}. Su ancho es
+\texttt{shared.hidden\_size} (por defecto, el ancho ruteado). Se suman con peso
+uno, o multiplicados por una compuerta aprendida por token
+$\sigma(w_s^{\top} x_t) \in (0,1)$ cuando \texttt{shared.gate: sigmoid}
+(Qwen3-Next) \citep{qwen2025qwen3}; la forma de peso fijo coincide con
+DeepSeek-V3 \citep{deepseek2024v3}. No son gratis: agregar uno sin reducir el
+top-$k$ ruteado aumenta el cómputo por token, y las ganancias de calidad medidas
+son pequeñas e inconsistentes \citep{li2026slicing}.
+
+\paragraph{Tope de activación.}
+\texttt{experts.activation\_clamp} acota superiormente el intermedio con
+compuerta,
+\begin{equation}
+  \mathrm{GatedFFN}(x) = W_{\text{down}}\!\left(
+  \phi\bigl(\operatorname{clamp}(xW_{\text{gate}}, -c, c)\bigr) \odot (xW_{\text{up}})
+  \right),
+\end{equation}
+con $c$ = \texttt{activation\_clamp} ($0$ lo desactiva). DeepSeek-V4.1 usa
+$c = 10$ y Step 5 Preview $c = 7$; Step 3.5 Flash encontró expertos atípicos
+cuyas normas de salida crecían mientras la pérdida quedaba plana, y el recorte
+los contuvo sin cambiar la pérdida
+\citep{huang2026step35,deepseek2026v4flash}. El tope suave exacto de SiTU-GLU
+que usa Kimi K3 se aproxima aquí con un recorte de la entrada de la compuerta y
+se documenta como desviación \citep{kimiteam2026k3}.
+
+\subsection{Disposición por capas}
+\label{app:moe-layout-es}
+
+\texttt{layout.dense\_layers} mantiene densas las primeras $N$ capas
+(DeepSeek-V3 y GLM conservan tres), y \texttt{layout.every\_n\_layers} intercala
+capas densas y MoE (Llama 4 Maverick usa una de cada dos)
+\citep{deepseek2024v3,meta2025llama4}. Las capas densas usan
+\texttt{ffn.hidden\_size}; las MoE usan \texttt{expert\_hidden\_size}. La
+configuración del modelo expone \texttt{is\_moe\_layer(i)},
+\texttt{moe\_layer\_mask()} y \texttt{moe\_layer\_count()}; las pilas de encoder,
+decoder, ViT y audio construyen una FFN ruteada o densa por capa física. Las
+capas densas iniciales reducen el número de capas MoE a bajo costo con FLOPs
+igualados \citep{krajewski2025scaling}, pero no corrigen por sí solas el
+desbalance de las primeras capas; las primeras capas MoE tras el prefijo siguen
+siendo las que hay que monitorear.
+
+\subsection{Capacidad y descarte de tokens}
+\label{app:moe-capacity-es}
+
+Por defecto el ruteo es dropless: un experto acepta todos los tokens que el
+router le envía (\texttt{routing.capacity\_factor: 0}). Un factor positivo
+$\kappa$ limita cada experto a
+\begin{equation}
+  C = \left\lceil \kappa\,\frac{Tk}{E} \right\rceil
+\end{equation}
+asignaciones, conservando los tokens de mayor probabilidad y descartando el
+resto. El tope acota la memoria y elimina el rezago del experto caliente, a un
+costo pequeño de calidad: Pangu Ultra MoE descartó cerca de 6--8\% de tokens con
+$\kappa = 1.5$ y su corrida dropless mantuvo menor pérdida, con una brecha que
+crecía con el número de expertos \citep{pangu2025ultra}, y MegaBlocks alcanzó su
+menor pérdida cuando no se descartó ningún token \citep{gale2022megablocks}. La
+capa registra \texttt{dropped\_fraction}. Dropless sigue siendo el valor por
+defecto y la opción recomendada para fine-tuning, donde los tokens descartados
+pueden caer dentro de respuestas de instrucción.
+
+\subsection{Monitoreo}
+\label{app:moe-monitoring-es}
+
+Cada \texttt{MoELayer} expone \texttt{last\_auxiliary\_losses} (las pérdidas
+\texttt{moe\_load\_balancing\_loss} y \texttt{moe\_router\_z\_loss} ponderadas
+por sus coeficientes) y \texttt{last\_moe\_stats}. El modelo las agrega sobre las
+capas mediante \texttt{aggregate\_moe\_aux\_losses()} y suma las pérdidas a la de
+tarea; el entrenador registra los escalares en el callback de métricas y en
+Weights \& Biases. Las señales son:
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{MaxVio} (\texttt{moe/max\_vio}) por capa: el colapso de ruteo se
+        ve como un valor creciente.
+  \item \textbf{Pérdida de balanceo} y \textbf{z-loss}: los coeficientes ya están
+        divididos en las estadísticas registradas; la z-loss sigue la deriva de
+        logits.
+  \item \textbf{Entropía de ruteo} y \textbf{peso top-1}: una compuerta plana,
+        que promedia sus $k$ expertos, se ve como entropía cercana a $\log k$ y
+        peso top-1 cercano a $1/k$.
+  \item \textbf{Razón de normas de expertos}: la mayor norma de salida por
+        experto sobre la mediana de la capa; un experto atípico la empuja muy por
+        encima de uno y uno muerto la fija en cero \citep{huang2026step35}.
+  \item \textbf{Fracción descartada}: proporción de asignaciones eliminadas por
+        el factor de capacidad.
+\end{itemize}
+
+\subsection{Contrato de esquema}
+\label{app:moe-schema-es}
+
+La Tabla~\ref{tab:moe-schema-es} lista cada clave \texttt{model.moe.*}, su valor
+por defecto, el campo plano de \texttt{FrankensteinModelConfig} que produce el
+aplanador y la referencia que la gobierna. El esquema JSON es el contrato
+ejecutable; la validación en runtime agrega las reglas entre claves:
+$top\_k \leqslant num\_experts$, softmax con $k=1$ implica pre-softmax, el sesgo
+requiere puntuación sigmoid o sqrt-softplus, la elección por experto es
+incompatible con los términos de balanceo, las capas hash requieren elección por
+token y prohíben el sesgo, el ancho latente debe estar en $(0, d)$ y el número de
+capas debe ser positivo.
+
+{\small
+\begin{longtable}{@{}L{0.27\linewidth}L{0.19\linewidth}L{0.22\linewidth}L{0.24\linewidth}@{}}
+\caption{Contrato de esquema MoE (\texttt{model.moe.*}).}\label{tab:moe-schema-es}\\
+\toprule
+\textbf{Clave} & \textbf{Defecto} & \textbf{Campo plano} & \textbf{Referencia} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Clave} & \textbf{Defecto} & \textbf{Campo plano} & \textbf{Referencia} \\
+\midrule
+\endhead
+\texttt{enabled} & \texttt{true} & \texttt{use\_moe} & \citet{shazeer2017moe} \\
+\texttt{num\_experts} & 8 & \texttt{num\_experts} & \citet{fedus2021switch} \\
+\texttt{top\_k} & 2 & \texttt{top\_k\_experts} & \citet{fedus2021switch} \\
+\texttt{expert\_hidden\_size} & \texttt{null} & \texttt{moe\_expert\_hidden\_size} & \citet{deepseek2024v3} \\
+\texttt{router.scoring} & \texttt{softmax} & \texttt{moe\_router\_scoring} & \citet{deepseek2024v3,deepseek2026v4} \\
+\texttt{router.pre\_softmax} & \texttt{false} & \texttt{moe\_router\_pre\_softmax} & \citet{fedus2021switch} \\
+\texttt{router.renormalize} & \texttt{true} & \texttt{moe\_router\_renormalize} & \citet{krajewski2025scaling} \\
+\texttt{router.routed\_scaling\_factor} & 1.0 & \texttt{moe\_routed\_scaling\_factor} & \citet{deepseek2024v3,kimiteam2026k3} \\
+\texttt{router.dtype} & \texttt{float32} & \texttt{moe\_router\_dtype} & \citet{fedus2021switch,zoph2022stmoe} \\
+\texttt{router.jitter\_eps} & 0.0 & \texttt{moe\_router\_jitter\_eps} & \citet{fedus2021switch} \\
+\texttt{router.z\_loss\_coeff} & 0.0 & \texttt{moe\_router\_z\_loss\_coeff} & \citet{zoph2022stmoe} \\
+\texttt{routing.type} & \texttt{token\_choice} & \texttt{moe\_routing\_type} & \citet{zhou2022expertchoice} \\
+\texttt{routing.capacity\_factor} & 0.0 & \texttt{moe\_capacity\_factor} & \citet{pangu2025ultra} \\
+\texttt{routing.hash\_layers} & 0 & \texttt{moe\_hash\_layers} & \citet{roller2021hash,deepseek2026v4} \\
+\texttt{routing.hash\_table} & \texttt{random} & \texttt{moe\_hash\_table} & \citet{roller2021hash} \\
+\texttt{routing.hash\_seed} & 42 & \texttt{moe\_hash\_seed} & \citet{roller2021hash} \\
+\texttt{balancing.aux\_loss} & \texttt{batch} & \texttt{moe\_aux\_loss\_type} & \citet{dai2024deepseekmoe,deepseek2024v3} \\
+\texttt{balancing.aux\_loss\_coeff} & 0.01 & \texttt{moe\_aux\_loss\_coeff} & \citet{deepseek2024v3} \\
+\texttt{balancing.bias\_update} & \texttt{none} & \texttt{moe\_bias\_update} & \citet{wang2024auxfree} \\
+\texttt{balancing.bias\_update\_rate} & 0.001 & \texttt{moe\_bias\_update\_rate} & \citet{wang2024auxfree} \\
+\texttt{shared.count} & 0 & \texttt{moe\_shared\_experts\_count} & \citet{dai2024deepseekmoe} \\
+\texttt{shared.hidden\_size} & \texttt{null} & \texttt{moe\_shared\_expert\_hidden\_size} & \citet{dai2024deepseekmoe} \\
+\texttt{shared.gate} & \texttt{none} & \texttt{moe\_shared\_expert\_gate} & \citet{qwen2025qwen3} \\
+\texttt{latent.enabled} & \texttt{false} & \texttt{moe\_latent\_enabled} & \citet{elango2026latentmoe} \\
+\texttt{latent.dim} & \texttt{null} & \texttt{moe\_latent\_dim} & \citet{elango2026latentmoe} \\
+\texttt{latent.norm\_before\_up\_proj} & \texttt{false} & \texttt{moe\_latent\_norm\_before\_up\_proj} & \citet{kimiteam2026k3} \\
+\texttt{layout.dense\_layers} & 0 & \texttt{moe\_dense\_layers} & \citet{deepseek2024v3} \\
+\texttt{layout.every\_n\_layers} & 1 & \texttt{moe\_layer\_frequency} & \citet{meta2025llama4} \\
+\texttt{experts.activation\_clamp} & 0.0 & \texttt{moe\_activation\_clamp} & \citet{huang2026step35} \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{Presets con nombre}
+\label{app:moe-presets-es}
+
+Los presets de \texttt{configs/} reflejan las configuraciones publicadas, con las
+desviaciones documentadas para un solo dispositivo. La
+Tabla~\ref{tab:moe-presets-es} resume el bloque MoE de cada preset MoE; los
+valores se verificaron contra el \texttt{config.json} de Hugging Face de cada
+modelo cuando estaba disponible.
+
+{\small
+\begin{longtable}{@{}L{0.18\linewidth}L{0.12\linewidth}L{0.10\linewidth}L{0.14\linewidth}L{0.12\linewidth}L{0.22\linewidth}@{}}
+\caption{Presets MoE y sus bloques MoE de arquitectura real.}\label{tab:moe-presets-es}\\
+\toprule
+\textbf{Preset} & \textbf{Expertos / top-k} & \textbf{Ancho} & \textbf{Router} & \textbf{Compartidos} & \textbf{Balanceo / capas} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Preset} & \textbf{Expertos / top-k} & \textbf{Ancho} & \textbf{Router} & \textbf{Compartidos} & \textbf{Balanceo / capas} \\
+\midrule
+\endhead
+DeepSeek-V2 & 160 / 6 & 1536 & softmax, $g{=}16$ & 2 & aux-secuencia $10^{-3}$; 1 densa \\
+DeepSeek-V3 & 256 / 8 & 2048 & sigmoid, $g{=}2.5$ & 1 & sesgo + aux-secuencia $10^{-4}$; 3 densas \\
+GLM-4.5/4.7 & 160 / 8 & 1536 & sigmoid, $g{=}2.5$ & 1 & sesgo; 3 densas \\
+GLM-5 & 256 / 8 & 2048 & sigmoid, $g{=}2.5$ & 1 & sesgo; 3 densas \\
+Kimi K2 & 384 / 8 & 2048 & sigmoid, $g{=}2.827$ & 1 & sesgo + aux-secuencia; 1 densa \\
+Kimi K3 & 896 / 16 & 3072 & sigmoid, $g{=}1$ & 2 & sesgo centrado; latente 3584; 1 densa \\
+gpt-oss-120b & 128 / 4 & 2880 & softmax & 0 & aux, tope 7 \\
+Llama 4 Scout & 16 / 1 & 8192 & softmax, pre & 0 & todas las capas \\
+Llama 4 Maverick & 128 / 1 & 8192 & softmax, pre & 0 & una de cada 2 capas \\
+MiniMax-Text-01 & 32 / 2 & 9216 & sigmoid & 0 & aux $10^{-3}$ \\
+MiniMax-M2 & 256 / 8 & 1536 & sigmoid & 0 & sesgo + aux $10^{-3}$ \\
+Qwen3-Next-80B & 512 / 10 & 512 & softmax & 1, con compuerta & aux $10^{-3}$ \\
+Qwen3.8 2.4T-A95B & 512 / 10 & 2048 & softmax & 1 & aux $10^{-3}$ \\
+\bottomrule
+\end{longtable}
+}
+
+\paragraph{Desviaciones de un solo dispositivo.}
+El runtime es CPU-first y de un solo dispositivo, así que implementa la semántica
+a nivel de modelo y deja los mecanismos distribuidos para trabajo futuro. Las
+desviaciones documentadas son: la pérdida a nivel de dispositivo de DeepSeek-V2
+se aproxima con la pérdida auxiliar de batch; el balanceo por cuantiles/PID de
+Kimi K3 se aproxima con la regla de signo centrado; el tope suave de SiTU-GLU de
+Kimi K3 se aproxima con \texttt{activation\_clamp: 4}; el escalado de
+puntuaciones en la entrada de Llama 4 no se aplica (los pesos del router se
+aplican a la salida del experto); y el ruteo limitado por grupos, el paralelismo
+de expertos, los despachadores de tokens, las réplicas de expertos/EPLB y la
+ejecución de expertos en FP8/FP4 quedan fuera de alcance. Las capas hash de
+DeepSeek-V4 se soportan con \texttt{routing.hash\_layers}.
+
+\subsection{Interacción con el entrenamiento}
+\label{app:moe-training-es}
+
+El sesgo de experto se actualiza después del paso del optimizador a partir de los
+conteos acumulados en los forwards del paso, así que la acumulación de gradiente
+y el micro-batching no cambian su semántica. El router no recibe gradiente del
+sesgo y el sesgo es un buffer no persistente; los checkpoints exportados quedan
+por tanto limpios para inferencia. Las pérdidas auxiliares son tensores
+ponderados por coeficiente en \texttt{last\_auxiliary\_losses} y el entrenador
+las suma a la pérdida de tarea; se excluyen de la evaluación. El router y los
+expertos se categorizan como bloques \texttt{router} y \texttt{ffn}
+respectivamente, así que las normas de gradiente por bloque y los conteos de
+parámetros coinciden con la taxonomía del estimador. Finalmente, la capa MoE es
+token-wise y por tanto segura para caché: las suites de paridad de caché KV
+mantienen la FFN densa porque un top-$k$ discreto puede cambiar bajo las
+diferencias numéricas mínimas entre forwards completos y con caché, lo que es
+una propiedad del ruteo discreto, no de la caché.
+
+\subsection{Sistemas relacionados y trabajo futuro}
+\label{app:moe-future-es}
+
+El diseño de este anexo sigue la anatomía del manual de MoE (router, ruteo,
+balanceo, expertos, disposición, capacidad) y la literatura de sistemas que
+resume. Trabajo futuro en este código: paralelismo de expertos y despachadores
+all-to-all \citep{lepikhin2020gshard,fedus2021switch}; pérdidas auxiliares sobre
+el batch global \citep{qiu2025demons}; balanceo por cuantiles/PID
+\citep{jin2026idbalancing}; upcycling de denso a MoE y crecimiento de expertos
+\citep{komatsuzaki2023upcycling}; tablas hash balanceadas por frecuencia
+\citep{roller2021hash}; SiTU-GLU exacto; y bloques MoE con conexión de atajo o
+paralelos que solapen el despacho con el cómputo
+\citep{cai2024scmoe,longcat2025flash}.

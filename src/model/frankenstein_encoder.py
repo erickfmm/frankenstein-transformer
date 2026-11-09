@@ -26,6 +26,7 @@ import torch.utils.checkpoint
 
 from .config import FrankensteinModelConfig
 from .hybrid_layer import HybridLayer
+from .moe import aggregate_moe_aux_losses
 from .hyperloop import HyperloopConnections
 from .attention.common import BitLinear
 from .norm import get_norm
@@ -110,6 +111,7 @@ class FrankensteinEncoder(nn.Module):
         self.use_fixed_softmax = bool(getattr(self.config, "fixed_softmax", False))
         self.last_auxiliary_losses = {}
         self.last_mixture_of_depths_stats = {}
+        self.last_moe_stats = {}
 
         if config.use_dynamic_embedding:
             self.emb = DynamicEmbedding(config)
@@ -123,7 +125,12 @@ class FrankensteinEncoder(nn.Module):
 
         self.layers = nn.ModuleList(
             [
-                HybridLayer(config, layer_type=config.layer_pattern[i % len(config.layer_pattern)], pos_encoder=self.pos_encoder)
+                HybridLayer(
+                    config,
+                    layer_type=config.layer_pattern[i % len(config.layer_pattern)],
+                    pos_encoder=self.pos_encoder,
+                    layer_index=i,
+                )
                 for i in range(config.num_layers)
             ]
         )
@@ -356,22 +363,23 @@ class FrankensteinEncoder(nn.Module):
             x = self.mhc_out_proj(x.reshape(bsz, seq_len, n * dim))
 
         x = self.final_norm(x)
+        moe_aux_losses, moe_stats = aggregate_moe_aux_losses(self.layers)
+        self.last_moe_stats = moe_stats
+        auxiliary_losses = dict(moe_aux_losses)
         if mixture_of_depths_aux_losses:
             raw_aux_loss = torch.stack(mixture_of_depths_aux_losses).mean()
             weighted_aux_loss = (
                 raw_aux_loss * float(self.config.mixture_of_depths_router_aux_loss_weight)
             )
-            self.last_auxiliary_losses = {
-                "mixture_of_depths_router_loss": weighted_aux_loss,
-            }
+            auxiliary_losses["mixture_of_depths_router_loss"] = weighted_aux_loss
             self.last_mixture_of_depths_stats = {
                 "average_selected_fraction": sum(mixture_of_depths_selected_fractions)
                 / len(mixture_of_depths_selected_fractions),
                 "raw_router_aux_loss": float(raw_aux_loss.detach().item()),
             }
         else:
-            self.last_auxiliary_losses = {}
             self.last_mixture_of_depths_stats = {}
+        self.last_auxiliary_losses = auxiliary_losses
         if self.classification_head and self.cls_head is not None:
             # Sequence-level classification: pool the final hidden states and
             # project to ``(B, num_labels)``.

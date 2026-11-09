@@ -22,11 +22,19 @@ model:
     enabled: true
     num_experts: 128
     top_k: 4
+    expert_hidden_size: 2880
+    balancing:
+      aux_loss: batch
+      # Upstream router_aux_loss_coef=0.9 is applied with per-layer
+      # normalisation; 0.01 keeps the same effective scale here.
+      aux_loss_coeff: 0.01
+    experts:
+      activation_clamp: 7.0
   bitnet:
     enabled: false
   ffn:
     hidden_size: 2880
-    activation: silu
+    activation: swiglu
 training:
   task: mlm
   seed: 42

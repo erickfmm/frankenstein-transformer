@@ -11,6 +11,8 @@ enforced by ``src/schema.yaml`` for YAML-based training configs.
 
 from __future__ import annotations
 
+import warnings
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -417,6 +419,53 @@ class FrankensteinModelConfig:
             Default: 1e-4.
         use_moe: If True, replace the dense FFN with a Mixture-of-Experts
             FFN block. Default: True.
+        moe_expert_hidden_size: Intermediate width of each routed expert.
+            ``None`` falls back to ``ffn_hidden_size``. Default: None.
+        moe_router_scoring: Gating function applied to router logits:
+            ``"softmax"`` (default), ``"sigmoid"`` or ``"softplus_sqrt"``.
+        moe_router_pre_softmax: Normalise with the softmax over all experts
+            before selecting the top-k (disables top-k renormalisation).
+            Default: False.
+        moe_router_renormalize: Rescale the selected weights so they sum to
+            one. Default: True.
+        moe_routed_scaling_factor: Constant multiplied onto the combined
+            routed output. Default: 1.0.
+        moe_router_dtype: Precision of the router logits/selection:
+            ``"float32"`` (default) or ``"bfloat16"``.
+        moe_router_jitter_eps: Switch-style uniform multiplicative jitter on
+            the router input. Default: 0.0.
+        moe_router_z_loss_coeff: Weight of the ST-MoE z-loss on the router
+            logits' logsumexp. Default: 0.0.
+        moe_routing_type: ``"token_choice"`` (default) or ``"expert_choice"``.
+        moe_capacity_factor: Maximum assignments per expert as a multiple of
+            the balanced load; tokens past the cap are dropped. Default: 0.0
+            (dropless).
+        moe_hash_layers: Number of leading MoE layers that select experts from
+            a fixed token-id table. Default: 0.
+        moe_hash_table: ``"random"`` (default) or ``"round_robin"``.
+        moe_hash_seed: RNG seed for the random hash table. Default: 42.
+        moe_aux_loss_type: Load-balancing loss scope: ``"none"``, ``"batch"``
+            (default) or ``"sequence"``.
+        moe_aux_loss_coeff: Load-balancing loss weight. Default: 0.01.
+        moe_bias_update: Auxiliary-loss-free expert-bias update rule:
+            ``"none"`` (default), ``"sign"`` or ``"centered_sign"``.
+        moe_bias_update_rate: Fixed bias step ``γ``. Default: 0.001.
+        moe_shared_experts_count: Always-on shared experts. Default: 0.
+        moe_shared_expert_hidden_size: Width of each shared expert; ``None``
+            uses the routed expert width. Default: None.
+        moe_shared_expert_gate: ``"none"`` (default) or ``"sigmoid"`` gate on
+            the shared-expert output.
+        moe_latent_enabled: Run the experts in a smaller latent space
+            (LatentMoE). Default: False.
+        moe_latent_dim: Latent width ``ℓ`` (required when latent is enabled).
+        moe_latent_norm_before_up_proj: RMSNorm before the latent
+            up-projection (Kimi K3 stability fix). Default: False.
+        moe_dense_layers: Number of leading layers that keep the dense FFN.
+            Default: 0.
+        moe_layer_frequency: Place an MoE layer every N layers after the dense
+            prefix (2 = alternate, Llama-4 style). Default: 1.
+        moe_activation_clamp: Upper bound on each expert's gated intermediate;
+            0 disables it. Default: 0.0.
         use_mixture_of_depths: If True, apply per-layer token routing where
             only the top-capacity tokens are updated; remaining tokens are
             passed through unchanged. Default: False.
@@ -518,6 +567,35 @@ class FrankensteinModelConfig:
     num_heads: int = 16
     num_experts: int = 8
     top_k_experts: int = 2
+
+    # ---- MoE anatomy (arXiv:2407.06204, 2412.19437, 2601.18089) ----
+    # See ``src/schema/_model/_moe.yaml`` (the executable contract).
+    moe_expert_hidden_size: Optional[int] = None
+    moe_router_scoring: str = "softmax"
+    moe_router_pre_softmax: bool = False
+    moe_router_renormalize: bool = True
+    moe_routed_scaling_factor: float = 1.0
+    moe_router_dtype: str = "float32"
+    moe_router_jitter_eps: float = 0.0
+    moe_router_z_loss_coeff: float = 0.0
+    moe_routing_type: str = "token_choice"
+    moe_capacity_factor: float = 0.0
+    moe_hash_layers: int = 0
+    moe_hash_table: str = "random"
+    moe_hash_seed: int = 42
+    moe_aux_loss_type: str = "batch"
+    moe_aux_loss_coeff: float = 0.01
+    moe_bias_update: str = "none"
+    moe_bias_update_rate: float = 0.001
+    moe_shared_experts_count: int = 0
+    moe_shared_expert_hidden_size: Optional[int] = None
+    moe_shared_expert_gate: str = "none"
+    moe_latent_enabled: bool = False
+    moe_latent_dim: Optional[int] = None
+    moe_latent_norm_before_up_proj: bool = False
+    moe_dense_layers: int = 0
+    moe_layer_frequency: int = 1
+    moe_activation_clamp: float = 0.0
     dropout: float = 0.1
 
     use_bitnet: bool = True
@@ -1032,6 +1110,200 @@ class FrankensteinModelConfig:
         """
         if self.ffn_hidden_size is None:
             self.ffn_hidden_size = self.hidden_size * 2
+
+        # ---- Validate MoE anatomy (schema: ``_model/_moe.yaml``) ----
+        if self.num_experts < 1:
+            raise ValueError(f"num_experts must be >= 1, got {self.num_experts}")
+        if self.top_k_experts < 1:
+            raise ValueError(
+                f"top_k_experts must be >= 1, got {self.top_k_experts}"
+            )
+        if self.top_k_experts > self.num_experts:
+            raise ValueError(
+                "top_k_experts must be <= num_experts, got "
+                f"top_k_experts={self.top_k_experts}, "
+                f"num_experts={self.num_experts}"
+            )
+        if self.moe_router_scoring not in {"softmax", "sigmoid", "softplus_sqrt"}:
+            raise ValueError(
+                "moe_router_scoring must be 'softmax', 'sigmoid' or "
+                f"'softplus_sqrt', got {self.moe_router_scoring!r}"
+            )
+        if self.moe_router_dtype not in {"float32", "bfloat16"}:
+            raise ValueError(
+                "moe_router_dtype must be 'float32' or 'bfloat16', got "
+                f"{self.moe_router_dtype!r}"
+            )
+        if self.moe_routing_type not in {"token_choice", "expert_choice"}:
+            raise ValueError(
+                "moe_routing_type must be 'token_choice' or 'expert_choice', "
+                f"got {self.moe_routing_type!r}"
+            )
+        if self.moe_hash_table not in {"random", "round_robin"}:
+            raise ValueError(
+                "moe_hash_table must be 'random' or 'round_robin', got "
+                f"{self.moe_hash_table!r}"
+            )
+        if self.moe_aux_loss_type not in {"none", "batch", "sequence"}:
+            raise ValueError(
+                "moe_aux_loss_type must be 'none', 'batch' or 'sequence', got "
+                f"{self.moe_aux_loss_type!r}"
+            )
+        if self.moe_bias_update not in {"none", "sign", "centered_sign"}:
+            raise ValueError(
+                "moe_bias_update must be 'none', 'sign' or 'centered_sign', "
+                f"got {self.moe_bias_update!r}"
+            )
+        if self.moe_shared_expert_gate not in {"none", "sigmoid"}:
+            raise ValueError(
+                "moe_shared_expert_gate must be 'none' or 'sigmoid', got "
+                f"{self.moe_shared_expert_gate!r}"
+            )
+        if (
+            self.use_moe
+            and self.moe_router_scoring == "softmax"
+            and self.top_k_experts == 1
+            and not self.moe_router_pre_softmax
+        ):
+            # Softmax at top-1 over a single logit is always 1, so the router
+            # would receive no gradient. The pre-softmax form (softmax over all
+            # experts) is the historical behaviour of this codebase and keeps
+            # the router trainable, so enable it instead of rejecting legacy
+            # configs that omit it.
+            self.moe_router_pre_softmax = True
+            warnings.warn(
+                "moe.router.scoring='softmax' with top_k=1: enabling "
+                "moe.router.pre_softmax automatically (a top-1 post-softmax "
+                "weight is always 1 and gives the router no gradient).",
+                UserWarning,
+                stacklevel=2,
+            )
+        if (
+            self.use_moe
+            and self.moe_bias_update != "none"
+            and self.moe_router_scoring == "softmax"
+        ):
+            raise ValueError(
+                "moe.balancing.bias_update requires router scoring 'sigmoid' or "
+                "'softplus_sqrt': the expert bias is added to the scores before "
+                "top-k and is not tunable under softmax normalisation "
+                "(Wang et al., arXiv:2408.15664)."
+            )
+        if (
+            self.use_moe
+            and self.moe_bias_update != "none"
+            and self.moe_routing_type == "expert_choice"
+        ):
+            raise ValueError(
+                "moe.routing.type='expert_choice' is self-balancing: it cannot "
+                "be combined with moe.balancing.bias_update."
+            )
+        if (
+            self.use_moe
+            and self.moe_aux_loss_type != "none"
+            and self.moe_routing_type == "expert_choice"
+        ):
+            raise ValueError(
+                "moe.routing.type='expert_choice' is self-balancing: it cannot "
+                "be combined with moe.balancing.aux_loss."
+            )
+        if (
+            self.use_moe
+            and self.moe_hash_layers > 0
+            and self.moe_routing_type != "token_choice"
+        ):
+            raise ValueError(
+                "moe.routing.hash_layers requires routing.type='token_choice'."
+            )
+        if (
+            self.use_moe
+            and self.moe_hash_layers > 0
+            and self.moe_bias_update != "none"
+        ):
+            raise ValueError(
+                "moe.routing.hash_layers selects experts from a fixed table: the "
+                "expert bias cannot rebalance it, so bias_update must stay 'none'."
+            )
+        if self.moe_hash_layers < 0:
+            raise ValueError(
+                f"moe_hash_layers must be >= 0, got {self.moe_hash_layers}"
+            )
+        if self.moe_dense_layers < 0:
+            raise ValueError(
+                f"moe_dense_layers must be >= 0, got {self.moe_dense_layers}"
+            )
+        if self.moe_dense_layers >= self.num_layers:
+            raise ValueError(
+                "moe_dense_layers must be < num_layers, got "
+                f"dense_layers={self.moe_dense_layers}, "
+                f"num_layers={self.num_layers}"
+            )
+        if self.moe_layer_frequency < 1:
+            raise ValueError(
+                "moe_layer_frequency must be >= 1, got "
+                f"{self.moe_layer_frequency}"
+            )
+        if self.use_moe and self.moe_hash_layers > self.moe_layer_count():
+            raise ValueError(
+                "moe_hash_layers cannot exceed the number of MoE layers "
+                f"(moe_hash_layers={self.moe_hash_layers}, "
+                f"moe_layers={self.moe_layer_count()})."
+            )
+        if self.moe_capacity_factor < 0.0:
+            raise ValueError(
+                "moe_capacity_factor must be >= 0, got "
+                f"{self.moe_capacity_factor}"
+            )
+        if self.moe_router_jitter_eps < 0.0:
+            raise ValueError(
+                "moe_router_jitter_eps must be >= 0, got "
+                f"{self.moe_router_jitter_eps}"
+            )
+        if self.moe_router_z_loss_coeff < 0.0:
+            raise ValueError(
+                "moe_router_z_loss_coeff must be >= 0, got "
+                f"{self.moe_router_z_loss_coeff}"
+            )
+        if self.moe_bias_update_rate < 0.0:
+            raise ValueError(
+                "moe_bias_update_rate must be >= 0, got "
+                f"{self.moe_bias_update_rate}"
+            )
+        if self.moe_shared_experts_count < 0:
+            raise ValueError(
+                "moe_shared_experts_count must be >= 0, got "
+                f"{self.moe_shared_experts_count}"
+            )
+        if self.moe_activation_clamp < 0.0:
+            raise ValueError(
+                "moe_activation_clamp must be >= 0, got "
+                f"{self.moe_activation_clamp}"
+            )
+        if self.moe_expert_hidden_size is not None and int(
+            self.moe_expert_hidden_size
+        ) < 1:
+            raise ValueError(
+                "moe_expert_hidden_size must be >= 1 when set, got "
+                f"{self.moe_expert_hidden_size}"
+            )
+        if self.moe_shared_expert_hidden_size is not None and int(
+            self.moe_shared_expert_hidden_size
+        ) < 1:
+            raise ValueError(
+                "moe_shared_expert_hidden_size must be >= 1 when set, got "
+                f"{self.moe_shared_expert_hidden_size}"
+            )
+        if self.moe_latent_enabled:
+            if self.moe_latent_dim is None:
+                raise ValueError(
+                    "moe.latent.enabled=true requires moe.latent.dim to be set."
+                )
+            if not 0 < int(self.moe_latent_dim) < int(self.hidden_size):
+                raise ValueError(
+                    "moe_latent_dim must be in (0, hidden_size) when latent MoE "
+                    f"is enabled, got latent_dim={self.moe_latent_dim}, "
+                    f"hidden_size={self.hidden_size}"
+                )
 
         # ---- Resolve latent-family ranks that default to hidden_size // 2 ----
         half = max(1, self.hidden_size // 2)
@@ -1608,3 +1880,34 @@ class FrankensteinModelConfig:
                 "audio_spec_augment_time_mask_ratio must be in (0, 1], got "
                 f"{self.audio_spec_augment_time_mask_ratio}"
             )
+
+    def is_moe_layer(self, layer_idx: int) -> bool:
+        """Return whether a physical layer index runs the MoE FFN.
+
+        The layout follows ``moe.layout``: the first ``moe_dense_layers``
+        layers always use the dense FFN, then an MoE layer is placed every
+        ``moe_layer_frequency`` layers (1 = every layer). Dense layers use
+        ``ffn_hidden_size``; MoE layers use ``moe_expert_hidden_size`` or fall
+        back to ``ffn_hidden_size``.
+
+        Args:
+            layer_idx: Zero-based physical layer index.
+
+        Returns:
+            ``True`` when the layer should build a routed MoE FFN.
+        """
+        if not bool(self.use_moe):
+            return False
+        dense = int(self.moe_dense_layers)
+        if layer_idx < dense:
+            return False
+        freq = max(1, int(self.moe_layer_frequency))
+        return (int(layer_idx) - dense) % freq == 0
+
+    def moe_layer_mask(self) -> List[bool]:
+        """Return the per-layer MoE mask for ``num_layers`` physical layers."""
+        return [self.is_moe_layer(i) for i in range(int(self.num_layers))]
+
+    def moe_layer_count(self) -> int:
+        """Return how many physical layers run the MoE FFN."""
+        return sum(self.moe_layer_mask())

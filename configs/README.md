@@ -359,7 +359,21 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
 
 #### model.moe / model.bitnet / model.mixture_of_depths / model.ssmax / model.numerics
 
-- `moe`: `enabled`, `num_experts`, `top_k`.
+- `moe`: router, routing, balancing, experts and layer layout. Core keys:
+  `enabled`, `num_experts`, `top_k`, `expert_hidden_size`; `router.scoring`
+  (`softmax`/`sigmoid`/`softplus_sqrt`), `pre_softmax`, `renormalize`,
+  `routed_scaling_factor`, `dtype`, `jitter_eps`, `z_loss_coeff`;
+  `routing.type` (`token_choice`/`expert_choice`), `capacity_factor`,
+  `hash_layers`, `hash_table`, `hash_seed`; `balancing.aux_loss`
+  (`none`/`batch`/`sequence`), `aux_loss_coeff`, `bias_update`
+  (`none`/`sign`/`centered_sign`), `bias_update_rate`; `shared.count`,
+  `shared.hidden_size`, `shared.gate`; `latent.enabled`, `latent.dim`,
+  `latent.norm_before_up_proj`; `layout.dense_layers`,
+  `layout.every_n_layers`; `experts.activation_clamp`. The named MoE presets
+  (`deepseek_v3`, `kimi_k2`, `kimi_k3`, `glm_5`, `gpt_oss_120b`, `llama4_*`,
+  `qwen3_*`, `minimax_*`) mirror the published architectures; see
+  `docs/paper/appendices/annex-22-moe.tex` for the per-model table and the
+  documented single-device deviations.
 - `bitnet`: `enabled`, `routers`, `conv`. When `enabled`, all primary + gate
   projections (Q/K/V/O, FFN, embeddings `proj`, LM head, and recurrent-state
   gates) become ternary `{-1,0,1}`. `routers` also quantizes routing/scoring

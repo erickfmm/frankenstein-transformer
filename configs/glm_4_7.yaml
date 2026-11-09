@@ -22,11 +22,24 @@ model:
     enabled: true
     num_experts: 160
     top_k: 8
+    expert_hidden_size: 1536
+    router:
+      scoring: sigmoid
+      routed_scaling_factor: 2.5
+    balancing:
+      aux_loss: none
+      bias_update: sign
+      bias_update_rate: 0.001
+    shared:
+      count: 1
+      hidden_size: 1536
+    layout:
+      dense_layers: 3
   bitnet:
     enabled: false
   ffn:
-    hidden_size: 1536
-    activation: silu
+    hidden_size: 12288
+    activation: swiglu
 training:
   task: mlm
   seed: 42

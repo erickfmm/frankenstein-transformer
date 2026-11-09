@@ -19,7 +19,6 @@ import torch.nn.functional as F
 
 from .config import FrankensteinModelConfig
 from .attention.common import BitLinear
-from .numerics import module_softmax
 from .norm import FlashNormBitLinear, FlashNormLinear, get_norm
 from .activation_function import (
     GLU_VARIANTS,
@@ -27,6 +26,7 @@ from .activation_function import (
     make_gated_ffn,
 )
 from .mhc import ManifoldHyperConnections
+from .moe import MoELayer
 from .attention.engram import EngramLayer
 from .attention.conformer import ConformerAttention
 from .attention.grouped_query_attention import GroupedQueryAttention
@@ -105,12 +105,13 @@ class HybridLayer(nn.Module):
         norm1: Pre-attention normalization layer.
         norm2: Pre-FFN normalization layer.
         mixer: The instantiated attention mixer module.
-        router: MoE router linear layer (None if dense FFN).
-        experts: ModuleList of MoE expert FFNs (None if dense FFN).
+        moe_layer: The :class:`~src.model.moe.layer.MoELayer` (None if the
+            layer runs the dense FFN).
         top_k: Number of experts activated per token in MoE mode.
         ffn: Dense FFN sequential block (None if MoE mode).
         depth_router: Mixture-of-Depths token router (None if disabled).
-        use_moe: Whether MoE FFN is active.
+        use_moe: Whether this physical layer runs the MoE FFN.
+        use_hash: Whether this MoE layer uses the fixed token-id table.
         use_mixture_of_depths: Whether Mixture-of-Depths routing is active.
         mixture_of_depths_capacity_ratio: Fraction of tokens selected.
         mixture_of_depths_router_aux_loss_weight: Aux loss weight.
@@ -124,7 +125,13 @@ class HybridLayer(nn.Module):
 
     TRAINING_FREE_LAYERS = {"fasa", "sparge"}
 
-    def __init__(self, config: FrankensteinModelConfig, layer_type: str, pos_encoder=None):
+    def __init__(
+        self,
+        config: FrankensteinModelConfig,
+        layer_type: str,
+        pos_encoder=None,
+        layer_index: int = 0,
+    ):
         """Initialize a hybrid layer for the given mixer type.
 
         Args:
@@ -134,6 +141,9 @@ class HybridLayer(nn.Module):
             pos_encoder: Optional shared positional encoding module forwarded
                 to attention mixers that accept it. ``None`` leaves mixers
                 to build/use their own PE.
+            layer_index: Zero-based physical layer index. Decides whether the
+                layer runs the dense FFN or the MoE FFN (``moe.layout``) and
+                whether it uses hash routing.
 
         Raises:
             ValueError: If ``layer_type`` is not recognized.
@@ -157,7 +167,14 @@ class HybridLayer(nn.Module):
                 "C-dimensional stream, which conflicts with the n-stream residual."
             )
         self.norm1 = get_norm(config)
-        self.use_moe = bool(config.use_moe)
+        self.layer_index = int(layer_index)
+        # Per-layer layout (moe.layout): leading dense layers + interleaving.
+        self.use_moe = bool(config.is_moe_layer(self.layer_index))
+        if self.use_moe:
+            moe_rank = sum(config.moe_layer_mask()[: self.layer_index])
+            self.use_hash = moe_rank < int(getattr(config, "moe_hash_layers", 0))
+        else:
+            self.use_hash = False
         self.mixture_of_depths_capacity_ratio = float(
             getattr(config, "mixture_of_depths_capacity_ratio", 1.0)
         )
@@ -266,56 +283,81 @@ class HybridLayer(nn.Module):
         )
         flashnorm_partial_ratio = float(getattr(config, "flashnorm_partial_ratio", 0.0))
 
-        def _build_ffn():
-            """Return a fresh FFN block (gated or elementwise activation)."""
+        def _build_ffn(
+            intermediate_size: Optional[int] = None,
+            in_out_size: Optional[int] = None,
+            clamp: float = 0.0,
+        ):
+            """Return a fresh FFN block (gated or elementwise activation).
+
+            Args:
+                intermediate_size: FFN width; defaults to
+                    ``config.ffn_hidden_size``.
+                in_out_size: Input/output width; defaults to
+                    ``config.hidden_size``. LatentMoE experts pass the latent
+                    width here.
+                clamp: Upper bound applied to the activation input; ``0``
+                    disables it (``moe.experts.activation_clamp``).
+            """
+            width = int(intermediate_size or config.ffn_hidden_size)
+            in_out = int(in_out_size or config.hidden_size)
             if is_glu:
                 # Gated FFN units own their projections; use the same
                 # proj_cls (BitLinear when BitNet is on) for BitNet parity.
                 return make_gated_ffn(
                     config.ffn_activation,
-                    hidden_size=config.hidden_size,
-                    intermediate_size=config.ffn_hidden_size,
+                    hidden_size=in_out,
+                    intermediate_size=width,
                     bias=False,
                     dropout=float(getattr(config, "dropout", 0.0) or 0.0),
                     proj_factory=proj_cls,
+                    clamp_value=(float(clamp) if clamp else None),
                 )
-            if fuse_ffn_input:
+            if fuse_ffn_input and in_out == config.hidden_size:
                 # Fused first projection: FlashNorm + Linear in one module.
                 # The bias-free path applies Prop. 2 (deferred scalar RMS).
                 if config.use_bitnet:
                     first_proj = FlashNormBitLinear(
-                        config.hidden_size,
-                        config.ffn_hidden_size,
+                        in_out,
+                        width,
                         bias=False,
                         partial_ratio=flashnorm_partial_ratio,
                     )
                 else:
                     first_proj = FlashNormLinear(
-                        config.hidden_size,
-                        config.ffn_hidden_size,
+                        in_out,
+                        width,
                         bias=False,
                         partial_ratio=flashnorm_partial_ratio,
                     )
             else:
-                first_proj = proj_cls(config.hidden_size, config.ffn_hidden_size)
-            return nn.Sequential(
-                first_proj,
-                get_activation(config, dim=config.ffn_hidden_size),
-                proj_cls(config.ffn_hidden_size, config.hidden_size),
-            )
+                first_proj = proj_cls(in_out, width)
+            layers = [first_proj]
+            if clamp:
+                layers.append(nn.Hardtanh(-float(clamp), float(clamp)))
+            layers.append(get_activation(config, dim=width))
+            layers.append(proj_cls(width, in_out))
+            return nn.Sequential(*layers)
 
         if fuse_ffn_input:
             # norm2 is absorbed into the FFN's first projection.
             self.norm2 = nn.Identity()
 
+        self.moe_layer = None
         if self.use_moe:
-            self.router = router_cls(config.hidden_size, config.num_experts, bias=False)
-            # One FFN per expert (fresh learnable activations per expert).
-            self.experts = nn.ModuleList([_build_ffn() for _ in range(config.num_experts)])
-            self.top_k = config.top_k_experts
+            self.top_k = int(config.top_k_experts)
+            self.ffn = None
+            # Router and latent projections share the MoE layer; the router
+            # uses ``router_cls`` (BitLinear only with ``bitnet_routers``)
+            # while the latent projections follow the regular projection class.
+            self.moe_layer = MoELayer(
+                config,
+                expert_factory=_build_ffn,
+                router_factory=lambda i, o, b: router_cls(i, o, bias=b),
+                linear_factory=lambda i, o, b: proj_cls(i, o, bias=b),
+                use_hash=self.use_hash,
+            )
         else:
-            self.router = None
-            self.experts = None
             self.top_k = 0
             self.ffn = _build_ffn()
         self.depth_router = (
@@ -344,6 +386,16 @@ class HybridLayer(nn.Module):
         else:
             self.mhc_attn = None
             self.mhc_ffn = None
+
+    @property
+    def router(self):
+        """Legacy accessor for the MoE router (``None`` on dense layers)."""
+        return self.moe_layer.router if self.moe_layer is not None else None
+
+    @property
+    def experts(self):
+        """Legacy accessor for the routed experts (``None`` on dense layers)."""
+        return self.moe_layer.experts if self.moe_layer is not None else None
 
     def _training_free_dense_forward(
         self,
@@ -486,29 +538,10 @@ class HybridLayer(nn.Module):
         x = self.norm2(x)
 
         if self.use_moe:
-            logits = self.router(x)
-            weights, indices = torch.topk(module_softmax(self, logits, dim=-1), self.top_k, dim=-1)
-
-            batch_size, seq_len, dim = x.shape
-            flat_x = x.view(-1, dim)
-            out = torch.zeros_like(flat_x)
-
-            for k in range(self.top_k):
-                expert_indices = indices[:, :, k].flatten()
-                expert_weights = weights[:, :, k].flatten().unsqueeze(1)
-
-                for i, expert in enumerate(self.experts):
-                    mask = expert_indices == i
-                    if mask.any():
-                        selected_x = flat_x[mask]
-                        expert_out = expert(selected_x)
-                        out[mask] += expert_out * expert_weights[mask]
-
+            out = self.moe_layer(x, input_ids=input_ids)
             if self.residual_type == "none":
-                x = out.view(batch_size, seq_len, dim)
-            else:
-                x = residual + out.view(batch_size, seq_len, dim)
-            return x
+                return out
+            return residual + out
 
         if self.residual_type == "none":
             x = self.ffn(x)
@@ -606,21 +639,7 @@ class HybridLayer(nn.Module):
         fpre = self.mhc_ffn.fpre(x)
         ffn_in = self.norm2(fpre)
         if self.use_moe:
-            logits = self.router(ffn_in)
-            weights, indices = torch.topk(module_softmax(self, logits, dim=-1), self.top_k, dim=-1)
-            batch_size, seq_len, dim = ffn_in.shape
-            flat_x = ffn_in.view(-1, dim)
-            out = torch.zeros_like(flat_x)
-            for k in range(self.top_k):
-                expert_indices = indices[:, :, k].flatten()
-                expert_weights = weights[:, :, k].flatten().unsqueeze(1)
-                for i, expert in enumerate(self.experts):
-                    mask = expert_indices == i
-                    if mask.any():
-                        selected_x = flat_x[mask]
-                        expert_out = expert(selected_x)
-                        out[mask] += expert_out * expert_weights[mask]
-            ffn_out = out.view(batch_size, seq_len, dim)
+            ffn_out = self.moe_layer(ffn_in, input_ids=input_ids)
         else:
             ffn_out = self.ffn(ffn_in)
 

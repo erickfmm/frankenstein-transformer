@@ -42,6 +42,7 @@ try:
         categorize_param_groups,
     )
     from ..model.optimizer.factory import build_optimizer
+    from ..model.moe import update_moe_expert_bias
     from ..model.norm.qk import QuacKController, apply_qk_clip
     from ..model.numerics import fixed_cross_entropy, fixed_softmax
     from .rnnt import (
@@ -60,6 +61,7 @@ except ImportError:
     )
     from utils.param_categories import BLOCK_CATEGORIES, categorize_param
     from model.optimizer.factory import build_optimizer
+    from model.moe import update_moe_expert_bias
     from model.norm.qk import QuacKController, apply_qk_clip
     from model.numerics import fixed_cross_entropy, fixed_softmax
     from training.rnnt import (
@@ -752,6 +754,18 @@ class TitanTrainer:
             "gpu_util_pct": float(telemetry["gpu_util_pct"]),
             "gpu_mem_used_mib": float(telemetry["gpu_mem_used_mib"]),
         }
+        moe_stats = getattr(self.model, "last_moe_stats", None) or {}
+        for name in (
+            "max_vio",
+            "load_balancing_loss",
+            "z_loss",
+            "routing_entropy",
+            "top1_weight",
+            "expert_norm_ratio",
+            "dropped_fraction",
+        ):
+            if name in moe_stats:
+                payload[f"moe/{name}"] = float(moe_stats[name])
         if self.training_config.enable_block_grad_norms:
             payload.update(
                 {f"grad_norm/{block}": float(value) for block, value in grad_buckets.items()}
@@ -841,6 +855,13 @@ class TitanTrainer:
                 "tokens_per_sec": tokens_per_sec,
                 "clip_ratio": clip_ratio,
                 "effective_batch_size": effective_batch_size,
+                **{
+                    f"moe_{name}": float(value)
+                    for name, value in (
+                        getattr(self.model, "last_moe_stats", None) or {}
+                    ).items()
+                    if isinstance(value, (int, float))
+                },
             })
 
         self._log_step_to_wandb(
@@ -2068,6 +2089,11 @@ class TitanTrainer:
                             self.scaler.update()
                         else:
                             self.optimizer.step()
+
+                        # Auxiliary-loss-free MoE balancing: move each expert
+                        # bias once per optimizer step from the counts that
+                        # accumulated across this step's forwards.
+                        update_moe_expert_bias(self.model)
 
                         if self._qk_clip_active:
                             apply_qk_clip(

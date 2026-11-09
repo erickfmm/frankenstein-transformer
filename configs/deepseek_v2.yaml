@@ -24,6 +24,20 @@ model:
     enabled: true
     num_experts: 160
     top_k: 6
+    expert_hidden_size: 1536
+    router:
+      scoring: softmax
+      # DeepSeek-V2 config: norm_topk_prob=false -> raw full-softmax weights.
+      pre_softmax: true
+      routed_scaling_factor: 16.0
+    balancing:
+      aux_loss: sequence
+      aux_loss_coeff: 0.001
+    shared:
+      count: 2
+      hidden_size: 1536
+    layout:
+      dense_layers: 1
   bitnet:
     enabled: false
   ffn:

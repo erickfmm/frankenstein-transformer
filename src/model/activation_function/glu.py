@@ -42,6 +42,10 @@ class GatedFFN(nn.Module):
         proj_factory: Optional callable ``(in, out, bias) -> nn.Module`` used
             to build the projections (e.g. :class:`BitLinear` for BitNet
             compatibility). When ``None``, plain :class:`nn.Linear` is used.
+        clamp_value: Optional symmetric clamp applied to the gate projection
+            output before the activation. ``None`` disables it. Used by MoE
+            experts (``moe.experts.activation_clamp``) to bound outlier
+            activations.
 
     Attributes:
         gate_proj: Linear ``hidden -> intermediate`` feeding the gate function.
@@ -59,6 +63,7 @@ class GatedFFN(nn.Module):
         bias: bool = False,
         dropout: float = 0.0,
         proj_factory: Callable[[int, int, bool], nn.Module] | None = None,
+        clamp_value: float | None = None,
     ):
         super().__init__()
         build = proj_factory or (lambda i, o, b: nn.Linear(i, o, bias=b))
@@ -66,6 +71,7 @@ class GatedFFN(nn.Module):
         self.up_proj = build(hidden_size, intermediate_size, bias)
         self.down_proj = build(intermediate_size, hidden_size, bias)
         self.gate_fn = gate_fn
+        self.clamp_value = float(clamp_value) if clamp_value else None
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -77,7 +83,12 @@ class GatedFFN(nn.Module):
         Returns:
             Tensor of shape ``(..., hidden_size)``.
         """
-        gate = self.gate_fn(self.gate_proj(x))
+        gate_input = self.gate_proj(x)
+        if self.clamp_value is not None:
+            gate_input = torch.clamp(
+                gate_input, -self.clamp_value, self.clamp_value
+            )
+        gate = self.gate_fn(gate_input)
         value = self.up_proj(x)
         return self.dropout(self.down_proj(gate * value))
 
@@ -89,6 +100,7 @@ def make_gated_ffn(
     bias: bool = False,
     dropout: float = 0.0,
     proj_factory: Callable[[int, int, bool], nn.Module] | None = None,
+    clamp_value: float | None = None,
 ) -> GatedFFN:
     """Build a :class:`GatedFFN` for the requested GLU variant.
 
@@ -99,6 +111,7 @@ def make_gated_ffn(
         bias: Whether projections include bias. Default: ``False``.
         dropout: Dropout probability after gating. Default: ``0.0``.
         proj_factory: Optional projection factory (e.g. BitLinear).
+        clamp_value: Optional symmetric clamp on the gate projection output.
 
     Returns:
         A :class:`GatedFFN` configured for the requested variant.
@@ -123,6 +136,7 @@ def make_gated_ffn(
         bias=bias,
         dropout=dropout,
         proj_factory=proj_factory,
+        clamp_value=clamp_value,
     )
 
 

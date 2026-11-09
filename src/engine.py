@@ -258,6 +258,30 @@ def build_model(
     )
     logging.info("  - ODE Solver: %s (%s steps)", config.ode_solver, config.ode_steps)
     logging.info("  - Norm Type: %s", config.norm_type)
+    if getattr(config, "use_moe", False):
+        logging.info(
+            "  - MoE: %s scoring, top-%s/%s, expert width %s, balancing=%s%s, "
+            "shared=%s, latent=%s, MoE layers=%s/%s",
+            getattr(config, "moe_router_scoring", "softmax"),
+            getattr(config, "top_k_experts", 0),
+            getattr(config, "num_experts", 0),
+            getattr(config, "moe_expert_hidden_size", None)
+            or getattr(config, "ffn_hidden_size", None),
+            getattr(config, "moe_aux_loss_type", "none"),
+            (
+                ""
+                if getattr(config, "moe_bias_update", "none") == "none"
+                else f" + {config.moe_bias_update} bias"
+            ),
+            getattr(config, "moe_shared_experts_count", 0),
+            (
+                f"{config.moe_latent_dim}"
+                if getattr(config, "moe_latent_enabled", False)
+                else "off"
+            ),
+            config.moe_layer_count() if hasattr(config, "moe_layer_count") else "?",
+            getattr(config, "num_layers", "?"),
+        )
     return model
 
 

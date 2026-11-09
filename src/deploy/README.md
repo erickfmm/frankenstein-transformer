@@ -234,6 +234,11 @@ Create a custom config JSON:
   "num_heads": 16,
   "num_experts": 8,
   "top_k_experts": 2,
+  "moe_expert_hidden_size": null,
+  "moe_router_scoring": "softmax",
+  "moe_routed_scaling_factor": 1.0,
+  "moe_shared_experts_count": 0,
+  "moe_latent_enabled": false,
   "dropout": 0.1,
   "use_bitnet": true,
   "norm_type": "dynamic_tanh",
@@ -244,6 +249,14 @@ Create a custom config JSON:
   "hope_damping": 0.01
 }
 ```
+
+
+The exported `config.json` also carries an HF-compatible `moe` block
+(`num_experts`, `num_experts_per_tok`, `moe_intermediate_size`, `scoring_func`,
+`norm_topk_prob`, `routed_scaling_factor`, `n_shared_experts`,
+`first_k_dense_replace`, `topk_method`, `latent.*`, `balancing.*`) derived from
+the flat `moe_*` fields, so DeepSeek/Qwen-style loaders can read the MoE
+architecture directly.
 
 Then deploy with:
 

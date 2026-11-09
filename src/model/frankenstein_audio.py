@@ -59,6 +59,7 @@ except Exception:  # noqa: BLE001 - optional dependency, any failure falls back
 
 from .config import FrankensteinModelConfig
 from .hybrid_layer import HybridLayer
+from .moe import aggregate_moe_aux_losses
 from .hyperloop import HyperloopConnections
 from .attention.common import BitLinear
 from .optimizer.base import categorize_param_groups
@@ -609,6 +610,7 @@ class FrankensteinAudio(nn.Module):
         self.use_fixed_softmax = bool(getattr(self.config, "fixed_softmax", False))
         self.last_auxiliary_losses: Dict[str, Any] = {}
         self.last_mixture_of_depths_stats: Dict[str, Any] = {}
+        self.last_moe_stats: Dict[str, Any] = {}
 
         # Audio encoders are bidirectional — force encoder mode.
         if self.config.mode != "encoder":
@@ -638,6 +640,7 @@ class FrankensteinAudio(nn.Module):
                     cfg,
                     layer_type=cfg.layer_pattern[i % len(cfg.layer_pattern)],
                     pos_encoder=self.pos_encoder,
+                    layer_index=i,
                 )
                 for i in range(cfg.num_layers)
             ]
@@ -863,22 +866,23 @@ class FrankensteinAudio(nn.Module):
 
         x = self.final_norm(x)
 
+        moe_aux_losses, moe_stats = aggregate_moe_aux_losses(self.layers)
+        self.last_moe_stats = moe_stats
+        auxiliary_losses = dict(moe_aux_losses)
         if mixture_of_depths_aux_losses:
             raw_aux_loss = torch.stack(mixture_of_depths_aux_losses).mean()
             weighted_aux_loss = raw_aux_loss * float(
                 getattr(self.config, "mixture_of_depths_router_aux_loss_weight", 0.0)
             )
-            self.last_auxiliary_losses = {
-                "mixture_of_depths_router_loss": weighted_aux_loss,
-            }
+            auxiliary_losses["mixture_of_depths_router_loss"] = weighted_aux_loss
             self.last_mixture_of_depths_stats = {
                 "average_selected_fraction": sum(mixture_of_depths_selected_fractions)
                 / len(mixture_of_depths_selected_fractions),
                 "raw_router_aux_loss": float(raw_aux_loss.detach().item()),
             }
         else:
-            self.last_auxiliary_losses = {}
             self.last_mixture_of_depths_stats = {}
+        self.last_auxiliary_losses = auxiliary_losses
         return x
 
     def _encode_frames(

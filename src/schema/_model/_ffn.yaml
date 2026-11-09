@@ -22,7 +22,9 @@ properties:
     description: |-
       Intermediate dimension of feed-forward layers. Typical ratio: 4×
       `dims.hidden_size` (e.g. 768→3072 for BERT-base). When `moe.enabled` is
-      true, this is each expert's hidden size.
+      true and `moe.expert_hidden_size` is unset, this is each expert's hidden
+      size; set `moe.expert_hidden_size` to give dense and MoE layers different
+      widths (DeepSeek-V3: dense 18432, experts 2048).
 
       **Examples explained:**
       - `hidden_size=3072` with `dims.hidden_size=768`: standard 4× ratio,
@@ -38,7 +40,10 @@ properties:
     description_es: |-
       Dimensión intermedia de las capas feed-forward. Ratio típico: 4×
       `dims.hidden_size` (p. ej. 768→3072 para BERT-base). Cuando
-      `moe.enabled` es true, es el tamaño oculto de cada experto.
+      `moe.enabled` es true y `moe.expert_hidden_size` no está definido, es el
+      tamaño oculto de cada experto; definir `moe.expert_hidden_size` permite
+      anchos distintos para capas densas y MoE (DeepSeek-V3: denso 18432,
+      expertos 2048).
 
       **Ejemplos explicados:**
       - `hidden_size=3072` con `dims.hidden_size=768`: ratio 4× estándar,

@@ -8,6 +8,12 @@ description: |-
   for each token, scaling model capacity without a proportional compute
   increase (only the selected experts run).
 
+  The block is organised in seven sub-blocks, mirroring the anatomy of an MoE
+  layer: `router` (logits → weights), `routing` (who selects the experts),
+  `balancing` (load across experts), `shared` (always-on experts), `latent`
+  (experts in a smaller latent space), `layout` (which layers are MoE) and
+  `experts` (the expert FFN itself).
+
   **Examples explained:**
   - `enabled: false`: standard dense FFN. Every token passes through the same
     network. Predictable, no routing overhead; the right default below ~100M
@@ -23,6 +29,12 @@ description_es: |-
   se reemplaza por un router que selecciona `top_k` de `num_experts` sub-redes
   especializadas por token, escalando la capacidad sin un aumento proporcional
   de cómputo (solo se ejecutan los expertos seleccionados).
+
+  El bloque se organiza en siete sub-bloques que reflejan la anatomía de una
+  capa MoE: `router` (logits → pesos), `routing` (quién selecciona los
+  expertos), `balancing` (carga entre expertos), `shared` (expertos siempre
+  activos), `latent` (expertos en un espacio latente menor), `layout` (qué
+  capas son MoE) y `experts` (la FFN del experto).
 
   **Ejemplos explicados:**
   - `enabled: false`: FFN densa estándar. Cada token pasa por la misma red.
@@ -54,19 +66,19 @@ properties:
     title: "MoE Expert Count"
     title_es: "Número de Expertos MoE"
     description: |-
-      Total number of expert networks. Each expert is a separate FFN; the
-      router selects `top_k` per token. Typical: 4–8 (efficient), up to 64
+      Total number of routed experts. Each expert is a separate FFN; the
+      router selects `top_k` per token. Typical: 4–8 (efficient), up to 256
       (scaling). Inactive experts occupy memory but consume no FLOPs.
 
       **References:** (paper: arxiv:2407.06204) (paper: arxiv:2103.16716)
     description_es: |-
-      Número total de redes expertas. Cada experto es una FFN separada; el
-      router selecciona `top_k` por token. Típico: 4–8 (eficiente), hasta 64
+      Número total de expertos ruteados. Cada experto es una FFN separada; el
+      router selecciona `top_k` por token. Típico: 4–8 (eficiente), hasta 256
       (escalado). Los expertos inactivos ocupan memoria pero no FLOPs.
 
       **Referencias:** (paper: arxiv:2407.06204) (paper: arxiv:2103.16716)
     default: 8
-    examples: [4, 8]
+    examples: [4, 8, 64]
   top_k:
     type: integer
     minimum: 1
@@ -74,15 +86,727 @@ properties:
     title_es: "Selección Top-K de Expertos"
     description: |-
       Number of experts activated per token (must be ≤ `num_experts`).
-      `top_k: 1` maximises sparsity and specialisation; `top_k: 2` adds
-      capacity at the cost of sparsity.
+      `top_k: 1` maximises sparsity and specialisation; `top_k: 2+` adds
+      capacity at the cost of sparsity. With `router.scoring: softmax` and
+      `top_k: 1`, set `router.pre_softmax: true` or the router receives no
+      gradient (the single chosen weight is always 1).
 
-      **References:** (paper: arxiv:2407.06204) (paper: arxiv:2103.16716)
+      **References:** (paper: arxiv:2101.03961)
     description_es: |-
       Número de expertos activados por token (debe ser ≤ `num_experts`).
-      `top_k: 1` maximiza dispersión y especialización; `top_k: 2` agrega
-      capacidad a costa de la dispersión.
+      `top_k: 1` maximiza dispersión y especialización; `top_k: 2+` agrega
+      capacidad a costa de la dispersión. Con `router.scoring: softmax` y
+      `top_k: 1`, usar `router.pre_softmax: true` o el router no recibe
+      gradiente (el único peso elegido es siempre 1).
 
-      **Referencias:** (paper: arxiv:2407.06204) (paper: arxiv:2103.16716)
+      **Referencias:** (paper: arxiv:2101.03961)
     default: 2
-    examples: [1, 2]
+    examples: [1, 2, 8]
+  expert_hidden_size:
+    type: integer
+    minimum: 1
+    title: "Expert Hidden Dimension"
+    title_es: "Dimensión Oculta del Experto"
+    description: |-
+      Intermediate width of each routed expert. `null` falls back to
+      `ffn.hidden_size`, which keeps the dense and MoE layers the same width.
+      DeepSeek-V3, for example, uses a dense width of 18432 but 2048 per
+      expert; setting this key is what separates the two.
+
+      **References:** (paper: arxiv:2412.19437)
+    description_es: |-
+      Ancho intermedio de cada experto ruteado. `null` usa `ffn.hidden_size`,
+      manteniendo igual ancho para capas densas y MoE. DeepSeek-V3, por ejemplo,
+      usa ancho denso 18432 pero 2048 por experto; definir esta clave es lo que
+      separa ambos valores.
+
+      **Referencias:** (paper: arxiv:2412.19437)
+    default: null
+    examples: [2048]
+  router:
+    type: object
+    additionalProperties: false
+    title: "MoE Router Scoring"
+    title_es: "Puntuación del Router MoE"
+    description: |-
+      How router logits become expert weights: the gating function, the output
+      scale and the numerical precision of the routing decision.
+
+      **References:** (paper: arxiv:2101.03961) (paper: arxiv:2412.19437)
+    description_es: |-
+      Cómo los logits del router se convierten en pesos de expertos: la función
+      de compuerta, la escala de salida y la precisión numérica de la decisión
+      de ruteo.
+
+      **Referencias:** (paper: arxiv:2101.03961) (paper: arxiv:2412.19437)
+    properties:
+      scoring:
+        type: string
+        enum: [softmax, sigmoid, softplus_sqrt]
+        title: "Gating Function"
+        title_es: "Función de Compuerta"
+        description: |-
+          Score function applied to the router logits. All three rank experts
+          identically; they differ in how much weight each chosen expert gets.
+          - `softmax`: normalised probabilities; confident routers concentrate
+            weight on the top expert. Default and most common.
+          - `sigmoid`: independent per-expert scores; saturates, so confident
+            experts end up with equal weights. Required for the expert bias of
+            `balancing.bias_update` (DeepSeek-V3).
+          - `softplus_sqrt`: `sqrt(softplus(x))`, between the two; DeepSeek-V4.
+
+          **References:** (paper: arxiv:2412.19437) (paper: arxiv:2606.19348)
+        description_es: |-
+          Función de puntuación aplicada a los logits del router. Las tres
+          ordenan los expertos igual; difieren en cuánto peso recibe cada
+          experto elegido.
+          - `softmax`: probabilidades normalizadas; los routers confiados
+            concentran el peso en el experto superior. Por defecto y la más común.
+          - `sigmoid`: puntuaciones independientes por experto; satura, así que
+            los expertos confiados terminan con pesos iguales. Requerida por el
+            sesgo de experto de `balancing.bias_update` (DeepSeek-V3).
+          - `softplus_sqrt`: `sqrt(softplus(x))`, intermedia; DeepSeek-V4.
+
+          **Referencias:** (paper: arxiv:2412.19437) (paper: arxiv:2606.19348)
+        default: softmax
+        examples: [softmax, sigmoid, softplus_sqrt]
+      pre_softmax:
+        type: boolean
+        title: "Softmax Before Top-K"
+        title_es: "Softmax Antes del Top-K"
+        description: |-
+          Compute the softmax over all experts before selecting the top-k, so
+          the kept weights are the raw probabilities and are not renormalised
+          over the selection. Required for `scoring: softmax` at `top_k: 1`
+          (otherwise the router gets no gradient). Ignored for `sigmoid` and
+          `softplus_sqrt`.
+
+          **References:** (paper: arxiv:2101.03961)
+        description_es: |-
+          Calcula el softmax sobre todos los expertos antes de seleccionar el
+          top-k, de modo que los pesos conservados son las probabilidades
+          crudas y no se renormalizan sobre la selección. Requerido para
+          `scoring: softmax` con `top_k: 1` (de lo contrario el router no
+          recibe gradiente). Se ignora para `sigmoid` y `softplus_sqrt`.
+
+          **Referencias:** (paper: arxiv:2101.03961)
+        default: false
+        examples: [false, true]
+      renormalize:
+        type: boolean
+        title: "Renormalize Top-K Weights"
+        title_es: "Renormalizar Pesos Top-K"
+        description: |-
+          Rescale the selected weights so they sum to 1. Keeps the routed
+          output's magnitude stable from token to token; renormalising lowered
+          validation loss in the granularity ablation. Ignored when
+          `pre_softmax: true`.
+
+          **References:** (paper: arxiv:2506.02890)
+        description_es: |-
+          Reescala los pesos seleccionados para que sumen 1. Mantiene estable
+          la magnitud de la salida ruteada entre tokens; renormalizar redujo la
+          pérdida de validación en la ablación de granularidad. Se ignora
+          cuando `pre_softmax: true`.
+
+          **Referencias:** (paper: arxiv:2506.02890)
+        default: true
+        examples: [true, false]
+      routed_scaling_factor:
+        type: number
+        title: "Routed Scaling Factor"
+        title_es: "Factor de Escala Ruteado"
+        description: |-
+          Constant multiplied onto the combined routed output. With equal
+          weights on k uncorrelated experts the output RMS drops to `1/√k`;
+          a factor near `√k` restores it. DeepSeek-V3 uses 2.5 at k = 8.
+          Shipped models disagree on the value (Kimi K3 uses 1.0 at k = 16).
+
+          **References:** (paper: arxiv:2412.19437) (paper: arxiv:2607.24653)
+        description_es: |-
+          Constante multiplicada sobre la salida ruteada combinada. Con pesos
+          iguales en k expertos incorrelacionados el RMS de salida cae a
+          `1/√k`; un factor cercano a `√k` lo restaura. DeepSeek-V3 usa 2.5
+          con k = 8. Los modelos publicados discrepan (Kimi K3 usa 1.0 con
+          k = 16).
+
+          **Referencias:** (paper: arxiv:2412.19437) (paper: arxiv:2607.24653)
+        default: 1.0
+        examples: [1.0, 2.5]
+      dtype:
+        type: string
+        enum: [float32, bfloat16]
+        title: "Router Compute Precision"
+        title_es: "Precisión de Cómputo del Router"
+        description: |-
+          Precision of the router's logits and selection math. Use
+          `float32`: a bf16 router diverged in Switch Transformers, and top-k
+          ties are broken arbitrarily. The experts themselves can stay in the
+          training precision.
+
+          **References:** (paper: arxiv:2101.03961) (paper: arxiv:2202.08906)
+        description_es: |-
+          Precisión de los logits y del cálculo de selección del router. Usar
+          `float32`: un router bf16 divergió en Switch Transformers y los
+          empates del top-k se rompen arbitrariamente. Los expertos pueden
+          quedar en la precisión de entrenamiento.
+
+          **Referencias:** (paper: arxiv:2101.03961) (paper: arxiv:2202.08906)
+        default: float32
+        examples: [float32]
+      jitter_eps:
+        type: number
+        title: "Router Input Jitter"
+        title_es: "Jitter de Entrada del Router"
+        description: |-
+          Switch-style multiplicative uniform noise on the router input,
+          `x · (1 + eps · (2u − 1))`. 0 disables it. A small value (e.g. 1e-2)
+          discourages the router from collapsing early in training.
+
+          **References:** (paper: arxiv:2101.03961)
+        description_es: |-
+          Ruido uniforme multiplicativo estilo Switch sobre la entrada del
+          router, `x · (1 + eps · (2u − 1))`. 0 lo desactiva. Un valor pequeño
+          (p. ej. 1e-2) evita el colapso temprano del router.
+
+          **Referencias:** (paper: arxiv:2101.03961)
+        default: 0.0
+        minimum: 0
+        examples: [0.0, 0.01]
+      z_loss_coeff:
+        type: number
+        title: "Router Z-Loss Coefficient"
+        title_es: "Coeficiente de Z-Loss del Router"
+        description: |-
+          Weight of the ST-MoE z-loss, `coeff · mean(logsumexp(logits)²)`.
+          Penalises logit drift, which is what destabilises bf16 routers.
+          0 disables it; ST-MoE uses 1e-3.
+
+          **References:** (paper: arxiv:2202.08906)
+        description_es: |-
+          Peso de la z-loss de ST-MoE, `coeff · mean(logsumexp(logits)²)`.
+          Penaliza la deriva de logits, que es lo que desestabiliza los routers
+          bf16. 0 la desactiva; ST-MoE usa 1e-3.
+
+          **Referencias:** (paper: arxiv:2202.08906)
+        default: 0.0
+        minimum: 0
+        examples: [0.0, 0.001]
+  routing:
+    type: object
+    additionalProperties: false
+    title: "MoE Routing Strategy"
+    title_es: "Estrategia de Ruteo MoE"
+    description: |-
+      Who selects the experts — each token (learned top-k), each expert
+      (expert choice), or a fixed token-id table (hash layers) — and how many
+      assignments an expert accepts.
+
+      **References:** (paper: arxiv:2202.09368) (paper: arxiv:2106.04426)
+    description_es: |-
+      Quién selecciona los expertos — cada token (top-k aprendido), cada
+      experto (expert choice) o una tabla fija por id de token (hash layers) —
+      y cuántas asignaciones acepta cada experto.
+
+      **Referencias:** (paper: arxiv:2202.09368) (paper: arxiv:2106.04426)
+    properties:
+      type:
+        type: string
+        enum: [token_choice, expert_choice]
+        title: "Routing Type"
+        title_es: "Tipo de Ruteo"
+        description: |-
+          - `token_choice`: each token keeps its k best experts. Default.
+          - `expert_choice`: each expert keeps its best tokens, which equalises
+            the load by construction. The selection depends on later tokens, so
+            inference routing differs from training; use for encoder/training
+            experiments, not autoregressive serving.
+
+          **References:** (paper: arxiv:2202.09368)
+        description_es: |-
+          - `token_choice`: cada token conserva sus k mejores expertos. Por
+            defecto.
+          - `expert_choice`: cada experto conserva sus mejores tokens, lo que
+            iguala la carga por construcción. La selección depende de tokens
+            posteriores, así que el ruteo en inferencia difiere del de
+            entrenamiento; usar en experimentos de encoder/entrenamiento, no en
+            serving autorregresivo.
+
+          **Referencias:** (paper: arxiv:2202.09368)
+        default: token_choice
+        examples: [token_choice, expert_choice]
+      capacity_factor:
+        type: number
+        minimum: 0
+        title: "Expert Capacity Factor"
+        title_es: "Factor de Capacidad por Experto"
+        description: |-
+          Maximum tokens an expert keeps, as a multiple of the perfectly
+          balanced load `tokens · top_k / num_experts`. Tokens past the cap are
+          dropped (highest-probability tokens win). 0 means dropless: every
+          token is kept whatever the load. Dropping buys speed and bounded
+          memory at a small quality cost.
+
+          **References:** (paper: arxiv:2202.08906) (paper: arxiv:2505.04519)
+        description_es: |-
+          Máximo de tokens que conserva un experto, como múltiplo de la carga
+          perfectamente balanceada `tokens · top_k / num_experts`. Los tokens
+          que exceden el tope se descartan (ganan los de mayor probabilidad).
+          0 significa dropless: todo token se conserva sea cual sea la carga.
+          Descartar compra velocidad y memoria acotada a un costo pequeño de
+          calidad.
+
+          **Referencias:** (paper: arxiv:2202.08906) (paper: arxiv:2505.04519)
+        default: 0.0
+        examples: [0.0, 1.5]
+      hash_layers:
+        type: integer
+        minimum: 0
+        title: "Hash-Routed MoE Layers"
+        title_es: "Capas MoE con Ruteo Hash"
+        description: |-
+          Number of leading MoE layers that select experts from a fixed
+          token-id → experts table instead of the learned router. The router is
+          still used for the weights (DeepSeek-V4 keeps its gate for that) but
+          receives no gradient from the selection. Hash routing is context-free
+          and cannot be rebalanced; 0 disables it.
+
+          **References:** (paper: arxiv:2106.04426) (paper: arxiv:2606.19348)
+        description_es: |-
+          Número de capas MoE iniciales que seleccionan expertos desde una
+          tabla fija id de token → expertos en vez del router aprendido. El
+          router se sigue usando para los pesos (DeepSeek-V4 conserva su gate
+          para eso) pero no recibe gradiente de la selección. El ruteo hash no
+          tiene contexto y no puede rebalancearse; 0 lo desactiva.
+
+          **Referencias:** (paper: arxiv:2106.04426) (paper: arxiv:2606.19348)
+        default: 0
+        examples: [0, 3]
+      hash_table:
+        type: string
+        enum: [random, round_robin]
+        title: "Hash Table Construction"
+        title_es: "Construcción de la Tabla Hash"
+        description: |-
+          How the token-id table is filled. `random` assigns each token id
+          `top_k` seeded random experts; `round_robin` cycles through experts
+          in order. Roller et al. found random and frequency-greedy tables
+          reach about the same perplexity, with the greedy table better
+          balanced; frequency-balanced tables need corpus statistics and are
+          not built here.
+
+          **References:** (paper: arxiv:2106.04426)
+        description_es: |-
+          Cómo se llena la tabla por id de token. `random` asigna a cada id
+          `top_k` expertos aleatorios con semilla; `round_robin` cicla por los
+          expertos en orden. Roller et al. hallaron que las tablas aleatorias y
+          las voraces por frecuencia alcanzan perplejidad similar, con mejor
+          balance la voraz; las tablas balanceadas por frecuencia requieren
+          estadísticas del corpus y no se construyen aquí.
+
+          **Referencias:** (paper: arxiv:2106.04426)
+        default: random
+        examples: [random, round_robin]
+      hash_seed:
+        type: integer
+        minimum: 0
+        title: "Hash Table Seed"
+        title_es: "Semilla de la Tabla Hash"
+        description: |-
+          RNG seed for the `random` hash table.
+
+          **References:** (paper: arxiv:2106.04426)
+        description_es: |-
+          Semilla del RNG para la tabla hash `random`.
+
+          **Referencias:** (paper: arxiv:2106.04426)
+        default: 42
+        examples: [42]
+  balancing:
+    type: object
+    additionalProperties: false
+    title: "MoE Load Balancing"
+    title_es: "Balanceo de Carga MoE"
+    description: |-
+      Keep tokens spread over the experts. Two independent families: an
+      auxiliary loss that steers the router's probabilities through its
+      gradient, and a loss-free expert bias that changes only which experts are
+      selected. They can be combined (DeepSeek-V3 pairs a batch-wide bias with
+      a small sequence-wise loss).
+
+      **References:** (paper: arxiv:2408.15664) (paper: arxiv:2412.19437)
+    description_es: |-
+      Mantiene los tokens repartidos entre los expertos. Dos familias
+      independientes: una pérdida auxiliar que guía las probabilidades del
+      router vía gradiente, y un sesgo de experto libre de pérdida que cambia
+      solo qué expertos se seleccionan. Pueden combinarse (DeepSeek-V3 combina
+      un sesgo de batch con una pérdida pequeña por secuencia).
+
+      **Referencias:** (paper: arxiv:2408.15664) (paper: arxiv:2412.19437)
+    properties:
+      aux_loss:
+        type: string
+        enum: [none, batch, sequence]
+        title: "Auxiliary Load-Balancing Loss"
+        title_es: "Pérdida Auxiliar de Balanceo"
+        description: |-
+          Scope of the load-balancing loss, `E · Σ f_e · P_e`:
+          - `none`: no auxiliary loss.
+          - `batch`: one micro-batch (Switch/DeepSeekMoE default).
+          - `sequence`: one sequence at a time, averaged over the batch
+            (DeepSeek-V3). Prevents a single sequence from piling onto a few
+            experts even when the batch as a whole looks balanced.
+
+          **References:** (paper: arxiv:2401.06066) (paper: arxiv:2412.19437)
+        description_es: |-
+          Alcance de la pérdida de balanceo, `E · Σ f_e · P_e`:
+          - `none`: sin pérdida auxiliar.
+          - `batch`: un micro-batch (por defecto en Switch/DeepSeekMoE).
+          - `sequence`: una secuencia a la vez, promediada sobre el batch
+            (DeepSeek-V3). Evita que una secuencia se apile en pocos expertos
+            aunque el batch completo parezca balanceado.
+
+          **Referencias:** (paper: arxiv:2401.06066) (paper: arxiv:2412.19437)
+        default: batch
+        examples: [none, batch, sequence]
+      aux_loss_coeff:
+        type: number
+        minimum: 0
+        title: "Auxiliary Loss Coefficient"
+        title_es: "Coeficiente de Pérdida Auxiliar"
+        description: |-
+          Weight of the load-balancing loss. Too high costs LM loss; too low
+          leaves the load uneven. Typical: 1e-3 (Megatron default), 0.01
+          (Switch/DeepSeekMoE), 1e-4 for DeepSeek-V3's sequence-wise guard.
+
+          **References:** (paper: arxiv:2412.19437) (paper: arxiv:2505.09388)
+        description_es: |-
+          Peso de la pérdida de balanceo. Demasiado alto cuesta pérdida de LM;
+          demasiado bajo deja la carga desigual. Típico: 1e-3 (por defecto en
+          Megatron), 0.01 (Switch/DeepSeekMoE), 1e-4 para la guarda por
+          secuencia de DeepSeek-V3.
+
+          **Referencias:** (paper: arxiv:2412.19437) (paper: arxiv:2505.09388)
+        default: 0.01
+        examples: [0.001, 0.01]
+      bias_update:
+        type: string
+        enum: [none, sign, centered_sign]
+        title: "Expert Bias Update Rule"
+        title_es: "Regla de Actualización del Sesgo"
+        description: |-
+          Auxiliary-loss-free balancing (DeepSeek-V3 `noaux_tc`): a per-expert
+          bias is added to the scores before selection only, and moved once per
+          optimizer step. `sign` adds `+rate` to underloaded experts and
+          `−rate` to overloaded ones; `centered_sign` subtracts the mean step
+          so the bias mean does not drift. Requires `router.scoring` different
+          from `softmax`.
+
+          **References:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982)
+        description_es: |-
+          Balanceo libre de pérdida auxiliar (DeepSeek-V3 `noaux_tc`): un sesgo
+          por experto se suma a las puntuaciones solo antes de la selección y
+          se mueve una vez por paso de optimizador. `sign` suma `+rate` a los
+          expertos subcargados y `−rate` a los sobrecargados; `centered_sign`
+          resta el paso medio para que la media del sesgo no derive. Requiere
+          `router.scoring` distinto de `softmax`.
+
+          **Referencias:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982)
+        default: none
+        examples: [none, sign, centered_sign]
+      bias_update_rate:
+        type: number
+        minimum: 0
+        title: "Expert Bias Update Rate"
+        title_es: "Tasa de Actualización del Sesgo"
+        description: |-
+          Fixed step `γ` for the expert bias. DeepSeek-V3 uses 1e-3; a step
+          that is too coarse for the expert count leaves the load uneven (above
+          ~128 experts a finer step or an auxiliary loss is needed).
+
+          **References:** (paper: arxiv:2408.15664) (paper: arxiv:2605.11689)
+        description_es: |-
+          Paso fijo `γ` del sesgo de experto. DeepSeek-V3 usa 1e-3; un paso
+          demasiado grueso para el número de expertos deja la carga desigual
+          (por encima de ~128 expertos se necesita un paso más fino o una
+          pérdida auxiliar).
+
+          **Referencias:** (paper: arxiv:2408.15664) (paper: arxiv:2605.11689)
+        default: 0.001
+        examples: [0.001]
+  shared:
+    type: object
+    additionalProperties: false
+    title: "Shared Experts"
+    title_es: "Expertos Compartidos"
+    description: |-
+      Always-on experts that process every token next to the routed ones,
+      learning common patterns and leaving the routed experts free to
+      specialise. They sit outside the router and add compute per token.
+
+      **References:** (paper: arxiv:2401.06066)
+    description_es: |-
+      Expertos siempre activos que procesan cada token junto a los ruteados,
+      aprendiendo patrones comunes y dejando libres a los expertos ruteados
+      para especializarse. Quedan fuera del router y agregan cómputo por token.
+
+      **Referencias:** (paper: arxiv:2401.06066)
+    properties:
+      count:
+        type: integer
+        minimum: 0
+        title: "Shared Expert Count"
+        title_es: "Número de Expertos Compartidos"
+        description: |-
+          Number of shared experts. 0 disables them; DeepSeek-V3 uses 1,
+          DeepSeek-V2 and Kimi K3 use 2.
+
+          **References:** (paper: arxiv:2401.06066) (paper: arxiv:2412.19437)
+        description_es: |-
+          Número de expertos compartidos. 0 los desactiva; DeepSeek-V3 usa 1,
+          DeepSeek-V2 y Kimi K3 usan 2.
+
+          **Referencias:** (paper: arxiv:2401.06066) (paper: arxiv:2412.19437)
+        default: 0
+        examples: [0, 1, 2]
+      hidden_size:
+        type: integer
+        minimum: 1
+        title: "Shared Expert Width"
+        title_es: "Ancho del Experto Compartido"
+        description: |-
+          Intermediate width of each shared expert. `null` uses the routed
+          expert width.
+
+          **References:** (paper: arxiv:2401.06066)
+        description_es: |-
+          Ancho intermedio de cada experto compartido. `null` usa el ancho de
+          los expertos ruteados.
+
+          **Referencias:** (paper: arxiv:2401.06066)
+        default: null
+        examples: [null, 2048]
+      gate:
+        type: string
+        enum: [none, sigmoid]
+        title: "Shared Expert Gate"
+        title_es: "Compuerta del Experto Compartido"
+        description: |-
+          How the shared branch mixes with the routed output. `none` adds it at
+          weight 1; `sigmoid` multiplies it by a learned per-token gate in
+          (0, 1), so the shared branch can take between 0 and 50% of the output
+          (Qwen3-Next).
+
+          **References:** (paper: arxiv:2401.06066) (paper: arxiv:2509.01322)
+        description_es: |-
+          Cómo se mezcla la rama compartida con la salida ruteada. `none` la
+          suma con peso 1; `sigmoid` la multiplica por una compuerta aprendida
+          por token en (0, 1), así que la rama compartida puede tomar entre 0 y
+          50% de la salida (Qwen3-Next).
+
+          **Referencias:** (paper: arxiv:2401.06066) (paper: arxiv:2509.01322)
+        default: none
+        examples: [none, sigmoid]
+  latent:
+    type: object
+    additionalProperties: false
+    title: "Latent MoE"
+    title_es: "MoE Latente"
+    description: |-
+      Run the experts in a smaller latent space: project each token from
+      `dims.hidden_size` down to `latent.dim` before dispatch and back up after
+      combining. At the same expert parameters, compute and traffic, this
+      affords `α = d / ℓ` times more experts and a larger top-k, or keeps
+      quality at lower cost. NVIDIA reports +5.65 MMLU-Pro at 95B with
+      `α = 4`; Kimi K3 and Nemotron 3 ship it.
+
+      **References:** (paper: arxiv:2601.18089)
+    description_es: |-
+      Ejecuta los expertos en un espacio latente menor: proyecta cada token de
+      `dims.hidden_size` a `latent.dim` antes del despacho y de vuelta después
+      de combinar. Con los mismos parámetros, cómputo y tráfico de expertos,
+      esto permite `α = d / ℓ` veces más expertos y un top-k mayor, o mantiene
+      la calidad a menor costo. NVIDIA reporta +5.65 en MMLU-Pro a 95B con
+      `α = 4`; Kimi K3 y Nemotron 3 lo usan.
+
+      **Referencias:** (paper: arxiv:2601.18089)
+    properties:
+      enabled:
+        type: boolean
+        title: "Enable Latent MoE"
+        title_es: "Habilitar MoE Latente"
+        description: |-
+          Project tokens into the latent space before the experts and back
+          after combining.
+
+          **References:** (paper: arxiv:2601.18089)
+        description_es: |-
+          Proyecta los tokens al espacio latente antes de los expertos y de
+          vuelta después de combinar.
+
+          **Referencias:** (paper: arxiv:2601.18089)
+        default: false
+        examples: [false, true]
+      dim:
+        type: integer
+        minimum: 1
+        title: "Latent Dimension"
+        title_es: "Dimensión Latente"
+        description: |-
+          Latent width `ℓ`. Must be smaller than `dims.hidden_size`; the
+          compression ratio is `α = hidden_size / ℓ`. Quality is preserved up
+          to `α = 4` in NVIDIA's ablations (e.g. 7168 → 3584 in Kimi K3).
+
+          **References:** (paper: arxiv:2601.18089) (paper: arxiv:2607.24653)
+        description_es: |-
+          Ancho latente `ℓ`. Debe ser menor que `dims.hidden_size`; la razón de
+          compresión es `α = hidden_size / ℓ`. La calidad se conserva hasta
+          `α = 4` en las ablaciones de NVIDIA (p. ej. 7168 → 3584 en Kimi K3).
+
+          **Referencias:** (paper: arxiv:2601.18089) (paper: arxiv:2607.24653)
+        default: null
+        examples: [null, 3584]
+      norm_before_up_proj:
+        type: boolean
+        title: "Normalize Before Up-Projection"
+        title_es: "Normalizar Antes de la Proyección de Salida"
+        description: |-
+          Apply RMSNorm to the combined expert output before the latent
+          up-projection. Kimi K3 added it to stop routed-branch activation
+          growth at 2.8T parameters.
+
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Aplica RMSNorm a la salida combinada de los expertos antes de la
+          proyección de salida latente. Kimi K3 la agregó para detener el
+          crecimiento de activaciones de la rama ruteada a 2.8T parámetros.
+
+          **Referencias:** (paper: arxiv:2607.24653)
+        default: false
+        examples: [false, true]
+  layout:
+    type: object
+    additionalProperties: false
+    title: "MoE Layer Layout"
+    title_es: "Distribución de Capas MoE"
+    description: |-
+      Which layers get experts. MoE in every layer maximises capacity but adds
+      router/communication cost everywhere; leading dense layers and
+      interleaving trade capacity for fewer MoE layers.
+
+      **References:** (paper: arxiv:2412.19437) (paper: arxiv:2507.17702)
+    description_es: |-
+      Qué capas llevan expertos. MoE en todas las capas maximiza capacidad pero
+      agrega costo de router/comunicación en todas; capas densas iniciales y la
+      intercalación cambian capacidad por menos capas MoE.
+
+      **Referencias:** (paper: arxiv:2412.19437) (paper: arxiv:2507.17702)
+    properties:
+      dense_layers:
+        type: integer
+        minimum: 0
+        title: "Leading Dense Layers"
+        title_es: "Capas Densas Iniciales"
+        description: |-
+          Number of leading layers that keep the dense FFN. DeepSeek-V3 and
+          GLM keep 3; Ling found 1–3 barely changed efficiency at matched
+          FLOPs. Dense layers use `ffn.hidden_size`; MoE layers use
+          `expert_hidden_size`.
+
+          **References:** (paper: arxiv:2412.19437) (paper: arxiv:2507.17702)
+        description_es: |-
+          Número de capas iniciales que conservan la FFN densa. DeepSeek-V3 y
+          GLM conservan 3; Ling halló que 1–3 apenas cambian la eficiencia con
+          FLOPs igualados. Las capas densas usan `ffn.hidden_size`; las MoE usan
+          `expert_hidden_size`.
+
+          **Referencias:** (paper: arxiv:2412.19437) (paper: arxiv:2507.17702)
+        default: 0
+        examples: [0, 3]
+      every_n_layers:
+        type: integer
+        minimum: 1
+        title: "MoE Layer Frequency"
+        title_es: "Frecuencia de Capas MoE"
+        description: |-
+          Place an MoE layer every N layers after the dense prefix. 1 means
+          every layer is MoE; 2 alternates dense and MoE as in Llama 4
+          Maverick.
+
+          **References:** (paper: arxiv:2412.19437)
+        description_es: |-
+          Coloca una capa MoE cada N capas después del prefijo denso. 1
+          significa MoE en todas las capas; 2 alterna densa y MoE como en
+          Llama 4 Maverick.
+
+          **Referencias:** (paper: arxiv:2412.19437)
+        default: 1
+        examples: [1, 2]
+  experts:
+    type: object
+    additionalProperties: false
+    title: "Expert FFN"
+    title_es: "FFN del Experto"
+    description: |-
+      The function inside each expert.
+
+      **References:** (paper: arxiv:2602.10604)
+    description_es: |-
+      La función dentro de cada experto.
+
+      **Referencias:** (paper: arxiv:2602.10604)
+    properties:
+      activation_clamp:
+        type: number
+        minimum: 0
+        title: "Expert Activation Clamp"
+        title_es: "Tope de Activación del Experto"
+        description: |-
+          Upper bound applied to each expert's gated intermediate, following
+          the gated-FFN clamp recipe. 0 disables it. DeepSeek-V4.1 uses 10,
+          Step-5 Preview 7; Step-3.5-Flash found outlier experts whose output
+          norms grew without any loss signal, and clipping contained them at
+          unchanged loss.
+
+          **References:** (paper: arxiv:2602.10604) (paper: arxiv:2609.19969)
+        description_es: |-
+          Cota superior aplicada al intermedio con compuerta de cada experto,
+          siguiendo la receta de recorte de FFN con compuerta. 0 lo desactiva.
+          DeepSeek-V4.1 usa 10, Step-5 Preview 7; Step-3.5-Flash encontró
+          expertos atípicos cuyas normas de salida crecían sin señal en la
+          pérdida, y el recorte los contuvo sin cambiar la pérdida.
+
+          **Referencias:** (paper: arxiv:2602.10604) (paper: arxiv:2609.19969)
+        default: 0.0
+        examples: [0.0, 10.0]
+allOf:
+  - if:
+      properties:
+        router:
+          properties:
+            scoring:
+              const: softmax
+        top_k:
+          const: 1
+      required: [router, top_k]
+    then:
+      properties:
+        router:
+          properties:
+            pre_softmax:
+              const: true
+  - if:
+      properties:
+        latent:
+          properties:
+            enabled:
+              const: true
+      required: [latent]
+    then:
+      properties:
+        latent:
+          required: [dim]
+          properties:
+            dim:
+              type: integer
+              minimum: 1

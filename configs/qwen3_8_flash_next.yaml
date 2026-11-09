@@ -25,11 +25,21 @@ model:
     enabled: true
     num_experts: 512
     top_k: 10
+    expert_hidden_size: 640
+    router:
+      scoring: softmax
+      routed_scaling_factor: 1.0
+    balancing:
+      aux_loss: batch
+      aux_loss_coeff: 0.001
+    shared:
+      count: 1
+      hidden_size: 640
   bitnet:
     enabled: false
   ffn:
     hidden_size: 640
-    activation: silu
+    activation: swiglu
 training:
   task: mlm
   seed: 42

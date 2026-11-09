@@ -556,6 +556,66 @@ def _build_transformers_config(
         "AutoModelForMaskedLM": "modeling_frankenstein.FrankensteinForMaskedLM",
         "AutoModelForCausalLM": "modeling_frankenstein.FrankensteinForCausalLM",
     }
+    # HF-compatible Mixture-of-Experts block (DeepSeek/Qwen-style names).
+    if bool(model_config.get("use_moe", False)):
+        top_k = int(model_config.get("top_k_experts", 2))
+        bias_update = str(model_config.get("moe_bias_update", "none"))
+        payload["num_experts"] = int(model_config.get("num_experts", 8))
+        payload["num_experts_per_tok"] = top_k
+        payload["moe"] = {
+            "enabled": True,
+            "num_experts": int(model_config.get("num_experts", 8)),
+            "num_experts_per_tok": top_k,
+            "moe_intermediate_size": model_config.get("moe_expert_hidden_size")
+            or model_config.get("ffn_hidden_size"),
+            "scoring_func": str(model_config.get("moe_router_scoring", "softmax")),
+            "norm_topk_prob": bool(model_config.get("moe_router_renormalize", True)),
+            "pre_softmax": bool(model_config.get("moe_router_pre_softmax", False)),
+            "routed_scaling_factor": float(
+                model_config.get("moe_routed_scaling_factor", 1.0)
+            ),
+            "router_dtype": str(model_config.get("moe_router_dtype", "float32")),
+            "z_loss_coeff": float(model_config.get("moe_router_z_loss_coeff", 0.0)),
+            "n_shared_experts": int(
+                model_config.get("moe_shared_experts_count", 0)
+            ),
+            "shared_expert_intermediate_size": model_config.get(
+                "moe_shared_expert_hidden_size"
+            ),
+            "shared_expert_gate": str(
+                model_config.get("moe_shared_expert_gate", "none")
+            ),
+            "first_k_dense_replace": int(model_config.get("moe_dense_layers", 0)),
+            "moe_layer_freq": int(model_config.get("moe_layer_frequency", 1)),
+            "routing_type": str(
+                model_config.get("moe_routing_type", "token_choice")
+            ),
+            "capacity_factor": float(
+                model_config.get("moe_capacity_factor", 0.0)
+            ),
+            "hash_layers": int(model_config.get("moe_hash_layers", 0)),
+            "latent": {
+                "enabled": bool(model_config.get("moe_latent_enabled", False)),
+                "dim": model_config.get("moe_latent_dim"),
+                "norm_before_up_proj": bool(
+                    model_config.get("moe_latent_norm_before_up_proj", False)
+                ),
+            },
+            "balancing": {
+                "aux_loss": str(model_config.get("moe_aux_loss_type", "batch")),
+                "aux_loss_coeff": float(
+                    model_config.get("moe_aux_loss_coeff", 0.01)
+                ),
+                "bias_update": bias_update,
+                "bias_update_rate": float(
+                    model_config.get("moe_bias_update_rate", 0.001)
+                ),
+            },
+            "topk_method": "noaux_tc" if bias_update != "none" else "greedy",
+            "activation_clamp": float(
+                model_config.get("moe_activation_clamp", 0.0)
+            ),
+        }
     if bool(model_config.get("use_bitnet", False)):
         payload["quantization_config"] = {
             "quant_method": "bitnet",

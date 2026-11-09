@@ -22,6 +22,10 @@ model:
     enabled: true
     num_experts: 16
     top_k: 1
+    expert_hidden_size: 8192
+    router:
+      scoring: softmax
+      pre_softmax: true
   bitnet:
     enabled: false
   ffn:

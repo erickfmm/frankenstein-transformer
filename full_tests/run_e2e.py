@@ -10,6 +10,10 @@ This script drives the real CLI with tiny models, exercising:
 * every ViT `pos_embedding_type` across all 3 vision tasks (classification,
   patch_prediction, segmentation),
 * major transversal toggles (BitNet, MoE, MoD, mHC, embeddings, residuals/AttnRes, etc.),
+* a curated Mixture-of-Experts subtype sweep (`--category moe`): one design axis
+  per combo (scoring, scaling, z-loss, bias, aux scope, expert choice, capacity,
+  hash layers, shared experts, latent MoE, layer layout, activation clamp,
+  top-1 pre-softmax) without a combinatorial product,
 * encoder/MLM and decoder/causal-LM tasks,
 * vision tasks (frankenstein_vit: patch_prediction, classification, segmentation),
 * audio tasks (frankenstein_audio: asr with CTC and RNN-Transducer,
@@ -863,6 +867,113 @@ def make_positional_encoding_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     return configs
 
 
+def make_moe_configs(vocab_size: int) -> List[Tuple[str, dict]]:
+    """Curated Mixture-of-Experts subtype sweep.
+
+    Each combo exercises exactly one MoE design axis on the standard two-layer
+    toy geometry. The variants are curated rather than a cartesian product, so
+    the whole sweep stays small while every schema feature is covered once:
+    router scoring, output scale, z-loss, both load-balancing families, aux
+    scope, expert choice, capacity/dropping, hash layers, shared experts,
+    latent MoE, dense/interleaved layout, activation clamping and the
+    softmax top-1 pre-softmax rule.
+
+    Args:
+        vocab_size: Vocabulary size for the toy model.
+
+    Returns:
+        List of ``(combo_id, config)`` tuples.
+    """
+    configs: List[Tuple[str, dict]] = []
+
+    def add(cid: str, moe: dict) -> None:
+        model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
+        model = _deep_update(model, {"dims": {"layer_pattern": ["standard", "titan"]}})
+        moe_block = {"enabled": True, "num_experts": 4, "top_k": 2}
+        moe_block.update(moe)
+        model = _deep_update(model, {"moe": moe_block})
+        model = _ensure_ssog_grid(model, training)
+        configs.append(
+            (
+                cid,
+                {
+                    "model_class": "frankenstein_text_encoder",
+                    "model": model,
+                    "training": training,
+                },
+            )
+        )
+
+    # 3.1 Router scoring and output scale.
+    add("moe_scoring_softmax", {})
+    add("moe_scoring_sigmoid", {"router": {"scoring": "sigmoid"}})
+    add("moe_scoring_softplus_sqrt", {"router": {"scoring": "softplus_sqrt"}})
+    add(
+        "moe_scaling_renorm",
+        {"router": {"renormalize": True, "routed_scaling_factor": 2.0}},
+    )
+    add("moe_z_loss", {"router": {"z_loss_coeff": 0.001}})
+    # 3.3 Load balancing: both families and the sequence scope.
+    add(
+        "moe_bias_sign",
+        {
+            "router": {"scoring": "sigmoid"},
+            "balancing": {
+                "aux_loss": "none",
+                "bias_update": "sign",
+                "bias_update_rate": 0.01,
+            },
+        },
+    )
+    add(
+        "moe_bias_centered_sign",
+        {
+            "router": {"scoring": "sigmoid"},
+            "balancing": {
+                "aux_loss": "none",
+                "bias_update": "centered_sign",
+                "bias_update_rate": 0.01,
+            },
+        },
+    )
+    add(
+        "moe_aux_sequence",
+        {"balancing": {"aux_loss": "sequence", "aux_loss_coeff": 1e-3}},
+    )
+    # 3.2 Routing strategy and capacity.
+    add(
+        "moe_expert_choice",
+        {"routing": {"type": "expert_choice"}, "balancing": {"aux_loss": "none"}},
+    )
+    add("moe_capacity_factor", {"routing": {"capacity_factor": 1.5}})
+    add("moe_hash_layers", {"routing": {"hash_layers": 1}})
+    add(
+        "moe_top1_pre_softmax",
+        {"top_k": 1, "router": {"pre_softmax": True}},
+    )
+    # 3.4 Experts: shared, latent, clamp.
+    add(
+        "moe_shared_gated",
+        {"shared": {"count": 1, "hidden_size": 128, "gate": "sigmoid"}},
+    )
+    add(
+        "moe_latent",
+        {
+            "top_k": 4,
+            "latent": {
+                "enabled": True,
+                "dim": 48,
+                "norm_before_up_proj": True,
+            },
+        },
+    )
+    add("moe_activation_clamp", {"experts": {"activation_clamp": 10.0}})
+    # 3.5 Layer layout.
+    add("moe_dense_prefix", {"layout": {"dense_layers": 1}})
+    add("moe_interleaved", {"layout": {"every_n_layers": 2}})
+    return configs
+
+
 def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     configs: List[Tuple[str, dict]] = []
 
@@ -1676,7 +1787,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--category",
-        choices=["all", "attn", "opt", "norm", "pe", "transversal", "task", "batch_size", "vision", "vision_pe", "audio", "tokenizer", "realdata", "deploy"],
+        choices=["all", "attn", "opt", "norm", "pe", "transversal", "moe", "task", "batch_size", "vision", "vision_pe", "audio", "tokenizer", "realdata", "deploy"],
         default="all",
         help="Which sweep to run (default: all).",
     )
@@ -2023,6 +2134,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         combos.extend(make_positional_encoding_configs(args.vocab_size))
     if args.category in {"all", "transversal"}:
         combos.extend(make_transversal_configs(args.vocab_size))
+    if args.category in {"all", "moe"}:
+        combos.extend(make_moe_configs(args.vocab_size))
     if args.category in {"all", "task"}:
         combos.extend(make_task_configs(args.vocab_size))
     if args.category in {"all", "batch_size"}:

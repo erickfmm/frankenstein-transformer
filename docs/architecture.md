@@ -72,13 +72,14 @@ The YAML file is the single source of truth for model/training settings.
 | `src/training/config_loader.py` | Schema resolution + cross-field validation + `LoadedTrainingConfig` |
 | `src/utils/config_flatten.py` | Nested YAML → flat `FrankensteinModelConfig` kwargs |
 | `src/model/config.py` | `FrankensteinModelConfig` flat dataclass (single coupling point) |
-| `src/model/hybrid_layer.py` | `HybridLayer`: mixer registry, norm wiring, FFN/MoE, MoD, BitNet, residual hand-off |
+| `src/model/hybrid_layer.py` | `HybridLayer`: mixer registry, norm wiring, dense/MoE FFN dispatch, MoD, BitNet, residual hand-off |
 | `src/model/frankenstein_encoder.py` | Encoder backbone (bidirectional; owns shared PE, mHC, AttnRes) |
 | `src/model/frankenstein_decoder.py` | Causal decoder (forces `mode=decoder`) |
 | `src/model/frankenstein_vit.py` | Vision Transformer (forces `mode=encoder`) |
 | `src/model/frankenstein_audio.py` | Audio model class: log-mel/spectrogram/raw frontend, conv subsampling, ASR and classification heads (forces `mode=encoder`) |
 | `src/model/mhc.py`, `src/model/hyperloop.py` | Manifold-constrained hyper-connections and loop-level variants |
 | `src/model/residuals/**` | Residual strategies + factory |
+| `src/model/moe/**` | MoE router scoring, load balancing, experts, shared experts, LatentMoE, hash layers |
 | `src/model/attention/**` | 46 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
 | `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
@@ -173,7 +174,7 @@ skipped, and `_ATTENTION_MIXER_RENAMES` maps each per-mixer leaf to its flat key
 | `model.embedding.dynamic.ngram_max/bucket/seed/precompute` | `dynamic_embedding_ngram_max`, `dynamic_embedding_bucket`, `dynamic_embedding_seed`, `dynamic_embedding_precompute` |
 | `model.embedding.conv.enabled/kernel` | `use_embedding_conv`, `embedding_conv_kernel` |
 | `model.attention.<mixer>.<leaf>` | `_ATTENTION_MIXER_RENAMES` (e.g. `mla.latent_rank` → `mla_latent_rank`) |
-| `model.moe.*` | `use_moe`, `num_experts`, `top_k_experts` |
+| `model.moe.*` | `use_moe`, `num_experts`, `top_k_experts`, `moe_expert_hidden_size`, `moe_router_*`, `moe_routed_scaling_factor`, `moe_routing_type`, `moe_capacity_factor`, `moe_hash_*`, `moe_aux_loss_*`, `moe_bias_update*`, `moe_shared_*`, `moe_latent_*`, `moe_dense_layers`, `moe_layer_frequency`, `moe_activation_clamp` |
 | `model.bitnet.*` | `use_bitnet`, `bitnet_routers`, `use_bitnet_conv` |
 | `model.mixture_of_depths.*` | `use_mixture_of_depths`, `mixture_of_depths_*` |
 | `model.ssmax.*` | `use_ssmax`, `ssmax_s_init` |
@@ -532,11 +533,42 @@ instead. `activation_config` keys: `raf_degrees`, `raf_version`, `raf_approx_fun
 
 | Block | Keys (defaults) | Behaviour |
 |---|---|---|
-| MoE | `moe.enabled` (**true**), `moe.num_experts` (8), `moe.top_k` (2) | Replaces dense FFN with top-k expert routing |
+| MoE | `moe.enabled` (**true**), `moe.num_experts` (8), `moe.top_k` (2), `moe.expert_hidden_size` (null) | Replaces the dense FFN with routed experts; see the MoE contract below |
 | Mixture-of-Depths | `mixture_of_depths.enabled` (false), `capacity_ratio` (0.5), `router_aux_loss_weight` (0.0) | Top-`capacity_ratio` tokens are updated; skipped tokens bypass the block. **Mutually exclusive with mHC** |
 | SSMax | `ssmax.enabled` (false), `ssmax.s_init` (1.0) | Per-head learnable logit rescale `s·ln(n)` |
 | Fixed numerics | `numerics.fixed_softmax` (false), `numerics.fixed_cross_entropy` (false) | Cancellation-free softmax/log-softmax and zero-sum-gradient hard-target CE (arXiv:2610.31642) |
 | BitNet | `bitnet.enabled` (**true**), `bitnet.routers` (false), `bitnet.conv` (false) | Ternary `BitLinear` projections; routers/conv opt-in |
+
+
+**Mixture of Experts (`model.moe.*`).** The block is implemented by
+`src/model/moe/{router,balancing,layer}.py` and declared in
+`src/schema/_model/_moe.yaml` (the executable contract). `HybridLayer` builds a
+`MoELayer` only on the physical layers selected by `moe.layout`
+(`moe.dense_layers` leading dense layers, then one MoE layer every
+`moe.layer_frequency` layers); dense layers use `ffn_hidden_size`, MoE layers use
+`moe.expert_hidden_size` (falling back to `ffn_hidden_size`).
+
+| Group | Keys (defaults) | Behaviour |
+|---|---|---|
+| Router | `router.scoring` (softmax), `pre_softmax` (false), `renormalize` (true), `routed_scaling_factor` (1.0), `dtype` (float32), `jitter_eps` (0.0), `z_loss_coeff` (0.0) | softmax / sigmoid / sqrt-softplus gating, top-k renormalisation, output scale, fp32 router, ST-MoE z-loss |
+| Routing | `routing.type` (token_choice), `capacity_factor` (0.0), `hash_layers` (0), `hash_table` (random), `hash_seed` (42) | token or expert choice, dropless/capacity dropping, fixed token-id tables |
+| Balancing | `balancing.aux_loss` (batch), `aux_loss_coeff` (0.01), `bias_update` (none), `bias_update_rate` (0.001) | batch/sequence auxiliary loss and the auxiliary-loss-free expert bias (`sign`, `centered_sign`) |
+| Shared | `shared.count` (0), `shared.hidden_size` (null), `shared.gate` (none) | always-on experts, optional sigmoid gate |
+| Latent | `latent.enabled` (false), `latent.dim` (null), `latent.norm_before_up_proj` (false) | LatentMoE `d -> ℓ -> d` projections (Kimi K3 RMSNorm before the up-projection) |
+| Experts | `experts.activation_clamp` (0.0) | upper bound on each expert's gated intermediate |
+
+Cross-key rules (runtime, `FrankensteinModelConfig.__post_init__`):
+`top_k <= num_experts`; softmax at `top_k=1` auto-enables `pre_softmax` (a
+post-softmax top-1 weight has no gradient); `bias_update` requires sigmoid or
+sqrt-softplus scoring; expert choice is self-balancing and forbids the
+auxiliary loss and the bias; hash layers require token choice and forbid the
+bias; `latent.dim` must lie in `(0, hidden_size)`; the layer layout must leave at
+least one MoE layer. Per-layer diagnostics (`moe_load_balancing_loss`,
+`moe_router_z_loss`, MaxVio, routing entropy, expert-norm ratio, dropped
+fraction) are aggregated by `aggregate_moe_aux_losses()` into
+`last_auxiliary_losses` / `last_moe_stats`, added to the task loss by the
+trainer, and logged to the CSV callback and W&B. The expert bias is advanced
+once per optimizer step by `update_moe_expert_bias()`.
 
 **Fixed numerics (arXiv:2610.31642).** `numerics.fixed_softmax` swaps every
 explicit softmax/log-softmax (all attention mixers, MoE/MoD routers, AttnRes

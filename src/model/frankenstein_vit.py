@@ -36,6 +36,7 @@ import torch.nn.functional as F
 
 from .config import FrankensteinModelConfig
 from .hybrid_layer import HybridLayer
+from .moe import aggregate_moe_aux_losses
 from .hyperloop import HyperloopConnections
 from .attention.common import BitLinear
 from .optimizer.base import categorize_param_groups
@@ -128,6 +129,7 @@ class FrankensteinViT(nn.Module):
         self.use_fixed_softmax = bool(getattr(self.config, "fixed_softmax", False))
         self.last_auxiliary_losses: Dict[str, Any] = {}
         self.last_mixture_of_depths_stats: Dict[str, Any] = {}
+        self.last_moe_stats: Dict[str, Any] = {}
 
         # ViT is bidirectional — force encoder mode.
         if self.config.mode != "encoder":
@@ -173,7 +175,12 @@ class FrankensteinViT(nn.Module):
         # ---- HybridLayer stack (reused — every layer_pattern mixer) ----
         self.layers = nn.ModuleList(
             [
-                HybridLayer(cfg, layer_type=cfg.layer_pattern[i % len(cfg.layer_pattern)], pos_encoder=self.pos_encoder)
+                HybridLayer(
+                    cfg,
+                    layer_type=cfg.layer_pattern[i % len(cfg.layer_pattern)],
+                    pos_encoder=self.pos_encoder,
+                    layer_index=i,
+                )
                 for i in range(cfg.num_layers)
             ]
         )
@@ -452,6 +459,9 @@ class FrankensteinViT(nn.Module):
             x = self.mhc_out_proj(x.reshape(bsz, seq_len, n * dim))
 
         x = self.final_norm(x)
+        moe_aux_losses, moe_stats = aggregate_moe_aux_losses(self.layers)
+        self.last_auxiliary_losses = dict(moe_aux_losses)
+        self.last_moe_stats = moe_stats
         return x
 
     def forward(

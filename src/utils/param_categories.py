@@ -94,12 +94,20 @@ def categorize_param(name: str) -> str:
     if "residual" in parts:
         return "residual"
 
-    # MoE router and Mixture-of-Depths depth router.
-    if any(part in ("router", "depth_router") for part in parts):
+    # MoE router, shared-expert gate and Mixture-of-Depths depth router.
+    if any(
+        part in ("router", "depth_router", "shared_gate_proj") for part in parts
+    ):
         return "router"
 
-    # FFN bodies and MoE experts.
-    if "ffn" in parts or "experts" in parts:
+    # FFN bodies, MoE routed/shared experts and LatentMoE projections.
+    if (
+        "ffn" in parts
+        or "experts" in parts
+        or any(part.endswith("_experts") for part in parts)
+        or "latent_down_proj" in parts
+        or "latent_up_proj" in parts
+    ):
         return "ffn"
 
     # Attention mixers, including their internal norms (QK-norm, GroupNorm,
