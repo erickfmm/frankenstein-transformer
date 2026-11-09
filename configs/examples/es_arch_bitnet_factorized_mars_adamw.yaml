@@ -8,7 +8,7 @@ model:
     num_heads: 8
     layer_pattern:
     - retnet
-    - standard_attn
+    - standard
   norm:
     type: derf
   embedding:

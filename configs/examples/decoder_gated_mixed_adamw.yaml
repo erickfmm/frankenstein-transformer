@@ -7,12 +7,12 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - gla_attn
-    - standard_attn
-    - deltanet_attn
-    - standard_attn
-    - hgrn2_attn
-    - standard_attn
+    - gla
+    - standard
+    - deltanet
+    - standard
+    - hgrn2
+    - standard
     mode: decoder
   norm:
     type: dynamic_tanh

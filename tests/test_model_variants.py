@@ -72,7 +72,7 @@ class FrankensteinDecoderTests(unittest.TestCase):
         self.assertTrue(torch.equal(x, x_clone))
 
     def test_custom_layer_pattern(self):
-        model = self._small_decoder(layer_pattern=["titan_attn", "mamba"])
+        model = self._small_decoder(layer_pattern=["titan", "mamba"])
         x = torch.randint(0, 200, (1, 5))
         y = model(x)
         self.assertEqual(y.shape, (1, 5, 200))
@@ -89,7 +89,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
         cfg = FrankensteinModelConfig(
             vocab_size=100,
             hidden_size=48,
-            num_layers=len(layer_pattern or ["standard_attn"]),
+            num_layers=len(layer_pattern or ["standard"]),
             num_loops=1,
             num_heads=6,
             retention_heads=6,
@@ -98,7 +98,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
             dropout=0.0,
             norm_type=kw.pop("norm_type", "layer_norm"),
             use_bitnet=False,
-            layer_pattern=layer_pattern or ["standard_attn"],
+            layer_pattern=layer_pattern or ["standard"],
             use_moe=False,
             ode_solver="rk4",
             ode_steps=1,
@@ -154,7 +154,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
             dropout=0.0,
             norm_type="layer_norm",
             use_bitnet=False,
-            layer_pattern=["standard_attn"],
+            layer_pattern=["standard"],
             use_moe=False,
             ode_solver="rk4",
             ode_steps=1,
@@ -209,7 +209,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
             dropout=0.0,
             norm_type="flash_norm",
             use_bitnet=False,
-            layer_pattern=["standard_attn"],
+            layer_pattern=["standard"],
             use_moe=False,
             ode_solver="rk4",
             ode_steps=1,
@@ -234,7 +234,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
             norm_type="flash_norm",
             flashnorm_partial_ratio=0.0,
             use_bitnet=False,
-            layer_pattern=["standard_attn"],
+            layer_pattern=["standard"],
             use_moe=False,
             ode_solver="rk4",
             ode_steps=1,
@@ -256,7 +256,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
             norm_type="flash_norm",
             flashnorm_partial_ratio=1.0,
             use_bitnet=False,
-            layer_pattern=["standard_attn"],
+            layer_pattern=["standard"],
             use_moe=False,
             ode_solver="rk4",
             ode_steps=1,
@@ -278,7 +278,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
                 norm_type="flash_norm",
                 flashnorm_partial_ratio=-0.1,
                 use_bitnet=False,
-                layer_pattern=["standard_attn"],
+                layer_pattern=["standard"],
                 use_moe=False,
                 ode_solver="rk4",
                 ode_steps=1,
@@ -300,7 +300,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
                 norm_type="flash_norm",
                 flashnorm_partial_ratio=1.5,
                 use_bitnet=False,
-                layer_pattern=["standard_attn"],
+                layer_pattern=["standard"],
                 use_moe=False,
                 ode_solver="rk4",
                 ode_steps=1,
@@ -321,7 +321,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
             dropout=0.0,
             norm_type="prms_norm",
             use_bitnet=False,
-            layer_pattern=["standard_attn"],
+            layer_pattern=["standard"],
             use_moe=False,
             ode_solver="rk4",
             ode_steps=1,
@@ -345,7 +345,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
                 norm_type="prms_norm",
                 prms_partial_ratio=0.0,
                 use_bitnet=False,
-                layer_pattern=["standard_attn"],
+                layer_pattern=["standard"],
                 use_moe=False,
                 ode_solver="rk4",
                 ode_steps=1,

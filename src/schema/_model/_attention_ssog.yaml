@@ -5,10 +5,10 @@ properties:
     type: object
     additionalProperties: false
     description: |-
-      Hyperparameters for `ssog_attn` (SSOG): Gaussian atoms per head, content steering, token grid geometry and numerical floors. Only applies when `ssog_attn` appears in `layer_pattern`.
+      Hyperparameters for `ssog` (SSOG): Gaussian atoms per head, content steering, token grid geometry and numerical floors. Only applies when `ssog` appears in `layer_pattern`.
       **References:** (paper: https://www.pisoni.ai/posts/ssog/)
     description_es: |-
-      Hiperparámetros para `ssog_attn` (SSOG): átomos Gaussianos por cabeza, dirección por contenido, geometría de la cuadrícula de tokens y pisos numéricos. Solo aplica cuando `ssog_attn` aparece en `layer_pattern`.
+      Hiperparámetros para `ssog` (SSOG): átomos Gaussianos por cabeza, dirección por contenido, geometría de la cuadrícula de tokens y pisos numéricos. Solo aplica cuando `ssog` aparece en `layer_pattern`.
       **Referencias:** (paper: https://www.pisoni.ai/posts/ssog/)
     properties:
       num_atoms:
@@ -16,14 +16,14 @@ properties:
         title: "SSOG Gaussian Atoms per Head"
         title_es: "Atomos Gaussianos SSOG por Cabeza"
         description: |-
-          Number `R` of Gaussian atoms per head for `ssog_attn`
+          Number `R` of Gaussian atoms per head for `ssog`
           (Separable Sum of Gaussians attention, Pisoni 2026,
           https://www.pisoni.ai/posts/ssog/). Each atom is five numbers
           (mu_y, mu_x, sigma_y, sigma_x, lambda) defining a 2D Gaussian
           over relative position. The field applies as two 1D filter
           passes per atom, so the `N x N` attention matrix never exists
           and cost scales as `O(R * N * sqrt(N) * d)`. Only applies when
-          `ssog_attn` appears in `layer_pattern`.
+          `ssog` appears in `layer_pattern`.
 
           **Examples explained:**
           - `num_atoms=4`: default and the recipe's sweet spot at small
@@ -37,14 +37,14 @@ properties:
 
           **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
-          Numero `R` de atomos Gaussianos por cabeza para `ssog_attn`
+          Numero `R` de atomos Gaussianos por cabeza para `ssog`
           (Separable Sum of Gaussians, Pisoni 2026,
           https://www.pisoni.ai/posts/ssog/). Cada atomo son cinco
           numeros (mu_y, mu_x, sigma_y, sigma_x, lambda) que definen una
           Gaussiana 2D sobre posicion relativa. El campo se aplica como
           dos pasadas de filtro 1D por atomo, por lo que la matriz de
           atencion `N x N` nunca existe y el costo escala como
-          `O(R * N * sqrt(N) * d)`. Solo aplica cuando `ssog_attn`
+          `O(R * N * sqrt(N) * d)`. Solo aplica cuando `ssog`
           aparece en `layer_pattern`.
 
           **Ejemplos explicados:**
@@ -65,7 +65,7 @@ properties:
         title: "SSOG Content Steering"
         title_es: "Direccionamiento por Contenido SSOG"
         description: |-
-          Enable content-conditioned steering for `ssog_attn`: tiny
+          Enable content-conditioned steering for `ssog`: tiny
           zero-initialized linear probes predict bounded per-token
           residuals on the atom centers (mu), widths (sigma) and mixture
           weights (lambda) behind cold-started gates. Content never
@@ -83,7 +83,7 @@ properties:
 
           **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
-          Habilita el direccionamiento por contenido para `ssog_attn`:
+          Habilita el direccionamiento por contenido para `ssog`:
           pequenas sondas lineales inicializadas en cero predicen
           residuos acotados por token sobre los centros de los atomos
           (mu), anchos (sigma) y pesos de mezcla (lambda), detras de
@@ -108,7 +108,7 @@ properties:
         title: "SSOG Max Steering Offset (grid cells)"
         title_es: "Desplazamiento Maximo SSOG (celdas de rejilla)"
         description: |-
-          Bound on per-token mu travel for `ssog_attn` steering, in grid
+          Bound on per-token mu travel for `ssog` steering, in grid
           cells. Residuals pass through `tanh`, so centers move at most
           `+/- max_offset` cells from the shared field. Must be > 0.
 
@@ -122,7 +122,7 @@ properties:
           **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Cota del desplazamiento por token de mu para el
-          direccionamiento `ssog_attn`, en celdas de rejilla. Los
+          direccionamiento `ssog`, en celdas de rejilla. Los
           residuos pasan por `tanh`, asi que los centros se mueven como
           maximo `+/- max_offset` celdas respecto al campo compartido.
           Debe ser > 0.
@@ -142,7 +142,7 @@ properties:
         title: "SSOG Cold-Start Gates"
         title_es: "Compuertas de Arranque en Frio SSOG"
         description: |-
-          Start the `ssog_attn` steering gates at ~0 (softplus(-8) ~=
+          Start the `ssog` steering gates at ~0 (softplus(-8) ~=
           3e-4) so the model begins life as a frozen geometric field and
           learns how far to open each content tap. `false` warm-starts
           the gates (softplus(-2) ~= 0.13).
@@ -154,7 +154,7 @@ properties:
 
           **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
-          Inicia las compuertas de direccionamiento `ssog_attn` en ~0
+          Inicia las compuertas de direccionamiento `ssog` en ~0
           (softplus(-8) ~= 3e-4) para que el modelo arranque como un
           campo geometrico congelado y aprenda cuanto abrir cada toma de
           contenido. `false` arranca las compuertas en caliente
@@ -172,7 +172,7 @@ properties:
         title: "SSOG Minimum Atom Width (grid cells)"
         title_es: "Ancho Minimo de Atomo SSOG (celdas de rejilla)"
         description: |-
-          Minimum Gaussian atom width for `ssog_attn`, in grid cells.
+          Minimum Gaussian atom width for `ssog`, in grid cells.
           Widths are reparametrized as `sigma = softplus(raw) + eps +
           sigma_floor`, guaranteeing strictly positive widths during
           gradient training. Must be >= 0.
@@ -184,7 +184,7 @@ properties:
 
           **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
-          Ancho minimo de los atomos Gaussianos para `ssog_attn`, en
+          Ancho minimo de los atomos Gaussianos para `ssog`, en
           celdas de rejilla. Los anchos se reparametrizan como
           `sigma = softplus(raw) + eps + sigma_floor`, garantizando
           anchos estrictamente positivos durante el entrenamiento por
@@ -203,7 +203,7 @@ properties:
         title: "SSOG Grid Rows"
         title_es: "Filas de Rejilla SSOG"
         description: |-
-          Rows of the token grid the `ssog_attn` field is defined over.
+          Rows of the token grid the `ssog` field is defined over.
           Tokens must be the row-major raster of `grid_h x grid_w`.
           `null` (default) derives `image_height // patch_size` — the
           right choice for `frankenstein_vit`. For non-vision grids set
@@ -218,7 +218,7 @@ properties:
           **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Filas de la rejilla de tokens sobre la que se define el campo
-          `ssog_attn`. Los tokens deben ser el raster row-major de
+          `ssog`. Los tokens deben ser el raster row-major de
           `grid_h x grid_w`. `null` (por defecto) deriva
           `image_height // patch_size` — la eleccion correcta para
           `frankenstein_vit`. Para rejillas no visuales debe fijarse
@@ -238,7 +238,7 @@ properties:
         title: "SSOG Grid Columns"
         title_es: "Columnas de Rejilla SSOG"
         description: |-
-          Columns of the token grid the `ssog_attn` field is defined
+          Columns of the token grid the `ssog` field is defined
           over. `null` (default) derives `image_width // patch_size`.
           For non-vision grids set it explicitly (e.g. the maximum
           sequence length for a 1D `grid_h=1` configuration).
@@ -250,7 +250,7 @@ properties:
           **References:** (paper: https://www.pisoni.ai/posts/ssog/)
         description_es: |-
           Columnas de la rejilla de tokens sobre la que se define el
-          campo `ssog_attn`. `null` (por defecto) deriva
+          campo `ssog`. `null` (por defecto) deriva
           `image_width // patch_size`. Para rejillas no visuales debe
           fijarse explicitamente (p.ej. la longitud maxima de secuencia
           para una configuracion 1D con `grid_h=1`).

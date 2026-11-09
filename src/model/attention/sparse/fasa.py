@@ -1,0 +1,291 @@
+"""Frequency-Aware Sparse Attention (Wang et al., 2026; arXiv:2602.03152).
+
+Implements a training-free sparse attention heuristic that leverages RoPE
+(Rotary Position Embedding) frequency properties to select important tokens.
+Each attention head is assigned a set of dominant frequency chunks derived
+from RoPE pairing dimensions. Token importance is estimated by computing
+dot-product similarity over only the dominant frequency dimensions, and full
+attention is computed exclusively over the top-k most important tokens. This
+avoids training or fine-tuning while achieving significant sparsity.
+
+.. note::
+    The **sparse selection path is inference-only**. When the enclosing
+    ``HybridLayer`` runs in training mode it routes this mixer through
+    :func:`~src.model.attention.common.dense_attention_forward` instead: the
+    layer is trained as standard dense attention over the same ``q/k/v/out``
+    projections, and the frequency-aware top-k heuristic only activates in
+    ``eval()``.
+
+Reference:
+    Wang, J., Li, Y., Zhang, H., Chen, X., Liu, Z., & Sun, M. (2026).
+    "FASA: Frequency-Aware Sparse Attention for Efficient Long-Context LLM Inference."
+    arXiv:2602.03152.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+import math
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from ...numerics import module_softmax
+
+from ..common import BitLinear, apply_pe_to_qk, dense_attention_forward
+
+
+class FASAAttention(nn.Module):
+    """Frequency-aware sparse attention using RoPE frequency chunk selection.
+
+    Each attention head is assigned a fixed set of ``n_tip`` dominant frequency
+    chunks (pairs of RoPE dimensions). Token importance is estimated by
+    computing dot-product similarity between queries and keys restricted to
+    these dominant dimensions only. The top ``n_fac`` most important tokens are
+    selected, and full-head attention is computed over the selected subset.
+
+    The dominant frequency chunk assignment is stored as a non-persistent
+    buffer and is head-specific, ensuring diversity across heads.
+
+    .. note::
+        The **sparse selection path is inference-only**. In training mode the
+        enclosing ``HybridLayer`` substitutes standard dense attention over
+        this module's own projections (see
+        :func:`~src.model.attention.common.dense_attention_forward`), so the
+        mixer can be trained from scratch and its sparse heuristic is used
+        from ``eval()`` onward.
+
+    Attributes:
+        hidden_size (int): Dimensionality of the input and output embeddings.
+        num_heads (int): Number of attention heads.
+        head_dim (int): Dimensionality of each attention head.
+        scale (float): Scaling factor for dot-product scores (1 / sqrt(head_dim)).
+        n_tip (int): Number of dominant frequency chunks (tip dimensions) per head.
+        n_fac (int): Number of top tokens to select for full attention (top-k).
+        dominant_fcs (torch.Tensor): Buffer of shape ``(num_heads, n_tip)``
+            storing the dominant frequency chunk indices for each head.
+        q_proj (nn.Module): Query projection (BitLinear or nn.Linear).
+        k_proj (nn.Module): Key projection (BitLinear or nn.Linear).
+        v_proj (nn.Module): Value projection (BitLinear or nn.Linear).
+        out_proj (nn.Module): Output projection (BitLinear or nn.Linear).
+        dropout (nn.Dropout): Dropout applied to attention weights.
+        mode (str): ``"encoder"`` or ``"decoder"``. Decoder mode applies causal
+            masking during importance estimation.
+
+    Reference:
+        Wang, J., Li, Y., Zhang, H., Chen, X., Liu, Z., & Sun, M. (2026).
+        "FASA: Frequency-Aware Sparse Attention for Efficient Long-Context LLM Inference."
+        arXiv:2602.03152.
+    """
+
+    def __init__(self, config, pos_encoder=None):
+        """Initialize FASAAttention.
+
+        Args:
+            config: Configuration object with the following expected attributes:
+                hidden_size (int): Model hidden dimension.
+                num_heads (int): Number of attention heads. Must divide
+                    ``hidden_size`` evenly.
+                dropout (float): Dropout probability for attention weights.
+                use_bitnet (bool): If True, use BitLinear projections.
+                fasa_n_tip (int, optional): Number of dominant frequency
+                    chunks per head. Defaults to 16.
+                fasa_n_fac (int, optional): Number of top tokens to select
+                    for full attention. Defaults to 256.
+                mode (str, optional): ``"encoder"`` or ``"decoder"``.
+                    Defaults to ``"encoder"``.
+            pos_encoder: Optional shared positional encoding module.
+
+        Raises:
+            ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
+        """
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.scale = self.head_dim ** -0.5
+
+        if self.hidden_size % self.num_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_heads for FASAAttention")
+
+        self.n_tip = max(1, int(getattr(config, "fasa_n_tip", 16)))
+        self.n_fac = max(1, int(getattr(config, "fasa_n_fac", 256)))
+
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.q_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.k_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.dropout = nn.Dropout(config.dropout)
+        self.mode = getattr(config, "mode", "encoder")
+
+        pair_dim = max(1, self.head_dim // 2)
+        dominant = torch.arange(self.n_tip, dtype=torch.long) % pair_dim
+        self.register_buffer("dominant_fcs", dominant.unsqueeze(0).repeat(self.num_heads, 1), persistent=False)
+
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "fasa_use_pe", True))
+
+    def _dominant_dim_indices(self, head_idx: int, device: torch.device) -> torch.Tensor:
+        """Get the dominant frequency dimension indices for a given head.
+
+        Each frequency chunk corresponds to a pair of RoPE dimensions
+        (2 * fc_idx and 2 * fc_idx + 1). This method expands the chunk
+        indices into the full set of dimension indices for the head.
+
+        Args:
+            head_idx (int): Index of the attention head.
+            device (torch.device): Device on which to place the index tensor.
+
+        Returns:
+            torch.Tensor: 1D tensor of dimension indices for the dominant
+                frequency chunks of the specified head.
+        """
+        fc_idx = self.dominant_fcs[head_idx].to(device)
+        dim_idx = torch.stack((fc_idx * 2, fc_idx * 2 + 1), dim=-1).flatten()
+        return dim_idx.clamp(max=self.head_dim - 1)
+
+    def make_cache_slot(self, meta, cache):
+        """KV slot caching post-RoPE keys (the importance proxy operates on
+        cached RoPE'd key dimensions — computation must stay full)."""
+        from ...cache.slots import KVSlot
+
+        kwargs = cache.codec_slot_kwargs()
+        return KVSlot(meta, codec=kwargs["codec"], policy=None, num_sinks=kwargs["num_sinks"])
+
+    def dense_forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+    ) -> torch.Tensor:
+        """Run standard dense attention with FASA's own projections (training).
+
+        Used by ``HybridLayer`` while ``model.train()`` is active: the layer
+        is trained as full dense attention and the frequency-aware top-k
+        selection is deferred to eval/inference.
+
+        Args:
+            x: Input tensor of shape ``(batch, seq_len, hidden_size)``.
+            logical_layer_idx: Logical layer index forwarded to the positional
+                encoder.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
+
+        Returns:
+            Output tensor of shape ``(batch, seq_len, hidden_size)``.
+        """
+        return dense_attention_forward(
+            self, x, logical_layer_idx=logical_layer_idx, pos_encoder=pos_encoder
+        )
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None, pos_encoder=None, cache=None, cache_position: Optional[int] = None) -> torch.Tensor:
+        """Compute frequency-aware sparse attention.
+
+        For each head independently:
+        1. Extracts the dominant frequency dimensions for that head.
+        2. Computes token importance scores using only those dimensions.
+        3. Selects the top ``n_fac`` most important tokens.
+        4. Computes full-head scaled dot-product attention over the selected
+           key-value subset.
+
+        In decoder mode, a causal mask is applied during importance estimation.
+
+        Cached decoding is exact: the per-row importance proxy and top-k
+        selection are row-local, so the decode step re-ranks the cached
+        (post-RoPE) keys per query — the importance CANNOT be precomputed
+        at write time (plan §6.4).
+
+        Args:
+            x (torch.Tensor): Input tensor of shape ``(batch, seq_len, hidden_size)``.
+            logical_layer_idx (Optional[int]): Logical layer index. Not used.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder``.
+            cache: Optional KV slot for incremental decoding (``None`` runs
+                the legacy full-recompute path, D4).
+            cache_position: Absolute index of the first token in ``x``.
+
+        Returns:
+            torch.Tensor: Output tensor of shape ``(batch, seq_len, hidden_size)``.
+
+        Raises:
+            Nothing is raised in training mode: ``HybridLayer`` routes training
+                calls to :meth:`dense_forward` instead of this method.
+        """
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
+        bsz, seq_len, hidden = x.shape
+
+        q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        slot = cache if getattr(cache, "kind", "") in ("kv", "ring") else None
+        if slot is not None:
+            from ...cache.hooks import causal_mask_from_positions, kv_decode_append, positions_for
+
+            offset = cache_position
+            positions = positions_for(offset, seq_len, x.device)
+            q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe, position_offset=offset)
+            K, V, kv_positions, _ = kv_decode_append(slot, k, v, positions)
+            total = K.size(-2)
+            n_select = min(self.n_fac, total)
+
+            mask = None
+            if seq_len > 1:
+                mask = causal_mask_from_positions(positions, kv_positions)
+
+            out = torch.zeros_like(q)
+            for h in range(self.num_heads):
+                dim_idx = self._dominant_dim_indices(h, x.device)
+                q_sub = q[:, h, :, dim_idx]           # (B, S, d_sub)
+                k_sub = K[:, h, :, dim_idx]           # (B, T, d_sub)
+                importance = torch.matmul(q_sub, k_sub.transpose(-2, -1))  # (B, S, T)
+                if mask is not None:
+                    importance = importance * (~mask).unsqueeze(0).to(importance.dtype)
+                top_idx = importance.topk(n_select, dim=-1).indices  # (B, S, n)
+
+                # Gather per (batch, query): K/V rows selected per query row.
+                k_head = K[:, h]  # (B, T, d)
+                v_head = V[:, h]
+                idx_e = top_idx.unsqueeze(-1).expand(bsz, seq_len, n_select, k_head.size(-1))
+                k_sel = k_head.unsqueeze(1).expand(bsz, seq_len, total, k_head.size(-1)).gather(2, idx_e)  # (B, S, n, d)
+                v_sel = v_head.unsqueeze(1).expand(bsz, seq_len, total, k_head.size(-1)).gather(2, idx_e)
+                scores = (q[:, h].unsqueeze(2) * k_sel).sum(dim=-1) / math.sqrt(self.head_dim)
+                attn = module_softmax(self, scores, dim=-1)
+                out[:, h] = torch.sum(attn.unsqueeze(-1) * v_sel, dim=2)
+
+            out = self.dropout(out)
+            out = out.transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+            return self.out_proj(out)
+
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
+        out = torch.zeros_like(q)
+        n_select = min(self.n_fac, seq_len)
+
+        for h in range(self.num_heads):
+            dim_idx = self._dominant_dim_indices(h, x.device)
+            q_sub = q[:, h, :, dim_idx]
+            k_sub = k[:, h, :, dim_idx]
+            importance = torch.matmul(q_sub, k_sub.transpose(-2, -1))
+            if self.mode == "decoder":
+                causal = torch.tril(torch.ones(seq_len, seq_len, device=x.device))
+                importance = importance * causal.unsqueeze(0)
+            top_idx = importance.topk(n_select, dim=-1).indices
+
+            for b in range(bsz):
+                k_head = k[b, h]
+                v_head = v[b, h]
+                k_sel = k_head[top_idx[b]]
+                v_sel = v_head[top_idx[b]]
+                q_head = q[b, h].unsqueeze(1)
+                scores = (q_head * k_sel).sum(dim=-1) / math.sqrt(self.head_dim)
+                attn = module_softmax(self, scores, dim=-1)
+                out[b, h] = torch.sum(attn.unsqueeze(-1) * v_sel, dim=1)
+
+        out = self.dropout(out)
+        out = out.transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+        return self.out_proj(out)

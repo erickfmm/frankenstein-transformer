@@ -22,11 +22,11 @@ generation start (a configuration error, never a mid-decode failure):
 * ``pyramid`` — static per-layer budgets, deeper layers get less
   (PyramidKV, arXiv:2406.02069; CAKE arXiv:2503.12491; D2O arXiv:2406.13035).
 * ``sparsek`` — learned scorer + top-k retention (SparseK,
-  arXiv:2406.16747); only applies to ``sparsek_attn`` layers (D14).
+  arXiv:2406.16747); only applies to ``sparsek`` layers (D14).
 
 Constraints (plan §10): policies apply only to position-indexed slots
 (``KVSlot`` / ``RingSlot`` / ``LatentKVSlot``); ``StateSlot``\\ s are
-constant-size; ``mtla_attn`` slots are excluded (D13).
+constant-size; ``mtla`` slots are excluded (D13).
 """
 
 from __future__ import annotations

@@ -38,6 +38,6 @@ When compatible, the command creates:
 All schema-declared layer types are recognized by the exporter.  
 Special case:
 
-- `fasa_attn`, `sparge_attn`: exported for inference, but they are eval-only layers for training.
+- `fasa`, `sparge`: exported for inference, but they are eval-only layers for training.
 
 If a checkpoint/YAML includes layer types outside the schema enum, the command marks the export as incompatible and writes details to `compatibility_report.json`.

@@ -12,7 +12,7 @@ model:
     num_loops: 1
     num_heads: 8
     layer_pattern:
-    - standard_attn
+    - standard
   norm:
     type: rms_norm
     qk_norm:

@@ -506,7 +506,7 @@ def _build_compatibility_report(
             "Unknown layer types (not in schema enum): " + ", ".join(unknown_layers)
         )
 
-    inference_sparse_layers = {"fasa_attn", "sparge_attn"}
+    inference_sparse_layers = {"fasa", "sparge"}
     used_sparse_layers = sorted(set(model_layers) & inference_sparse_layers)
     if used_sparse_layers:
         warnings.append(

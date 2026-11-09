@@ -139,28 +139,28 @@ cli_main([
 | `es_mlm_mdeberta_shampoo.yaml` | mlm | `microsoft/mdeberta-v3-base` | `shampoo` | n/a | base-model MLM | high | `p40_experimental` |
 | `es_mlm_deberta_soap.yaml` | mlm | `microsoft/deberta-v3-base` | `soap` | n/a | base-model MLM | high | `p40_experimental` |
 | `es_mlm_albert_sophia.yaml` | mlm | `albert-base-v2` | `sophia` | n/a | base-model MLM | low | `p40_safe` |
-| `es_arch_titan_dynamic_tanh_sgd_momentum.yaml` | mlm | custom `frankenstein` | `sgd_momentum` | `dynamic_tanh` | `[titan_attn]` | medium | `p40_safe` |
-| `es_arch_standard_layer_norm_prodigy.yaml` | mlm | custom `frankenstein` | `prodigy` | `layer_norm` | `[standard_attn]` | medium | `p40_safe` |
-| `es_arch_sigmoid_derf_muon.yaml` | mlm | custom `frankenstein` | `muon` | `derf` | `[sigmoid_attn]` | medium | `p40_experimental` |
-| `es_arch_hybrid_turbo_muon.yaml` | mlm | custom `frankenstein` hybrid | `turbo_muon` | `layer_norm` | `[retnet, titan_attn, mamba, ode]` | high | `p40_experimental` |
-| `es_arch_titan_hope_adan.yaml` | mlm | custom `frankenstein` | `adan` | `dynamic_tanh` | `[titan_attn]` | high | `p40_experimental` |
-| `es_arch_standard_sigmoid_adopt.yaml` | mlm | custom `frankenstein` | `adopt` | `layer_norm` | `[standard_attn, sigmoid_attn]` | medium | `p40_safe` |
-| `es_arch_moe_titan_ademamix.yaml` | mlm | custom `frankenstein` MoE | `ademamix` | `layer_norm` | `[titan_attn, retnet]` | high | `p40_experimental` |
-| `es_arch_bitnet_factorized_mars_adamw.yaml` | mlm | custom `frankenstein` BitNet+factorized | `mars_adamw` | `derf` | `[retnet, standard_attn]` | medium | `p40_safe` |
-| `es_arch_mini_cautious_adamw.yaml` | mlm | custom `frankenstein` | `cautious_adamw` | `layer_norm` | `[retnet, titan_attn, mamba, ode, standard_attn, sigmoid_attn]` | low-medium | `p40_safe` |
-| `es_arch_gla_deltanet_lion.yaml` | mlm | custom `frankenstein` gated | `lion` | `layer_norm` | `[gla_attn, deltanet_attn]` | medium | `p40_safe` |
-| `es_arch_hgrn2_fox_gated_softmax_adamw.yaml` | mlm | custom `frankenstein` gated | `adamw` | `dynamic_tanh` | `[hgrn2_attn, fox_attn, gated_softmax_attn]` | medium | `p40_safe` |
+| `es_arch_titan_dynamic_tanh_sgd_momentum.yaml` | mlm | custom `frankenstein` | `sgd_momentum` | `dynamic_tanh` | `[titan]` | medium | `p40_safe` |
+| `es_arch_standard_layer_norm_prodigy.yaml` | mlm | custom `frankenstein` | `prodigy` | `layer_norm` | `[standard]` | medium | `p40_safe` |
+| `es_arch_sigmoid_derf_muon.yaml` | mlm | custom `frankenstein` | `muon` | `derf` | `[sigmoid]` | medium | `p40_experimental` |
+| `es_arch_hybrid_turbo_muon.yaml` | mlm | custom `frankenstein` hybrid | `turbo_muon` | `layer_norm` | `[retnet, titan, mamba, ode]` | high | `p40_experimental` |
+| `es_arch_titan_hope_adan.yaml` | mlm | custom `frankenstein` | `adan` | `dynamic_tanh` | `[titan]` | high | `p40_experimental` |
+| `es_arch_standard_sigmoid_adopt.yaml` | mlm | custom `frankenstein` | `adopt` | `layer_norm` | `[standard, sigmoid]` | medium | `p40_safe` |
+| `es_arch_moe_titan_ademamix.yaml` | mlm | custom `frankenstein` MoE | `ademamix` | `layer_norm` | `[titan, retnet]` | high | `p40_experimental` |
+| `es_arch_bitnet_factorized_mars_adamw.yaml` | mlm | custom `frankenstein` BitNet+factorized | `mars_adamw` | `derf` | `[retnet, standard]` | medium | `p40_safe` |
+| `es_arch_mini_cautious_adamw.yaml` | mlm | custom `frankenstein` | `cautious_adamw` | `layer_norm` | `[retnet, titan, mamba, ode, standard, sigmoid]` | low-medium | `p40_safe` |
+| `es_arch_gla_deltanet_lion.yaml` | mlm | custom `frankenstein` gated | `lion` | `layer_norm` | `[gla, deltanet]` | medium | `p40_safe` |
+| `es_arch_hgrn2_fox_gated_softmax_adamw.yaml` | mlm | custom `frankenstein` gated | `adamw` | `dynamic_tanh` | `[hgrn2, fox, gated_softmax]` | medium | `p40_safe` |
 | `es_arch_all_gated_muon.yaml` | mlm | custom `frankenstein` all-gated BitNet | `muon` | `derf` | all 6 gated types | high | `p40_experimental` |
-| `es_arch_sparse_longformer_adamw.yaml` | mlm | custom `frankenstein` sparse | `adamw` | `layer_norm` | `[sparse_transformer_attn, longformer_attn]` | medium-high | `p40_safe` |
-| `es_arch_bigbird_sparsek_lamb.yaml` | mlm | custom `frankenstein` sparse | `lamb` | `layer_norm` | `[bigbird_attn, sparsek_attn]` | medium-high | `p40_safe` |
-| `es_arch_nsa_retnet_radam.yaml` | mlm | custom `frankenstein` sparse+retnet | `radam` | `dynamic_tanh` | `[nsa_attn, retnet_attn]` | medium | `p40_safe` |
-| `es_arch_conformer_adamw.yaml` | mlm | custom `frankenstein` convolution-augmented | `adamw` | `layer_norm` | `[conformer_attn, standard_attn]` ×4 | medium | `p40_safe` |
+| `es_arch_sparse_longformer_adamw.yaml` | mlm | custom `frankenstein` sparse | `adamw` | `layer_norm` | `[sparse_transformer, longformer]` | medium-high | `p40_safe` |
+| `es_arch_bigbird_sparsek_lamb.yaml` | mlm | custom `frankenstein` sparse | `lamb` | `layer_norm` | `[bigbird, sparsek]` | medium-high | `p40_safe` |
+| `es_arch_nsa_retnet_radam.yaml` | mlm | custom `frankenstein` sparse+retnet | `radam` | `dynamic_tanh` | `[nsa, retnet]` | medium | `p40_safe` |
+| `es_arch_conformer_adamw.yaml` | mlm | custom `frankenstein` convolution-augmented | `adamw` | `layer_norm` | `[conformer, standard]` ×4 | medium | `p40_safe` |
 | `es_sbert_beto_mean.yaml` | sbert | `dccuchile/bert-base-spanish-wwm-cased` | n/a (SBERT trainer) | n/a | sentence pooling `mean` | medium | `p40_safe` |
 | `es_sbert_bertin_cls.yaml` | sbert | `bertin-project/bertin-roberta-base-spanish` | n/a (SBERT trainer) | n/a | sentence pooling `cls` | medium | `p40_safe` |
 | `es_sbert_maria_max.yaml` | sbert | `PlanTL-GOB-ES/roberta-base-bne` | n/a (SBERT trainer) | n/a | sentence pooling `max` | medium | `p40_safe` |
 | `es_sbert_modernbert_mean.yaml` | sbert | `answerdotai/ModernBERT-base` | n/a (SBERT trainer) | n/a | sentence pooling `mean` | medium-high | `p40_experimental` |
 | `es_sbert_xlmr_mean.yaml` | sbert | `xlm-roberta-base` | n/a (SBERT trainer) | n/a | sentence pooling `mean` | high | `p40_safe` |
-| `embedding_dynamic.yaml` | mlm | custom `frankenstein` + dynamic embeddings (EELBERT) | `adamw` | `layer_norm` | `[standard_attn]` ×2 | low | `p40_safe` |
+| `embedding_dynamic.yaml` | mlm | custom `frankenstein` + dynamic embeddings (EELBERT) | `adamw` | `layer_norm` | `[standard]` ×2 | low | `p40_safe` |
 
 ## Selector Guides
 ### Decoder autoregressive presets (famous architecture-inspired)
@@ -188,7 +188,7 @@ cli_main([
 ### Sparse attention presets
 - `es_arch_sparse_longformer_adamw.yaml` — SparseTransformer + Longformer
 - `es_arch_bigbird_sparsek_lamb.yaml` — BigBird + SparseK
-- `es_arch_nsa_retnet_radam.yaml` — NSA + RetNetAttention
+- `es_arch_nsa_retnet_radam.yaml` — NSA + RetNet
 
 ### Best first run
 - `es_mlm_beto_adamw.yaml`

@@ -12,8 +12,8 @@ model:
     num_kv_heads: 2
     dropout: 0.1
     layer_pattern:
-    - conformer_attn
-    - standard_attn
+    - conformer
+    - standard
     mode: encoder
   norm:
     type: layer_norm

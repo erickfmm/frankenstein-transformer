@@ -29,7 +29,7 @@ def _tiny_audio_config(**overrides) -> FrankensteinModelConfig:
         dropout=0.0,
         norm_type="layer_norm",
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         use_moe=False,
         ode_solver="rk4",
         ode_steps=1,

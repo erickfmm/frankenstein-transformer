@@ -8,7 +8,7 @@ model:
     num_heads: 8
     num_kv_heads: 4
     layer_pattern:
-    - mtla_attn
+    - mtla
   norm:
     type: layer_norm
   embedding:

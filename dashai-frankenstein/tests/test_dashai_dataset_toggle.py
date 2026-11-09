@@ -481,7 +481,7 @@ def test_engine_causal_lm_accepts_caller_dataset(dashai_db, tmp_path, monkeypatc
     cfg = {
         "model_class": "frankenstein_text_decoder",
         "model": {"dims": {"hidden_size": 64, "num_layers": 2,
-                           "num_heads": 4, "layer_pattern": ["standard_attn"]}},
+                           "num_heads": 4, "layer_pattern": ["standard"]}},
         "tokenizer": {"name_or_path": "prajjwal1/bert-tiny"},
         "training": {"task": "causal_lm",
                      "optimizer": {"optimizer_class": "AdamW",
@@ -586,7 +586,7 @@ class TestTokenizerTrainFromDataset:
             "model_class": "frankenstein_text_encoder",
             "model": {"dims": {"hidden_size": 32, "num_layers": 1,
                                "num_heads": 4,
-                               "layer_pattern": ["standard_attn"]}},
+                               "layer_pattern": ["standard"]}},
             "tokenizer": {
                 "source": "train_from_dataset",
                 "training": {

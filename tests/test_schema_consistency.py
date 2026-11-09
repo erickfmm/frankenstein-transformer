@@ -258,7 +258,7 @@ def test_optional_ranks_accept_explicit_null(schema):
             "num_layers": 1,
             "num_loops": 1,
             "num_heads": 4,
-            "layer_pattern": ["standard_attn"],
+            "layer_pattern": ["standard"],
         },
         "attention": {
             "mla": {"latent_rank": None},
@@ -319,4 +319,4 @@ def test_titan_pe_subtree_and_placeholders_are_removed():
     assert alibi["properties"], "alibi placeholder must expose at least num_heads"
 
     use_pe = pe["properties"]["positional_encoding_parameters"]["properties"]["use_pe"]["properties"]
-    assert "ssog_attn" in use_pe
+    assert "ssog" in use_pe

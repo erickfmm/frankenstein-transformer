@@ -537,7 +537,7 @@ class BuildPosEncoderFactoryTests(unittest.TestCase):
         return FrankensteinModelConfig(
             vocab_size=100, hidden_size=48, num_layers=1, num_loops=1,
             num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-            dropout=0.0, layer_pattern=["standard_attn"], use_bitnet=False,
+            dropout=0.0, layer_pattern=["standard"], use_bitnet=False,
             norm_type="layer_norm", use_moe=False, ffn_activation="gelu",
             positional_encoding=pe,
         )

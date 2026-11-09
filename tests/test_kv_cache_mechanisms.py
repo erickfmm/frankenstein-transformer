@@ -29,7 +29,7 @@ def _cfg(**overrides):
         num_kv_heads=2,
         dropout=0.0,
         use_bitnet=False,
-        layer_pattern=["standard_attn", "gqa_attn"],
+        layer_pattern=["standard", "gqa"],
         mode="decoder",
         positional_encoding="rope",
         norm_type="layer_norm",
@@ -85,7 +85,7 @@ class MhcTests(unittest.TestCase):
             mhc_hyperloop_end_layers=1,
             num_layers=3,
             num_loops=2,
-            layer_pattern=["standard_attn", "gqa_attn", "standard_attn"],
+            layer_pattern=["standard", "gqa", "standard"],
         )
         prompt = torch.randint(0, 64, (1, 5))
         with torch.inference_mode():

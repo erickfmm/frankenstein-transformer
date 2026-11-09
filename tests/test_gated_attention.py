@@ -11,7 +11,6 @@ if TORCH_AVAILABLE:
         GatedLinearAttention,
         DeltaNetAttention,
         GatedDeltaNetAttention,
-        RetNetAttention,
         HGRN2Attention,
         ForgettingAttention,
         GatedSoftmaxAttention,
@@ -32,7 +31,7 @@ def _cfg(**overrides):
         dropout=0.0,
         norm_type="layer_norm",
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         use_moe=False,
         ode_solver="rk4",
         ode_steps=1,
@@ -98,24 +97,6 @@ class GatedDeltaNetAttentionTests(unittest.TestCase):
 
     def test_gradient_flows(self):
         attn = GatedDeltaNetAttention(_cfg())
-        x = _x().requires_grad_(True)
-        attn(x).sum().backward()
-        self.assertIsNotNone(x.grad)
-
-
-@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
-class RetNetAttentionTests(unittest.TestCase):
-    def test_output_shape(self):
-        attn = RetNetAttention(_cfg())
-        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
-
-    def test_logical_layer_idx_accepted(self):
-        attn = RetNetAttention(_cfg())
-        y = attn(_x(), logical_layer_idx=2)
-        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
-
-    def test_gradient_flows(self):
-        attn = RetNetAttention(_cfg())
         x = _x().requires_grad_(True)
         attn(x).sum().backward()
         self.assertIsNotNone(x.grad)

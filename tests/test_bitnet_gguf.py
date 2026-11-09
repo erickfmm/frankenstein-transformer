@@ -1,6 +1,6 @@
 """Tests for the best-effort GGUF (BitNet i2_s) exporter.
 
-Covers the compatibility check (standard_attn-only accepted, hybrids and
+Covers the compatibility check (standard-only accepted, hybrids and
 non-bitnet rejected), the GGUF binary header (magic, version, tensor count),
 and the i2_s ternary packing helper.
 """
@@ -54,7 +54,7 @@ class TestBitNetGGUFExport(unittest.TestCase):
         cfg = FrankensteinModelConfig(
             vocab_size=64, hidden_size=64, num_layers=2, num_heads=4,
             use_bitnet=True, use_moe=False, ffn_hidden_size=128,
-            layer_pattern=["standard_attn"], mode=mode,
+            layer_pattern=["standard"], mode=mode,
         )
         model = (FrankensteinDecoder(cfg) if mode == "decoder"
                  else FrankensteinEncoder(cfg))
@@ -62,29 +62,29 @@ class TestBitNetGGUFExport(unittest.TestCase):
         torch.save({"model_state_dict": model.state_dict()}, path)
         return path
 
-    def test_compatibility_standard_attn_ok(self):
+    def test_compatibility_standard_ok(self):
         yp = os.path.join(self.tmpdir, "ok.yaml")
-        _write_yaml(yp, ["standard_attn"])
+        _write_yaml(yp, ["standard"])
         res = check_gguf_compatibility(yp)
         self.assertTrue(res["is_compatible"])
 
     def test_compatibility_hybrid_rejected(self):
         yp = os.path.join(self.tmpdir, "hyb.yaml")
-        _write_yaml(yp, ["standard_attn", "retnet"])
+        _write_yaml(yp, ["standard", "retnet"])
         res = check_gguf_compatibility(yp)
         self.assertFalse(res["is_compatible"])
-        self.assertIn("standard_attn", res["reason"])
+        self.assertIn("standard", res["reason"])
 
     def test_compatibility_non_bitnet_rejected(self):
         yp = os.path.join(self.tmpdir, "fp.yaml")
-        _write_yaml(yp, ["standard_attn"], use_bitnet=False)
+        _write_yaml(yp, ["standard"], use_bitnet=False)
         res = check_gguf_compatibility(yp)
         self.assertFalse(res["is_compatible"])
 
     def test_export_header_and_tensors(self):
         ckpt = self._make_checkpoint()
         yp = os.path.join(self.tmpdir, "ok.yaml")
-        _write_yaml(yp, ["standard_attn"])
+        _write_yaml(yp, ["standard"])
         out = os.path.join(self.tmpdir, "m.gguf")
         res = export_bitnet_gguf(ckpt, yp, out)
         self.assertEqual(res["status"], "ok")
@@ -100,7 +100,7 @@ class TestBitNetGGUFExport(unittest.TestCase):
     def test_export_decoder(self):
         ckpt = self._make_checkpoint(mode="decoder")
         yp = os.path.join(self.tmpdir, "ok.yaml")
-        _write_yaml(yp, ["standard_attn"])
+        _write_yaml(yp, ["standard"])
         out = os.path.join(self.tmpdir, "dec.gguf")
         res = export_bitnet_gguf(ckpt, yp, out)
         self.assertEqual(res["status"], "ok")
@@ -108,7 +108,7 @@ class TestBitNetGGUFExport(unittest.TestCase):
     def test_export_hybrid_raises(self):
         ckpt = self._make_checkpoint()
         yp = os.path.join(self.tmpdir, "hyb.yaml")
-        _write_yaml(yp, ["standard_attn", "mamba"])
+        _write_yaml(yp, ["standard", "mamba"])
         out = os.path.join(self.tmpdir, "x.gguf")
         with self.assertRaises(GGUFExportError):
             export_bitnet_gguf(ckpt, yp, out)

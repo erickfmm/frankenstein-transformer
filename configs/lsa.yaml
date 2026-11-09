@@ -24,30 +24,30 @@ model:
     dropout: 0.0
     mode: decoder
     layer_pattern:
-    - lsa_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - lsa_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - lsa_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - lsa_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - lsa_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - lsa_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
+    - lsa
+    - gated_deltanet
+    - gated_deltanet
+    - gated_deltanet
+    - lsa
+    - gated_deltanet
+    - gated_deltanet
+    - gated_deltanet
+    - lsa
+    - gated_deltanet
+    - gated_deltanet
+    - gated_deltanet
+    - lsa
+    - gated_deltanet
+    - gated_deltanet
+    - gated_deltanet
+    - lsa
+    - gated_deltanet
+    - gated_deltanet
+    - gated_deltanet
+    - lsa
+    - gated_deltanet
+    - gated_deltanet
+    - gated_deltanet
   norm:
     type: rms_norm
   embedding:

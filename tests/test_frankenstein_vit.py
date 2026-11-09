@@ -100,7 +100,7 @@ class TestFrankensteinViT:
     def test_multiple_mixers(self, dummy_image):
         cfg = FrankensteinViT.build_vit_config(
             hidden_size=64, num_layers=2, num_heads=4, patch_size=8,
-            image_height=32, image_width=32, layer_pattern=["titan_attn", "standard_attn"],
+            image_height=32, image_width=32, layer_pattern=["titan", "standard"],
         )
         model = FrankensteinViT(cfg)
         out = model(dummy_image, task="classification")

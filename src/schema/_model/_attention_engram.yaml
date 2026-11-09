@@ -5,10 +5,10 @@ properties:
     type: object
     additionalProperties: false
     description: |-
-      Configuration of the Engram conditional-memory module: N-gram orders, hashing heads, per-head embedding width and the short conv over retrieved vectors. Only applies when `engram_attn` appears in `layer_pattern`.
+      Configuration of the Engram conditional-memory module: N-gram orders, hashing heads, per-head embedding width and the short conv over retrieved vectors. Only applies when `engram` appears in `layer_pattern`.
       **References:** (paper: arxiv:2601.07372)
     description_es: |-
-      Configuración del módulo de memoria condicional Engram: órdenes de N-gramas, cabezas de hashing, ancho de embedding por cabeza y la conv corta sobre los vectores recuperados. Solo aplica cuando `engram_attn` aparece en `layer_pattern`.
+      Configuración del módulo de memoria condicional Engram: órdenes de N-gramas, cabezas de hashing, ancho de embedding por cabeza y la conv corta sobre los vectores recuperados. Solo aplica cuando `engram` aparece en `layer_pattern`.
       **Referencias:** (paper: arxiv:2601.07372)
     properties:
       max_ngram_size:
@@ -18,7 +18,7 @@ properties:
         description: |
           Highest N-gram order for the Engram conditional memory module (paper: arxiv:2601.07372).
           Builds lookup tables for all N-gram sizes from 2 up to this value. 3 = bigrams + trigrams.
-          Only when `engram_attn` appears in `layer_pattern`.
+          Only when `engram` appears in `layer_pattern`.
 
           **Impact:** Higher values give richer context keys but increase the number of
           embedding tables quadratically.
@@ -27,7 +27,7 @@ properties:
         description_es: |
           Orden máximo de N-grama para el módulo de memoria condicional Engram (paper: arxiv:2601.07372).
           Construye tablas de búsqueda para todos los tamaños de N-grama desde 2 hasta este valor.
-          3 = bigramas + trigramas. Solo cuando `engram_attn` aparece en `layer_pattern`.
+          3 = bigramas + trigramas. Solo cuando `engram` aparece en `layer_pattern`.
 
           **Impacto:** Valores mayores dan claves de contexto más ricas pero aumentan el número de
           embedding tables quadratically.
@@ -41,7 +41,7 @@ properties:
         description: |
           Independent hash functions (heads) per N-gram order in the Engram module. Each head uses
           a different prime modulus for statistically independent collisions. More heads = more retrieval
-          diversity, more embedding params. Only when `engram_attn` in `layer_pattern`.
+          diversity, more embedding params. Only when `engram` in `layer_pattern`.
 
           **Impact:** Typical: 4–8. Total Engram params grow with: (max_ngram-1) × n_heads × embed_dim.
 
@@ -49,7 +49,7 @@ properties:
         description_es: |
           Funciones hash independientes (cabezas) por orden de N-grama en el módulo Engram. Cada
           cabeza usa un módulo primo diferente para colisiones estadísticamente independientes. Más cabezas
-          = más diversidad de recuperación, más parámetros de embedding. Solo con `engram_attn` en `layer_pattern`.
+          = más diversidad de recuperación, más parámetros de embedding. Solo con `engram` en `layer_pattern`.
 
           **Impacto:** Típico: 4–8. Total Engram params crecen con: (max_ngram-1) × n_heads × embed_dim.
 
@@ -62,7 +62,7 @@ properties:
         description: |
           Dimensionality of each per-head N-gram embedding. Total Engram hidden size =
           `(max_ngram_size-1) × n_heads_per_ngram × embed_dim_per_head`. Typical: 16–64 (small), 128+ (large).
-          Only when `engram_attn` in `layer_pattern`.
+          Only when `engram` in `layer_pattern`.
 
           **Impact:** Lower = memory savings. Higher = more expressivity. With max_ngram=3, heads=4, dim=32:
           total = 2 × 4 × 32 = 256 channels.
@@ -71,7 +71,7 @@ properties:
         description_es: |
           Dimensionalidad de cada embedding N-grama por cabeza. Tamaño total oculto de Engram =
           `(max_ngram_size-1) × n_heads_per_ngram × embed_dim_per_head`. Típico: 16–64 (pequeño), 128+ (grande).
-          Solo con `engram_attn` en `layer_pattern`.
+          Solo con `engram` en `layer_pattern`.
 
           **Impacto:** Menor = ahorro de memoria. Mayor = más expresividad. Con max_ngram=3, heads=4, dim=32:
           total = 2 × 4 × 32 = 256 channels.
@@ -85,7 +85,7 @@ properties:
         description: |
           Kernel width of causal depthwise conv on retrieved N-gram embeddings. Typical: 3–8.
           Dilated by `max_ngram_size` → effective receptive field = `kernel_size × max_ngram_size` tokens.
-          Only when `engram_attn` in `layer_pattern`.
+          Only when `engram` in `layer_pattern`.
 
           **Impact:** Larger kernels capture wider local context in the embedding space.
 
@@ -93,7 +93,7 @@ properties:
         description_es: |
           Ancho del kernel de convolución causal depthwise sobre embeddings N-grama recuperados.
           Típico: 3–8. Dilatado por `max_ngram_size` → campo receptivo efectivo = `kernel_size × max_ngram_size` tokens.
-          Solo con `engram_attn` en `layer_pattern`.
+          Solo con `engram` en `layer_pattern`.
 
           **Impacto:** Kernels más grandes capturan contexto local más amplio en el espacio de embedding.
 
@@ -106,7 +106,7 @@ properties:
         description: |
           Random seed for generating odd multipliers for N-gram hashing in the Engram module.
           Changing produces a different but equally valid hash mapping. Fixed value for reproducibility.
-          Only when `engram_attn` in `layer_pattern`.
+          Only when `engram` in `layer_pattern`.
 
           **Impact:** Affects which tokens collide in hash space. Use 42 for standard
           reproducibility. Change if adverse collisions are suspected.
@@ -115,7 +115,7 @@ properties:
         description_es: |
           Semilla aleatoria para generar multiplicadores impares para hashing de N-gramas en el
           módulo Engram. Cambiarla produce un mapeo hash diferente pero igualmente válido. Valor fijo para
-          reproducibilidad. Solo con `engram_attn` en `layer_pattern`.
+          reproducibilidad. Solo con `engram` en `layer_pattern`.
 
           **Impacto:** Afecta qué tokens colisionan en el espacio hash. Usar 42 para reproducibilidad
           reproducibility. Change if adverse collisions are suspected.

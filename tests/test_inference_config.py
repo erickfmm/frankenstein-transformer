@@ -81,7 +81,7 @@ class FlattenTests(unittest.TestCase):
                 "enabled": True,
                 "quantization": {"method": "int8"},
                 "compression": {"method": "window_sinks", "num_sinks": 2, "window": 64},
-                "per_mixer": [{"mixer": "standard_attn", "enabled": False}],
+                "per_mixer": [{"mixer": "standard", "enabled": False}],
             },
         }
         flat = flatten_inference_dict(data)
@@ -92,7 +92,7 @@ class FlattenTests(unittest.TestCase):
         self.assertEqual(flat["kv_compress_method"], "window_sinks")
         self.assertEqual(flat["kv_num_sinks"], 2)
         self.assertEqual(flat["kv_window"], 64)
-        self.assertEqual(flat["kv_per_mixer"], [{"mixer": "standard_attn", "enabled": False}])
+        self.assertEqual(flat["kv_per_mixer"], [{"mixer": "standard", "enabled": False}])
 
     def test_flatten_absent_section(self):
         self.assertEqual(flatten_inference_dict(None), {})
@@ -103,7 +103,7 @@ class LoadAndPrecedenceTests(unittest.TestCase):
     def test_load_from_yaml_path(self):
         doc = {
             "model": {
-                "dims": {"layer_pattern": ["standard_attn"], "hidden_size": 32},
+                "dims": {"layer_pattern": ["standard"], "hidden_size": 32},
                 "positional_encoding": "rope",
             },
             "inference": {
@@ -193,7 +193,7 @@ class LoadAndPrecedenceTests(unittest.TestCase):
     def test_warning_for_unsupported_mixer(self):
         doc = {
             "model": {
-                "dims": {"layer_pattern": ["ssog_attn"]},
+                "dims": {"layer_pattern": ["ssog"]},
                 "positional_encoding": "rope",
             },
             "inference": {"kv_cache": {"enabled": True}},
@@ -201,7 +201,7 @@ class LoadAndPrecedenceTests(unittest.TestCase):
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             load_inference_config(doc)
-        self.assertIn("ssog_attn", buffer.getvalue())
+        self.assertIn("ssog", buffer.getvalue())
         self.assertIn("WARNING", buffer.getvalue())
 
 
@@ -214,7 +214,7 @@ class SerializationTests(unittest.TestCase):
             kv_compress_method="window_sinks",
             kv_budget=128,
             kv_per_layer_budgets=[64, 32],
-            kv_per_mixer=[{"mixer": "gqa_attn", "enabled": True}],
+            kv_per_mixer=[{"mixer": "gqa", "enabled": True}],
         )
         data = inference_config_to_dict(cfg)
         self.assertEqual(data["generation"]["max_new_tokens"], 9)

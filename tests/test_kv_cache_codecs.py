@@ -23,7 +23,7 @@ if TORCH_AVAILABLE:
 
 def _meta():
     return SlotMeta(
-        mixer_key="standard_attn",
+        mixer_key="standard",
         logical_layer_idx=0,
         num_heads=1,
         num_kv_heads=1,

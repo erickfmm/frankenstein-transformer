@@ -591,7 +591,7 @@ def default_model_cfg(vocab_size: int = TOY_VOCAB_SIZE, num_layers: int = 2, num
             "num_kv_heads": 4,
             "retention_heads": 8,
             "dropout": 0.0,
-            "layer_pattern": ["standard_attn", "standard_attn"],
+            "layer_pattern": ["standard", "standard"],
             "mode": "encoder",
         },
         "norm": {"type": "layer_norm"},

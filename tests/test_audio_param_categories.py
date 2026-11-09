@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parameter-category gates for :class:`FrankensteinAudio` + ``conformer_attn``.
+"""Parameter-category gates for :class:`FrankensteinAudio` + ``conformer``.
 
 The canonical taxonomy (:data:`src.utils.param_categories.BLOCK_CATEGORIES`)
 feeds three consumers: the per-block ``grad_norm_<block>`` training logs, the
@@ -36,7 +36,7 @@ pytestmark = pytest.mark.skipif(not TORCH_AVAILABLE, reason="torch not available
 
 
 def _audio_config(**overrides) -> "FrankensteinModelConfig":
-    """Return a tiny ``conformer_attn`` audio config for fast CPU tests."""
+    """Return a tiny ``conformer`` audio config for fast CPU tests."""
     params = dict(
         vocab_size=48,
         hidden_size=32,
@@ -46,7 +46,7 @@ def _audio_config(**overrides) -> "FrankensteinModelConfig":
         dropout=0.0,
         norm_type="layer_norm",
         use_bitnet=False,
-        layer_pattern=["conformer_attn", "standard_attn"],
+        layer_pattern=["conformer", "standard"],
         use_moe=False,
         ffn_hidden_size=64,
         ffn_activation="silu",

@@ -279,26 +279,26 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - `num_layers`: physical layers.
 - `num_loops`: logical loops.
 - `num_heads`: attention heads.
-- `num_kv_heads`: key-value heads for GQA (also used by `msa_attn`/`sparda_attn`/`lsa_attn`).
+- `num_kv_heads`: key-value heads for GQA (also used by `msa`/`sparda`/`lsa`).
 - `dropout`: global dropout.
 - `layer_pattern`: list of blocks.
 - `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankenstein_text_decoder`, which forces decoder).
-- Legacy blocks: `retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`.
-- Sparse blocks: `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`, `msa_attn` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda_attn` (SparDA, arXiv:2606.04511), `lsa_attn` (Latent Sparse Attention, arXiv:2610.42147), `fastconformer_attn` (Fast Conformer limited-context attention, arXiv:2305.05084).
-- Gated blocks: `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` (Kimi Delta Attention, arXiv:2510.26692).
+- Legacy blocks: `retnet`, `retnet`, `mamba`, `ode`, `titan`, `standard`, `sigmoid`.
+- Sparse blocks: `sparse_transformer`, `longformer`, `bigbird`, `sparsek`, `nsa`, `sparge`, `fasa`, `msa` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda` (SparDA, arXiv:2606.04511), `lsa` (Latent Sparse Attention, arXiv:2610.42147), `fastconformer` (Fast Conformer limited-context attention, arXiv:2305.05084).
+- Gated blocks: `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `gated_softmax`, `kda` (Kimi Delta Attention, arXiv:2510.26692).
 - Latent blocks (KV-compression / head-mixing, generalising GQA):
-  - `mla_attn` — Multi-Head Latent Attention + RoPE (arXiv:2506.09342).
-  - `gqla_attn` — Group-Query Latent Attention, two decoding paths (arXiv:2605.15250).
-  - `mlra_attn` — Multi-Head Low-Rank Attention, partitionable latent (arXiv:2603.02188).
-  - `tucker_attn` — Tucker Attention, generalised low-rank factorisation (arXiv:2603.30033).
-  - `iha_attn` — Interleaved Head Attention, cross-head pseudo-heads (arXiv:2602.21371).
-  - `gta_attn` — Grouped-head laTenT Attention, shared map + latent values (arXiv:2506.17286).
-  - `mtla_attn` — Multi-head Temporal Latent Attention, temporal KV merge (arXiv:2505.13544).
-  - `cca_attn` — Compressed Convolutional Attention, attention in compressed latent + convs (arXiv:2510.04476).
-  - `ccgqa_attn` — Compressed Convolutional Grouped Query Attention, CCA + decoupled GQA in latent (arXiv:2510.04476).
-- Convolution-augmented: `conformer_attn` — Conformer, macaron FFN₁ + MHSA + convolution module (arXiv:2005.08100).
-- Memory blocks: `memory_attn` — Memory Attention, token-ID memory values `V = K + Norm(E[s])` replacing the value projection (arXiv:2609.28399).
-- Training-free policy: `sparge_attn` and `fasa_attn` are eval-only; training mode raises an explicit runtime error.
+  - `mla` — Multi-Head Latent Attention + RoPE (arXiv:2506.09342).
+  - `gqla` — Group-Query Latent Attention, two decoding paths (arXiv:2605.15250).
+  - `mlra` — Multi-Head Low-Rank Attention, partitionable latent (arXiv:2603.02188).
+  - `tucker` — Tucker Attention, generalised low-rank factorisation (arXiv:2603.30033).
+  - `iha` — Interleaved Head Attention, cross-head pseudo-heads (arXiv:2602.21371).
+  - `gta` — Grouped-head laTenT Attention, shared map + latent values (arXiv:2506.17286).
+  - `mtla` — Multi-head Temporal Latent Attention, temporal KV merge (arXiv:2505.13544).
+  - `cca` — Compressed Convolutional Attention, attention in compressed latent + convs (arXiv:2510.04476).
+  - `ccgqa` — Compressed Convolutional Grouped Query Attention, CCA + decoupled GQA in latent (arXiv:2510.04476).
+- Convolution-augmented: `conformer` — Conformer, macaron FFN₁ + MHSA + convolution module (arXiv:2005.08100).
+- Memory blocks: `memory` — Memory Attention, token-ID memory values `V = K + Norm(E[s])` replacing the value projection (arXiv:2609.28399).
+- Training-free policy: `sparge` and `fasa` are eval-only; training mode raises an explicit runtime error.
 
 #### model.norm
 
@@ -317,12 +317,12 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - `qk_norm.eps`: RMS/L2 stabilizer for the forward methods (default 1e-6).
 
   QK stabilization requires every mixer in `dims.layer_pattern` to be one of
-  `standard_attn`, `sigmoid_attn`, `gqa_attn`, `mla_attn`, `swa_attn`,
-  `longformer_attn`, `bigbird_attn`, `sparse_transformer_attn`, `gta_attn`,
-  `iha_attn`, `mtla_attn`, `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`,
-  `sparda_attn`, `lsa_attn`, `fastconformer_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
-  `titan_attn`, `gqla_attn`, `mlra_attn`, `memory_attn`; `qk_clip` additionally excludes
-  `gma_attn`. Recurrent/state-space mixers (`retnet`, `gla_attn`, `mamba`, …)
+  `standard`, `sigmoid`, `gqa`, `mla`, `swa`,
+  `longformer`, `bigbird`, `sparse_transformer`, `gta`,
+  `iha`, `mtla`, `gma`, `nsa`, `sparsek`, `msa`,
+  `sparda`, `lsa`, `fastconformer`, `conformer`, `fox`, `gated_softmax`,
+  `titan`, `gqla`, `mlra`, `memory`; `qk_clip` additionally excludes
+  `gma`. Recurrent/state-space mixers (`retnet`, `gla`, `mamba`, …)
   are rejected at load time. Examples: `norm_qknorm_rms.yaml`,
   `norm_qknorm_clip_mla.yaml`, `norm_qknorm_quack.yaml`.
 
@@ -395,41 +395,41 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
 
 ### Latent / KV-compression family (model.attention.*)
 
-- `model.attention.mla.latent_rank`: rank of the joint KV latent for `mla_attn` (default `hidden_size // 2`).
-- `model.attention.gqla.latent_rank`: latent rank for `gqla_attn` (default `hidden_size // 2`).
+- `model.attention.mla.latent_rank`: rank of the joint KV latent for `mla` (default `hidden_size // 2`).
+- `model.attention.gqla.latent_rank`: latent rank for `gqla` (default `hidden_size // 2`).
 - `model.attention.gqla.num_groups`: number of GQA groups for the expanded path (default `num_heads // 4`).
 - `model.attention.gqla.decode_path`: `"mqa_absorb"` or `"gqa"` (default `"gqa"`).
-- `model.attention.mlra.latent_rank`: total latent rank for `mlra_attn` (default `hidden_size // 2`).
+- `model.attention.mlra.latent_rank`: total latent rank for `mlra` (default `hidden_size // 2`).
 - `model.attention.mlra.num_latent_heads`: number of disjoint latent sub-heads (default 4).
 - `model.attention.tucker.query_rank`, `model.attention.tucker.key_rank`, `model.attention.tucker.value_rank`: Tucker ranks (default `hidden_size` for Q, `hidden_size // 2` for K/V).
-- `model.attention.iha.num_pseudo_heads`: number of pseudo-heads per head for `iha_attn` (default `num_heads`).
-- `model.attention.gta.num_shared_groups`: number of head groups sharing an attention map for `gta_attn` (default `num_heads // 4`).
-- `model.attention.gta.value_latent_rank`: value-cache latent rank for `gta_attn` (default `hidden_size // 2`).
-- `model.attention.mtla.latent_rank`: feature-axis latent rank for `mtla_attn` (default `hidden_size // 2`).
+- `model.attention.iha.num_pseudo_heads`: number of pseudo-heads per head for `iha` (default `num_heads`).
+- `model.attention.gta.num_shared_groups`: number of head groups sharing an attention map for `gta` (default `num_heads // 4`).
+- `model.attention.gta.value_latent_rank`: value-cache latent rank for `gta` (default `hidden_size // 2`).
+- `model.attention.mtla.latent_rank`: feature-axis latent rank for `mtla` (default `hidden_size // 2`).
 - `model.attention.mtla.merge_factor`: consecutive KV entries merged per temporal slot (default 2).
 - `model.attention.mtla.stride`: stride between merged slots (default `mtla_merge_factor`).
-- `model.attention.cca.latent_rank`: latent width ẽ for `cca_attn` (default `hidden_size // 4`, i.e. C=4).
-- `model.attention.cca.num_conv_layers`: 0, 1, or 2 convolution layers for `cca_attn` (default 2).
-- `model.attention.cca.conv_kernel_seq`: depth-wise causal seq conv kernel for `cca_attn` (default 4).
-- `model.attention.cca.conv_kernel_ch`: head-wise grouped channel conv kernel for `cca_attn` (default 3).
-- `model.attention.cca.qk_mean`: enable q-k-mean bias for `cca_attn` (default true).
-- `model.attention.cca.value_shift`: enable value-shift for `cca_attn` (default true; requires even `num_heads`).
-- `model.attention.ccgqa.query_latent_rank`: query latent width E/C₁ for `ccgqa_attn` (default `hidden_size // 2`).
-- `model.attention.ccgqa.kv_latent_rank`: KV latent width E/C₂ for `ccgqa_attn` (default `hidden_size // 8`).
-- `model.attention.ccgqa.num_kv_heads`: number of KV group heads for `ccgqa_attn` (default `num_heads // 4`).
-- `model.attention.ccgqa.num_conv_layers`: 0, 1, or 2 conv layers for `ccgqa_attn` (default 2).
-- `model.attention.ccgqa.conv_kernel_seq`: seq conv kernel for `ccgqa_attn` (default 4).
-- `model.attention.ccgqa.conv_kernel_ch`: channel conv kernel for `ccgqa_attn` (default 3).
-- `model.attention.ccgqa.qk_mean`: enable q-k-mean with B_group/E_group for `ccgqa_attn` (default true).
-- `model.attention.ccgqa.value_shift`: enable value-shift for `ccgqa_attn` (default true).
+- `model.attention.cca.latent_rank`: latent width ẽ for `cca` (default `hidden_size // 4`, i.e. C=4).
+- `model.attention.cca.num_conv_layers`: 0, 1, or 2 convolution layers for `cca` (default 2).
+- `model.attention.cca.conv_kernel_seq`: depth-wise causal seq conv kernel for `cca` (default 4).
+- `model.attention.cca.conv_kernel_ch`: head-wise grouped channel conv kernel for `cca` (default 3).
+- `model.attention.cca.qk_mean`: enable q-k-mean bias for `cca` (default true).
+- `model.attention.cca.value_shift`: enable value-shift for `cca` (default true; requires even `num_heads`).
+- `model.attention.ccgqa.query_latent_rank`: query latent width E/C₁ for `ccgqa` (default `hidden_size // 2`).
+- `model.attention.ccgqa.kv_latent_rank`: KV latent width E/C₂ for `ccgqa` (default `hidden_size // 8`).
+- `model.attention.ccgqa.num_kv_heads`: number of KV group heads for `ccgqa` (default `num_heads // 4`).
+- `model.attention.ccgqa.num_conv_layers`: 0, 1, or 2 conv layers for `ccgqa` (default 2).
+- `model.attention.ccgqa.conv_kernel_seq`: seq conv kernel for `ccgqa` (default 4).
+- `model.attention.ccgqa.conv_kernel_ch`: channel conv kernel for `ccgqa` (default 3).
+- `model.attention.ccgqa.qk_mean`: enable q-k-mean with B_group/E_group for `ccgqa` (default true).
+- `model.attention.ccgqa.value_shift`: enable value-shift for `ccgqa` (default true).
 
 ### MiniMax Sparse Attention & SparDA (model.attention.msa / model.attention.sparda)
 
-- `model.attention.msa.block_size`: KV block size for `msa_attn` (default 128).
+- `model.attention.msa.block_size`: KV block size for `msa` (default 128).
 - `model.attention.msa.topk_blocks`: blocks selected per GQA group per query (default 16).
 - `model.attention.msa.index_dim`: Index Branch head dim (default 64).
 - `model.attention.msa.kl_loss_weight`: KL alignment loss weight (default 0.0).
-- `model.attention.sparda.block_size`: KV block size for `sparda_attn` (default 128).
+- `model.attention.sparda.block_size`: KV block size for `sparda` (default 128).
 - `model.attention.sparda.topk_blocks`: blocks selected per GQA group (default 16).
 - `model.attention.sparda.forecast_dim`: Forecast projection dim (default 64).
 
@@ -443,7 +443,7 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
 - `model.attention.lsa.keys_per_bucket`: average keys per bucket; yields `cluster_block / keys_per_bucket` buckets per block and must divide `cluster_block` (default 8).
 - `model.attention.lsa.max_keys_per_bucket`: Ward merge cap per bucket, at least `keys_per_bucket` (default 16).
 
-`lsa_attn` uses `num_kv_heads` (the paper's N-LSA uses a single shared KV head),
+`lsa` uses `num_kv_heads` (the paper's N-LSA uses a single shared KV head),
 adds no parameters, and opts out of the model-wide positional encoding by
 default (N-LSA trains without PE).
 
@@ -454,25 +454,25 @@ default (N-LSA trains without PE).
 - `model.attention.fastconformer.global_tokens_spacing`: stride $s$ between global positions $\{0, s, \dots, (g{-}1)s\}$ (default 1).
 - `model.attention.fastconformer.global_attn_separate`: use a separate set of global query/key/value projections (paper §2.2, Longformer-style, adds $3H^2$ parameters) instead of the shared local ones (paper §3.4, the evaluated long-form model; default `false`).
 
-`fastconformer_attn` uses plain multi-head projections (it does not read
+`fastconformer` uses plain multi-head projections (it does not read
 `num_kv_heads`), adds no parameters by default, trains its windowed + global
 pattern in both training and inference, and caches in a `RingSlot` whose pinned
 head prefix covers the global positions (exact incremental decoding).
 
 ### SSOG — Separable Sum of Gaussians (model.attention.ssog)
 
-- `model.attention.ssog.num_atoms`: Gaussian atoms per head for `ssog_attn` (default 4; each atom is 5 numbers — μy, μx, σy, σx, λ).
+- `model.attention.ssog.num_atoms`: Gaussian atoms per head for `ssog` (default 4; each atom is 5 numbers — μy, μx, σy, σx, λ).
 - `model.attention.ssog.lookat`: content-conditioned steering on μ/σ/λ (default true; `false` = fixed content-blind field).
 - `model.attention.ssog.max_offset`: bound on per-token μ travel in grid cells (default 4.0; small grids want 1–2).
 - `model.attention.ssog.cold_init`: start steering gates at ≈0, frozen geometry at init (default true; warm-start loses ~1 pt).
 - `model.attention.ssog.sigma_floor`: minimum atom width in grid cells (default 0.25).
 - `model.attention.ssog.grid_h` / `model.attention.ssog.grid_w`: token grid raster (default: derived from `image_height // patch_size` × `image_width // patch_size`; set explicitly for non-vision grids — `grid_h: 1, grid_w: max_len` gives a 1D positional field).
-- Constraints: `ssog_attn` is encoder-only (`mode: encoder`), sequence length must equal `grid_h * grid_w`, and `frankenstein_vit` configs must use `image.cls_token: false` (with `pooling_mode: gap`).
+- Constraints: `ssog` is encoder-only (`mode: encoder`), sequence length must equal `grid_h * grid_w`, and `frankenstein_vit` configs must use `image.cls_token: false` (with `pooling_mode: gap`).
 - Examples: `configs/examples/vit_ssog_mnist.yaml` (ViT), `configs/examples/es_arch_ssog_adamw.yaml` (1D NLP grid).
 
 ### Conformer (model.attention.conformer)
 
-`conformer_attn` (arXiv:2005.08100) owns the macaron FFN₁, multi-head
+`conformer` (arXiv:2005.08100) owns the macaron FFN₁, multi-head
 self-attention and the convolution module with internal pre-norm residuals;
 the shared `HybridLayer` norm + FFN plays FFN₂ and the outer residual.
 Examples: `configs/examples/es_arch_conformer_adamw.yaml` (8-layer Spanish
@@ -480,26 +480,26 @@ MLM preset), `configs/examples/mixer_conformer.yaml` (minimal smoke preset),
 `vit_conformer.yaml` (ViT), `audio_asr_conformer.yaml` and
 `audio_classification_conformer.yaml` (speech/audio).
 
-- `model.attention.conformer.kernel_size`: depth-wise conv kernel `k` for `conformer_attn` (default 32; paper best of {3, 7, 17, 32, 65}).
+- `model.attention.conformer.kernel_size`: depth-wise conv kernel `k` for `conformer` (default 32; paper best of {3, 7, 17, 32, 65}).
 - `model.attention.conformer.macaron`: enable the macaron FFN₁ branch (default true).
 - `model.attention.conformer.conv_norm`: normalization after the depth-wise conv — `batch` (BatchNorm1d, paper default), `group` (GroupNorm) or `layer` (LayerNorm).
-- `positional_encoding_parameters.use_pe.conformer_attn`: per-mixer PE opt-out (default true).
+- `positional_encoding_parameters.use_pe.conformer`: per-mixer PE opt-out (default true).
 - Decoder mode pads the depth-wise conv causally; encoder mode uses symmetric padding.
-- `conformer_attn` is not KV-cacheable (depth-wise conv + macaron state); it always runs the legacy full-recompute path.
+- `conformer` is not KV-cacheable (depth-wise conv + macaron state); it always runs the legacy full-recompute path.
 
-### Memory Attention (model.attention.memory_attn)
+### Memory Attention (model.attention.memory)
 
-`memory_attn` (arXiv:2609.28399) keeps the standard softmax attention operator
+`memory` (arXiv:2609.28399) keeps the standard softmax attention operator
 but drops the dedicated value projection: values are the contextual keys plus a
 per-layer, token-ID-indexed memory table, `V = K + RMSNorm(E[s])`, with
 `d_v = dims.num_kv_heads * (hidden_size / num_heads)`. RoPE applies only to the
 scoring pair. There are no per-mixer sub-keys (`dims.num_kv_heads` and
-`dims.vocab_size` are the only inputs); `positional_encoding_parameters.use_pe.memory_attn`
+`dims.vocab_size` are the only inputs); `positional_encoding_parameters.use_pe.memory`
 (default true) is the only flag. The mixer needs token IDs, so it is text-only
 (mask `input_ids`; ViT/audio presets have none). At inference it uses a plain
-KV slot, so `inference.kv_cache.enabled: true` works as for `standard_attn`.
+KV slot, so `inference.kv_cache.enabled: true` works as for `standard`.
 Examples: `configs/examples/es_arch_memory_adamw.yaml` (small Spanish MLM
-preset) and `configs/memory_attn.yaml` (the paper's L24-D2048 causal-LM
+preset) and `configs/memory.yaml` (the paper's L24-D2048 causal-LM
 reference).
 
 ### Audio presets (`frankenstein_audio`, tasks `asr` / `audio_classification`)
@@ -517,7 +517,7 @@ waveform frontend and adds ASR / audio-classification heads. New presets:
   classification with the synthetic dummy dataset (`dataset_name: ""`).
 - `configs/examples/audio_eeg_classification.yaml` — generic multichannel 1-D
   signals: `audio.feature: raw`, `audio.in_channels: 8` (EEG-style).
-- `configs/examples/vit_conformer.yaml` — ViT with `conformer_attn` in
+- `configs/examples/vit_conformer.yaml` — ViT with `conformer` in
   `layer_pattern`.
 
 Top-level blocks:
@@ -764,7 +764,7 @@ inference:
       window: 512
       budget: null
       per_layer_budgets: []
-    per_mixer: []                       # [{mixer: standard_attn, enabled: false}]
+    per_mixer: []                       # [{mixer: standard, enabled: false}]
 ```
 
 Precedence (D2): **CLI flags > YAML `inference:` > schema defaults**.
@@ -801,7 +801,7 @@ without the original YAML.
 
 - `ffn_hidden_size` is required to match BERT/TinyBERT/EmbBERT.
 - `embedding_conv_kernel` allows replicating EmbBERT with kernel 32.
-- `standard_attn` and `sigmoid_attn` are compatible with any positional-encoding setting because they do not apply HoPE/RoPE.
+- `standard` and `sigmoid` are compatible with any positional-encoding setting because they do not apply HoPE/RoPE.
 - Full GPU power/utilization/memory telemetry uses `pynvml` when available; non-guard telemetry may fall back to zeros.
 - When `gpu_temp_guard_enabled: true`, temperature reads are strict (`NVML` then `nvidia-smi`), and telemetry failure stops training immediately.
 - When `switch_on_thermal: true`, critical temperature can switch training GPU->CPU and return CPU->GPU at resume temperature; CUDA/NVIDIA runtime failures may force CPU-only mode.

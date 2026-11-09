@@ -12,10 +12,10 @@ model:
     num_heads: 4
     dropout: 0.1
     layer_pattern:
-      - conformer_attn
-      - conformer_attn
-      - conformer_attn
-      - standard_attn
+      - conformer
+      - conformer
+      - conformer
+      - standard
     mode: encoder
   norm:
     type: layer_norm

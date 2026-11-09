@@ -3,12 +3,12 @@ additionalProperties: false
 title: "RetNet / Retention"
 title_es: "RetNet / Retención"
 description: |-
-  Configuration for the `retnet` / `retnet_attn` retention mixers. Only applies
+  Configuration for the `retnet` retention mixer. Only applies
   when either appears in `model.dims.layer_pattern`.
 
   **References:** (paper: arxiv:2307.08621) (paper: arxiv:2506.06708)
 description_es: |-
-  Configuración de los mixers de retención `retnet` / `retnet_attn`. Solo aplica
+  Configuración del mixer de retención `retnet`. Solo aplica
   cuando alguno aparece en `model.dims.layer_pattern`.
 
   **Referencias:** (paper: arxiv:2307.08621) (paper: arxiv:2506.06708)
@@ -20,13 +20,13 @@ properties:
     title_es: "Cabezas de Retención"
     description: |-
       Number of retention heads. Must divide `dims.hidden_size` evenly. Only
-      affects `retnet` / `retnet_attn` layers; usually set equal to
+      affects `retnet` layers; usually set equal to
       `dims.num_heads`.
 
       **References:** (paper: arxiv:2307.08621)
     description_es: |-
       Número de cabezas de retención. Debe dividir `dims.hidden_size`
-      exactamente. Solo afecta capas `retnet` / `retnet_attn`; normalmente se
+      exactamente. Solo afecta capas `retnet`; normalmente se
       iguala a `dims.num_heads`.
 
       **Referencias:** (paper: arxiv:2307.08621)

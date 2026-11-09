@@ -347,7 +347,7 @@ class ModelDeployer:
         # Text encoder/decoder: token ids. SSOG requires seq_len == grid_h *
         # grid_w, so honor the configured raster instead of the default 64.
         seq_len = 64
-        if "ssog_attn" in (getattr(cfg, "layer_pattern", None) or []):
+        if "ssog" in (getattr(cfg, "layer_pattern", None) or []):
             seq_len = int(getattr(cfg, "ssog_grid_h", 1)) * int(
                 getattr(cfg, "ssog_grid_w", seq_len)
             )

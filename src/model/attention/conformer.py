@@ -229,7 +229,7 @@ class ConformerAttention(nn.Module):
         self.mode = getattr(config, "mode", "encoder")
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "conformer_attn_use_pe", True))
+        self.use_pe = bool(getattr(config, "conformer_use_pe", True))
         attach_qk_norm(self, config, self.head_dim)
         # Set by HybridLayer (transversal fixed-numerics opt-in). Standalone
         # use keeps the classic softmax.
@@ -357,7 +357,7 @@ class ConformerAttention(nn.Module):
                 positional encoder.
             pos_encoder: Optional positional encoding override for this
                 call.
-            cache: Accepted for interface uniformity. ``conformer_attn`` has
+            cache: Accepted for interface uniformity. ``conformer`` has
                 no implemented incremental branch (see
                 ``src/model/cache/capabilities.py``), so the full-recompute
                 path always runs.
@@ -390,7 +390,7 @@ class ConformerAttention(nn.Module):
     ) -> torch.Tensor:
         """Alias for :meth:`forward` (uniform mixer interface).
 
-        ``conformer_attn`` is not a training-free mixer, but exposing the
+        ``conformer`` is not a training-free mixer, but exposing the
         dense entry point keeps the mixer uniform with the rest of the
         registry and lets callers use the same dispatch.
 

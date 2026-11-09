@@ -20,8 +20,8 @@ model:
     num_loops: 1
     num_heads: 2
     layer_pattern:
-    - standard_attn
-    - standard_attn
+    - standard
+    - standard
     mode: encoder
     dropout: 0.1
   norm:

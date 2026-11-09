@@ -173,10 +173,10 @@ def _load_legacy_frankenstein_model(loaded: LoadedTrainingConfig) -> "Tuple[torc
 
     stable_layer_pattern = [
         "retnet",
-        "titan_attn",
+        "titan",
         "retnet",
         "mamba",
-        "titan_attn",
+        "titan",
         "ode",
     ]
     if not config.layer_pattern:

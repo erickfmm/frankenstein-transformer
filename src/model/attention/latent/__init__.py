@@ -59,15 +59,15 @@ with ``hidden_size``, ``num_heads``, ``dropout``, ``use_bitnet`` and
 :class:`~src.model.attention.common.BitLinear`.
 """
 
-from .mla_attn import MLAAttention
-from .gqla_attn import GQLAAttention
-from .mlra_attn import MLRAAttention
-from .tucker_attn import TuckerAttention
-from .iha_attn import IHAAttention
-from .gta_attn import GTAAttention
-from .mtla_attn import MTLAAttention
-from .cca_attn import CCAAttention, CCGQAAttention
-from .gma_attn import GaussianMixtureAttention
+from .mla import MLAAttention
+from .gqla import GQLAAttention
+from .mlra import MLRAAttention
+from .tucker import TuckerAttention
+from .iha import IHAAttention
+from .gta import GTAAttention
+from .mtla import MTLAAttention
+from .cca import CCAAttention, CCGQAAttention
+from .gma import GaussianMixtureAttention
 
 __all__ = [
     "MLAAttention",

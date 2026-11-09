@@ -8,7 +8,7 @@ model:
     num_heads: 12
     layer_pattern:
     - retnet
-    - titan_attn
+    - titan
     - mamba
     - ode
   norm:

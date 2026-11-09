@@ -5,7 +5,7 @@ any training started:
 
 * ``--realonall`` raises ``training.max_length`` from 32 to 64 *after* the
   config makers fixed the SSOG raster, leaving a stale ``1x32`` grid that
-  crashed every ``ssog_attn`` combo at the first forward (41 runs + 2
+  crashed every ``ssog`` combo at the first forward (41 runs + 2
   transversals);
 * ``_with_optimizer`` passed ``rank`` to every APOLLO variant although
   ``apollo_mini`` (rank-1 by construction) rejects it, failing ``opt_apollo_mini``.
@@ -54,7 +54,7 @@ def test_apollo_mini_gets_no_rank_key():
 
 def _ssog_combo(max_length=32):
     model, training = run_e2e._base_config(vocab_size=100, num_layers=2, num_loops=1)
-    model = run_e2e._deep_update(model, {"dims": {"layer_pattern": ["ssog_attn", "ssog_attn"]}})
+    model = run_e2e._deep_update(model, {"dims": {"layer_pattern": ["ssog", "ssog"]}})
     training["max_length"] = max_length
     model = run_e2e._ensure_ssog_grid(model, training)
     return {
@@ -80,7 +80,7 @@ def test_ensure_ssog_grid_force_overrides_stale_grid():
 def test_realonall_re_syncs_ssog_grid():
     """apply_realonall must leave grid_h * grid_w == the raised max_length."""
     config = _ssog_combo(max_length=32)
-    bound = run_e2e.apply_realonall("attn_x__ssog_attn", config, real_text_dir=None)
+    bound = run_e2e.apply_realonall("attn_x__ssog", config, real_text_dir=None)
     ssog = bound["model"]["attention"]["ssog"]
     max_length = bound["training"]["max_length"]
     assert max_length == run_e2e.REAL_TEXT_MAX_LENGTH
@@ -91,13 +91,13 @@ def test_validate_combos_catches_stale_ssog_grid():
     """The pre-flight check reports a grid that no longer matches max_length."""
     config = _ssog_combo(max_length=32)
     config["training"]["max_length"] = 64  # grid left behind at 1x32
-    errors = run_e2e.validate_combos([("attn_x__ssog_attn", config)])
+    errors = run_e2e.validate_combos([("attn_x__ssog", config)])
     assert any("ssog grid" in error for error in errors), errors
 
 
 def test_validate_combos_catches_unknown_optimizer_key():
     config = _ssog_combo(max_length=32)
-    config["model"]["dims"]["layer_pattern"] = ["standard_attn", "standard_attn"]
+    config["model"]["dims"]["layer_pattern"] = ["standard", "standard"]
     config["training"]["optimizer"] = {
         "optimizer_class": "apollo_mini",
         "parameters": {"apollo_mini-rank": 8},
@@ -108,4 +108,4 @@ def test_validate_combos_catches_unknown_optimizer_key():
 
 def test_validate_combos_passes_a_healthy_config():
     config = _ssog_combo(max_length=32)
-    assert run_e2e.validate_combos([("attn_x__ssog_attn", config)]) == []
+    assert run_e2e.validate_combos([("attn_x__ssog", config)]) == []

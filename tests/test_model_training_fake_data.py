@@ -91,7 +91,7 @@ def _train_steps(model, n=5):
 # Frankensteiner (uses legacy retnet/titan/mamba/ode pattern)
 # ---------------------------------------------------------------------------
 
-_MINI_LEGACY_PATTERN = ["retnet", "titan_attn", "retnet", "mamba", "titan_attn", "ode"]
+_MINI_LEGACY_PATTERN = ["retnet", "titan", "retnet", "mamba", "titan", "ode"]
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -144,12 +144,12 @@ class LegacyLayerTrainingTests(unittest.TestCase):
         model = FrankensteinEncoder(_cfg(layers, **kw))
         return _train_steps(model, n=3)
 
-    def test_standard_attn_training(self):
-        losses = self._train(["standard_attn"])
+    def test_standard_training(self):
+        losses = self._train(["standard"])
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_sigmoid_attn_training(self):
-        losses = self._train(["sigmoid_attn"])
+    def test_sigmoid_training(self):
+        losses = self._train(["sigmoid"])
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_mamba_training(self):
@@ -164,20 +164,20 @@ class LegacyLayerTrainingTests(unittest.TestCase):
         losses = self._train(["retnet"])
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_titan_attn_training(self):
-        losses = self._train(["titan_attn"])
+    def test_titan_training(self):
+        losses = self._train(["titan"])
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_retnet_attn_training(self):
-        losses = self._train(["retnet_attn"])
+    def test_retnet_training(self):
+        losses = self._train(["retnet"])
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_moe_training(self):
-        losses = self._train(["standard_attn"], use_moe=True)
+        losses = self._train(["standard"], use_moe=True)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_decoder_mode_training(self):
-        losses = self._train(["standard_attn"], mode="decoder")
+        losses = self._train(["standard"], mode="decoder")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
 
@@ -192,28 +192,28 @@ class GatedLayerTrainingTests(unittest.TestCase):
         model = FrankensteinEncoder(_cfg([layer_type]))
         return _train_steps(model, n=3)
 
-    def test_gla_attn_training(self):
-        losses = self._train("gla_attn")
+    def test_gla_training(self):
+        losses = self._train("gla")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_deltanet_attn_training(self):
-        losses = self._train("deltanet_attn")
+    def test_deltanet_training(self):
+        losses = self._train("deltanet")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_gated_deltanet_attn_training(self):
-        losses = self._train("gated_deltanet_attn")
+    def test_gated_deltanet_training(self):
+        losses = self._train("gated_deltanet")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_hgrn2_attn_training(self):
-        losses = self._train("hgrn2_attn")
+    def test_hgrn2_training(self):
+        losses = self._train("hgrn2")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_fox_attn_training(self):
-        losses = self._train("fox_attn")
+    def test_fox_training(self):
+        losses = self._train("fox")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_gated_softmax_attn_training(self):
-        losses = self._train("gated_softmax_attn")
+    def test_gated_softmax_training(self):
+        losses = self._train("gated_softmax")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
 
@@ -236,52 +236,52 @@ class SparseLayerTrainingTests(unittest.TestCase):
             logits = model(ids)
         return logits
 
-    def test_sparse_transformer_attn_training(self):
-        losses = self._train("sparse_transformer_attn")
+    def test_sparse_transformer_training(self):
+        losses = self._train("sparse_transformer")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_longformer_attn_training(self):
-        losses = self._train("longformer_attn")
+    def test_longformer_training(self):
+        losses = self._train("longformer")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_swa_attn_training(self):
-        losses = self._train("swa_attn")
+    def test_swa_training(self):
+        losses = self._train("swa")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_bigbird_attn_training(self):
-        losses = self._train("bigbird_attn")
+    def test_bigbird_training(self):
+        losses = self._train("bigbird")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_sparsek_attn_training(self):
-        losses = self._train("sparsek_attn")
+    def test_sparsek_training(self):
+        losses = self._train("sparsek")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_nsa_attn_training(self):
-        losses = self._train("nsa_attn")
+    def test_nsa_training(self):
+        losses = self._train("nsa")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_sparge_attn_dense_fallback_training(self):
-        # sparge_attn's sparse filter is inference-only; training runs
+    def test_sparge_dense_fallback_training(self):
+        # sparge's sparse filter is inference-only; training runs
         # standard dense attention over the same projections.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            losses = self._train("sparge_attn")
+            losses = self._train("sparge")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_fasa_attn_dense_fallback_training(self):
-        # fasa_attn's frequency-aware selection is inference-only; training
+    def test_fasa_dense_fallback_training(self):
+        # fasa's frequency-aware selection is inference-only; training
         # runs standard dense attention over the same projections.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            losses = self._train("fasa_attn")
+            losses = self._train("fasa")
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
-    def test_sparge_attn_eval_sparse_path_ok(self):
-        logits = self._eval_forward("sparge_attn")
+    def test_sparge_eval_sparse_path_ok(self):
+        logits = self._eval_forward("sparge")
         self.assertEqual(logits.shape, (BSZ, SEQ, VOCAB))
 
-    def test_fasa_attn_eval_sparse_path_ok(self):
-        logits = self._eval_forward("fasa_attn")
+    def test_fasa_eval_sparse_path_ok(self):
+        logits = self._eval_forward("fasa")
         self.assertEqual(logits.shape, (BSZ, SEQ, VOCAB))
 
 
@@ -305,30 +305,30 @@ class DecoderTrainingTests(unittest.TestCase):
             setattr(cfg, k, v)
         return FrankensteinDecoder(cfg)
 
-    def test_decoder_standard_attn_training(self):
-        model = self._decoder(["standard_attn"])
+    def test_decoder_standard_training(self):
+        model = self._decoder(["standard"])
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_decoder_gated_attn_training(self):
-        model = self._decoder(["gla_attn", "standard_attn"])
+        model = self._decoder(["gla", "standard"])
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_decoder_mixed_pattern_training(self):
-        model = self._decoder(["titan_attn", "retnet_attn", "mamba", "standard_attn"])
+        model = self._decoder(["titan", "retnet", "mamba", "standard"])
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_generate_does_not_crash(self):
-        model = self._decoder(["standard_attn"])
+        model = self._decoder(["standard"])
         model.eval()
         ids = torch.randint(0, VOCAB, (1, 4))
         out = model.generate(ids, max_new_tokens=2)
         self.assertEqual(out.shape[1], 6)
 
     def test_decoder_loss_is_finite_after_10_steps(self):
-        model = self._decoder(["standard_attn", "titan_attn"])
+        model = self._decoder(["standard", "titan"])
         losses = _train_steps(model, n=10)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
@@ -342,52 +342,52 @@ class MixedPatternTrainingTests(unittest.TestCase):
 
     def test_mixed_legacy_pattern(self):
         model = FrankensteinEncoder(
-            _cfg(["retnet", "ode", "mamba", "titan_attn", "standard_attn", "sigmoid_attn"])
+            _cfg(["retnet", "ode", "mamba", "titan", "standard", "sigmoid"])
         )
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_mixed_gated_legacy_pattern(self):
         model = FrankensteinEncoder(
-            _cfg(["gla_attn", "standard_attn", "deltanet_attn", "titan_attn"])
+            _cfg(["gla", "standard", "deltanet", "titan"])
         )
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_mixed_sparse_legacy_pattern(self):
         model = FrankensteinEncoder(
-            _cfg(["sparse_transformer_attn", "standard_attn", "longformer_attn", "titan_attn"])
+            _cfg(["sparse_transformer", "standard", "longformer", "titan"])
         )
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_multi_loop_training(self):
-        cfg = _cfg(["standard_attn", "titan_attn"], num_loops=2, num_layers=2)
+        cfg = _cfg(["standard", "titan"], num_loops=2, num_layers=2)
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_bitnet_training(self):
-        cfg = _cfg(["standard_attn"], use_bitnet=True)
+        cfg = _cfg(["standard"], use_bitnet=True)
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_derf_norm_training(self):
-        cfg = _cfg(["standard_attn"], norm_type="derf")
+        cfg = _cfg(["standard"], norm_type="derf")
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_dynamic_tanh_norm_training(self):
-        cfg = _cfg(["standard_attn"], norm_type="dynamic_tanh")
+        cfg = _cfg(["standard"], norm_type="dynamic_tanh")
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_factorized_embedding_training(self):
         cfg = _cfg(
-            ["standard_attn"],
+            ["standard"],
             use_factorized_embedding=True,
             factorized_embedding_dim=16,
             use_embedding_conv=True,
@@ -398,13 +398,13 @@ class MixedPatternTrainingTests(unittest.TestCase):
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_rope_positional_encoding_training(self):
-        cfg = _cfg(["standard_attn"], positional_encoding="rope")
+        cfg = _cfg(["standard"], positional_encoding="rope")
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_bam_positional_encoding_training(self):
-        cfg = _cfg(["standard_attn"], positional_encoding="bam")
+        cfg = _cfg(["standard"], positional_encoding="bam")
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
@@ -427,7 +427,7 @@ class CausalLMLossTests(unittest.TestCase):
                 num_layers=1,
                 num_loops=1,
                 use_bitnet=False,
-                layer_pattern=["standard_attn"],
+                layer_pattern=["standard"],
             )
         )
         return TitanTrainer(model, model.config, device="cpu", task="causal_lm")

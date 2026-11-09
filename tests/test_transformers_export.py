@@ -34,7 +34,7 @@ class TransformersExportTests(unittest.TestCase):
                 hidden_size=16,
                 num_layers=1,
                 num_loops=1,
-                layer_pattern=["standard_attn"],
+                layer_pattern=["standard"],
                 num_heads=4,
                 retention_heads=4,
                 num_experts=2,
@@ -64,7 +64,7 @@ class TransformersExportTests(unittest.TestCase):
                     "hidden_size": 16,
                     "num_layers": 1,
                     "num_loops": 1,
-                    "layer_pattern": ["standard_attn"],
+                    "layer_pattern": ["standard"],
                     "num_heads": 4,
                     "retention_heads": 4,
                     "num_experts": 2,
@@ -137,7 +137,7 @@ class TransformersExportTests(unittest.TestCase):
                 yaml.safe_dump(
                     {
                         "model_class": "frankenstein_text_encoder",
-                        "model": {"layer_pattern": ["standard_attn"]},
+                        "model": {"layer_pattern": ["standard"]},
                         "training": {"task": "sbert"},
                     }
                 ),
@@ -162,7 +162,7 @@ class TransformersExportTests(unittest.TestCase):
                     {
                         "base_model": "answerdotai/ModernBERT-base",
                         "training": {"task": "mlm"},
-                        "model": {"layer_pattern": ["standard_attn"]},
+                        "model": {"layer_pattern": ["standard"]},
                     }
                 ),
                 encoding="utf-8",
@@ -209,7 +209,7 @@ class TransformersExportCacheTests(unittest.TestCase):
 
         cfg = FrankensteinModelConfig(
             vocab_size=32, hidden_size=16, num_layers=1, num_loops=1,
-            layer_pattern=["standard_attn"], num_heads=4, retention_heads=4,
+            layer_pattern=["standard"], num_heads=4, retention_heads=4,
             dropout=0.0, use_bitnet=False, mode="decoder",
             positional_encoding="rope", norm_type="layer_norm",
             ffn_hidden_size=32,

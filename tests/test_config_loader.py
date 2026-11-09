@@ -44,7 +44,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -75,7 +75,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -104,7 +104,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -128,7 +128,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -154,7 +154,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -181,7 +181,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -239,7 +239,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -270,7 +270,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -298,7 +298,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -334,7 +334,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -362,7 +362,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -392,7 +392,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -422,7 +422,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -469,7 +469,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -499,7 +499,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -527,7 +527,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 num_heads: 6
                 retention_heads: 6
                 dropout: 0.0
-                layer_pattern: [standard_attn]
+                layer_pattern: [standard]
                 mode: encoder
               norm:
                 type: flash_norm
@@ -563,7 +563,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
               dropout: 0.0
               norm_type: flash_norm
               flashnorm_partial_ratio: 0.5
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -592,7 +592,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 num_heads: 6
                 retention_heads: 6
                 dropout: 0.0
-                layer_pattern: [standard_attn]
+                layer_pattern: [standard]
                 mode: encoder
               norm:
                 type: layer_norm
@@ -635,7 +635,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 num_heads: 6
                 retention_heads: 6
                 dropout: 0.0
-                layer_pattern: [standard_attn, retnet, titan_attn, standard_attn, retnet, titan_attn]
+                layer_pattern: [standard, retnet, titan, standard, retnet, titan]
                 mode: encoder
               norm:
                 type: layer_norm
@@ -677,7 +677,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 num_heads: 6
                 retention_heads: 6
                 dropout: 0.0
-                layer_pattern: [standard_attn, retnet, titan_attn, standard_attn, retnet, titan_attn]
+                layer_pattern: [standard, retnet, titan, standard, retnet, titan]
                 mode: encoder
               norm:
                 type: layer_norm
@@ -724,7 +724,7 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -771,7 +771,7 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4
@@ -801,7 +801,7 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
               top_k_experts: 1
               dropout: 0.0
               norm_type: layer_norm
-              layer_pattern: [standard_attn]
+              layer_pattern: [standard]
               use_bitnet: false
               use_moe: false
               ode_solver: rk4

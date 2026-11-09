@@ -11,7 +11,7 @@ description: |-
   **Examples explained:**
   - Typical BERT-base style: `dims.hidden_size=768, dims.num_layers=12, dims.num_heads=12, ffn.hidden_size=3072` — ~110M params, good starting point for MLM pre-training.
   - Memory-efficient: `embedding.factorized.enabled=true, embedding.factorized.dim=128, moe.enabled=false` — reduces embedding params ~4.5× for large vocabularies.
-  - Experimental hybrid: `dims.layer_pattern: [retnet, titan_attn, mamba, standard_attn, ode]` — mixes recurrent, attention, state-space, and continuous-depth layers for diverse representation learning.
+  - Experimental hybrid: `dims.layer_pattern: [retnet, titan, mamba, standard, ode]` — mixes recurrent, attention, state-space, and continuous-depth layers for diverse representation learning.
 
   **References:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805)
 description_es: |-
@@ -26,7 +26,7 @@ description_es: |-
   **Ejemplos explicados:**
   - Estilo BERT-base típico: `dims.hidden_size=768, dims.num_layers=12, dims.num_heads=12, ffn.hidden_size=3072` — ~110M params, buen punto de partida para preentrenamiento MLM.
   - Eficiente en memoria: `embedding.factorized.enabled=true, embedding.factorized.dim=128, moe.enabled=false` — reduce params de embedding ~4.5× para vocabularios grandes.
-  - Híbrido experimental: `dims.layer_pattern: [retnet, titan_attn, mamba, standard_attn, ode]` — mezcla capas recurrentes, de atención, de espacio de estados y de profundidad continua para aprendizaje de representaciones diverso.
+  - Híbrido experimental: `dims.layer_pattern: [retnet, titan, mamba, standard, ode]` — mezcla capas recurrentes, de atención, de espacio de estados y de profundidad continua para aprendizaje de representaciones diverso.
 
   **Referencias:** (paper: arxiv:1706.03762) (paper: arxiv:1810.04805)
 additionalProperties: false
@@ -47,21 +47,21 @@ properties:
     type: object
     description: |-
       Per-mixer configuration sub-objects. Each mixer with dedicated hyperparameters has
-      its own sub-object here; mixers without config knobs (standard_attn, sigmoid_attn,
-      gated_softmax_attn, gla_attn, deltanet_attn, gated_deltanet_attn,
-      gated_deltanet2_attn, hgrn2_attn, fox_attn, longformer_attn, bigbird_attn,
-      sparse_transformer_attn, sparsek_attn, nsa_attn, sparge_attn, fasa_attn, kda_attn,
-      memory_attn, mamba) do not need a sub-object. `gqa_attn` reads `dims.num_kv_heads`.
+      its own sub-object here; mixers without config knobs (standard, sigmoid,
+      gated_softmax, gla, deltanet, gated_deltanet,
+      gated_deltanet2, hgrn2, fox, longformer, bigbird,
+      sparse_transformer, sparsek, nsa, sparge, fasa, kda,
+      memory, mamba) do not need a sub-object. `gqa` reads `dims.num_kv_heads`.
 
       **References:** (paper: arxiv:1706.03762) (paper: arxiv:2307.08621) (paper: arxiv:2312.00752)
       (paper: arxiv:2501.00663)
     description_es: |-
       Sub-objetos de configuración por mixer. Cada mixer con hiperparámetros dedicados tiene
-      su propio sub-objeto aquí; los mixers sin parámetros de configuración (standard_attn,
-      sigmoid_attn, gated_softmax_attn, gla_attn, deltanet_attn, gated_deltanet_attn,
-      gated_deltanet2_attn, hgrn2_attn, fox_attn, longformer_attn, bigbird_attn,
-      sparse_transformer_attn, sparsek_attn, nsa_attn, sparge_attn, fasa_attn, kda_attn,
-      memory_attn, mamba) no necesitan sub-objeto. `gqa_attn` lee `dims.num_kv_heads`.
+      su propio sub-objeto aquí; los mixers sin parámetros de configuración (standard,
+      sigmoid, gated_softmax, gla, deltanet, gated_deltanet,
+      gated_deltanet2, hgrn2, fox, longformer, bigbird,
+      sparse_transformer, sparsek, nsa, sparge, fasa, kda,
+      memory, mamba) no necesitan sub-objeto. `gqa` lee `dims.num_kv_heads`.
 
       **Referencias:** (paper: arxiv:1706.03762) (paper: arxiv:2307.08621) (paper: arxiv:2312.00752)
       (paper: arxiv:2501.00663)

@@ -11,7 +11,7 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - swa_attn
+    - swa
     mode: decoder
   norm:
     type: layer_norm

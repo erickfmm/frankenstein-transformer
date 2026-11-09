@@ -72,7 +72,7 @@ attention.ode.steps & int $\ge 1$ & Pasos de integración entre capas transforme
 \midrule
 \multicolumn{3}{l}{\textit{model.attention.retnet.*}} \\
 \midrule
-attention.retnet.heads & int $\ge 1$ & Cabezas de retención para capas \texttt{retnet}/\texttt{retnet\_attn}. Debe dividir \texttt{hidden\_size}. Por defecto: 8. \\
+attention.retnet.heads & int $\ge 1$ & Cabezas de retención para capas \texttt{retnet}/\texttt{retnet}. Debe dividir \texttt{hidden\_size}. Por defecto: 8. \\
 \midrule
 \multicolumn{3}{l}{\textit{model.attention.mla.*}} \\
 \midrule
@@ -238,48 +238,48 @@ El array \texttt{model.dims.layer\_pattern} acepta los siguientes 47 códigos de
 \multicolumn{4}{r}{\textit{continúa en la página siguiente}} \\
 \endfoot
 \bottomrule
-\caption{Enumeración completa de \texttt{layer\_pattern}. $\checkmark$ = soportado, $\times$ = no soportado. \texttt{fasa\_attn} y \texttt{sparge\_attn} entrenan como atención estándar densa sobre sus propias proyecciones y aplican su heurística dispersa solo en inferencia.}
+\caption{Enumeración completa de \texttt{layer\_pattern}. $\checkmark$ = soportado, $\times$ = no soportado. \texttt{fasa} y \texttt{sparge} entrenan como atención estándar densa sobre sus propias proyecciones y aplican su heurística dispersa solo en inferencia.}
 \label{tab:layer-pattern-enum}
 \endlastfoot
-standard\_attn & Atención multi-cabeza clásica (estilo BERT) & \checkmark & \checkmark \\
-sigmoid\_attn & Atención con compuerta sigmoide & \checkmark & \checkmark \\
-memory\_attn & Atención con memoria — valores por ID de token (V = K + Norm(E[s])) & \checkmark & \checkmark \\
-gated\_softmax\_attn & Atención softmax con compuerta sigmoide post-SDPA & \checkmark & \checkmark \\
-titan\_attn & Atención Titan con codificación posicional (HoPE/RoPE) & \checkmark & \checkmark \\
-retnet / retnet\_attn & Red de Retención (híbrido RNN+transformer) & \checkmark & \checkmark \\
+standard & Atención multi-cabeza clásica (estilo BERT) & \checkmark & \checkmark \\
+sigmoid & Atención con compuerta sigmoide & \checkmark & \checkmark \\
+memory & Atención con memoria — valores por ID de token (V = K + Norm(E[s])) & \checkmark & \checkmark \\
+gated\_softmax & Atención softmax con compuerta sigmoide post-SDPA & \checkmark & \checkmark \\
+titan & Atención Titan con codificación posicional (HoPE/RoPE) & \checkmark & \checkmark \\
+retnet & Red de Retención (híbrido RNN+transformer) & \checkmark & \checkmark \\
 mamba & Modelo de espacio de estado selectivo (SSM) & \checkmark & \checkmark \\
 ode & Capa ODE de profundidad continua & \checkmark & \checkmark \\
-gla\_attn & Atención Lineal con Compuerta con decaimiento multiplicativo & \checkmark & \checkmark \\
-deltanet\_attn / gated\_deltanet\_attn & DeltaNet con regla delta correctiva & \checkmark & \checkmark \\
-gated\_deltanet2\_attn & Gated DeltaNet-2 con compuertas de borrado/escritura canalizadas desacopladas & \checkmark & \checkmark \\
-hgrn2\_attn & HGRN2 con compuertas de olvido jerárquicas & \checkmark & \checkmark \\
-fox\_attn & Forgetting Transformer (FoX) con sesgo de olvido en logits & \checkmark & \checkmark \\
-nsa\_attn & Native Sparse Attention (tres ramas) & \checkmark & \checkmark \\
-engram\_attn & Búsqueda condicional de memoria de N-gramas & \checkmark & \checkmark \\
-gqa\_attn & Atención por Consultas Agrupadas con cabezas KV configurables & \checkmark & \checkmark \\
-longformer\_attn & Longformer: ventanas deslizantes + tokens globales & \checkmark & \checkmark \\
-bigbird\_attn & BigBird: atención local + aleatoria + global & \checkmark & \checkmark \\
-sparse\_transformer\_attn & Sparse Transformer: patrones factorizados & \checkmark & \checkmark \\
-sparsek\_attn & SparseK: selección KV top-k diferenciable & \checkmark & \checkmark \\
-sparge\_attn & SpargeAttn --- poda de bloques en dos etapas; entrenamiento denso, inferencia dispersa & \checkmark & \checkmark \\
-fasa\_attn & FASA --- selección de tokens consciente de frecuencia; entrenamiento denso, inferencia dispersa & \checkmark & \checkmark \\
-msa\_attn & MiniMax Sparse Attention --- bloques dispersos sobre GQA & \checkmark & \checkmark \\
-sparda\_attn & SparDA --- atención dispersa desacoplada con proyección Forecast & \checkmark & \checkmark \\
-lsa\_attn & Latent Sparse Attention --- clustering semántico de claves con selección top-k & \checkmark & \checkmark \\
-fastconformer\_attn & Fast Conformer --- ventana de contexto limitado + token global anclado a la cabecera & \checkmark & \checkmark \\
-kda\_attn & Kimi Delta Attention --- decaimiento por canal + compuerta de escritura escalar & \checkmark & \checkmark \\
-falcon1\_attn / falcon2\_attn / falcon3\_attn & Familia de regresión Falcon --- regla delta NLMS prefix-alineada (RAW) & \checkmark & \checkmark \\
-falcon1a\_attn / falcon2a\_attn / falcon3a\_attn & Familia de producto interno Falcon --- escrituras aditivas desplazadas con decaimiento por ridge & \checkmark & \checkmark \\
-mla\_attn & Atención Latente Multi-Cabeza + RoPE & \checkmark & \checkmark \\
-gqla\_attn & Atención Latente por Consultas Agrupadas --- dos rutas de decodificación & \checkmark & \checkmark \\
-mlra\_attn & Atención Multi-Cabeza de Rango Bajo --- latente particionable & \checkmark & \checkmark \\
-tucker\_attn & Atención Tucker --- factorización de rango bajo generalizada & \checkmark & \checkmark \\
-iha\_attn & Atención de Cabezas Entrelazadas --- pseudo-cabezas entre cabezas & \checkmark & \checkmark \\
-gta\_attn & Atención laTenT por Cabezas Agrupadas --- mapa compartido + valores latentes & \checkmark & \checkmark \\
-mtla\_attn & Atención Latente Temporal Multi-Cabeza --- fusión temporal KV & \checkmark & \checkmark \\
-cca\_attn & Atención Convolucional Comprimida --- atención en espacio latente + convs & \checkmark & \checkmark \\
-ccgqa\_attn & Atención Convolucional Comprimida por Consultas Agrupadas --- CCA + GQA en latente & \checkmark & \checkmark \\
-gma\_attn & Atención de Mezcla Gaussiana --- enrutamiento latente probabilístico, $\mathcal{O}(NK)$ tiempo lineal & \checkmark & \checkmark \\
+gla & Atención Lineal con Compuerta con decaimiento multiplicativo & \checkmark & \checkmark \\
+deltanet / gated\_deltanet & DeltaNet con regla delta correctiva & \checkmark & \checkmark \\
+gated\_deltanet2 & Gated DeltaNet-2 con compuertas de borrado/escritura canalizadas desacopladas & \checkmark & \checkmark \\
+hgrn2 & HGRN2 con compuertas de olvido jerárquicas & \checkmark & \checkmark \\
+fox & Forgetting Transformer (FoX) con sesgo de olvido en logits & \checkmark & \checkmark \\
+nsa & Native Sparse Attention (tres ramas) & \checkmark & \checkmark \\
+engram & Búsqueda condicional de memoria de N-gramas & \checkmark & \checkmark \\
+gqa & Atención por Consultas Agrupadas con cabezas KV configurables & \checkmark & \checkmark \\
+longformer & Longformer: ventanas deslizantes + tokens globales & \checkmark & \checkmark \\
+bigbird & BigBird: atención local + aleatoria + global & \checkmark & \checkmark \\
+sparse\_transformer & Sparse Transformer: patrones factorizados & \checkmark & \checkmark \\
+sparsek & SparseK: selección KV top-k diferenciable & \checkmark & \checkmark \\
+sparge & SpargeAttn --- poda de bloques en dos etapas; entrenamiento denso, inferencia dispersa & \checkmark & \checkmark \\
+fasa & FASA --- selección de tokens consciente de frecuencia; entrenamiento denso, inferencia dispersa & \checkmark & \checkmark \\
+msa & MiniMax Sparse Attention --- bloques dispersos sobre GQA & \checkmark & \checkmark \\
+sparda & SparDA --- atención dispersa desacoplada con proyección Forecast & \checkmark & \checkmark \\
+lsa & Latent Sparse Attention --- clustering semántico de claves con selección top-k & \checkmark & \checkmark \\
+fastconformer & Fast Conformer --- ventana de contexto limitado + token global anclado a la cabecera & \checkmark & \checkmark \\
+kda & Kimi Delta Attention --- decaimiento por canal + compuerta de escritura escalar & \checkmark & \checkmark \\
+falcon1 / falcon2 / falcon3 & Familia de regresión Falcon --- regla delta NLMS prefix-alineada (RAW) & \checkmark & \checkmark \\
+falcon1a / falcon2a / falcon3a & Familia de producto interno Falcon --- escrituras aditivas desplazadas con decaimiento por ridge & \checkmark & \checkmark \\
+mla & Atención Latente Multi-Cabeza + RoPE & \checkmark & \checkmark \\
+gqla & Atención Latente por Consultas Agrupadas --- dos rutas de decodificación & \checkmark & \checkmark \\
+mlra & Atención Multi-Cabeza de Rango Bajo --- latente particionable & \checkmark & \checkmark \\
+tucker & Atención Tucker --- factorización de rango bajo generalizada & \checkmark & \checkmark \\
+iha & Atención de Cabezas Entrelazadas --- pseudo-cabezas entre cabezas & \checkmark & \checkmark \\
+gta & Atención laTenT por Cabezas Agrupadas --- mapa compartido + valores latentes & \checkmark & \checkmark \\
+mtla & Atención Latente Temporal Multi-Cabeza --- fusión temporal KV & \checkmark & \checkmark \\
+cca & Atención Convolucional Comprimida --- atención en espacio latente + convs & \checkmark & \checkmark \\
+ccgqa & Atención Convolucional Comprimida por Consultas Agrupadas --- CCA + GQA en latente & \checkmark & \checkmark \\
+gma & Atención de Mezcla Gaussiana --- enrutamiento latente probabilístico, $\mathcal{O}(NK)$ tiempo lineal & \checkmark & \checkmark \\
 \end{longtable}
 
 \subsection{Configuración de Entrenamiento}
@@ -505,7 +505,7 @@ El esquema impone las siguientes reglas de validación entre componentes, implem
     \item \texttt{task: mlm} requiere \texttt{training.optimizer}; \texttt{task: sbert} requiere \texttt{training.sbert}; \texttt{task: causal\_lm} requiere \texttt{training.optimizer} y \texttt{model\_class='frankenstein\_text\_decoder'}.
     \item \texttt{bitnet.routers=true} requiere \texttt{bitnet.enabled=true}. La bandera no tiene efecto en caso contrario.
     \item \texttt{use\_mhc=true} (flujo residual de $n$ streams mHC) y \texttt{use\_mixture\_of\_depths=true} son mutuamente excluyentes. Habilitar ambos lanza un \texttt{ValueError}: el enrutamiento MoD de tokens opera sobre un flujo $C$-dimensional único, en conflicto con el flujo residual de $n$ streams.
-    \item \texttt{fasa\_attn} y \texttt{sparge\_attn} son tipos de capa dispersos en inferencia: aplican su heurística dispersa solo en modo evaluación. Durante el entrenamiento la capa híbrida contenedora sustituye atención estándar densa sobre las mismas proyecciones $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$, por lo que pueden aparecer en \texttt{model.dims.layer\_pattern} para ejecuciones de entrenamiento; los pesos entrenados son los que lee la ruta dispersa en inferencia.
+    \item \texttt{fasa} y \texttt{sparge} son tipos de capa dispersos en inferencia: aplican su heurística dispersa solo en modo evaluación. Durante el entrenamiento la capa híbrida contenedora sustituye atención estándar densa sobre las mismas proyecciones $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$, por lo que pueden aparecer en \texttt{model.dims.layer\_pattern} para ejecuciones de entrenamiento; los pesos entrenados son los que lee la ruta dispersa en inferencia.
     \item \texttt{model\_class: frankenstein\_text\_decoder} fuerza \texttt{model.dims.mode: decoder} en tiempo de ejecución. Establecer \texttt{model.dims.mode: encoder} con esta clase se sobrescribe.
     \item O bien \texttt{base\_model} debe estar presente, o bien tanto \texttt{model\_class} como \texttt{model} deben estar presentes. El esquema rechaza configuraciones que no proporcionen ninguno o una combinación incompleta.
 \end{enumerate}

@@ -7,19 +7,19 @@ properties:
     title: "Latent Sparse Attention"
     title_es: "Atención Dispersa Latente"
     description: |-
-      Hyperparameters for `lsa_attn` (Latent Sparse Attention / Native-LSA
+      Hyperparameters for `lsa` (Latent Sparse Attention / Native-LSA
       (paper: arxiv:2610.42147)). Keys are L2-normalised, pooled every
       `pool_size` tokens and Ward-clustered per complete `cluster_block` into
       `cluster_block / keys_per_bucket` buckets whose unit-norm centroids are
       scored per query; the top `num_buckets` buckets expand into
       `num_long_range` long-range keys attended on top of `num_sinks` sink
       keys and a one-block window. N-LSA adds no parameters and trains
-      natively on the next-token loss. Only applies when `lsa_attn` appears in
+      natively on the next-token loss. Only applies when `lsa` appears in
       `layer_pattern`.
 
       **References:** (paper: arxiv:2610.42147)
     description_es: |-
-      Hiperparámetros para `lsa_attn` (Atención Dispersa Latente / Native-LSA
+      Hiperparámetros para `lsa` (Atención Dispersa Latente / Native-LSA
       (paper: arxiv:2610.42147)). Las claves se normalizan L2, se agrupan cada
       `pool_size` tokens y se agrupan con Ward por cada `cluster_block`
       completo en `cluster_block / keys_per_bucket` buckets cuyos centroides
@@ -27,7 +27,7 @@ properties:
       expanden a `num_long_range` claves de largo alcance que se atienden
       junto a `num_sinks` claves sumidero y una ventana de un bloque. N-LSA no
       añade parámetros y entrena de forma nativa con la pérdida del siguiente
-      token. Solo aplica cuando `lsa_attn` aparece en `layer_pattern`.
+      token. Solo aplica cuando `lsa` aparece en `layer_pattern`.
 
       **Referencias:** (paper: arxiv:2610.42147)
     properties:
@@ -37,7 +37,7 @@ properties:
         title: "LSA Long-Range Keys"
         title_es: "Claves de Largo Alcance LSA"
         description: |-
-          Long-range key budget `k` selected per query in `lsa_attn`
+          Long-range key budget `k` selected per query in `lsa`
           (Latent Sparse Attention (paper: arxiv:2610.42147)). The selected
           buckets are expanded best-first until `k` long-range keys are
           found; each query additionally attends to `num_sinks` sinks and a
@@ -48,7 +48,7 @@ properties:
           **References:** (paper: arxiv:2610.42147)
         description_es: |-
           Presupuesto de claves de largo alcance `k` seleccionadas por
-          consulta en `lsa_attn` (Atención Dispersa Latente (paper:
+          consulta en `lsa` (Atención Dispersa Latente (paper:
           arxiv:2610.42147)). Los buckets elegidos se expanden mejor-primero
           hasta encontrar `k` claves; cada consulta atiende además a
           `num_sinks` sumideros y una ventana de un bloque. Por defecto en
@@ -64,7 +64,7 @@ properties:
         title: "LSA Buckets per Query"
         title_es: "Buckets por Consulta LSA"
         description: |-
-          Number of buckets `p` scored and selected per query in `lsa_attn`
+          Number of buckets `p` scored and selected per query in `lsa`
           (Latent Sparse Attention (paper: arxiv:2610.42147)). The paper
           chooses `p` such that `p · pool_size ≥ k`; the runtime raises `p`
           to `ceil(k / pool_size)` when the configured value is smaller, and
@@ -73,7 +73,7 @@ properties:
           **References:** (paper: arxiv:2610.42147)
         description_es: |-
           Número de buckets `p` puntuados y seleccionados por consulta en
-          `lsa_attn` (Atención Dispersa Latente (paper: arxiv:2610.42147)). El
+          `lsa` (Atención Dispersa Latente (paper: arxiv:2610.42147)). El
           paper elige `p` de forma que `p · pool_size ≥ k`; en ejecución se
           eleva `p` a `ceil(k / pool_size)` si el valor configurado es menor,
           y se recorta al número de buckets en caché. Por defecto en N-LSA:
@@ -89,24 +89,24 @@ properties:
         title_es: "Sumideros de Atención LSA"
         description: |-
           Number of leading sink tokens `n_sink` that every query always
-          attends to in `lsa_attn` (Latent Sparse Attention (paper:
+          attends to in `lsa` (Latent Sparse Attention (paper:
           arxiv:2610.42147), building on StreamingLLM (paper: arxiv:2309.17453)).
           The paper fixes `n_sink = 4` and excludes sinks from the long-range
           expansion (a selected key already covered by the sink prefix is
           skipped). Must be at least 1 and smaller than `cluster_block`; sinks
-          are causal-clipped in decoder mode. Only applies when `lsa_attn` is
+          are causal-clipped in decoder mode. Only applies when `lsa` is
           in `layer_pattern`.
 
           **References:** (paper: arxiv:2610.42147) (paper: arxiv:2309.17453)
         description_es: |-
           Número de tokens sumidero iniciales `n_sink` a los que toda consulta
-          atiende siempre en `lsa_attn` (Atención Dispersa Latente (paper:
+          atiende siempre en `lsa` (Atención Dispersa Latente (paper:
           arxiv:2610.42147), sobre StreamingLLM (paper: arxiv:2309.17453)). El
           paper fija `n_sink = 4` y excluye los sumideros de la expansión de
           largo alcance (una clave ya cubierta por el prefijo sumidero se
           omite). Debe ser al menos 1 y menor que `cluster_block`; los
           sumideros se recortan de forma causal en modo decoder. Solo aplica
-          cuando `lsa_attn` está en `layer_pattern`.
+          cuando `lsa` está en `layer_pattern`.
 
           **Referencias:** (paper: arxiv:2610.42147) (paper: arxiv:2309.17453)
         default: 4
@@ -118,7 +118,7 @@ properties:
         title_es: "Tamaño de Pool LSA"
         description: |-
           Number of consecutive index keys `n_pool` summed into one pool key
-          before Ward clustering in `lsa_attn` (Latent Sparse Attention
+          before Ward clustering in `lsa` (Latent Sparse Attention
           (paper: arxiv:2610.42147)). Clustering therefore runs over
           `T / pool_size` pool keys instead of `T` keys. The paper uses 4, so
           the bucket cache holds one centroid per `keys_per_bucket` keys.
@@ -127,7 +127,7 @@ properties:
           **References:** (paper: arxiv:2610.42147)
         description_es: |-
           Número de claves índice consecutivas `n_pool` que se suman en una
-          clave de pool antes del clustering Ward en `lsa_attn` (Atención
+          clave de pool antes del clustering Ward en `lsa` (Atención
           Dispersa Latente (paper: arxiv:2610.42147)). El clustering recorre
           por tanto `T / pool_size` claves de pool en lugar de `T` claves. El
           paper usa 4, de modo que la caché de buckets guarda un centroide por
@@ -143,7 +143,7 @@ properties:
         title: "LSA Cluster Block"
         title_es: "Bloque de Clustering LSA"
         description: |-
-          Cluster block size `n_cluster` for `lsa_attn` (Latent Sparse
+          Cluster block size `n_cluster` for `lsa` (Latent Sparse
           Attention (paper: arxiv:2610.42147)). Keys are clustered in
           consecutive blocks of this size; a query's own block is not yet
           clustered and is covered by the window, so this value is also the
@@ -153,7 +153,7 @@ properties:
 
           **References:** (paper: arxiv:2610.42147)
         description_es: |-
-          Tamaño de bloque de clustering `n_cluster` para `lsa_attn` (Atención
+          Tamaño de bloque de clustering `n_cluster` para `lsa` (Atención
           Dispersa Latente (paper: arxiv:2610.42147)). Las claves se agrupan en
           bloques consecutivos de este tamaño; el bloque propio de una consulta
           aún no está clusterizado y queda cubierto por la ventana, por lo que
@@ -171,7 +171,7 @@ properties:
         title: "LSA Keys per Bucket"
         title_es: "Claves por Bucket LSA"
         description: |-
-          Average number of keys per bucket `n̄_b` in `lsa_attn` (Latent
+          Average number of keys per bucket `n̄_b` in `lsa` (Latent
           Sparse Attention (paper: arxiv:2610.42147)). Each complete block is
           Ward-clustered into `m = cluster_block / keys_per_bucket` buckets;
           with the defaults (512 / 8) every block holds 64 buckets. Must
@@ -179,7 +179,7 @@ properties:
 
           **References:** (paper: arxiv:2610.42147)
         description_es: |-
-          Número medio de claves por bucket `n̄_b` en `lsa_attn` (Atención
+          Número medio de claves por bucket `n̄_b` en `lsa` (Atención
           Dispersa Latente (paper: arxiv:2610.42147)). Cada bloque completo se
           agrupa con Ward en `m = cluster_block / keys_per_bucket` buckets; con
           los valores por defecto (512 / 8) cada bloque contiene 64 buckets.
@@ -194,7 +194,7 @@ properties:
         title: "LSA Max Keys per Bucket"
         title_es: "Máximo de Claves por Bucket LSA"
         description: |-
-          Maximum number of keys `n_max_b` a bucket may hold in `lsa_attn`
+          Maximum number of keys `n_max_b` a bucket may hold in `lsa`
           (Latent Sparse Attention (paper: arxiv:2610.42147)). Ward merges
           that would push a bucket above this cap are skipped, which bounds
           the width of the bucket index table. Must be at least
@@ -203,7 +203,7 @@ properties:
           **References:** (paper: arxiv:2610.42147)
         description_es: |-
           Número máximo de claves `n_max_b` que puede contener un bucket en
-          `lsa_attn` (Atención Dispersa Latente (paper: arxiv:2610.42147)). Las
+          `lsa` (Atención Dispersa Latente (paper: arxiv:2610.42147)). Las
           fusiones Ward que superarían este límite se omiten, lo que acota el
           ancho de la tabla de índices del bucket. Debe ser al menos
           `keys_per_bucket`. Por defecto del paper: 16.

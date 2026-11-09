@@ -1,6 +1,6 @@
 """Eval-only mixer cache tests (plan §13, T6).
 
-``fasa_attn`` is a decode-time selection method by design: it reads a full
+``fasa`` is a decode-time selection method by design: it reads a full
 K/V cache and skips computation. Cached decoding must work. Its sparse path
 remains inference-only: in training mode ``HybridLayer`` substitutes standard
 dense attention over the same projections (see ``dense_forward``).
@@ -29,7 +29,7 @@ def _build():
         num_kv_heads=2,
         dropout=0.0,
         use_bitnet=False,
-        layer_pattern=["fasa_attn"],
+        layer_pattern=["fasa"],
         mode="decoder",
         positional_encoding="rope",
         norm_type="layer_norm",

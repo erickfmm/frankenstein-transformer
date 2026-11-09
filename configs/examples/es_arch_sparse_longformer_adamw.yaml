@@ -7,14 +7,14 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - sparse_transformer_attn
-    - longformer_attn
-    - sparse_transformer_attn
-    - longformer_attn
-    - sparse_transformer_attn
-    - longformer_attn
-    - sparse_transformer_attn
-    - longformer_attn
+    - sparse_transformer
+    - longformer
+    - sparse_transformer
+    - longformer
+    - sparse_transformer
+    - longformer
+    - sparse_transformer
+    - longformer
   norm:
     type: layer_norm
   embedding:

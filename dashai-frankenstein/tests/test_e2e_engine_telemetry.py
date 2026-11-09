@@ -92,7 +92,7 @@ _E2E_CFG = {
             "num_layers": 2,
             "num_heads": 4,
             "num_loops": 1,
-            "layer_pattern": ["standard_attn"],
+            "layer_pattern": ["standard"],
             "mode": "encoder",
             "dropout": 0.0,
         },

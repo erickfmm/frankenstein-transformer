@@ -9,7 +9,7 @@ argument. It owns:
   under ``num_loops``/Hyperloop where the same physical layer executes
   with distinct logical roles);
 * the global token tail (FIFO of recent token ids for token-level
-  consumers such as ``engram_attn``);
+  consumers such as ``engram``);
 * the write-time codec (quantization) and the read-time policy
   (eviction), built from the resolved :class:`InferenceConfig`;
 * the per-mixer enable/disable overrides;
@@ -144,7 +144,7 @@ class FrankensteinCache:
         self._position += int(num_tokens)
 
     # ------------------------------------------------------------------ #
-    # Token tail (token-level consumers, e.g. engram_attn)
+    # Token tail (token-level consumers, e.g. engram)
     # ------------------------------------------------------------------ #
     def push_tokens(self, token_ids: torch.Tensor) -> None:
         """Append the latest token ids ``(B, T)`` to the token tail FIFO."""

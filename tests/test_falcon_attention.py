@@ -31,7 +31,7 @@ def _cfg(**overrides):
         dropout=0.0,
         norm_type="layer_norm",
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         use_moe=False,
         ode_solver="rk4",
         ode_steps=1,
@@ -313,8 +313,8 @@ class FalconConfigTests(unittest.TestCase):
         self.assertEqual(cfg.falcon_conv_kernel, 4)
         self.assertEqual(cfg.falcon_eps, 1e-6)
         self.assertEqual(cfg.falcon_eps_gamma, 1e-4)
-        self.assertFalse(cfg.falcon1_attn_use_pe)
-        self.assertFalse(cfg.falcon3a_attn_use_pe)
+        self.assertFalse(cfg.falcon1_use_pe)
+        self.assertFalse(cfg.falcon3a_use_pe)
 
     def test_invalid_values_raise(self):
         for kwargs, msg in [

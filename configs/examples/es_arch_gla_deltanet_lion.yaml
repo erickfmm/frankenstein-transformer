@@ -7,14 +7,14 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - gla_attn
-    - deltanet_attn
-    - gla_attn
-    - deltanet_attn
-    - gla_attn
-    - deltanet_attn
-    - gla_attn
-    - deltanet_attn
+    - gla
+    - deltanet
+    - gla
+    - deltanet
+    - gla
+    - deltanet
+    - gla
+    - deltanet
   norm:
     type: layer_norm
   embedding:

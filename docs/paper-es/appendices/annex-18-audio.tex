@@ -141,7 +141,7 @@ Los ejemplos de ASR usan \texttt{astroza/chilean-jokes-festival-de-vina} (audio 
 model_class: frankenstein_audio
 model:
   dims: {hidden_size: 144, num_layers: 16, num_heads: 4}
-  dims.layer_pattern: [conformer_attn, ...]   # 16 entradas
+  dims.layer_pattern: [conformer, ...]   # 16 entradas
   attention.conformer: {kernel_size: 32, macaron: true, conv_norm: batch}
 audio:
   feature: logmel

@@ -9,7 +9,7 @@ model:
     layer_pattern:
     - retnet
     - mamba
-    - titan_attn
+    - titan
     - retnet
     mode: decoder
   norm:

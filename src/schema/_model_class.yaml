@@ -11,7 +11,7 @@ description: |-
   **Examples explained:**
   - `frankenstein_text_encoder`: Use when you need a full-featured text encoder with mixed attention mechanisms, MoE, and advanced normalization. Best for MLM pre-training with large datasets where architectural flexibility matters. Supports all mixer types in `layer_pattern`.
   - `frankenstein_text_decoder`: Use for autoregressive text generation tasks (GPT-style). The system forces `mode=decoder` automatically. Supports causal attention where each token only attends to previous tokens.
-  - `frankenstein_audio`: Use for speech recognition or audio/sensor classification. Pair `layer_pattern: [conformer_attn]` with `audio.feature: logmel` for the paper's recipe, or `audio.feature: raw` to classify multichannel 1-D signals directly.
+  - `frankenstein_audio`: Use for speech recognition or audio/sensor classification. Pair `layer_pattern: [conformer]` with `audio.feature: logmel` for the paper's recipe, or `audio.feature: raw` to classify multichannel 1-D signals directly.
 
   **References:** (paper: arxiv:1810.04805) (paper: arxiv:1706.03762) (paper: arxiv:2010.11929)
   (paper: arxiv:2503.19108) (paper: arxiv:2005.08100)
@@ -25,7 +25,7 @@ description_es: |-
   **Ejemplos explicados:**
   - `frankenstein_text_encoder`: Usar cuando se necesita un encoder de texto completo con mecanismos de atención mixtos, MoE y normalización avanzada. Ideal para preentrenamiento MLM con datasets grandes donde importa la flexibilidad arquitectónica. Soporta todos los tipos de mixer en `layer_pattern`.
   - `frankenstein_text_decoder`: Usar para tareas de generación de texto autorregresivas (tipo GPT). El sistema fuerza `mode=decoder` automáticamente. Soporta atención causal donde cada token solo atiende a tokens previos.
-  - `frankenstein_audio`: Usar para reconocimiento de habla o clasificación de audio/señales. Combina `layer_pattern: [conformer_attn]` con `audio.feature: logmel` para la receta del paper, o `audio.feature: raw` para clasificar señales 1-D multicanal directamente.
+  - `frankenstein_audio`: Usar para reconocimiento de habla o clasificación de audio/señales. Combina `layer_pattern: [conformer]` con `audio.feature: logmel` para la receta del paper, o `audio.feature: raw` para clasificar señales 1-D multicanal directamente.
 
   **Referencias:** (paper: arxiv:1810.04805) (paper: arxiv:1706.03762) (paper: arxiv:2010.11929)
   (paper: arxiv:2503.19108) (paper: arxiv:2005.08100)

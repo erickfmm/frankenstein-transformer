@@ -16,14 +16,14 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - conformer_attn
-    - standard_attn
-    - conformer_attn
-    - standard_attn
-    - conformer_attn
-    - standard_attn
-    - conformer_attn
-    - standard_attn
+    - conformer
+    - standard
+    - conformer
+    - standard
+    - conformer
+    - standard
+    - conformer
+    - standard
   norm:
     type: layer_norm
   embedding:

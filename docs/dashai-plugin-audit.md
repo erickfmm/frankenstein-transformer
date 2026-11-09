@@ -44,7 +44,7 @@ These still hold and the integration must respect them:
 1. **Schema is the source of truth.** Every config field must exist in `src/schema/_*.yaml`. The plugin must never invent undocumented keys.
 2. **Cross-component compatibility** (divisibility of `hidden_size` by `num_heads`, `num_kv_heads` | `num_heads`, vocab/tokenizer match, `task` ↔ optimizer/sbert rules, etc.).
 3. **BitNet defaults to `True`**; `bitnet_routers` requires `use_bitnet`.
-4. **`fasa_attn`/`sparge_attn` are eval-only** (raise in training).
+4. **`fasa`/`sparge` are eval-only** (raise in training).
 5. **`frankenstein_text_decoder` forces `mode: decoder`.**
 6. **Optimizer prefixed keys** `<class>-<group>_<param>`.
 7. **`training.task` is required** (`mlm`/`sbert`/vision/causal).

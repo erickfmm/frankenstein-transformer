@@ -157,7 +157,7 @@ properties:
     title: "Key-Value Heads (GQA)"
     title_es: "Cabezas Clave-Valor (GQA)"
     description: |
-      Number of key-value heads for Grouped-Query Attention (``gqa_attn``).
+      Number of key-value heads for Grouped-Query Attention (``gqa``).
       Must divide ``num_heads`` evenly. Values range from 1 (equivalent to
       multi-query attention) to ``num_heads`` (equivalent to multi-head
       attention). The paper suggests 8 as a favorable middle ground for
@@ -166,11 +166,11 @@ properties:
       **References:** (paper: arxiv:2305.13245)
     description_es: |
       Número de cabezas clave-valor para Grouped-Query Attention
-      (``gqa_attn``). Debe dividir ``num_heads`` exactamente. Los valores
+      (``gqa``). Debe dividir ``num_heads`` exactamente. Los valores
       van de 1 (equivalente a multi-query attention) a ``num_heads``
       (equivalente a multi-head attention). El paper sugiere 8 como un
       punto medio favorable para tamaños de modelo típicos.
-      También lo consumen los mixers GQA-based (`msa_attn`, `sparda_attn`) y
+      También lo consumen los mixers GQA-based (`msa`, `sparda`) y
       `attention.ccgqa.num_kv_heads` para CCGQA.
 
       **Referencias:** (paper: arxiv:2305.13245)
@@ -216,117 +216,117 @@ properties:
 
       | Type | Description | Training | Inference |
       |------|-------------|----------|-----------|
-      | `standard_attn` | Classic multi-head self-attention (like BERT) (paper: arxiv:1706.03762) | ✅ | ✅ |
-      | `sigmoid_attn` | Sigmoid-gated attention (paper: arxiv:2409.04431) | ✅ | ✅ |
-      | `gated_softmax_attn` | Gated softmax attention with post-SDPA sigmoid (paper: arxiv:2505.06708) | ✅ | ✅ |
-      | `titan_attn` | Titan attention with positional encoding (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
-      | `retnet` / `retnet_attn` | Retention Network (RNN+transformer hybrid) (paper: arxiv:2307.08621) | ✅ | ✅ |
+      | `standard` | Classic multi-head self-attention (like BERT) (paper: arxiv:1706.03762) | ✅ | ✅ |
+      | `sigmoid` | Sigmoid-gated attention (paper: arxiv:2409.04431) | ✅ | ✅ |
+      | `gated_softmax` | Gated softmax attention with post-SDPA sigmoid (paper: arxiv:2505.06708) | ✅ | ✅ |
+      | `titan` | Titan attention with positional encoding (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
+      | `retnet` | Retention Network (RNN+transformer hybrid) (paper: arxiv:2307.08621) | ✅ | ✅ |
       | `mamba` | Selective state-space model (SSM) (paper: arxiv:2312.00752) | ✅ | ✅ |
       | `ode` | Continuous-depth ODE layer (uses `attention.ode.solver`/`attention.ode.steps`) (paper: arxiv:1906.02762) (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692) | ✅ | ✅ |
-      | `gla_attn` | Gated Linear Attention with multiplicative decay (paper: arxiv:2312.06635) | ✅ | ✅ |
-      | `deltanet_attn` / `gated_deltanet_attn` | DeltaNet with corrective delta rule (paper: arxiv:2406.06484) (paper: arxiv:2412.06464) | ✅ | ✅ |
-      | `gated_deltanet2_attn` | Gated DeltaNet-2 with decoupled channel-wise erase/write gates (paper: arxiv:2605.22791) | ✅ | ✅ |
-      | `hgrn2_attn` | HGRN2 with hierarchical forget gates (paper: arxiv:2404.07904) | ✅ | ✅ |
-      | `fox_attn` | Forgetting Transformer (FoX) with forget bias in logits (paper: arxiv:2503.02130) | ✅ | ✅ |
-      | `nsa_attn` | Native Sparse Attention (three-branch) (paper: arxiv:2502.11089) | ✅ | ✅ |
-      | `engram_attn` | N-gram conditional memory lookup (paper: arxiv:2601.07372) | ✅ | ✅ |
-      | `gqa_attn` | Grouped-Query Attention — configurable KV heads (paper: arxiv:2305.13245) | ✅ | ✅ |
-      | `longformer_attn` | Longformer: sliding windows + global tokens (paper: arxiv:2004.05150) | ✅ | ✅ |
-      | `swa_attn` | Sliding-window attention with attention sinks — SWA(w, s) (paper: arxiv:2608.28444) | ✅ | ✅ |
-      | `bigbird_attn` | BigBird: local + random + global attention (paper: arxiv:2007.14062) | ✅ | ✅ |
-      | `sparse_transformer_attn` | Sparse Transformer: factorized patterns (paper: arxiv:1904.10509) | ✅ | ✅ |
-      | `sparsek_attn` | SparseK: differentiable top-k KV selection (paper: arxiv:2406.16747) | ✅ | ✅ |
-      | `sparge_attn` ⚠️ | SpargeAttn — two-stage block pruning; **trains as dense attention**, sparse filter at inference (paper: arxiv:2502.18137) | ✅ (dense) | ✅ (sparse) |
-      | `fasa_attn` ⚠️ | FASA — frequency-aware token selection; **trains as dense attention**, sparse selection at inference (paper: arxiv:2602.03152) | ✅ (dense) | ✅ (sparse) |
-      | `msa_attn` | MiniMax Sparse Attention — block-sparse on GQA (paper: arxiv:2606.13392) | ✅ | ✅ |
-      | `sparda_attn` | SparDA — decoupled sparse attention with a Forecast projection (paper: arxiv:2606.04511) | ✅ | ✅ |
-      | `kda_attn` | Kimi Delta Attention — channel-wise decay + scalar write gate (paper: arxiv:2510.26692) | ✅ | ✅ |
-      | `falcon1_attn` | Falcon-1 — scalar NLMS regression (delta-rule) fast-weight update, read-after-write prefix-aligned (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon2_attn` | Falcon-2 — per-column NLMS regression fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon3_attn` | Falcon-3 — sliding-window minibatch regression fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon1a_attn` | Falcon-1A — scalar inner-product (additive) fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon2a_attn` | Falcon-2A — per-column inner-product fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon3a_attn` | Falcon-3A — sliding-window inner-product fast-weight update, best length extrapolation (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `mla_attn` | Multi-Head Latent Attention + RoPE (paper: arxiv:2506.09342) | ✅ | ✅ |
-      | `gqla_attn` | Group-Query Latent Attention — two decoding paths (paper: arxiv:2605.15250) | ✅ | ✅ |
-      | `mlra_attn` | Multi-Head Low-Rank Attention — partitionable latent (paper: arxiv:2603.02188) | ✅ | ✅ |
-      | `tucker_attn` | Tucker Attention — generalised low-rank factorisation (paper: arxiv:2603.30033) | ✅ | ✅ |
-      | `iha_attn` | Interleaved Head Attention — cross-head pseudo-heads (paper: arxiv:2602.21371) | ✅ | ✅ |
-      | `gta_attn` | Grouped-head laTenT Attention — shared map + latent values (paper: arxiv:2506.17286) | ✅ | ✅ |
-      | `mtla_attn` | Multi-head Temporal Latent Attention — temporal KV merge (paper: arxiv:2505.13544) | ✅ | ✅ |
-      | `cca_attn` | Compressed Convolutional Attention — latent-space attention + convs (paper: arxiv:2510.04476) | ✅ | ✅ |
-      | `ccgqa_attn` | Compressed Convolutional Grouped Query Attention — CCA + GQA in latent (paper: arxiv:2510.04476) | ✅ | ✅ |
-      | `gma_attn` | Gaussian Mixture Attention — probabilistic latent routing, O(NK) linear-time (paper: arxiv:2606.18283) | ✅ | ✅ |
-      | `ssog_attn` | SSOG — separable Gaussian field over relative position, near-linear O(R·N·√N); content steers, never scores (Pisoni 2026) (paper: https://www.pisoni.ai/posts/ssog/) | ✅ | ✅ |
-      | `conformer_attn` | Conformer — macaron FFN₁ + MHSA + convolution module (paper: arxiv:2005.08100) | ✅ | ✅ |
-      | `memory_attn` | Memory Attention — value projection replaced by layer-specific token-ID memory, V = K + Norm(E[s]) (paper: arxiv:2609.28399) | ✅ | ✅ |
-      | `lsa_attn` | Latent Sparse Attention — semantic Ward clustering of keys + top-k long-range selection; natively trainable, no extra parameters, no PE (paper: arxiv:2610.42147) | ✅ | ✅ |
-      | `fastconformer_attn` | Fast Conformer limited-context attention — local window + head-pinned global token(s), optional separate global projections (paper: arxiv:2305.05084) | ✅ | ✅ |
+      | `gla` | Gated Linear Attention with multiplicative decay (paper: arxiv:2312.06635) | ✅ | ✅ |
+      | `deltanet` / `gated_deltanet` | DeltaNet with corrective delta rule (paper: arxiv:2406.06484) (paper: arxiv:2412.06464) | ✅ | ✅ |
+      | `gated_deltanet2` | Gated DeltaNet-2 with decoupled channel-wise erase/write gates (paper: arxiv:2605.22791) | ✅ | ✅ |
+      | `hgrn2` | HGRN2 with hierarchical forget gates (paper: arxiv:2404.07904) | ✅ | ✅ |
+      | `fox` | Forgetting Transformer (FoX) with forget bias in logits (paper: arxiv:2503.02130) | ✅ | ✅ |
+      | `nsa` | Native Sparse Attention (three-branch) (paper: arxiv:2502.11089) | ✅ | ✅ |
+      | `engram` | N-gram conditional memory lookup (paper: arxiv:2601.07372) | ✅ | ✅ |
+      | `gqa` | Grouped-Query Attention — configurable KV heads (paper: arxiv:2305.13245) | ✅ | ✅ |
+      | `longformer` | Longformer: sliding windows + global tokens (paper: arxiv:2004.05150) | ✅ | ✅ |
+      | `swa` | Sliding-window attention with attention sinks — SWA(w, s) (paper: arxiv:2608.28444) | ✅ | ✅ |
+      | `bigbird` | BigBird: local + random + global attention (paper: arxiv:2007.14062) | ✅ | ✅ |
+      | `sparse_transformer` | Sparse Transformer: factorized patterns (paper: arxiv:1904.10509) | ✅ | ✅ |
+      | `sparsek` | SparseK: differentiable top-k KV selection (paper: arxiv:2406.16747) | ✅ | ✅ |
+      | `sparge` ⚠️ | SpargeAttn — two-stage block pruning; **trains as dense attention**, sparse filter at inference (paper: arxiv:2502.18137) | ✅ (dense) | ✅ (sparse) |
+      | `fasa` ⚠️ | FASA — frequency-aware token selection; **trains as dense attention**, sparse selection at inference (paper: arxiv:2602.03152) | ✅ (dense) | ✅ (sparse) |
+      | `msa` | MiniMax Sparse Attention — block-sparse on GQA (paper: arxiv:2606.13392) | ✅ | ✅ |
+      | `sparda` | SparDA — decoupled sparse attention with a Forecast projection (paper: arxiv:2606.04511) | ✅ | ✅ |
+      | `kda` | Kimi Delta Attention — channel-wise decay + scalar write gate (paper: arxiv:2510.26692) | ✅ | ✅ |
+      | `falcon1` | Falcon-1 — scalar NLMS regression (delta-rule) fast-weight update, read-after-write prefix-aligned (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon2` | Falcon-2 — per-column NLMS regression fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon3` | Falcon-3 — sliding-window minibatch regression fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon1a` | Falcon-1A — scalar inner-product (additive) fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon2a` | Falcon-2A — per-column inner-product fast-weight update (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon3a` | Falcon-3A — sliding-window inner-product fast-weight update, best length extrapolation (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `mla` | Multi-Head Latent Attention + RoPE (paper: arxiv:2506.09342) | ✅ | ✅ |
+      | `gqla` | Group-Query Latent Attention — two decoding paths (paper: arxiv:2605.15250) | ✅ | ✅ |
+      | `mlra` | Multi-Head Low-Rank Attention — partitionable latent (paper: arxiv:2603.02188) | ✅ | ✅ |
+      | `tucker` | Tucker Attention — generalised low-rank factorisation (paper: arxiv:2603.30033) | ✅ | ✅ |
+      | `iha` | Interleaved Head Attention — cross-head pseudo-heads (paper: arxiv:2602.21371) | ✅ | ✅ |
+      | `gta` | Grouped-head laTenT Attention — shared map + latent values (paper: arxiv:2506.17286) | ✅ | ✅ |
+      | `mtla` | Multi-head Temporal Latent Attention — temporal KV merge (paper: arxiv:2505.13544) | ✅ | ✅ |
+      | `cca` | Compressed Convolutional Attention — latent-space attention + convs (paper: arxiv:2510.04476) | ✅ | ✅ |
+      | `ccgqa` | Compressed Convolutional Grouped Query Attention — CCA + GQA in latent (paper: arxiv:2510.04476) | ✅ | ✅ |
+      | `gma` | Gaussian Mixture Attention — probabilistic latent routing, O(NK) linear-time (paper: arxiv:2606.18283) | ✅ | ✅ |
+      | `ssog` | SSOG — separable Gaussian field over relative position, near-linear O(R·N·√N); content steers, never scores (Pisoni 2026) (paper: https://www.pisoni.ai/posts/ssog/) | ✅ | ✅ |
+      | `conformer` | Conformer — macaron FFN₁ + MHSA + convolution module (paper: arxiv:2005.08100) | ✅ | ✅ |
+      | `memory` | Memory Attention — value projection replaced by layer-specific token-ID memory, V = K + Norm(E[s]) (paper: arxiv:2609.28399) | ✅ | ✅ |
+      | `lsa` | Latent Sparse Attention — semantic Ward clustering of keys + top-k long-range selection; natively trainable, no extra parameters, no PE (paper: arxiv:2610.42147) | ✅ | ✅ |
+      | `fastconformer` | Fast Conformer limited-context attention — local window + head-pinned global token(s), optional separate global projections (paper: arxiv:2305.05084) | ✅ | ✅ |
 
       **Examples explained:**
-      - `[standard_attn]` repeated 12 times: Classic BERT-like encoder. Simplest configuration, serves as a reliable baseline. All layers use full quadratic attention.
-      - `[retnet, titan_attn, retnet, mamba, titan_attn, ode]` with `num_layers=6`: Mixed architecture combining recurrent retention (efficient long-range), Titan attention with positional encoding (precise local attention), Mamba SSM (linear-time sequence modeling), and ODE continuous depth. Each position gets a different type of computation, enabling diverse representations.
-      - `[standard_attn, standard_attn, longformer_attn]` with `num_layers=3`: Hybrid dense + sparse. Start with 2 dense attention layers for fine-grained interactions, then use Longformer for efficient long-sequence processing. Good for documents > 512 tokens.
-      - Mixing recurrent (retnet, mamba) with attention (standard_attn, titan_attn): Recurrent layers provide memory and long-range context at O(1) inference cost, while attention layers provide high-precision local interactions. This is the recommended pattern for models that need both efficiency and quality.
-      - ⚠️ `sparge_attn` and `fasa_attn` apply their sparse heuristic **only in evaluation/inference**. While training, `HybridLayer` substitutes standard dense attention over the same projections (`q/k/v/out`), so they can be trained from scratch; the trained weights are exactly the ones the sparse path reads at eval time.
+      - `[standard]` repeated 12 times: Classic BERT-like encoder. Simplest configuration, serves as a reliable baseline. All layers use full quadratic attention.
+      - `[retnet, titan, retnet, mamba, titan, ode]` with `num_layers=6`: Mixed architecture combining recurrent retention (efficient long-range), Titan attention with positional encoding (precise local attention), Mamba SSM (linear-time sequence modeling), and ODE continuous depth. Each position gets a different type of computation, enabling diverse representations.
+      - `[standard, standard, longformer]` with `num_layers=3`: Hybrid dense + sparse. Start with 2 dense attention layers for fine-grained interactions, then use Longformer for efficient long-sequence processing. Good for documents > 512 tokens.
+      - Mixing recurrent (retnet, mamba) with attention (standard, titan): Recurrent layers provide memory and long-range context at O(1) inference cost, while attention layers provide high-precision local interactions. This is the recommended pattern for models that need both efficiency and quality.
+      - ⚠️ `sparge` and `fasa` apply their sparse heuristic **only in evaluation/inference**. While training, `HybridLayer` substitutes standard dense attention over the same projections (`q/k/v/out`), so they can be trained from scratch; the trained weights are exactly the ones the sparse path reads at eval time.
     description_es: |-
       Secuencia ordenada de tipos de capa apilados en el modelo. Cada elemento define una
       capa física. La longitud del patrón debe igualar `num_layers`. Tipos disponibles:
 
       | Tipo | Descripción | Entrenamiento | Inferencia |
       |------|-------------|---------------|------------|
-      | `standard_attn` | Atención multi-cabeza clásica (tipo BERT) (paper: arxiv:1706.03762) | ✅ | ✅ |
-      | `sigmoid_attn` | Atención con compuerta sigmoide (paper: arxiv:2409.04431) | ✅ | ✅ |
-      | `gated_softmax_attn` | Atención softmax con compuerta post-SDPA (paper: arxiv:2505.06708) | ✅ | ✅ |
-      | `titan_attn` | Atención Titan con codificación posicional (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
-      | `retnet` / `retnet_attn` | Retention Network (híbrido RNN+transformer) (paper: arxiv:2307.08621) | ✅ | ✅ |
+      | `standard` | Atención multi-cabeza clásica (tipo BERT) (paper: arxiv:1706.03762) | ✅ | ✅ |
+      | `sigmoid` | Atención con compuerta sigmoide (paper: arxiv:2409.04431) | ✅ | ✅ |
+      | `gated_softmax` | Atención softmax con compuerta post-SDPA (paper: arxiv:2505.06708) | ✅ | ✅ |
+      | `titan` | Atención Titan con codificación posicional (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
+      | `retnet` | Retention Network (híbrido RNN+transformer) (paper: arxiv:2307.08621) | ✅ | ✅ |
       | `mamba` | Modelo de espacio de estados (SSM) selectivo (paper: arxiv:2312.00752) | ✅ | ✅ |
       | `ode` | Capa ODE de profundidad continua (usa `attention.ode.solver`/`attention.ode.steps`) (paper: arxiv:1906.02762) (paper: https://ojs.aaai.org/index.php/AAAI/article/view/17692) | ✅ | ✅ |
-      | `gla_attn` | Gated Linear Attention con decaimiento multiplicativo (paper: arxiv:2312.06635) | ✅ | ✅ |
-      | `deltanet_attn` / `gated_deltanet_attn` | DeltaNet con regla delta correctiva (paper: arxiv:2406.06484) (paper: arxiv:2412.06464) | ✅ | ✅ |
-      | `gated_deltanet2_attn` | Gated DeltaNet-2 con compuertas erase/write canalizadas decoupladas (paper: arxiv:2605.22791) | ✅ | ✅ |
-      | `hgrn2_attn` | HGRN2 con compuertas de olvido jerárquicas (paper: arxiv:2404.07904) | ✅ | ✅ |
-      | `fox_attn` | Forgetting Transformer (FoX) con sesgo de olvido en logits (paper: arxiv:2503.02130) | ✅ | ✅ |
-      | `nsa_attn` | Native Sparse Attention de tres ramas (paper: arxiv:2502.11089) | ✅ | ✅ |
-      | `engram_attn` | Memoria condicional por N-gramas (paper: arxiv:2601.07372) | ✅ | ✅ |
-      | `gqa_attn` | Grouped-Query Attention — cabezas KV configurables (paper: arxiv:2305.13245) | ✅ | ✅ |
-      | `longformer_attn` | Longformer: ventanas deslizantes + tokens globales (paper: arxiv:2004.05150) | ✅ | ✅ |
-      | `swa_attn` | Atención de ventana deslizante con sumideros de atención — SWA(w, s) (paper: arxiv:2608.28444) | ✅ | ✅ |
-      | `bigbird_attn` | BigBird: local + aleatorio + global (paper: arxiv:2007.14062) | ✅ | ✅ |
-      | `sparse_transformer_attn` | Sparse Transformer: patrones factorizados (paper: arxiv:1904.10509) | ✅ | ✅ |
-      | `sparsek_attn` | SparseK: selección top-k diferenciable (paper: arxiv:2406.16747) | ✅ | ✅ |
-      | `sparge_attn` ⚠️ | SpargeAttn — poda de bloques en dos etapas; **entrena como atención densa**, filtro disperso en inferencia (paper: arxiv:2502.18137) | ✅ (densa) | ✅ (dispersa) |
-      | `fasa_attn` ⚠️ | FASA — selección de tokens consciente de frecuencia; **entrena como atención densa**, selección dispersa en inferencia (paper: arxiv:2602.03152) | ✅ (densa) | ✅ (dispersa) |
-      | `msa_attn` | MiniMax Sparse Attention — bloques dispersos sobre GQA (paper: arxiv:2606.13392) | ✅ | ✅ |
-      | `sparda_attn` | SparDA — atención dispersa desacoplada con proyección Forecast (paper: arxiv:2606.04511) | ✅ | ✅ |
-      | `kda_attn` | Kimi Delta Attention — decaimiento canalizado + compuerta escalar (paper: arxiv:2510.26692) | ✅ | ✅ |
-      | `falcon1_attn` | Falcon-1 — actualización fast-weight de regresión NLMS escalar (regla delta), alineada al prefijo read-after-write (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon2_attn` | Falcon-2 — actualización fast-weight de regresión NLMS por columna (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon3_attn` | Falcon-3 — actualización fast-weight de regresión por mini-lote de ventana deslizante (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon1a_attn` | Falcon-1A — actualización fast-weight de producto interno escalar (aditiva) (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon2a_attn` | Falcon-2A — actualización fast-weight de producto interno por columna (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `falcon3a_attn` | Falcon-3A — actualización fast-weight de producto interno con ventana deslizante, mejor extrapolación de longitud (paper: arxiv:2608.27763) | ✅ | ✅ |
-      | `mla_attn` | Multi-Head Latent Attention + RoPE (paper: arxiv:2506.09342) | ✅ | ✅ |
-      | `gqla_attn` | Group-Query Latent Attention — dos rutas de decodificación (paper: arxiv:2605.15250) | ✅ | ✅ |
-      | `mlra_attn` | Multi-Head Low-Rank Attention — latente particionable (paper: arxiv:2603.02188) | ✅ | ✅ |
-      | `tucker_attn` | Tucker Attention — factorización de bajo rango generalizada (paper: arxiv:2603.30033) | ✅ | ✅ |
-      | `iha_attn` | Interleaved Head Attention — pseudo-cabezas entre cabezas (paper: arxiv:2602.21371) | ✅ | ✅ |
-      | `gta_attn` | Grouped-head laTenT Attention — mapa compartido + valores latentes (paper: arxiv:2506.17286) | ✅ | ✅ |
-      | `mtla_attn` | Multi-head Temporal Latent Attention — fusión temporal de KV (paper: arxiv:2505.13544) | ✅ | ✅ |
-      | `cca_attn` | Compressed Convolutional Attention — atención en espacio latente + convoluciones (paper: arxiv:2510.04476) | ✅ | ✅ |
-      | `ccgqa_attn` | Compressed Convolutional Grouped Query Attention — CCA + GQA en latente (paper: arxiv:2510.04476) | ✅ | ✅ |
-      | `gma_attn` | Gaussian Mixture Attention — enrutamiento latente probabilístico, O(NK) en tiempo lineal (paper: arxiv:2606.18283) | ✅ | ✅ |
-      | `ssog_attn` | SSOG — campo Gaussiano separable sobre posición relativa, casi lineal O(R·N·√N); el contenido dirige, nunca puntúa (Pisoni 2026) (paper: https://www.pisoni.ai/posts/ssog/) | ✅ | ✅ |
-      | `conformer_attn` | Conformer — FFN₁ macaron + MHSA + módulo de convolución (paper: arxiv:2005.08100) | ✅ | ✅ |
-      | `memory_attn` | Memory Attention — proyección de valores reemplazada por memoria token-ID por capa, V = K + Norm(E[s]) (paper: arxiv:2609.28399) | ✅ | ✅ |
-      | `lsa_attn` | Atención Dispersa Latente — clustering Ward semántica de claves + selección top-k de largo alcance; entrenable de forma nativa, sin parámetros extra, sin PE (paper: arxiv:2610.42147) | ✅ | ✅ |
-      | `fastconformer_attn` | Atención de contexto limitado Fast Conformer — ventana local + token(s) global(es) anclado(s) a la cabecera, proyecciones globales separadas opcionales (paper: arxiv:2305.05084) | ✅ | ✅ |
+      | `gla` | Gated Linear Attention con decaimiento multiplicativo (paper: arxiv:2312.06635) | ✅ | ✅ |
+      | `deltanet` / `gated_deltanet` | DeltaNet con regla delta correctiva (paper: arxiv:2406.06484) (paper: arxiv:2412.06464) | ✅ | ✅ |
+      | `gated_deltanet2` | Gated DeltaNet-2 con compuertas erase/write canalizadas decoupladas (paper: arxiv:2605.22791) | ✅ | ✅ |
+      | `hgrn2` | HGRN2 con compuertas de olvido jerárquicas (paper: arxiv:2404.07904) | ✅ | ✅ |
+      | `fox` | Forgetting Transformer (FoX) con sesgo de olvido en logits (paper: arxiv:2503.02130) | ✅ | ✅ |
+      | `nsa` | Native Sparse Attention de tres ramas (paper: arxiv:2502.11089) | ✅ | ✅ |
+      | `engram` | Memoria condicional por N-gramas (paper: arxiv:2601.07372) | ✅ | ✅ |
+      | `gqa` | Grouped-Query Attention — cabezas KV configurables (paper: arxiv:2305.13245) | ✅ | ✅ |
+      | `longformer` | Longformer: ventanas deslizantes + tokens globales (paper: arxiv:2004.05150) | ✅ | ✅ |
+      | `swa` | Atención de ventana deslizante con sumideros de atención — SWA(w, s) (paper: arxiv:2608.28444) | ✅ | ✅ |
+      | `bigbird` | BigBird: local + aleatorio + global (paper: arxiv:2007.14062) | ✅ | ✅ |
+      | `sparse_transformer` | Sparse Transformer: patrones factorizados (paper: arxiv:1904.10509) | ✅ | ✅ |
+      | `sparsek` | SparseK: selección top-k diferenciable (paper: arxiv:2406.16747) | ✅ | ✅ |
+      | `sparge` ⚠️ | SpargeAttn — poda de bloques en dos etapas; **entrena como atención densa**, filtro disperso en inferencia (paper: arxiv:2502.18137) | ✅ (densa) | ✅ (dispersa) |
+      | `fasa` ⚠️ | FASA — selección de tokens consciente de frecuencia; **entrena como atención densa**, selección dispersa en inferencia (paper: arxiv:2602.03152) | ✅ (densa) | ✅ (dispersa) |
+      | `msa` | MiniMax Sparse Attention — bloques dispersos sobre GQA (paper: arxiv:2606.13392) | ✅ | ✅ |
+      | `sparda` | SparDA — atención dispersa desacoplada con proyección Forecast (paper: arxiv:2606.04511) | ✅ | ✅ |
+      | `kda` | Kimi Delta Attention — decaimiento canalizado + compuerta escalar (paper: arxiv:2510.26692) | ✅ | ✅ |
+      | `falcon1` | Falcon-1 — actualización fast-weight de regresión NLMS escalar (regla delta), alineada al prefijo read-after-write (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon2` | Falcon-2 — actualización fast-weight de regresión NLMS por columna (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon3` | Falcon-3 — actualización fast-weight de regresión por mini-lote de ventana deslizante (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon1a` | Falcon-1A — actualización fast-weight de producto interno escalar (aditiva) (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon2a` | Falcon-2A — actualización fast-weight de producto interno por columna (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `falcon3a` | Falcon-3A — actualización fast-weight de producto interno con ventana deslizante, mejor extrapolación de longitud (paper: arxiv:2608.27763) | ✅ | ✅ |
+      | `mla` | Multi-Head Latent Attention + RoPE (paper: arxiv:2506.09342) | ✅ | ✅ |
+      | `gqla` | Group-Query Latent Attention — dos rutas de decodificación (paper: arxiv:2605.15250) | ✅ | ✅ |
+      | `mlra` | Multi-Head Low-Rank Attention — latente particionable (paper: arxiv:2603.02188) | ✅ | ✅ |
+      | `tucker` | Tucker Attention — factorización de bajo rango generalizada (paper: arxiv:2603.30033) | ✅ | ✅ |
+      | `iha` | Interleaved Head Attention — pseudo-cabezas entre cabezas (paper: arxiv:2602.21371) | ✅ | ✅ |
+      | `gta` | Grouped-head laTenT Attention — mapa compartido + valores latentes (paper: arxiv:2506.17286) | ✅ | ✅ |
+      | `mtla` | Multi-head Temporal Latent Attention — fusión temporal de KV (paper: arxiv:2505.13544) | ✅ | ✅ |
+      | `cca` | Compressed Convolutional Attention — atención en espacio latente + convoluciones (paper: arxiv:2510.04476) | ✅ | ✅ |
+      | `ccgqa` | Compressed Convolutional Grouped Query Attention — CCA + GQA en latente (paper: arxiv:2510.04476) | ✅ | ✅ |
+      | `gma` | Gaussian Mixture Attention — enrutamiento latente probabilístico, O(NK) en tiempo lineal (paper: arxiv:2606.18283) | ✅ | ✅ |
+      | `ssog` | SSOG — campo Gaussiano separable sobre posición relativa, casi lineal O(R·N·√N); el contenido dirige, nunca puntúa (Pisoni 2026) (paper: https://www.pisoni.ai/posts/ssog/) | ✅ | ✅ |
+      | `conformer` | Conformer — FFN₁ macaron + MHSA + módulo de convolución (paper: arxiv:2005.08100) | ✅ | ✅ |
+      | `memory` | Memory Attention — proyección de valores reemplazada por memoria token-ID por capa, V = K + Norm(E[s]) (paper: arxiv:2609.28399) | ✅ | ✅ |
+      | `lsa` | Atención Dispersa Latente — clustering Ward semántica de claves + selección top-k de largo alcance; entrenable de forma nativa, sin parámetros extra, sin PE (paper: arxiv:2610.42147) | ✅ | ✅ |
+      | `fastconformer` | Atención de contexto limitado Fast Conformer — ventana local + token(s) global(es) anclado(s) a la cabecera, proyecciones globales separadas opcionales (paper: arxiv:2305.05084) | ✅ | ✅ |
       **Ejemplos explicados:**
-      - `[standard_attn]` repetido 12 veces: Encoder clásico tipo BERT. Configuración más simple, sirve como línea base confiable. Todas las capas usan atención cuadrática completa.
-      - `[retnet, titan_attn, retnet, mamba, titan_attn, ode]` con `num_layers=6`: Arquitectura mixta que combina retención recurrente (largo alcance eficiente), atención Titan con codificación posicional (atención local precisa), Mamba SSM (modelado de secuencias en tiempo lineal) y ODE de profundidad continua. Cada posición recibe un tipo diferente de cómputo, permitiendo representaciones diversas.
-      - `[standard_attn, standard_attn, longformer_attn]` con `num_layers=3`: Híbrido denso + disperso. Empieza con 2 capas de atención densa para interacciones detalladas, luego usa Longformer para procesamiento eficiente de secuencias largas. Bueno para documentos > 512 tokens.
-      - Mezcla de recurrente (retnet, mamba) con atención (standard_attn, titan_attn): Las capas recurrentes proporcionan memoria y contexto de largo alcance a costo O(1) en inferencia, mientras que las capas de atención proporcionan interacciones locales de alta precisión. Este es el patrón recomendado para modelos que necesitan tanto eficiencia como calidad.
-      - ⚠️ `sparge_attn` y `fasa_attn` aplican su heurística dispersa **solo en evaluación/inferencia**. Durante el entrenamiento `HybridLayer` sustituye atención estándar densa sobre las mismas proyecciones (`q/k/v/out`), por lo que pueden entrenarse desde cero; los pesos entrenados son exactamente los que usa la ruta dispersa al evaluar.
+      - `[standard]` repetido 12 veces: Encoder clásico tipo BERT. Configuración más simple, sirve como línea base confiable. Todas las capas usan atención cuadrática completa.
+      - `[retnet, titan, retnet, mamba, titan, ode]` con `num_layers=6`: Arquitectura mixta que combina retención recurrente (largo alcance eficiente), atención Titan con codificación posicional (atención local precisa), Mamba SSM (modelado de secuencias en tiempo lineal) y ODE de profundidad continua. Cada posición recibe un tipo diferente de cómputo, permitiendo representaciones diversas.
+      - `[standard, standard, longformer]` con `num_layers=3`: Híbrido denso + disperso. Empieza con 2 capas de atención densa para interacciones detalladas, luego usa Longformer para procesamiento eficiente de secuencias largas. Bueno para documentos > 512 tokens.
+      - Mezcla de recurrente (retnet, mamba) con atención (standard, titan): Las capas recurrentes proporcionan memoria y contexto de largo alcance a costo O(1) en inferencia, mientras que las capas de atención proporcionan interacciones locales de alta precisión. Este es el patrón recomendado para modelos que necesitan tanto eficiencia como calidad.
+      - ⚠️ `sparge` y `fasa` aplican su heurística dispersa **solo en evaluación/inferencia**. Durante el entrenamiento `HybridLayer` sustituye atención estándar densa sobre las mismas proyecciones (`q/k/v/out`), por lo que pueden entrenarse desde cero; los pesos entrenados son exactamente los que usa la ruta dispersa al evaluar.
     items:
       description: |-
         One mixer type from the `layer_pattern` enum; see the table in `dims.layer_pattern` for the full catalogue with per-mixer references.
@@ -335,56 +335,55 @@ properties:
       type: string
       enum:
         - retnet
-        - retnet_attn
         - mamba
         - ode
-        - titan_attn
-        - standard_attn
-        - sigmoid_attn
-        - sparse_transformer_attn
-        - longformer_attn
-        - swa_attn
-        - bigbird_attn
-        - sparsek_attn
-        - nsa_attn
-        - sparge_attn
-        - fasa_attn
-        - gla_attn
-        - deltanet_attn
-        - gated_deltanet_attn
-        - gated_deltanet2_attn
-        - hgrn2_attn
-        - fox_attn
-        - gated_softmax_attn
-        - engram_attn
-        - gqa_attn
-        - mla_attn
-        - gqla_attn
-        - mlra_attn
-        - tucker_attn
-        - iha_attn
-        - gta_attn
-        - mtla_attn
-        - cca_attn
-        - ccgqa_attn
-        - gma_attn
-        - ssog_attn
-        - conformer_attn
-        - msa_attn
-        - sparda_attn
-        - kda_attn
-        - falcon1_attn
-        - falcon2_attn
-        - falcon3_attn
-        - falcon1a_attn
-        - falcon2a_attn
-        - falcon3a_attn
-        - memory_attn
-        - lsa_attn
-        - fastconformer_attn
+        - titan
+        - standard
+        - sigmoid
+        - sparse_transformer
+        - longformer
+        - swa
+        - bigbird
+        - sparsek
+        - nsa
+        - sparge
+        - fasa
+        - gla
+        - deltanet
+        - gated_deltanet
+        - gated_deltanet2
+        - hgrn2
+        - fox
+        - gated_softmax
+        - engram
+        - gqa
+        - mla
+        - gqla
+        - mlra
+        - tucker
+        - iha
+        - gta
+        - mtla
+        - cca
+        - ccgqa
+        - gma
+        - ssog
+        - conformer
+        - msa
+        - sparda
+        - kda
+        - falcon1
+        - falcon2
+        - falcon3
+        - falcon1a
+        - falcon2a
+        - falcon3a
+        - memory
+        - lsa
+        - fastconformer
     examples:
-      - [retnet, titan_attn, retnet, mamba, titan_attn, ode]
-      - [standard_attn]
+      - [retnet, titan, retnet, mamba, titan, ode]
+      - [standard]
   mode:
     type: string
     title: "Transformer Mode"

@@ -6,9 +6,9 @@ model:
     num_layers: 4
     num_heads: 4
     layer_pattern:
-    - standard_attn
+    - standard
     - retnet
-    - titan_attn
+    - titan
     - mamba
     mode: encoder
   positional_encoding: rope
@@ -17,9 +17,9 @@ model:
       base: 10000.0
       scaling: 1.0
     use_pe:
-      standard_attn: true
+      standard: true
       retnet: false
-      titan_attn: true
+      titan: true
       mamba: false
   moe:
     enabled: false

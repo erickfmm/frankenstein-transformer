@@ -225,7 +225,7 @@ class EngramLayer(nn.Module):
     4. Computes a scalar gate: σ(dot(norm(key), norm(query)) / √D).
     5. Returns ``gate ⊙ value_proj(engram_emb)`` projected to hidden_size.
 
-    The layer is registered as ``"engram_attn"`` in HybridLayer and can appear
+    The layer is registered as ``"engram"`` in HybridLayer and can appear
     at any position in *layer_pattern*.  When no input_ids are available the
     module returns a zero tensor (graceful degradation).
 
@@ -289,7 +289,7 @@ class EngramLayer(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "engram_attn_use_pe", True))
+        self.use_pe = bool(getattr(config, "engram_use_pe", True))
 
     # ------------------------------------------------------------------
     def forward(

@@ -9,15 +9,15 @@ properties:
     description: |-
       Shared configuration of the Falcon fast-weight attention family
       ((paper: arxiv:2608.27763), "Fast Weight Attention for Continual Learning",
-      Zhang et al. 2026). The six mixers `falcon1_attn`, `falcon2_attn`,
-      `falcon3_attn` (squared-error regression family) and
-      `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn` (negative
+      Zhang et al. 2026). The six mixers `falcon1`, `falcon2`,
+      `falcon3` (squared-error regression family) and
+      `falcon1a`, `falcon2a`, `falcon3a` (negative
       inner-product / additive family) treat the recurrent fast-weight
       state transition as an online continual-learning rule under
       read-after-write autoregressive semantics: the local fast-memory
       example revealed at step `t` is the prefix-aligned pair
       `(x_t, y_t) = (phi(k_{t-1}), v_t)`. Knobs are shared by all six
-      variants; `window` only applies to `falcon3_attn`/`falcon3a_attn`.
+      variants; `window` only applies to `falcon3`/`falcon3a`.
 
       **Examples explained:**
       - `beta_mode=ctx_eta, lambda_mode=ctx, qk_norm=rms_norm`: the
@@ -34,16 +34,16 @@ properties:
     description_es: |-
       Configuración compartida de la familia de atención fast-weight
       Falcon ((paper: arxiv:2608.27763), "Fast Weight Attention for Continual
-      Learning", Zhang et al. 2026). Los seis mixers `falcon1_attn`,
-      `falcon2_attn`, `falcon3_attn` (familia de regresión de error
-      cuadrático) y `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn`
+      Learning", Zhang et al. 2026). Los seis mixers `falcon1`,
+      `falcon2`, `falcon3` (familia de regresión de error
+      cuadrático) y `falcon1a`, `falcon2a`, `falcon3a`
       (familia de producto interno negativo / aditiva) tratan la
       transición del estado fast-weight recurrente como una regla de
       aprendizaje continuo en línea bajo semántica autorregresiva
       read-after-write: el ejemplo local revelado en el paso `t` es el
       par alineado al prefijo `(x_t, y_t) = (phi(k_{t-1}), v_t)`. Los
       parámetros son compartidos por las seis variantes; `window` solo
-      aplica a `falcon3_attn`/`falcon3a_attn`.
+      aplica a `falcon3`/`falcon3a`.
 
       **Ejemplos explicados:**
       - `beta_mode=ctx_eta, lambda_mode=ctx, qk_norm=rms_norm`: la
@@ -200,7 +200,7 @@ properties:
         title_es: "Ventana Deslizante B Falcon"
         description: |-
           Sliding-window size B of the bounded-rehearsal variants
-          `falcon3_attn` / `falcon3a_attn`: each prefix-aligned pair is
+          `falcon3` / `falcon3a`: each prefix-aligned pair is
           replayed in B consecutive window-averaged updates
           (window-averaging keeps the update magnitude invariant to B).
           Ignored by the non-windowed variants. Paper default: 4.
@@ -208,7 +208,7 @@ properties:
           **References:** (paper: arxiv:2608.27763)
         description_es: |-
           Tamaño de ventana deslizante B de las variantes de ensayo
-          acotado `falcon3_attn` / `falcon3a_attn`: cada par alineado al
+          acotado `falcon3` / `falcon3a`: cada par alineado al
           prefijo se repite en B actualizaciones promediadas por
           ventana consecutivas (el promediado mantiene la magnitud de
           actualización invariante a B). Ignorada por las variantes no

@@ -99,9 +99,9 @@ class YamlExamplesContentTests(unittest.TestCase):
     def test_all_gated_muon_layer_pattern_has_all_six_gated_types(self):
         cfg = self._load("es_arch_all_gated_muon.yaml")
         pattern = set(cfg.model_config.layer_pattern)
-        for lt in ("gla_attn", "deltanet_attn", "gated_deltanet_attn",
-                   "gated_deltanet2_attn",
-                   "hgrn2_attn", "fox_attn", "gated_softmax_attn"):
+        for lt in ("gla", "deltanet", "gated_deltanet",
+                   "gated_deltanet2",
+                   "hgrn2", "fox", "gated_softmax"):
             self.assertIn(lt, pattern, f"{lt} missing from all_gated pattern")
 
     def test_gla_deltanet_uses_lion_optimizer(self):
@@ -131,7 +131,7 @@ class YamlExamplesContentTests(unittest.TestCase):
     def test_sparse_longformer_layer_pattern(self):
         cfg = self._load("es_arch_sparse_longformer_adamw.yaml")
         for lt in cfg.model_config.layer_pattern:
-            self.assertIn(lt, {"sparse_transformer_attn", "longformer_attn"})
+            self.assertIn(lt, {"sparse_transformer", "longformer"})
 
     def test_decoder_gated_mixed_mode_is_decoder(self):
         cfg = self._load("decoder_gated_mixed_adamw.yaml")

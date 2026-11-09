@@ -7,13 +7,13 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - gla_attn
-    - deltanet_attn
-    - gated_deltanet_attn
-    - gated_deltanet2_attn
-    - hgrn2_attn
-    - fox_attn
-    - gated_softmax_attn
+    - gla
+    - deltanet
+    - gated_deltanet
+    - gated_deltanet2
+    - hgrn2
+    - fox
+    - gated_softmax
   norm:
     type: derf
   embedding:

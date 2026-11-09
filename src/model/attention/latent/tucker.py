@@ -1,0 +1,187 @@
+"""Tucker Attention: generalised low-rank attention.
+
+Implements Tucker Attention, arXiv:2603.30033 (Klein et al. 2026).
+Tucker Attention provides a unified low-rank view of Multi-Head
+Attention (MHA), Grouped-Query Attention (GQA) and Multi-Head Latent
+Attention (MLA): each is recovered as a special case of a Tucker-style
+factorisation of the query, key and value weight tensors along the
+``num_heads`` and ``hidden_size`` axes. Concretely, the canonical
+``W_q, W_k, W_v`` of shape ``hidden_size -> num_heads * head_dim`` are
+replaced by a small core tensor contracted against per-mode factor
+matrices, exposing the *actual* ranks achieved by MHA, GQA and MLA.
+
+Special cases:
+    * MHA    : ``query_rank = key_rank = value_rank = hidden_size``.
+    * GQA    : ``key_rank = value_rank < hidden_size`` (shared KV).
+    * MLA    : ``key_rank = value_rank = latent_rank`` (joint KV latent).
+
+The paper reports an order of magnitude fewer parameters than GQA and
+MLA for comparable validation metrics on LLM and ViT test cases. Tucker
+Attention is fully compatible with FlashAttention and RoPE.
+
+Reference:
+    Klein, T., Kusch, J., Sager, S., Schnake, S., & Schotthöfer, S.
+    (2026). "Tucker Attention: A generalization of approximate attention
+    mechanisms". arXiv:2603.30033.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from ...numerics import module_softmax
+
+from ..common import BitLinear
+from ...cache.hooks import cached_latent_attention
+
+
+class TuckerAttention(nn.Module):
+    """Tucker-factorised low-rank attention (Klein et al. 2026).
+
+    Args:
+        config: Configuration object. Relevant attributes: hidden_size,
+            num_heads, dropout, use_bitnet, mode, and optional
+            ``tucker_query_rank``, ``tucker_key_rank``,
+            ``tucker_value_rank`` (default ``hidden_size // 2`` for K
+            and V, ``hidden_size`` for Q).
+        pos_encoder: Shared positional encoding module applied to query
+            and key tensors. If ``None``, no PE is applied.
+
+    Attributes:
+        hidden_size: Input dimensionality.
+        num_heads: Number of attention heads.
+        head_dim: Per-head dimensionality.
+        query_rank, key_rank, value_rank: Tucker ranks along the
+            hidden axis for Q, K, V respectively.
+        q_factor, k_factor, v_factor: Down-projections ``hidden_size ->
+            rank``.
+        q_core, k_core, v_core: Per-head core projections ``rank ->
+            num_heads * head_dim``.
+        out_proj: Output projection.
+        dropout, mode: As in the rest of the family.
+        pos_encoder: Shared positional encoding module (or ``None``).
+        pe_type: Positional encoding type string (lowercased).
+        use_pe: Whether PE is enabled for this mixer.
+
+    Raises:
+        ValueError: If ``hidden_size`` not divisible by ``num_heads``.
+    """
+
+    def __init__(self, config, pos_encoder=None):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        if self.hidden_size % self.num_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_heads for TuckerAttention")
+        self.query_rank = int(getattr(config, "tucker_query_rank", self.hidden_size))
+        self.key_rank = int(getattr(config, "tucker_key_rank", max(1, self.hidden_size // 2)))
+        self.value_rank = int(getattr(config, "tucker_value_rank", max(1, self.hidden_size // 2)))
+
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.q_factor = proj_cls(self.hidden_size, self.query_rank, bias=False)
+        self.k_factor = proj_cls(self.hidden_size, self.key_rank, bias=False)
+        self.v_factor = proj_cls(self.hidden_size, self.value_rank, bias=False)
+        self.q_core = proj_cls(self.query_rank, self.num_heads * self.head_dim, bias=False)
+        self.k_core = proj_cls(self.key_rank, self.num_heads * self.head_dim, bias=False)
+        self.v_core = proj_cls(self.value_rank, self.num_heads * self.head_dim, bias=False)
+        self.out_proj = proj_cls(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.dropout = nn.Dropout(config.dropout)
+        self.mode = getattr(config, "mode", "encoder")
+        self.scale = self.head_dim ** -0.5
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "tucker_use_pe", True))
+
+    def make_cache_slot(self, meta, cache):
+        """Cache the factorized K/V latents (per-token axes)."""
+        from ...cache.slots import LatentKVSlot
+
+        return LatentKVSlot(
+            meta,
+            axes={"k_lat": "token", "v_lat": "token"},
+            **cache.codec_slot_kwargs(),
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
+        """Compute Tucker-factorised attention.
+
+        Args:
+            x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
+            logical_layer_idx: Logical layer index passed to the positional
+                encoder. Defaults to ``0`` if ``None``.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder`` for this forward call.
+            cache: Optional latent slot caching the factorized K/V latents
+                (``key_rank``/``value_rank`` per token). ``None`` runs the
+                legacy path (D4).
+            cache_position: Absolute index of the first token in ``x``.
+
+        Returns:
+            Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
+        """
+        bsz, seq_len, _ = x.shape
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
+        slot = cache if getattr(cache, "kind", "") == "latent_kv" else None
+        if slot is not None:
+            from ...cache.hooks import cached_latent_attention
+
+            k_lat = self.k_factor(x)
+            v_lat = self.v_factor(x)
+            q = self.q_core(self.q_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+            def _expand(c_all):
+                k = self.k_core(c_all["k_lat"]).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+                v = self.v_core(c_all["v_lat"]).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+                return k, v
+
+            attended = cached_latent_attention(
+                slot,
+                q,
+                {"k_lat": k_lat, "v_lat": v_lat},
+                cache_position=cache_position,
+                scale=self.scale,
+                expand_fn=_expand,
+                pe=pe,
+                pe_type=self.pe_type,
+                use_pe=self.use_pe,
+                x_for_pe=x,
+                logical_layer_idx=logical_layer_idx or 0,
+                dropout=self.dropout,
+                causal=True,
+                use_fixed_softmax=self.use_fixed_softmax,
+            )
+            out = attended.transpose(1, 2).contiguous().view(bsz, seq_len, -1)
+            return self.out_proj(out)
+
+        q = self.q_core(self.q_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_core(self.k_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_core(self.v_factor(x)).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        from ..common import apply_pe_to_qk, apply_pe_to_scores
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
+        attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
+        if self.mode == "decoder":
+            causal_mask = torch.triu(
+                torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1
+            )
+            attn_scores = attn_scores.masked_fill(
+                causal_mask.unsqueeze(0).unsqueeze(0), float("-inf")
+            )
+        attn_weights = module_softmax(self, attn_scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+        out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, -1)
+        return self.out_proj(out)

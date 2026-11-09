@@ -26,12 +26,12 @@ Un único módulo de PE se construye una vez en el codificador
 \texttt{forward(..., pos\_encoder=None)}.
 
 Cada mezclador lleva una bandera \texttt{use\_pe} por mezclador
-(\texttt{<mezclador>\_attn\_use\_pe}, por defecto \texttt{True} para
+(\texttt{<mezclador>\_use\_pe}, por defecto \texttt{True} para
 mezcladores de atención, \texttt{False} para mezcladores
 recurrentes/de decaimiento como \texttt{retnet}, \texttt{mamba},
-\texttt{ode}, \texttt{gla\_attn}, \texttt{deltanet\_attn},
-\texttt{mtla\_attn} y los seis mezcladores Falcon
-\texttt{falcon\{1,2,3,1a,2a,3a\}\_attn}). Cuando \texttt{use\_pe} es \texttt{False}, el
+\texttt{ode}, \texttt{gla}, \texttt{deltanet},
+\texttt{mtla} y los seis mezcladores Falcon
+\texttt{falcon\{1,2,3,1a,2a,3a\}}). Cuando \texttt{use\_pe} es \texttt{False}, el
 mezclador ignora completamente el módulo inyectado.
 
 La PE se aplica en dos fases mediante los ayudantes compartidos
@@ -218,30 +218,30 @@ absoluta, los mezcladores no realizan ninguna acción por capa.
 \subsection{Banderas \texttt{use\_pe} Por Mezclador}
 
 Cada mezclador expone un campo de configuración
-\texttt{<mezclador>\_attn\_use\_pe} (p.\,ej.\
-\texttt{standard\_attn\_use\_pe}, \texttt{titan\_attn\_use\_pe}). Los
+\texttt{<mezclador>\_use\_pe} (p.\,ej.\
+\texttt{standard\_use\_pe}, \texttt{titan\_use\_pe}). Los
 valores por defecto son:
 
 \begin{itemize}
-\item \textbf{True} (mezcladores de atención): \texttt{standard\_attn},
-  \texttt{titan\_attn}, \texttt{sigmoid\_attn},
-  \texttt{gated\_softmax\_attn}, \texttt{gqa\_attn}, todos los
-  mezcladores latentes (\texttt{mla\_attn}, \texttt{gqla\_attn},
-  \texttt{mlra\_attn}, \texttt{tucker\_attn}, \texttt{iha\_attn},
-  \texttt{gta\_attn}, \texttt{cca\_attn}, \texttt{ccgqa\_attn},
-  \texttt{gma\_attn}), todos los mezcladores dispersos
-  (\texttt{longformer\_attn}, \texttt{bigbird\_attn},
-  \texttt{sparse\_transformer\_attn}, \texttt{sparsek\_attn},
-  \texttt{nsa\_attn}, \texttt{msa\_attn}, \texttt{sparda\_attn},
-  \texttt{fasa\_attn}, \texttt{sparge\_attn}), y
-  \texttt{engram\_attn}, y \texttt{memory\_attn} (RoPE solo en el par de
+\item \textbf{True} (mezcladores de atención): \texttt{standard},
+  \texttt{titan}, \texttt{sigmoid},
+  \texttt{gated\_softmax}, \texttt{gqa}, todos los
+  mezcladores latentes (\texttt{mla}, \texttt{gqla},
+  \texttt{mlra}, \texttt{tucker}, \texttt{iha},
+  \texttt{gta}, \texttt{cca}, \texttt{ccgqa},
+  \texttt{gma}), todos los mezcladores dispersos
+  (\texttt{longformer}, \texttt{bigbird},
+  \texttt{sparse\_transformer}, \texttt{sparsek},
+  \texttt{nsa}, \texttt{msa}, \texttt{sparda},
+  \texttt{fasa}, \texttt{sparge}), y
+  \texttt{engram}, y \texttt{memory} (RoPE solo en el par de
   puntuación; los valores se construyen desde las claves sin rotar).
 \item \textbf{False} (mezcladores recurrentes/de decaimiento):
-  \texttt{retnet}, \texttt{retnet\_attn}, \texttt{mamba}, \texttt{ode},
-  \texttt{gla\_attn}, \texttt{deltanet\_attn},
-  \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn},
-  \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{kda\_attn},
-  \texttt{mtla\_attn}.
+  \texttt{retnet}, \texttt{retnet}, \texttt{mamba}, \texttt{ode},
+  \texttt{gla}, \texttt{deltanet},
+  \texttt{gated\_deltanet}, \texttt{gated\_deltanet2},
+  \texttt{hgrn2}, \texttt{fox}, \texttt{kda},
+  \texttt{mtla}.
 \end{itemize}
 
 El valor por defecto \texttt{False} para mezcladores recurrentes/de
@@ -268,7 +268,7 @@ nuevo enum: \texttt{use\_hope=True} $\to$
 \texttt{positional\_encoding=hope}, \texttt{use\_hope=False} $\to$
 \texttt{positional\_encoding=rope}. La sobrescritura
 \texttt{positional\_encoding} por mezclador que previamente existía solo
-en \texttt{titan\_attn} es ahora una operación nula: el enum de todo el
+en \texttt{titan} es ahora una operación nula: el enum de todo el
 modelo es la única fuente de verdad, y la lista de permitidos de
 TitanAttention que restringía PE a \texttt{\{hope, rope, none, nope\}} se
 ha eliminado --- los 12 valores ahora funcionan con cada mezclador.

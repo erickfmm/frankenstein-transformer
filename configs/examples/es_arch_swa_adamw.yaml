@@ -11,7 +11,7 @@ model:
     num_heads: 8
     num_kv_heads: 4
     layer_pattern:
-    - swa_attn
+    - swa
   norm:
     type: layer_norm
   embedding:

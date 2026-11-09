@@ -688,23 +688,23 @@ una interfaz de configuración unificada.</p>
 <p><strong>Selección de Patrones de Mezcladores de Secuencia</strong>:
 El campo <code>layer_pattern</code> acepta una lista ordenada de
 identificadores de mezcladores que abarcan seis familias: líneas base
-densas (<code>standard_attn</code>, <code>sigmoid_attn</code>,
+densas (<code>standard</code>, <code>sigmoid</code>,
 <code>gqa</code>), recurrentes/retentivas (<code>retnet</code>,
-<code>retnet_attn</code>, <code>mamba</code>, <code>ode</code>,
-<code>titan_attn</code>), atención dispersa
-(<code>sparse_transformer_attn</code>, <code>longformer_attn</code>,
-<code>bigbird_attn</code>, <code>sparsek_attn</code>,
-<code>nsa_attn</code>, <code>sparge_attn</code>, <code>fasa_attn</code>,
-<code>msa_attn</code>, <code>sparda_attn</code>), mecanismos con
-compuerta (<code>gla_attn</code>, <code>deltanet_attn</code>,
-<code>gated_deltanet_attn</code>, <code>gated_deltanet2_attn</code>,
-<code>hgrn2_attn</code>, <code>fox_attn</code>,
-<code>gated_softmax_attn</code>, <code>kda_attn</code>), compresión
-latente (<code>mla_attn</code>, <code>gqla_attn</code>,
-<code>mlra_attn</code>, <code>tucker_attn</code>, <code>iha_attn</code>,
-<code>gta_attn</code>, <code>mtla_attn</code>, <code>cca_attn</code>,
-<code>ccgqa_attn</code>) y memoria condicional
-(<code>engram_attn</code>). La taxonomía completa con referencias se
+<code>retnet</code>, <code>mamba</code>, <code>ode</code>,
+<code>titan</code>), atención dispersa
+(<code>sparse_transformer</code>, <code>longformer</code>,
+<code>bigbird</code>, <code>sparsek</code>,
+<code>nsa</code>, <code>sparge</code>, <code>fasa</code>,
+<code>msa</code>, <code>sparda</code>), mecanismos con
+compuerta (<code>gla</code>, <code>deltanet</code>,
+<code>gated_deltanet</code>, <code>gated_deltanet2</code>,
+<code>hgrn2</code>, <code>fox</code>,
+<code>gated_softmax</code>, <code>kda</code>), compresión
+latente (<code>mla</code>, <code>gqla</code>,
+<code>mlra</code>, <code>tucker</code>, <code>iha</code>,
+<code>gta</code>, <code>mtla</code>, <code>cca</code>,
+<code>ccgqa</code>) y memoria condicional
+(<code>engram</code>). La taxonomía completa con referencias se
 proporciona en la Sección <a href="#sec:architecture-taxonomy"
 data-reference-type="ref"
 data-reference="sec:architecture-taxonomy">4</a> y el Apéndice <a
@@ -886,8 +886,8 @@ algorítmico y una tabla comparativa arquitectónica se recopilan en el
 Apéndice <a href="#sec:annex-transformer" data-reference-type="ref"
 data-reference="sec:annex-transformer">13</a>. El algoritmo de despacho
 de mezclador guiado por patrón (incluyendo la política de cumplimiento
-sin entrenamiento para <code>fasa_attn</code> y
-<code>sparge_attn</code>) se detalla igualmente allí.</p>
+sin entrenamiento para <code>fasa</code> y
+<code>sparge</code>) se detalla igualmente allí.</p>
 <h2 id="familia-de-atención-latente-y-de-rango-bajo">Familia de Atención
 Latente y de Rango Bajo</h2>
 <p>Una familia complementaria comprime el estado clave–valor por token
@@ -904,14 +904,14 @@ data-reference="sec:annex-latent">14</a>.</p>
 <h2 id="extensiones-de-atención-dispersa">Extensiones de Atención
 Dispersa</h2>
 <p>El registro de mezcladores incluye nueve bloques dispersos:
-<code>sparse_transformer_attn</code>, <code>longformer_attn</code>,
-<code>bigbird_attn</code>, <code>sparsek_attn</code>,
-<code>nsa_attn</code>, <code>sparge_attn</code>, <code>fasa_attn</code>,
-<code>msa_attn</code> y <code>sparda_attn</code> <span class="citation"
+<code>sparse_transformer</code>, <code>longformer</code>,
+<code>bigbird</code>, <code>sparsek</code>,
+<code>nsa</code>, <code>sparge</code>, <code>fasa</code>,
+<code>msa</code> y <code>sparda</code> <span class="citation"
 data-cites="child_sparse_transformer_2019 beltagy_longformer_2020 zaheer_bigbird_2020 lou_sparsek_2024 yuan_nsa_2025 zhang_spargeattn_2025 wang_fasa_2026"></span>.
 La implementación impone una política de ejecución explícita para
-métodos dispersos sin entrenamiento: <code>fasa_attn</code> y
-<code>sparge_attn</code> son solo para evaluación/inferencia y generan
+métodos dispersos sin entrenamiento: <code>fasa</code> y
+<code>sparge</code> son solo para evaluación/inferencia y generan
 errores en tiempo de ejecución si se usan mientras el modelo está en
 modo de entrenamiento. Las formulaciones matemáticas, el pseudocódigo
 algorítmico, las características por bloque y una tabla comparativa se
@@ -920,10 +920,10 @@ data-reference-type="ref" data-reference="sec:annex-sparse">15</a>.</p>
 <h2 id="extensiones-de-atención-con-compuerta">Extensiones de Atención
 con Compuerta</h2>
 <p>El registro de mezcladores incluye ocho bloques con compuerta:
-<code>gla_attn</code>, <code>deltanet_attn</code>,
-<code>gated_deltanet_attn</code>, <code>gated_deltanet2_attn</code>,
-<code>hgrn2_attn</code>, <code>fox_attn</code>,
-<code>gated_softmax_attn</code> y <code>kda_attn</code> <span
+<code>gla</code>, <code>deltanet</code>,
+<code>gated_deltanet</code>, <code>gated_deltanet2</code>,
+<code>hgrn2</code>, <code>fox</code>,
+<code>gated_softmax</code> y <code>kda</code> <span
 class="citation"
 data-cites="yang_gla_2023 yang_deltanet_2024 yang_gated_deltanet_2024 hatamizadeh_gated_deltanet2_2026 qin_hgrn2_2024 lin_forgetting_transformer_2025 qiu_gated_attention_2025 kimi_kda_2025"></span>.
 La idea unificadora es que las compuertas controlan <em>qué información
@@ -2005,7 +2005,7 @@ Típico: 3.</td>
 <td style="text-align: left;">use_hope</td>
 <td style="text-align: left;">bool</td>
 <td style="text-align: left;">Bandera heredada para HoPE en
-<code>titan_attn</code>. Obsoleta; preferir
+<code>titan</code>. Obsoleta; preferir
 <code>positional_encoding</code>.</td>
 </tr>
 <tr class="even">
@@ -2112,7 +2112,7 @@ Debe dividir <code>num_heads</code> exactamente.</td>
 <td style="text-align: left;">positional_encoding</td>
 <td style="text-align: left;">enum (hope, rope)</td>
 <td style="text-align: left;">Método de codificación posicional para
-capas <code>titan_attn</code>.</td>
+capas <code>titan</code>.</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">rope_base</td>
@@ -2409,34 +2409,34 @@ class="math inline">\(\times\)</span> = no soportado.</caption>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">standard_attn</td>
+<td style="text-align: left;">standard</td>
 <td style="text-align: left;">Atención multi-cabeza clásica (estilo
 BERT)</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sigmoid_attn</td>
+<td style="text-align: left;">sigmoid</td>
 <td style="text-align: left;">Atención con compuerta sigmoide</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">gated_softmax_attn</td>
+<td style="text-align: left;">gated_softmax</td>
 <td style="text-align: left;">Atención softmax con compuerta sigmoide
 post-SDPA</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">titan_attn</td>
+<td style="text-align: left;">titan</td>
 <td style="text-align: left;">Atención Titan con codificación posicional
 (HoPE/RoPE)</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">retnet / retnet_attn</td>
+<td style="text-align: left;">retnet / retnet</td>
 <td style="text-align: left;">Red de Retención (híbrido
 RNN+transformer)</td>
 <td style="text-align: center;"></td>
@@ -2456,89 +2456,89 @@ RNN+transformer)</td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gla_attn</td>
+<td style="text-align: left;">gla</td>
 <td style="text-align: left;">Atención Lineal con Compuerta con
 decaimiento multiplicativo</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">deltanet_attn / gated_deltanet_attn</td>
+<td style="text-align: left;">deltanet / gated_deltanet</td>
 <td style="text-align: left;">DeltaNet con regla delta correctiva</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gated_deltanet2_attn</td>
+<td style="text-align: left;">gated_deltanet2</td>
 <td style="text-align: left;">Gated DeltaNet-2 con compuertas de
 borrado/escritura canalizadas desacopladas</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">hgrn2_attn</td>
+<td style="text-align: left;">hgrn2</td>
 <td style="text-align: left;">HGRN2 con compuertas de olvido
 jerárquicas</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">fox_attn</td>
+<td style="text-align: left;">fox</td>
 <td style="text-align: left;">Forgetting Transformer (FoX) con sesgo de
 olvido en logits</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">nsa_attn</td>
+<td style="text-align: left;">nsa</td>
 <td style="text-align: left;">Native Sparse Attention (tres ramas)</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">engram_attn</td>
+<td style="text-align: left;">engram</td>
 <td style="text-align: left;">Búsqueda condicional de memoria de
 N-gramas</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">gqa_attn</td>
+<td style="text-align: left;">gqa</td>
 <td style="text-align: left;">Atención por Consultas Agrupadas con
 cabezas KV configurables</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">longformer_attn</td>
+<td style="text-align: left;">longformer</td>
 <td style="text-align: left;">Longformer: ventanas deslizantes + tokens
 globales</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">bigbird_attn</td>
+<td style="text-align: left;">bigbird</td>
 <td style="text-align: left;">BigBird: atención local + aleatoria +
 global</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sparse_transformer_attn</td>
+<td style="text-align: left;">sparse_transformer</td>
 <td style="text-align: left;">Sparse Transformer: patrones
 factorizados</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sparsek_attn</td>
+<td style="text-align: left;">sparsek</td>
 <td style="text-align: left;">SparseK: selección KV top-k
 diferenciable</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sparge_attn</td>
+<td style="text-align: left;">sparge</td>
 <td style="text-align: left;">SpargeAttn — poda de bloques en dos
 etapas</td>
 <td style="text-align: center;"><span
@@ -2546,7 +2546,7 @@ class="math inline">\(\times\)</span></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">fasa_attn</td>
+<td style="text-align: left;">fasa</td>
 <td style="text-align: left;">FASA — selección de tokens consciente de
 frecuencia</td>
 <td style="text-align: center;"><span
@@ -2554,83 +2554,83 @@ class="math inline">\(\times\)</span></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">msa_attn</td>
+<td style="text-align: left;">msa</td>
 <td style="text-align: left;">MiniMax Sparse Attention — bloques
 dispersos sobre GQA</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sparda_attn</td>
+<td style="text-align: left;">sparda</td>
 <td style="text-align: left;">SparDA — atención dispersa desacoplada con
 proyección Forecast</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">kda_attn</td>
+<td style="text-align: left;">kda</td>
 <td style="text-align: left;">Kimi Delta Attention — decaimiento por
 canal + compuerta de escritura escalar</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mla_attn</td>
+<td style="text-align: left;">mla</td>
 <td style="text-align: left;">Atención Latente Multi-Cabeza + RoPE</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gqla_attn</td>
+<td style="text-align: left;">gqla</td>
 <td style="text-align: left;">Atención Latente por Consultas Agrupadas —
 dos rutas de decodificación</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mlra_attn</td>
+<td style="text-align: left;">mlra</td>
 <td style="text-align: left;">Atención Multi-Cabeza de Rango Bajo —
 latente particionable</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">tucker_attn</td>
+<td style="text-align: left;">tucker</td>
 <td style="text-align: left;">Atención Tucker — factorización de rango
 bajo generalizada</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">iha_attn</td>
+<td style="text-align: left;">iha</td>
 <td style="text-align: left;">Atención de Cabezas Entrelazadas —
 pseudo-cabezas entre cabezas</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gta_attn</td>
+<td style="text-align: left;">gta</td>
 <td style="text-align: left;">Atención laTenT por Cabezas Agrupadas —
 mapa compartido + valores latentes</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mtla_attn</td>
+<td style="text-align: left;">mtla</td>
 <td style="text-align: left;">Atención Latente Temporal Multi-Cabeza —
 fusión temporal KV</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">cca_attn</td>
+<td style="text-align: left;">cca</td>
 <td style="text-align: left;">Atención Convolucional Comprimida —
 atención en espacio latente + convs</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">ccgqa_attn</td>
+<td style="text-align: left;">ccgqa</td>
 <td style="text-align: left;">Atención Convolucional Comprimida por
 Consultas Agrupadas — CCA + GQA en latente</td>
 <td style="text-align: center;"></td>
@@ -3256,7 +3256,7 @@ token y fallo de entrenamiento irrecuperable.</p></li>
 <li><p><code>bitnet_routers=true</code> requiere
 <code>use_bitnet=true</code>. La bandera no tiene efecto en caso
 contrario.</p></li>
-<li><p><code>fasa_attn</code> y <code>sparge_attn</code> son tipos de
+<li><p><code>fasa</code> y <code>sparge</code> son tipos de
 capa solo para evaluación. Lanzan <code>RuntimeError</code> si se usan
 durante el entrenamiento. No deben aparecer en
 <code>layer_pattern</code> para ejecuciones de entrenamiento.</p></li>
@@ -3327,7 +3327,7 @@ siguiente</em></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">standard_attn</td>
+<td style="text-align: left;">standard</td>
 <td style="text-align: left;">Denso</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3339,7 +3339,7 @@ botella KV en secuencias largas</td>
 data-cites="vaswani_attention_2017"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sigmoid_attn</td>
+<td style="text-align: left;">sigmoid</td>
 <td style="text-align: left;">Denso</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3368,7 +3368,7 @@ data-cites="ainslie_gqa_2023"></span></td>
 (5)</strong></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">retnet_attn</td>
+<td style="text-align: left;">retnet</td>
 <td style="text-align: left;">Recurrente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span> paralelo</td>
@@ -3404,7 +3404,7 @@ solucionador de paso adaptativo</td>
 data-cites="zhang_continuous_2021"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">titan_attn</td>
+<td style="text-align: left;">titan</td>
 <td style="text-align: left;">Recurrente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(c^2 + n f)\)</span></td>
@@ -3416,7 +3416,7 @@ dinámica de escritura impulsada por sorpresa</td>
 data-cites="behrouz_titans_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">engram_attn</td>
+<td style="text-align: left;">engram</td>
 <td style="text-align: left;">Memoria</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(n
 \cdot N \cdot H)\)</span></td>
@@ -3432,7 +3432,7 @@ data-cites="cheng2026conditionalmemoryscalablelookup"></span></td>
 (9)</strong></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sparse_transformer_attn</td>
+<td style="text-align: left;">sparse_transformer</td>
 <td style="text-align: left;">Disperso</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(n
 \sqrt{n} \cdot d)\)</span></td>
@@ -3444,7 +3444,7 @@ patrón de dispersidad <span class="math inline">\(\sqrt{n}\)</span></td>
 data-cites="child_sparse_transformer_2019"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">longformer_attn</td>
+<td style="text-align: left;">longformer</td>
 <td style="text-align: left;">Disperso</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(n
 \cdot w \cdot d)\)</span></td>
@@ -3456,7 +3456,7 @@ globales; lineal en <span class="math inline">\(n\)</span></td>
 data-cites="beltagy_longformer_2020"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">bigbird_attn</td>
+<td style="text-align: left;">bigbird</td>
 <td style="text-align: left;">Disperso</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n)\)</span></td>
@@ -3468,7 +3468,7 @@ Turing completa</td>
 data-cites="zaheer_bigbird_2020"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sparsek_attn</td>
+<td style="text-align: left;">sparsek</td>
 <td style="text-align: left;">Disperso</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(n
 \cdot d)\)</span></td>
@@ -3481,7 +3481,7 @@ aprendida</td>
 data-cites="lou_sparsek_2024"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">nsa_attn</td>
+<td style="text-align: left;">nsa</td>
 <td style="text-align: left;">Disperso</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}((t/d + n_l + w)d)\)</span></td>
@@ -3493,7 +3493,7 @@ token/vecino/ventana</td>
 data-cites="yuan_nsa_2025"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sparge_attn</td>
+<td style="text-align: left;">sparge</td>
 <td style="text-align: left;">Disperso</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 \cdot s \cdot d)\)</span></td>
@@ -3505,7 +3505,7 @@ evaluación (sin entrenamiento)</td>
 data-cites="zhang_spargeattn_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">fasa_attn</td>
+<td style="text-align: left;">fasa</td>
 <td style="text-align: left;">Disperso</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(t
 \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)\)</span></td>
@@ -3517,7 +3517,7 @@ solo evaluación</td>
 data-cites="wang_fasa_2026"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">msa_attn</td>
+<td style="text-align: left;">msa</td>
 <td style="text-align: left;">Disperso</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}}
@@ -3530,7 +3530,7 @@ desplegado a escala 109B</td>
 data-cites="lai_minimax_2026"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sparda_attn</td>
+<td style="text-align: left;">sparda</td>
 <td style="text-align: left;">Disperso</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot
@@ -3547,7 +3547,7 @@ data-cites="fu_sparda_2026"></span></td>
 (8)</strong></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gla_attn</td>
+<td style="text-align: left;">gla</td>
 <td style="text-align: left;">Con compuerta</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3559,7 +3559,7 @@ atención lineal con compuerta</td>
 data-cites="yang_gla_2023"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">deltanet_attn</td>
+<td style="text-align: left;">deltanet</td>
 <td style="text-align: left;">Con compuerta</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3571,7 +3571,7 @@ corrección de errores</td>
 data-cites="yang_deltanet_2024"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gated_deltanet_attn</td>
+<td style="text-align: left;">gated_deltanet</td>
 <td style="text-align: left;">Con compuerta</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3583,7 +3583,7 @@ escritura; marco delta unificado</td>
 data-cites="yang_gated_deltanet_2024"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">gated_deltanet2_attn</td>
+<td style="text-align: left;">gated_deltanet2</td>
 <td style="text-align: left;">Con compuerta</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3595,7 +3595,7 @@ canalizadas desacopladas; compuerta mejorada</td>
 data-cites="hatamizadeh_gated_deltanet2_2026"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">hgrn2_attn</td>
+<td style="text-align: left;">hgrn2</td>
 <td style="text-align: left;">Con compuerta</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3607,7 +3607,7 @@ recurrencia multi-escala</td>
 data-cites="qin_hgrn2_2024"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">fox_attn</td>
+<td style="text-align: left;">fox</td>
 <td style="text-align: left;">Con compuerta</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(L^2 d)\)</span></td>
@@ -3619,7 +3619,7 @@ compatible con FlashAttn</td>
 data-cites="lin_forgetting_transformer_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gated_softmax_attn</td>
+<td style="text-align: left;">gated_softmax</td>
 <td style="text-align: left;">Con compuerta</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(L^2 d)\)</span></td>
@@ -3631,7 +3631,7 @@ del sumidero de atención</td>
 data-cites="qiu_gated_attention_2025"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">kda_attn</td>
+<td style="text-align: left;">kda</td>
 <td style="text-align: left;">Con compuerta</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3647,7 +3647,7 @@ data-cites="kimi_kda_2025"></span></td>
 (9)</strong></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mla_attn</td>
+<td style="text-align: left;">mla</td>
 <td style="text-align: left;">Latente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3660,7 +3660,7 @@ DeepSeek</td>
 data-cites="mehta_mla_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gqla_attn</td>
+<td style="text-align: left;">gqla</td>
 <td style="text-align: left;">Latente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3672,7 +3672,7 @@ al hardware; fusión GQA + latente</td>
 data-cites="meng_gqla_2026"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mlra_attn</td>
+<td style="text-align: left;">mlra</td>
 <td style="text-align: left;">Latente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3684,7 +3684,7 @@ sub-cabezas; compatible con tensor-paralelismo de 4 vías</td>
 data-cites="liu_mlra_2026"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">tucker_attn</td>
+<td style="text-align: left;">tucker</td>
 <td style="text-align: left;">Latente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3696,7 +3696,7 @@ MHA/GQA/MLA</td>
 data-cites="klein_tucker_2026"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">iha_attn</td>
+<td style="text-align: left;">iha</td>
 <td style="text-align: left;">Latente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 H^2)\)</span></td>
@@ -3708,7 +3708,7 @@ class="math inline">\(\mathcal{O}(n^2 H^2)\)</span></td>
 data-cites="duvvuri_iha_2026"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gta_attn</td>
+<td style="text-align: left;">gta</td>
 <td style="text-align: left;">Latente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 \cdot G \cdot d_h)\)</span></td>
@@ -3720,7 +3720,7 @@ reducción de FLOPs del 62.5%</td>
 data-cites="sun_gta_2025"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mtla_attn</td>
+<td style="text-align: left;">mtla</td>
 <td style="text-align: left;">Latente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d / m)\)</span></td>
@@ -3733,7 +3733,7 @@ decodificación de <span class="math inline">\(5.3\times\)</span></td>
 data-cites="deng_mtla_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">cca_attn</td>
+<td style="text-align: left;">cca</td>
 <td style="text-align: left;">Latente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d / C)\)</span></td>
@@ -3745,7 +3745,7 @@ class="math inline">\(\mathcal{O}(\tilde{e} \cdot n)\)</span></td>
 data-cites="figliola_cca_2025"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">ccgqa_attn</td>
+<td style="text-align: left;">ccgqa</td>
 <td style="text-align: left;">Latente</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d / C_1)\)</span></td>
@@ -6733,7 +6733,7 @@ por capa.</p></li>
 para regularización del enrutador.</p></li>
 </ul>
 <h2 id="memoria-condicional-engram">Memoria Condicional Engram</h2>
-<p>Engram (<code>engram_attn</code>) implementa memoria condicional
+<p>Engram (<code>engram</code>) implementa memoria condicional
 mediante búsqueda N-gram escalable <span class="citation"
 data-cites="cheng2026conditionalmemoryscalablelookup"></span>. Construye
 tablas de búsqueda basadas en hash para contextos N-gram desde tamaño 2

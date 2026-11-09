@@ -35,7 +35,7 @@ def _cfg(**overrides):
         dropout=0.0,
         norm_type="layer_norm",
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         use_moe=False,
         ode_solver="rk4",
         ode_steps=1,
@@ -119,7 +119,7 @@ class ConformerAttentionTests(unittest.TestCase):
         rope = RoPE(head_dim=DIM // 6)
         on = ConformerAttention(_cfg(), pos_encoder=rope)
         off = ConformerAttention(
-            _cfg(conformer_attn_use_pe=False), pos_encoder=rope
+            _cfg(conformer_use_pe=False), pos_encoder=rope
         )
         off.load_state_dict(on.state_dict())
         on.eval()

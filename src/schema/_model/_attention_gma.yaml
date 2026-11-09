@@ -5,10 +5,10 @@ properties:
     type: object
     additionalProperties: false
     description: |-
-      Hyperparameters for `gma_attn` (Gaussian Mixture Attention): number of mixture components, routing dimension and numerical floors. Only applies when `gma_attn` appears in `layer_pattern`.
+      Hyperparameters for `gma` (Gaussian Mixture Attention): number of mixture components, routing dimension and numerical floors. Only applies when `gma` appears in `layer_pattern`.
       **References:** (paper: arxiv:2606.18283)
     description_es: |-
-      Hiperparámetros para `gma_attn` (Gaussian Mixture Attention): número de componentes de la mezcla, dimensión de enrutamiento y pisos numéricos. Solo aplica cuando `gma_attn` aparece en `layer_pattern`.
+      Hiperparámetros para `gma` (Gaussian Mixture Attention): número de componentes de la mezcla, dimensión de enrutamiento y pisos numéricos. Solo aplica cuando `gma` aparece en `layer_pattern`.
       **Referencias:** (paper: arxiv:2606.18283)
     properties:
       num_components:
@@ -17,11 +17,11 @@ properties:
         title_es: "Componentes de Mezcla GMA"
         description: |-
           Number `K` of learned Gaussian mixture components per head for
-          `gma_attn` (Gaussian Mixture Attention (paper: arxiv:2606.18283)). Each
+          `gma` (Gaussian Mixture Attention (paper: arxiv:2606.18283)). Each
           component routes values into one latent memory slot, so `K`
           controls the routing capacity of the layer. The dominant
           activation storage scales as `O(NK)` for fixed `K`, which is
-          linear in the sequence length `N`. Only applies when `gma_attn`
+          linear in the sequence length `N`. Only applies when `gma`
           appears in `layer_pattern`.
 
           **Examples explained:**
@@ -39,12 +39,12 @@ properties:
           **References:** (paper: arxiv:2606.18283)
         description_es: |-
           Número `K` de componentes de mezcla Gaussianos aprendidos por
-          cabeza para `gma_attn` (Gaussian Mixture Attention,
+          cabeza para `gma` (Gaussian Mixture Attention,
           (paper: arxiv:2606.18283)). Cada componente enruta valores a un slot de
           memoria latente, por lo que `K` controla la capacidad de
           enrutamiento de la capa. El almacenamiento de activaciones
           dominante escala como `O(NK)` para `K` fijo, lineal en la
-          longitud de secuencia `N`. Solo aplica cuando `gma_attn`
+          longitud de secuencia `N`. Solo aplica cuando `gma`
           aparece en `layer_pattern`.
 
           **Ejemplos explicados:**
@@ -70,12 +70,12 @@ properties:
         title_es: "Dimensión de Enrutamiento GMA"
         description: |-
           Routing dimension `d_r` used to compute Gaussian
-          responsibilities for `gma_attn` (paper: arxiv:2606.18283). Queries and
+          responsibilities for `gma` (paper: arxiv:2606.18283). Queries and
           keys are projected from `hidden_size` into `num_heads * d_r`
           before being mapped to posterior responsibilities over the `K`
           mixture components. `null` defaults to the per-head dimension
           `hidden_size // num_heads`. Decoupled from the value dimension
-          `d_v` (which equals `head_dim`). Only applies when `gma_attn`
+          `d_v` (which equals `head_dim`). Only applies when `gma`
           is in `layer_pattern`.
 
           **Impact:** Larger `d_r` gives finer-grained Gaussian
@@ -87,13 +87,13 @@ properties:
           **References:** (paper: arxiv:2606.18283)
         description_es: |-
           Dimensión de enrutamiento `d_r` usada para calcular las
-          responsabilidades Gaussianas para `gma_attn` (paper: arxiv:2606.18283).
+          responsabilidades Gaussianas para `gma` (paper: arxiv:2606.18283).
           Queries y keys se proyectan de `hidden_size` a
           `num_heads * d_r` antes de mapearse a responsabilidades
           posteriores sobre los `K` componentes de mezcla. `null` por
           defecto es la dimensión por cabeza `hidden_size // num_heads`.
           Desacoplada de la dimensión de valor `d_v` (que es igual a
-          `head_dim`). Solo aplica cuando `gma_attn` está en
+          `head_dim`). Solo aplica cuando `gma` está en
           `layer_pattern`.
 
           **Impacto:** `d_r` mayor da posteriores Gaussianos más finos y
@@ -110,10 +110,10 @@ properties:
         title_es: "Épsilon Normalizador de Lectura GMA"
         description: |-
           Numerical-stability constant `epsilon` added to the read-step
-          denominator `Gamma^Q Z + epsilon` of `gma_attn`
+          denominator `Gamma^Q Z + epsilon` of `gma`
           (paper: arxiv:2606.18283). Prevents division by zero when a mixture
           component receives negligible key-responsibility mass. Must be
-          strictly positive. Only applies when `gma_attn` is in
+          strictly positive. Only applies when `gma` is in
           `layer_pattern`.
 
           **Impact:** Smaller values (e.g. 1e-8) preserve the row-stochastic
@@ -126,10 +126,10 @@ properties:
         description_es: |-
           Constante de estabilidad numérica `epsilon` añadida al
           denominador del paso de lectura `Gamma^Q Z + epsilon` de
-          `gma_attn` (paper: arxiv:2606.18283). Previene división por cero cuando
+          `gma` (paper: arxiv:2606.18283). Previene división por cero cuando
           un componente de mezcla recibe masa de responsabilidad de clave
           despreciable. Debe ser estrictamente positivo. Solo aplica
-          cuando `gma_attn` está en `layer_pattern`.
+          cuando `gma` está en `layer_pattern`.
 
           **Impacto:** Valores menores (e.g. 1e-8) preservan la
           interpretación estocástica por fila de los pesos de atención
@@ -146,11 +146,11 @@ properties:
         title_es: "Piso de Covarianza GMA"
         description: |-
           Lower bound `epsilon_sigma` for the diagonal variances of the
-          Gaussian mixture components of `gma_attn` (paper: arxiv:2606.18283).
+          Gaussian mixture components of `gma` (paper: arxiv:2606.18283).
           Variances are reparameterised as
           `sigma^2 = softplus(omega) + epsilon_sigma`, which guarantees
           strict positive-definiteness during gradient-based training.
-          Must be strictly positive. Only applies when `gma_attn` is in
+          Must be strictly positive. Only applies when `gma` is in
           `layer_pattern`.
 
           **Impact:** Smaller values allow sharper, more peaked
@@ -162,12 +162,12 @@ properties:
           **References:** (paper: arxiv:2606.18283)
         description_es: |-
           Cota inferior `epsilon_sigma` para las varianzas diagonales de
-          los componentes de la mezcla Gaussiana de `gma_attn`
+          los componentes de la mezcla Gaussiana de `gma`
           (paper: arxiv:2606.18283). Las varianzas se reparametrizan como
           `sigma^2 = softplus(omega) + epsilon_sigma`, lo que garantiza
           definida-positividad estricta durante el entrenamiento basado
           en gradientes. Debe ser estrictamente positivo. Solo aplica
-          cuando `gma_attn` está en `layer_pattern`.
+          cuando `gma` está en `layer_pattern`.
 
           **Impacto:** Valores menores permiten componentes más afilados
           y picudos pero arriesgan covarianzas singulares y distancias
@@ -184,9 +184,9 @@ properties:
         title_es: "Desviación de Inicialización de Medias GMA"
         description: |-
           Standard deviation of the zero-mean Gaussian used to initialise
-          the mixture component means `mu` of `gma_attn`
+          the mixture component means `mu` of `gma`
           (paper: arxiv:2606.18283). Means are drawn as `mu ~ N(0,
-          init_mean_std^2)`. Only applies when `gma_attn` is in
+          init_mean_std^2)`. Only applies when `gma` is in
           `layer_pattern`.
 
           **Impact:** Larger values spread the initial components across
@@ -200,8 +200,8 @@ properties:
         description_es: |-
           Desviación estándar de la Gaussiana de media cero usada para
           inicializar las medias de los componentes de mezcla `mu` de
-          `gma_attn` (paper: arxiv:2606.18283). Las medias se extraen como
-          `mu ~ N(0, init_mean_std^2)`. Solo aplica cuando `gma_attn`
+          `gma` (paper: arxiv:2606.18283). Las medias se extraen como
+          `mu ~ N(0, init_mean_std^2)`. Solo aplica cuando `gma`
           está en `layer_pattern`.
 
           **Impacto:** Valores mayores dispersan los componentes iniciales

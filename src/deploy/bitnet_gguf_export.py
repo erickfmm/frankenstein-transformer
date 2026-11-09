@@ -14,12 +14,12 @@ Falcon3, Falcon-E, and the official BitNet b1.58 models). The Frankenstein
 because its compute graph is not registered.
 
 This exporter therefore only supports Frankenstein models configured with a
-**single mixer type ``standard_attn``** (pure encoder or pure decoder). For
+**single mixer type ``standard``** (pure encoder or pure decoder). For
 that subset the attention/FFN graph maps to the Llama/BERT tensor naming
 convention, and the ternary weights are packed with the ``i2_s`` layout that
 ``setup_env.py -q i2_s`` expects.
 
-Any other ``layer_pattern`` (e.g. ``retnet``, ``mamba``, ``gla_attn``, ...)
+Any other ``layer_pattern`` (e.g. ``retnet``, ``mamba``, ``gla``, ...)
 raises :class:`GGUFExportError`. This is a deliberate limitation: those mixers
 have no equivalent in llama.cpp.
 
@@ -203,13 +203,13 @@ def pack_i2_s(weight: torch.Tensor) -> Tuple[np.ndarray, float]:
 
 
 # ---------------------------------------------------------------------------
-# Tensor remapping (standard_attn -> Llama-style names)
+# Tensor remapping (standard -> Llama-style names)
 # ---------------------------------------------------------------------------
-def _remap_standard_attn_tensors(
+def _remap_standard_tensors(
     state_dict: Dict[str, torch.Tensor],
     config: Dict[str, Any],
 ) -> List[Tuple[str, torch.Tensor]]:
-    """Map Frankenstein ``standard_attn`` tensors to Llama-style GGUF names.
+    """Map Frankenstein ``standard`` tensors to Llama-style GGUF names.
 
     Only tensors belonging to the embedding, per-layer attention (q/k/v/o),
     FFN (up/down), final norm and LM head are remapped. Anything else raises
@@ -279,12 +279,12 @@ def _map_single(name: str, num_layers: int) -> str | None:
 def check_gguf_compatibility(yaml_path: str) -> Dict[str, Any]:
     """Check whether a training YAML is compatible with the GGUF/BitNet export.
 
-    The model must use ``use_bitnet: true`` and a single ``standard_attn``
+    The model must use ``use_bitnet: true`` and a single ``standard``
     layer type (pure encoder or decoder). Any hybrid mixer is rejected.
 
     The optional ``inference.kv_cache`` block is **irrelevant to the GGUF
     compatibility check**: KV caching is a runtime decode optimisation, not
-    an architecture change — a cached ``standard_attn`` hybrid exports
+    an architecture change — a cached ``standard`` hybrid exports
     exactly like an uncached one. The check therefore ignores the
     ``inference:`` section entirely (plan item 27).
 
@@ -308,11 +308,11 @@ def check_gguf_compatibility(yaml_path: str) -> Dict[str, Any]:
     if not layers:
         return {"is_compatible": False, "reason": "layer_pattern is empty"}
     unique = set(layers)
-    if unique != {"standard_attn"}:
+    if unique != {"standard"}:
         return {
             "is_compatible": False,
             "reason": (
-                "GGUF/BitNet export only supports the 'standard_attn' mixer "
+                "GGUF/BitNet export only supports the 'standard' mixer "
                 f"(found {sorted(unique)}). Hybrid mixers have no equivalent "
                 "in llama.cpp / bitnet.cpp."
             ),
@@ -368,10 +368,10 @@ def export_bitnet_gguf(
     else:
         state_dict = checkpoint
 
-    remapped = _remap_standard_attn_tensors(state_dict, model_config)
+    remapped = _remap_standard_tensors(state_dict, model_config)
     if not remapped:
         raise GGUFExportError(
-            "No remappable standard_attn tensors found in the checkpoint"
+            "No remappable standard tensors found in the checkpoint"
         )
 
     # Pack every tensor to i2_s.
@@ -488,7 +488,7 @@ def export_bitnet_gguf(
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Best-effort GGUF (BitNet i2_s) exporter for standard_attn-only "
+            "Best-effort GGUF (BitNet i2_s) exporter for standard-only "
             "Frankenstein BitNet models."
         )
     )

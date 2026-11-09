@@ -8,11 +8,11 @@ model:
     num_heads: 6
     layer_pattern:
     - retnet
-    - titan_attn
+    - titan
     - mamba
     - ode
-    - standard_attn
-    - sigmoid_attn
+    - standard
+    - sigmoid
   norm:
     type: layer_norm
   embedding:

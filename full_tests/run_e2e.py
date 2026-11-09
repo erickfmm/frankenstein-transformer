@@ -220,33 +220,33 @@ import _helpers as helpers  # type: ignore  # noqa: E402
 # ---------------------------------------------------------------------------
 # Canonical lists from the schema
 # ---------------------------------------------------------------------------
-# fasa_attn and sparge_attn are training-free/eval-only; skip them here.
+# fasa and sparge are training-free/eval-only; skip them here.
 ATTENTIONS = [
-    "retnet", "retnet_attn", "mamba", "ode", "titan_attn", "standard_attn",
-    "sigmoid_attn", "sparse_transformer_attn", "longformer_attn", "bigbird_attn",
-    "sparsek_attn", "nsa_attn", "gla_attn", "deltanet_attn", "gated_deltanet_attn",
-    "gated_deltanet2_attn", "hgrn2_attn", "fox_attn", "gated_softmax_attn",
-    "engram_attn", "gqa_attn", "mla_attn", "gqla_attn", "mlra_attn",
-    "tucker_attn", "iha_attn", "gta_attn", "mtla_attn", "cca_attn", "ccgqa_attn",
-    "msa_attn", "sparda_attn", "kda_attn", "gma_attn", "ssog_attn",
-    "falcon1_attn", "falcon2_attn", "falcon3_attn", "falcon1a_attn",
-    "falcon2a_attn", "falcon3a_attn",
+    "retnet", "retnet", "mamba", "ode", "titan", "standard",
+    "sigmoid", "sparse_transformer", "longformer", "bigbird",
+    "sparsek", "nsa", "gla", "deltanet", "gated_deltanet",
+    "gated_deltanet2", "hgrn2", "fox", "gated_softmax",
+    "engram", "gqa", "mla", "gqla", "mlra",
+    "tucker", "iha", "gta", "mtla", "cca", "ccgqa",
+    "msa", "sparda", "kda", "gma", "ssog",
+    "falcon1", "falcon2", "falcon3", "falcon1a",
+    "falcon2a", "falcon3a",
     # Convolution-augmented attention (arXiv:2005.08100): macaron FFN₁ + MHSA
     # + convolution module. Trains densely in both encoder and decoder modes
     # (causal padding in the decoder), so it belongs in the pair sweep too.
-    "conformer_attn",
+    "conformer",
     # Memory Attention (arXiv:2609.28399): V = K + Norm(E[s]) — trains
     # densely in encoder and decoder modes; conventional KV cache.
-    "memory_attn",
+    "memory",
     # Latent Sparse Attention / N-LSA (arXiv:2610.42147): semantic key
     # clustering + top-k selection; trains natively in encoder and decoder
     # modes; exact bucket-cache incremental decoding.
-    "lsa_attn",
+    "lsa",
     # Fast Conformer limited-context attention (arXiv:2305.05084): local
     # window + head-pinned global attention token; trains its windowed pattern
     # natively in encoder and decoder modes; exact ring-cache incremental
     # decoding.
-    "fastconformer_attn",
+    "fastconformer",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).
@@ -395,7 +395,7 @@ def _base_config(vocab_size: int, num_layers: int, num_loops: int) -> Tuple[dict
 
 
 def _ensure_ssog_grid(model: dict, training: dict, *, force: bool = False) -> dict:
-    """Give ``ssog_attn`` layers a 1D grid matching the training ``max_length``.
+    """Give ``ssog`` layers a 1D grid matching the training ``max_length``.
 
     SSOG requires ``seq_len == grid_h * grid_w``. The toy MLM corpus is padded
     and truncated to exactly ``max_length`` tokens, so a degenerate
@@ -409,7 +409,7 @@ def _ensure_ssog_grid(model: dict, training: dict, *, force: bool = False) -> di
     run would crash at the first forward.
     """
     pattern = model.get("dims", {}).get("layer_pattern", [])
-    if "ssog_attn" not in pattern:
+    if "ssog" not in pattern:
         return model
     max_length = int(training.get("max_length", 32))
     attention = dict(model.get("attention") or {})
@@ -794,7 +794,7 @@ def make_optimizer_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     configs: List[Tuple[str, dict]] = []
     for opt in OPTIMIZERS:
         model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-        model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
+        model = _deep_update(model, {"dims": {"layer_pattern": ["standard", "titan"]}})
         training = _with_optimizer(training, opt)
         configs.append((f"opt_{opt}", {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
     return configs
@@ -804,7 +804,7 @@ def make_norm_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     configs: List[Tuple[str, dict]] = []
     for norm in NORMS:
         model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-        model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
+        model = _deep_update(model, {"dims": {"layer_pattern": ["standard", "titan"]}})
         norm_block: Dict[str, Any] = {"type": norm}
         if norm == "prms_norm":
             norm_block["partial_ratio"] = 0.5
@@ -818,14 +818,14 @@ def make_norm_configs(vocab_size: int) -> List[Tuple[str, dict]]:
 def make_positional_encoding_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     """One config per model-wide ``positional_encoding`` value.
 
-    Uses a fixed baseline ``[standard_attn, titan_attn]`` pattern — no cross
+    Uses a fixed baseline ``[standard, titan]`` pattern — no cross
     product with mixers.  Only the schema-defined ``positional_encoding`` and
     ``positional_encoding_parameters`` keys are touched.
     """
     configs: List[Tuple[str, dict]] = []
     for pe in POSITIONAL_ENCODINGS:
         model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-        model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
+        model = _deep_update(model, {"dims": {"layer_pattern": ["standard", "titan"]}})
         overrides: Dict[str, Any] = {"positional_encoding": pe}
         # PaPE family shares the ``pape`` parameters sub-object (num_parabolas,
         # num_positions, rotation_invariant).  Provide sane toy values.
@@ -859,7 +859,7 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
 
     def add(cid: str, overrides: dict) -> None:
         model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-        model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
+        model = _deep_update(model, {"dims": {"layer_pattern": ["standard", "titan"]}})
         model = _deep_update(model, overrides)
         model = _ensure_ssog_grid(model, training)
         configs.append((cid, {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
@@ -900,7 +900,7 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # SSMax rescales logits (larger margins) and BitNet perturbs weights: the
     # interaction is exactly where the precision cliff matters.
     add("trans_fixed_softmax_ssmax_bitnet", {"fixed_softmax": True, "use_ssmax": True, "ssmax_s_init": 1.0, "use_bitnet": True})
-    add("trans_num_loops_2", {"dims": {"num_layers": 1, "num_loops": 2, "layer_pattern": ["standard_attn"]}})
+    add("trans_num_loops_2", {"dims": {"num_layers": 1, "num_loops": 2, "layer_pattern": ["standard"]}})
     add("trans_ffn_relu", {"ffn_activation": "relu"})
     add("trans_ffn_swiglu", {"ffn_activation": "swiglu"})
     add("trans_mhc", {
@@ -908,11 +908,11 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     })
     # SSOG transversals: fixed (content-blind) field, and BitNet-wired SSOG.
     add("trans_ssog_fixed_field", {
-        "dims": {"layer_pattern": ["ssog_attn", "ssog_attn"]},
+        "dims": {"layer_pattern": ["ssog", "ssog"]},
         "attention": {"ssog": {"lookat": False}},
     })
     add("trans_ssog_bitnet", {
-        "dims": {"layer_pattern": ["ssog_attn", "ssog_attn"]},
+        "dims": {"layer_pattern": ["ssog", "ssog"]},
         "use_bitnet": True,
     })
     return configs
@@ -923,12 +923,12 @@ def make_task_configs(vocab_size: int) -> List[Tuple[str, dict]]:
 
     # Encoder MLM (default path)
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-    model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
+    model = _deep_update(model, {"dims": {"layer_pattern": ["standard", "titan"]}})
     configs.append(("task_mlm_encoder", {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
 
     # Decoder causal LM
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-    model = _deep_update(model, {"dims": {"mode": "decoder", "layer_pattern": ["standard_attn", "titan_attn"]}})
+    model = _deep_update(model, {"dims": {"mode": "decoder", "layer_pattern": ["standard", "titan"]}})
     training = training.copy()
     training["task"] = "causal_lm"
     configs.append(("task_causal_lm_decoder", {"model_class": "frankenstein_text_decoder", "model": model, "training": training}))
@@ -938,7 +938,7 @@ def make_task_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # streaming-safe.
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
     model = _deep_update(model, {
-        "dims": {"mode": "decoder", "layer_pattern": ["conformer_attn", "standard_attn"]},
+        "dims": {"mode": "decoder", "layer_pattern": ["conformer", "standard"]},
         "attention": {"conformer": {"kernel_size": 8, "macaron": True, "conv_norm": "batch"}},
     })
     training = training.copy()
@@ -948,7 +948,7 @@ def make_task_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # Decoder causal LM with fixed numerics: exercises the ignore_index=-100
     # path of the fixed cross-entropy and the decoder softmax/sampling plumbing.
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-    model = _deep_update(model, {"dims": {"mode": "decoder", "layer_pattern": ["standard_attn", "titan_attn"]}})
+    model = _deep_update(model, {"dims": {"mode": "decoder", "layer_pattern": ["standard", "titan"]}})
     model = _deep_update(model, {"fixed_softmax": True, "fixed_cross_entropy": True})
     training = training.copy()
     training["task"] = "causal_lm"
@@ -960,7 +960,7 @@ def make_batch_size_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     configs: List[Tuple[str, dict]] = []
     for bs in [1, 2]:
         model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-        model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
+        model = _deep_update(model, {"dims": {"layer_pattern": ["standard", "titan"]}})
         training = training.copy()
         training["batch_size"] = bs
         configs.append((f"batch_size_{bs}", {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
@@ -972,7 +972,7 @@ def _vit_model(vocab_size: int) -> dict:
     return {
         "dims": {
             "hidden_size": 64, "num_layers": 2, "num_heads": 4, "num_loops": 1,
-            "layer_pattern": ["standard_attn"], "mode": "encoder", "dropout": 0.0,
+            "layer_pattern": ["standard"], "mode": "encoder", "dropout": 0.0,
             "vocab_size": vocab_size,
         },
         "norm": {"type": "layer_norm"},
@@ -1071,7 +1071,7 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         "cls_token": False, "pooling_mode": "gap",
     }
     ssog_model = _deep_update(_vit_model(vocab_size), {
-        "dims": {"layer_pattern": ["ssog_attn"]},
+        "dims": {"layer_pattern": ["ssog"]},
         "attention": {"ssog": {"num_atoms": 2, "max_offset": 1.0}},
     })
 
@@ -1112,7 +1112,7 @@ def make_vision_pe_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     """Sweep every ViT ``pos_embedding_type`` across all 3 vision tasks.
 
     No cross product with mixers — each combo is one (task, PE) pair using the
-    default ``standard_attn`` ViT layer pattern.  Mirrors the strategy of
+    default ``standard`` ViT layer pattern.  Mirrors the strategy of
     ``make_positional_encoding_configs`` but for the vision image block.
     """
     configs: List[Tuple[str, dict]] = []
@@ -1208,7 +1208,7 @@ def make_tokenizer_configs(vocab_size: int) -> List[Tuple[str, dict]]:
 
     for algo in ["bpe", "wordpiece", "wordlevel", "unigram"]:
         model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-        model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "standard_attn"]}})
+        model = _deep_update(model, {"dims": {"layer_pattern": ["standard", "standard"]}})
         training = training.copy()
         training["task"] = "mlm"
         tok_training: Dict[str, Any] = {
@@ -1276,7 +1276,7 @@ def make_real_dataset_configs(vocab_size: int) -> List[Tuple[str, dict]]:
 
     # --- MLM on Spanish poetry (Borges) -----------------------------------
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
-    model = _deep_update(model, {"dims": {"layer_pattern": ["standard_attn", "titan_attn"]}})
+    model = _deep_update(model, {"dims": {"layer_pattern": ["standard", "titan"]}})
     training = _deep_update(training, {"task": "mlm", "batch_size": 2, "max_length": 64})
     configs.append(("realdata_mlm_borges", {
         "model_class": "frankenstein_text_encoder",
@@ -1294,7 +1294,7 @@ def make_real_dataset_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # --- Autoregressive causal LM on the same corpus -----------------------
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
     model = _deep_update(model, {
-        "dims": {"mode": "decoder", "layer_pattern": ["standard_attn", "titan_attn"]},
+        "dims": {"mode": "decoder", "layer_pattern": ["standard", "titan"]},
     })
     training = _deep_update(training, {"task": "causal_lm", "batch_size": 2, "max_length": 64})
     configs.append(("realdata_causal_lm_borges", {
@@ -1313,7 +1313,7 @@ def make_real_dataset_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # --- Supervised text classification (3 string labels) ------------------
     model, training = _base_config(vocab_size, num_layers=1, num_loops=1)
     model = _deep_update(model, {
-        "dims": {"layer_pattern": ["standard_attn"]},
+        "dims": {"layer_pattern": ["standard"]},
         "classification_head": {"enabled": True, "num_labels": 3, "pooling_mode": "cls"},
     })
     training = _deep_update(training, {"task": "text_classification", "batch_size": 2, "max_length": 64})
@@ -1563,7 +1563,7 @@ def validate_combos(combos: List[Tuple[str, dict]], *, deep: bool = True) -> Lis
 
     * dict level: ``dims`` invariants (``hidden_size % num_heads == 0``,
       non-empty ``layer_pattern`` — it is tiled to ``num_layers`` when
-      shorter —, ``num_kv_heads`` divides ``num_heads``), ``ssog_attn`` grid
+      shorter —, ``num_kv_heads`` divides ``num_heads``), ``ssog`` grid
       equals ``training.max_length`` (text
       model classes only; ViT derives it), and every
       ``<optimizer>-<param>`` key is accepted by the factory's
@@ -1618,7 +1618,7 @@ def validate_combos(combos: List[Tuple[str, dict]], *, deep: bool = True) -> Lis
 
         model_class = str(config.get("model_class") or "").strip().lower()
         training = config.get("training") or {}
-        if model_class in TEXT_MODEL_CLASSES and "ssog_attn" in pattern:
+        if model_class in TEXT_MODEL_CLASSES and "ssog" in pattern:
             ssog = ((config.get("model") or {}).get("attention") or {}).get("ssog") or {}
             grid = int(ssog.get("grid_h") or 0) * int(ssog.get("grid_w") or 0)
             max_length = int(training.get("max_length") or 32)
@@ -2490,11 +2490,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                     prefix=f"[{completed}/{len(combos)}] (combo {idx}) ",
                 )
 
-    # Dedicated BitNet+standard_attn training + bitnet-gguf export, if not already covered.
+    # Dedicated BitNet+standard training + bitnet-gguf export, if not already covered.
     if not args.skip_deploy and (args.category in {"all", "transversal"}):
         model, training = _base_config(args.vocab_size, num_layers=2, num_loops=1)
         model = _deep_update(model, {
-            "dims": {"layer_pattern": ["standard_attn", "standard_attn"]},
+            "dims": {"layer_pattern": ["standard", "standard"]},
             "use_bitnet": True,
         })
         bitnet_id = "bitnet_std_attn_for_gguf"

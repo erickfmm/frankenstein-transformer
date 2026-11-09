@@ -29,7 +29,7 @@ def _audio_config(task: str, *, loss: str = "ctc", tmp_path=None) -> dict:
                 "num_loops": 1,
                 "num_heads": 4,
                 "dropout": 0.0,
-                "layer_pattern": ["conformer_attn"],
+                "layer_pattern": ["conformer"],
                 "mode": "encoder",
             },
             "norm": {"type": "layer_norm"},

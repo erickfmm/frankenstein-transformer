@@ -1,6 +1,6 @@
 # Fast Conformer limited-context attention — knob-coverage example (arXiv:2305.05084).
 #
-# Every layer uses `fastconformer_attn` with the paper's §3.4 window (128 steps
+# Every layer uses `fastconformer` with the paper's §3.4 window (128 steps
 # per side, i.e. window_size 256) and a single head-pinned global attention
 # token. This example deliberately enables `global_attn_separate: true` — the
 # paper's §2.2 Longformer-style variant with its own global query/key/value
@@ -17,7 +17,7 @@ model:
     num_loops: 1
     num_heads: 8
     layer_pattern:
-    - fastconformer_attn
+    - fastconformer
   norm:
     type: layer_norm
   embedding:

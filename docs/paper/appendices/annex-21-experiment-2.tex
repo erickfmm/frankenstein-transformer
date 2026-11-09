@@ -5,11 +5,11 @@ This annex reports Round~2 in full. It follows the order of the published report
 
 \subsection{Setup}
 
-The population is 868 configurations: 703 hybrid-pair records (667 unique pairs after collapsing the \texttt{retnet}/\texttt{retnet\_attn} duplicate), 38 single-mixer baselines, 48 vision transformers and 79 ablations. Every run trains for 100 epochs (about 3{,}000 steps) on a 512-token Spanish vocabulary with 32-token sequences, one seed, the same warm-up-plus-cosine schedule and BitNet enabled by default. Holding the schedule, the data and the budget fixed is what makes the cells comparable: the only moving parts are the architectural choices under study. Hybrid pairs are the two-element combinations of the 42-entry mixer list, with layer~0 running mixer~A and layer~1 running mixer~B; no reversed pair exists, so the first/second asymmetry is descriptive. A cell of the grid is covered only if both of its mixers train in every configuration that contains them: the grid has $42\times41/2 = 861$ cells and 667 were measured.
+The population is 868 configurations: 703 hybrid-pair records (667 unique pairs after collapsing the \texttt{retnet\_attn} alias duplicate), 38 single-mixer baselines, 48 vision transformers and 79 ablations. Every run trains for 100 epochs (about 3{,}000 steps) on a 512-token Spanish vocabulary with 32-token sequences, one seed, the same warm-up-plus-cosine schedule and BitNet enabled by default. Holding the schedule, the data and the budget fixed is what makes the cells comparable: the only moving parts are the architectural choices under study. Hybrid pairs are the two-element combinations of the 42-entry mixer list, with layer~0 running mixer~A and layer~1 running mixer~B; no reversed pair exists, so the first/second asymmetry is descriptive. A cell of the grid is covered only if both of its mixers train in every configuration that contains them: the grid has $42\times41/2 = 861$ cells and 667 were measured.
 
 \subsection{The Parameter Landscape}
 
-The 868 configurations span 127{,}328 to 415{,}904 parameters, with a median of 220{,}160. Hybrid pairs sit in the middle of the range because they stack two attention modules; the smallest runs are single-mixer baselines such as \texttt{attn\_single\_mamba} (127{,}328 parameters), and the largest is \texttt{engram\_\_conformer\_attn} at 415{,}904, driven by the \texttt{engram} memory bank, which attaches a large key--value table to the attention block.
+The 868 configurations span 127{,}328 to 415{,}904 parameters, with a median of 220{,}160. Hybrid pairs sit in the middle of the range because they stack two attention modules; the smallest runs are single-mixer baselines such as \texttt{attn\_single\_mamba} (127{,}328 parameters), and the largest is \texttt{engram\_\_conformer} at 415{,}904, driven by the \texttt{engram} memory bank, which attaches a large key--value table to the attention block.
 
 The composition chart (Figure~\ref{fig:r2-params-composition}) is the most useful diagnostic of the section. The token embeddings and the output head are fixed costs of roughly 49k parameters each, so almost every difference between configurations is paid in the attention block and the FFN---the two components the experiments actually vary. Vision transformers are the most parameter-hungry family because they add patch embeddings and a larger classification head, while the optimizer, normalization and positional-encoding ablations keep the same 210k backbone by design, so that only the ablated component differs. Parameter cost has a clear per-mixer reading: \texttt{engram} adds 100k--160k parameters wherever it appears, and \texttt{mamba} and \texttt{retnet} are among the cheapest second mixers even though they are the worst performers---cheap and bad, the worst combination on both axes.
 
@@ -29,9 +29,9 @@ The composition chart (Figure~\ref{fig:r2-params-composition}) is the most usefu
 
 \subsection{Training Outcomes}
 
-Across the hybrid pairs, the final training loss ranges from 8.116 to 10.450 nats (median 9.595). The best pair is \texttt{nsa\_\_engram\_attn} at 8.116, followed by \texttt{gated\_deltanet2\_\_sparda\_attn} (8.567) and \texttt{falcon3\_\_conformer\_attn} (8.620); the worst, \texttt{gqa\_\_tucker\_attn}, needs 10.450. The spread between the best and worst pair is wider than the spread between almost all optimizer ablations---the strongest argument in the round for choosing the attention pair deliberately: the mixer stack matters more than the optimizer.
+Across the hybrid pairs, the final training loss ranges from 8.116 to 10.450 nats (median 9.595). The best pair is \texttt{nsa\_\_engram} at 8.116, followed by \texttt{gated\_deltanet2\_\_sparda} (8.567) and \texttt{falcon3\_\_conformer} (8.620); the worst, \texttt{gqa\_\_tucker}, needs 10.450. The spread between the best and worst pair is wider than the spread between almost all optimizer ablations---the strongest argument in the round for choosing the attention pair deliberately: the mixer stack matters more than the optimizer.
 
-Loss and held-out accuracy, however, disagree. Their rank correlation over the pairs is weak; the pair with the absolute best loss scores 0.0\% top-1, while the best-accuracy pair (\texttt{fox\_\_falcon1a\_attn}) reaches 12.55\% with a worse training loss (9.292). The reason is resolution: with four evaluation sentences, a single lucky or unlucky token rewrites the ranking. Both signals are therefore reported throughout, and the inference tables should be read as a catastrophic-failure check rather than as a leaderboard. Table~\ref{tab:r2-top-loss} lists the ten best pairs by final loss and Table~\ref{tab:r2-top-acc} the ten best by held-out accuracy; the two tables have no pair in common.
+Loss and held-out accuracy, however, disagree. Their rank correlation over the pairs is weak; the pair with the absolute best loss scores 0.0\% top-1, while the best-accuracy pair (\texttt{fox\_\_falcon1a}) reaches 12.55\% with a worse training loss (9.292). The reason is resolution: with four evaluation sentences, a single lucky or unlucky token rewrites the ranking. Both signals are therefore reported throughout, and the inference tables should be read as a catastrophic-failure check rather than as a leaderboard. Table~\ref{tab:r2-top-loss} lists the ten best pairs by final loss and Table~\ref{tab:r2-top-acc} the ten best by held-out accuracy; the two tables have no pair in common.
 
 \begin{table}[H]
 \centering
@@ -421,7 +421,7 @@ Post-training quantization is the good news of the round. Across the 810 configu
 
 The speed story is less flattering, and the reason is structural. The quantized deployment is faster than the standard one in only 32.3\% of runs (median ratio 0.64$\times$) because the deploy stage is dominated by serialisation and format conversion, not by inference; the evaluation stage, which does measure inference, is faster 51.2\% of the time with a median 1.03$\times$ speed-up. Inference itself takes about 10.5\,s for four sentences---the number that matters at serving time.
 
-The best inference configuration is not the best-loss configuration. \texttt{mamba\_\_engram\_attn} hits three of four tokens in the top-5 (75.0\%) with a training loss of 10.277, above the pair median. With four samples per configuration, top-5 is a blunt instrument: use it to catch catastrophic failures, not to crown a winner.
+The best inference configuration is not the best-loss configuration. \texttt{mamba\_\_engram} hits three of four tokens in the top-5 (75.0\%) with a training loss of 10.277, above the pair median. With four samples per configuration, top-5 is a blunt instrument: use it to catch catastrophic failures, not to crown a winner.
 
 \begin{figure}[tbp]
 \centering
@@ -460,16 +460,16 @@ The best inference configuration is not the best-loss configuration. \texttt{mam
 \toprule
 Configuration & Top-5 std & Top-1 std & Top-5 quant & Final loss & Params \\
 \midrule
-\texttt{mamba\_\_engram\_attn} & 75\% & 50\% & 75\% & 10.277 & 347{,}168 \\
-\texttt{mamba\_\_nsa\_attn}    & 75\% & 0\%  & 75\% & 9.262  & 192{,}479 \\
-\texttt{retnet\_\_fox\_attn}  & 75\% & 0\%  & 75\% & 9.873  & 220{,}936 \\
-\texttt{bigbird\_\_kda\_attn}  & 50\% & 0\%  & 50\% & 10.196 & 221{,}128 \\
-\texttt{fox\_\_engram\_attn}   & 50\% & 25\% & 50\% & 9.535  & 375{,}496 \\
-\texttt{fox\_\_gated\_softmax\_attn} & 50\% & 25\% & 50\% & 9.892 & 220{,}744 \\
-\texttt{fox\_\_tucker\_attn}   & 50\% & 25\% & 50\% & 9.890  & 220{,}744 \\
-\texttt{gated\_deltanet\_\_tucker\_attn} & 50\% & 25\% & 50\% & 9.796 & 230{,}928 \\
-\texttt{gla\_\_falcon1\_attn}  & 50\% & 0\%  & 50\% & 9.511  & 226{,}032 \\
-\texttt{gla\_\_mlra\_attn}     & 50\% & 25\% & 50\% & 9.538  & 211{,}808 \\
+\texttt{mamba\_\_engram} & 75\% & 50\% & 75\% & 10.277 & 347{,}168 \\
+\texttt{mamba\_\_nsa}    & 75\% & 0\%  & 75\% & 9.262  & 192{,}479 \\
+\texttt{retnet\_\_fox}  & 75\% & 0\%  & 75\% & 9.873  & 220{,}936 \\
+\texttt{bigbird\_\_kda}  & 50\% & 0\%  & 50\% & 10.196 & 221{,}128 \\
+\texttt{fox\_\_engram}   & 50\% & 25\% & 50\% & 9.535  & 375{,}496 \\
+\texttt{fox\_\_gated\_softmax} & 50\% & 25\% & 50\% & 9.892 & 220{,}744 \\
+\texttt{fox\_\_tucker}   & 50\% & 25\% & 50\% & 9.890  & 220{,}744 \\
+\texttt{gated\_deltanet\_\_tucker} & 50\% & 25\% & 50\% & 9.796 & 230{,}928 \\
+\texttt{gla\_\_falcon1}  & 50\% & 0\%  & 50\% & 9.511  & 226{,}032 \\
+\texttt{gla\_\_mlra}     & 50\% & 25\% & 50\% & 9.538  & 211{,}808 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -478,7 +478,7 @@ Configuration & Top-5 std & Top-1 std & Top-5 quant & Final loss & Params \\
 
 The ledger records 5{,}271 stage executions. 868 training runs succeeded and 171 failed with a non-zero exit code---all of them outside the 868 analysed configurations, which were selected precisely because they trained. Deployment failed 104 times out of 1{,}734, always in symmetric pairs: a configuration that fails the standard export also fails the quantized one, which points to a shared root cause (checkpoint or configuration serialisation) rather than to quantization itself.
 
-Two data-quality findings shape the interpretation of the atlas. First, four mixers never train: \texttt{cca}, \texttt{ccgqa}, \texttt{msa} and \texttt{ssog} fail in their four singles and in all 158 pairs that contain them---exactly the 158 missing cells. Second, four mixers are indistinguishable at a 32-token context: \texttt{standard}, \texttt{bigbird}, \texttt{longformer} and \texttt{titan} share bit-identical losses and parameter counts because their windows (at least 64 tokens) cover the whole sequence and the position-augmented variant reduces to plain multi-head attention; they agree on all 33 shared second mixers. Separately, 37 pairs appear as \texttt{attn\_retnet\_\_X} and \texttt{attn\_retnet\_attn\_\_X} with identical metrics---two names for one implementation---which the atlas collapses to one row. Each of these facts is a caveat carried forward rather than a defect hidden: the atlas has 667 measured cells, 158 structurally missing ones, and four mixers that are, at this context length, the same model.
+Two data-quality findings shape the interpretation of the atlas. First, four mixers never train: \texttt{cca}, \texttt{ccgqa}, \texttt{msa} and \texttt{ssog} fail in their four singles and in all 158 pairs that contain them---exactly the 158 missing cells. Second, four mixers are indistinguishable at a 32-token context: \texttt{standard}, \texttt{bigbird}, \texttt{longformer} and \texttt{titan} share bit-identical losses and parameter counts because their windows (at least 64 tokens) cover the whole sequence and the position-augmented variant reduces to plain multi-head attention; they agree on all 33 shared second mixers. Separately, 37 pairs appear as \texttt{attn\_retnet\_\_X} and \texttt{attn\_retnet\_\_X} with identical metrics---two names for one implementation---which the atlas collapses to one row. Each of these facts is a caveat carried forward rather than a defect hidden: the atlas has 667 measured cells, 158 structurally missing ones, and four mixers that are, at this context length, the same model.
 
 \begin{figure}[tbp]
 \centering

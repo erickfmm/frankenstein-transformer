@@ -8,7 +8,7 @@ model:
     num_heads: 8
     num_kv_heads: 4
     layer_pattern:
-    - falcon1a_attn
+    - falcon1a
   norm:
     type: layer_norm
   embedding:

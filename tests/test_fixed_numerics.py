@@ -51,7 +51,7 @@ def _cfg(**overrides):
         use_bitnet=False,
         use_moe=False,
         ffn_hidden_size=64,
-        layer_pattern=["standard_attn", "titan_attn"],
+        layer_pattern=["standard", "titan"],
         mode="encoder",
     )
     base.update(overrides)
@@ -234,7 +234,7 @@ class DispatchTests(unittest.TestCase):
     def test_hybrid_layer_attaches_flag_to_mixers(self):
         for flag in (True, False):
             with self.subTest(fixed_softmax=flag):
-                layer = HybridLayer(_cfg(fixed_softmax=flag), "standard_attn")
+                layer = HybridLayer(_cfg(fixed_softmax=flag), "standard")
                 self.assertEqual(layer.mixer.use_fixed_softmax, flag)
 
 
@@ -334,8 +334,8 @@ class CacheParityTests(unittest.TestCase):
         torch.manual_seed(0)
         return FrankensteinDecoder(cfg).eval()
 
-    def test_standard_attn_cache_parity(self):
-        for pattern in ("standard_attn", "mla_attn", "titan_attn"):
+    def test_standard_cache_parity(self):
+        for pattern in ("standard", "mla", "titan"):
             with self.subTest(pattern=pattern):
                 torch.manual_seed(42)
                 m1 = self._build(pattern)

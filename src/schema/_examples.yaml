@@ -7,7 +7,7 @@
       num_loops: 1
       num_heads: 12
       dropout: 0.1
-      layer_pattern: [standard_attn]
+      layer_pattern: [standard]
     norm:
       type: layer_norm
     embedding:
@@ -108,7 +108,7 @@
       num_loops: 1
       num_heads: 4
       dropout: 0.1
-      layer_pattern: [conformer_attn, conformer_attn, conformer_attn, standard_attn]
+      layer_pattern: [conformer, conformer, conformer, standard]
       mode: encoder
     norm:
       type: layer_norm

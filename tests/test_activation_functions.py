@@ -45,7 +45,7 @@ def _cfg(ffn_activation="silu", hidden_size=8, ffn_hidden_size=16, **acfg):
         dropout=0.0,
         norm_type="layer_norm",
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         use_moe=False,
         ffn_activation=ffn_activation,
     )
@@ -325,7 +325,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
             FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard_attn"], ffn_activation="bogus",
+                layer_pattern=["standard"], ffn_activation="bogus",
             )
 
     def test_activation_lowercased(self):
@@ -337,7 +337,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
             FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard_attn"], ffn_activation="raf",
+                layer_pattern=["standard"], ffn_activation="raf",
                 ffn_activation_config=[1, 2, 3],
             )
 
@@ -346,7 +346,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
             FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard_attn"], ffn_activation="raf",
+                layer_pattern=["standard"], ffn_activation="raf",
                 ffn_activation_config={"bogus_key": 1},
             )
 
@@ -355,7 +355,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
             FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard_attn"], ffn_activation="raf",
+                layer_pattern=["standard"], ffn_activation="raf",
                 ffn_activation_config={"raf_version": "Z"},
             )
 
@@ -364,7 +364,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
             FrankensteinModelConfig(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard_attn"], ffn_activation="raf",
+                layer_pattern=["standard"], ffn_activation="raf",
                 ffn_activation_config={"raf_degrees": [5, 4, 3]},
             )
 

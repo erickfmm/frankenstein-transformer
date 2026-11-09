@@ -20,7 +20,7 @@ from src.model.attention import (
     LongformerAttention,
     NSAAttention,
     ODEAttentionBlock,
-    RetNetAttention,
+    MultiScaleRetention,
     RoPE,
     SigmoidAttention,
     SparseKAttention,
@@ -95,7 +95,7 @@ class AttentionRefactorTests(unittest.TestCase):
         self.assertTrue(callable(DeltaNetAttention))
         self.assertTrue(callable(GatedDeltaNetAttention))
         self.assertTrue(callable(GatedDeltaNet2Attention))
-        self.assertTrue(callable(RetNetAttention))
+        self.assertTrue(callable(MultiScaleRetention))
         self.assertTrue(callable(HGRN2Attention))
         self.assertTrue(callable(ForgettingAttention))
         self.assertTrue(callable(GatedSoftmaxAttention))
@@ -104,7 +104,7 @@ class AttentionRefactorTests(unittest.TestCase):
         self.assertTrue(callable(SSOGAttention))
 
     def test_default_forward_compat(self):
-        config = self._build_config(["titan_attn", "standard_attn"])
+        config = self._build_config(["titan", "standard"])
         config.num_layers = 2
         model = FrankensteinEncoder(config)
         x = torch.randint(0, config.vocab_size, (2, 8))
@@ -113,7 +113,7 @@ class AttentionRefactorTests(unittest.TestCase):
 
     def test_default_positional_encoding_is_rope(self):
         from src.model.embeddings.factory import build_pos_encoder
-        config = self._build_config(["titan_attn"])
+        config = self._build_config(["titan"])
         config.positional_encoding = None
         config.__post_init__()
         pe = build_pos_encoder(config)
@@ -125,7 +125,7 @@ class AttentionRefactorTests(unittest.TestCase):
         from src.model.embeddings.factory import build_pos_encoder
         from src.model.embeddings.hope import HoPE
         from src.model.embeddings.rope import RoPE
-        base = self._build_config(["titan_attn"])
+        base = self._build_config(["titan"])
         cfg_hope = FrankensteinModelConfig(**{**base.__dict__, "positional_encoding": "hope"})
         cfg_rope = FrankensteinModelConfig(**{**base.__dict__, "positional_encoding": "rope"})
         pe_hope = build_pos_encoder(cfg_hope)
@@ -135,45 +135,45 @@ class AttentionRefactorTests(unittest.TestCase):
 
     def test_invalid_positional_encoding_raises(self):
         with self.assertRaisesRegex(ValueError, "positional_encoding"):
-            FrankensteinModelConfig(**{**self._build_config(["titan_attn"]).__dict__, "positional_encoding": "invalid"})
+            FrankensteinModelConfig(**{**self._build_config(["titan"]).__dict__, "positional_encoding": "invalid"})
 
     def test_layer_type_coverage_trainable(self):
         layer_types = [
-            "titan_attn",
-            "standard_attn",
-            "sigmoid_attn",
+            "titan",
+            "standard",
+            "sigmoid",
             "ode",
             "retnet",
-            "retnet_attn",
+            "retnet",
             "mamba",
-            "sparse_transformer_attn",
-            "longformer_attn",
-            "swa_attn",
-            "fastconformer_attn",
-            "bigbird_attn",
-            "sparsek_attn",
-            "nsa_attn",
-            "gla_attn",
-            "deltanet_attn",
-            "gated_deltanet_attn",
-            "gated_deltanet2_attn",
-            "hgrn2_attn",
-            "fox_attn",
-            "gated_softmax_attn",
-            "engram_attn",
-            "gqa_attn",
-            "gma_attn",
-            "ssog_attn",
-            "falcon1_attn",
-            "falcon2_attn",
-            "falcon3_attn",
-            "falcon1a_attn",
-            "falcon2a_attn",
-            "falcon3a_attn",
+            "sparse_transformer",
+            "longformer",
+            "swa",
+            "fastconformer",
+            "bigbird",
+            "sparsek",
+            "nsa",
+            "gla",
+            "deltanet",
+            "gated_deltanet",
+            "gated_deltanet2",
+            "hgrn2",
+            "fox",
+            "gated_softmax",
+            "engram",
+            "gqa",
+            "gma",
+            "ssog",
+            "falcon1",
+            "falcon2",
+            "falcon3",
+            "falcon1a",
+            "falcon2a",
+            "falcon3a",
         ]
         for layer_type in layer_types:
             config = self._build_config([layer_type])
-            if layer_type == "ssog_attn":
+            if layer_type == "ssog":
                 # SSOG needs the seq len to match its grid: use a 1x6
                 # degenerate grid for the 6-token smoke input.
                 config.ssog_grid_h = 1
@@ -184,7 +184,7 @@ class AttentionRefactorTests(unittest.TestCase):
             self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
 
     def test_training_free_sparse_layers_eval_only(self):
-        for layer_type in ["fasa_attn", "sparge_attn"]:
+        for layer_type in ["fasa", "sparge"]:
             config = self._build_config([layer_type])
             model = FrankensteinEncoder(config)
             model.eval()
@@ -196,7 +196,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_training_free_sparse_layers_train_as_dense(self):
         # Training-free mixers train through standard dense attention over
         # their own projections; the sparse path activates in eval only.
-        for layer_type in ["fasa_attn", "sparge_attn"]:
+        for layer_type in ["fasa", "sparge"]:
             config = self._build_config([layer_type])
             model = FrankensteinEncoder(config)
             model.train()
@@ -210,7 +210,7 @@ class AttentionRefactorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "mixture_of_depths_capacity_ratio"):
             FrankensteinModelConfig(
                 **{
-                    **self._build_config(["standard_attn"]).__dict__,
+                    **self._build_config(["standard"]).__dict__,
                     "use_mixture_of_depths": True,
                     "mixture_of_depths_capacity_ratio": 0.0,
                 }
@@ -240,7 +240,7 @@ class AttentionRefactorTests(unittest.TestCase):
         self.assertEqual(layer.last_mixture_of_depths_capacity, 2)
 
     def test_mixture_of_depths_collects_auxiliary_stats(self):
-        config = self._build_config(["standard_attn"])
+        config = self._build_config(["standard"])
         config.use_mixture_of_depths = True
         config.mixture_of_depths_capacity_ratio = 0.5
         config.mixture_of_depths_router_aux_loss_weight = 0.25
@@ -260,7 +260,7 @@ class AttentionRefactorTests(unittest.TestCase):
         # Bidirectional (encoder) and causal (decoder) GMA must preserve
         # the (B, N, hidden_size) shape and produce finite outputs.
         for mode in ("encoder", "decoder"):
-            config = self._build_config(["gma_attn"])
+            config = self._build_config(["gma"])
             config.mode = mode
             config.gma_num_components = 8
             config.gma_routing_dim = 16
@@ -273,7 +273,7 @@ class AttentionRefactorTests(unittest.TestCase):
 
     def test_gma_responsibilities_are_probabilistic(self):
         # Each row of the (B, N, H, K) responsibility tensor must sum to 1.
-        config = self._build_config(["gma_attn"])
+        config = self._build_config(["gma"])
         config.gma_num_components = 5
         config.gma_routing_dim = 12
         mixer = GaussianMixtureAttention(config)
@@ -289,7 +289,7 @@ class AttentionRefactorTests(unittest.TestCase):
         # 2D raster grid and the 1xW degenerate (sequence) grid must both
         # preserve (B, N, hidden_size) and stay finite, in train and eval.
         for grid_h, grid_w in ((2, 3), (1, 6)):
-            config = self._build_config(["ssog_attn"])
+            config = self._build_config(["ssog"])
             config.ssog_grid_h = grid_h
             config.ssog_grid_w = grid_w
             mixer = SSOGAttention(config)
@@ -306,7 +306,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_ssog_cold_start_equals_fixed_field(self):
         # Zero-init probes behind ~0 gates: the steered forward at init
         # must reproduce the purely fixed geometric field.
-        config = self._build_config(["ssog_attn"])
+        config = self._build_config(["ssog"])
         config.ssog_grid_h = 2
         config.ssog_grid_w = 2
         config.ssog_num_atoms = 3
@@ -322,7 +322,7 @@ class AttentionRefactorTests(unittest.TestCase):
 
     def test_ssog_axis_kernels_row_stochastic(self):
         # Softmaxed kernels must sum to 1 over the key axis.
-        config = self._build_config(["ssog_attn"])
+        config = self._build_config(["ssog"])
         config.ssog_grid_h = 3
         config.ssog_grid_w = 4
         mixer = SSOGAttention(config)
@@ -333,16 +333,16 @@ class AttentionRefactorTests(unittest.TestCase):
         self.assertTrue(torch.allclose(ax.sum(dim=-1), torch.ones_like(ax.sum(dim=-1)), atol=1e-5))
 
     def test_ssog_grid_mismatch_raises(self):
-        config = self._build_config(["ssog_attn"])
+        config = self._build_config(["ssog"])
         config.ssog_grid_h = 2
         config.ssog_grid_w = 2
         mixer = SSOGAttention(config)
         x = torch.randn(1, 5, config.hidden_size)
-        with self.assertRaisesRegex(ValueError, "ssog_attn"):
+        with self.assertRaisesRegex(ValueError, "ssog"):
             mixer(x)
 
     def test_ssog_decoder_mode_raises(self):
-        base = self._build_config(["ssog_attn"])
+        base = self._build_config(["ssog"])
         base.ssog_grid_h = 1
         base.ssog_grid_w = 6
         # Config-level check fires at construction time.
@@ -355,7 +355,7 @@ class AttentionRefactorTests(unittest.TestCase):
             SSOGAttention(config)
 
     def test_ssog_bitnet_and_gradient_flow(self):
-        config = self._build_config(["ssog_attn"])
+        config = self._build_config(["ssog"])
         config.ssog_grid_h = 2
         config.ssog_grid_w = 2
         config.use_bitnet = True
@@ -377,7 +377,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_ssog_steering_changes_output(self):
         # With opened gates and non-zero probes, steered output must
         # diverge from the fixed field.
-        config = self._build_config(["ssog_attn"])
+        config = self._build_config(["ssog"])
         config.ssog_grid_h = 2
         config.ssog_grid_w = 2
         torch.manual_seed(2)

@@ -39,7 +39,7 @@ class SlotMeta:
 
     Attributes:
         mixer_key: Schema mixer enum value owning the slot (e.g.
-            ``"standard_attn"``).
+            ``"standard"``).
         logical_layer_idx: Global logical layer index (0 .. num_layers *
             num_loops - 1). The slot identity key (D6).
         num_heads: Number of query heads.
@@ -107,7 +107,7 @@ class CachePolicy(Protocol):
 
     Policies apply only to position-indexed slots (``KVSlot``, ``RingSlot``,
     ``LatentKVSlot``). ``StateSlot``\\ s are constant-size — nothing to
-    evict. Compression policies never run on ``mtla_attn`` slots (D13):
+    evict. Compression policies never run on ``mtla`` slots (D13):
     MTLA manages its own dynamic merging schedule internally.
     """
 

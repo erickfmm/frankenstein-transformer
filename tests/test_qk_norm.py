@@ -21,7 +21,7 @@ if TORCH_AVAILABLE:
     import torch.nn as nn
 
     from src.model.attention.grouped_query_attention import GroupedQueryAttention
-    from src.model.attention.latent.mla_attn import MLAAttention
+    from src.model.attention.latent.mla import MLAAttention
     from src.model.attention.standard import StandardAttention
     from src.model.config import FrankensteinModelConfig
     from src.model.frankenstein_decoder import FrankensteinDecoder
@@ -48,7 +48,7 @@ def _config(**overrides):
         num_kv_heads=2,
         dropout=0.0,
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         mode="decoder",
         positional_encoding="rope",
         norm_type="layer_norm",
@@ -304,12 +304,12 @@ class QKNormCacheParityTests(unittest.TestCase):
         return torch.equal(full, cached)
 
     def test_rope_parity_for_key_cached_mixers(self):
-        for pattern in ("standard_attn", "gqa_attn", "swa_attn"):
+        for pattern in ("standard", "gqa", "swa"):
             with self.subTest(pattern=pattern):
                 self.assertTrue(self._parity(pattern, "rope"))
 
     def test_latent_mixers_parity(self):
-        for pattern in ("mla_attn", "gqla_attn", "mlra_attn", "gta_attn"):
+        for pattern in ("mla", "gqla", "mlra", "gta"):
             for pe in ("nope", "rope"):
                 with self.subTest(pattern=pattern, pe=pe):
                     self.assertTrue(self._parity(pattern, pe))
@@ -317,16 +317,16 @@ class QKNormCacheParityTests(unittest.TestCase):
     def test_layer_norm_and_l2_parity(self):
         for method in ("layer_norm", "l2_norm"):
             with self.subTest(method=method):
-                self.assertTrue(self._parity("mla_attn", "rope", method))
+                self.assertTrue(self._parity("mla", "rope", method))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class QKNormConfigValidationTests(unittest.TestCase):
     def test_capability_sets(self):
-        self.assertIn("standard_attn", QK_NORM_MIXERS)
-        self.assertIn("mla_attn", QK_NORM_MIXERS)
-        self.assertIn("gma_attn", QK_NORM_MIXERS)
-        self.assertNotIn("gma_attn", QK_CLIP_MIXERS)
+        self.assertIn("standard", QK_NORM_MIXERS)
+        self.assertIn("mla", QK_NORM_MIXERS)
+        self.assertIn("gma", QK_NORM_MIXERS)
+        self.assertNotIn("gma", QK_CLIP_MIXERS)
         self.assertNotIn("retnet", QK_NORM_MIXERS)
 
     def test_loader_accepts_supported_pattern(self):
@@ -344,7 +344,7 @@ class QKNormConfigValidationTests(unittest.TestCase):
                     "hidden_size": 64,
                     "num_layers": 2,
                     "num_heads": 4,
-                    "layer_pattern": ["standard_attn", "mla_attn"],
+                    "layer_pattern": ["standard", "mla"],
                     "mode": "decoder",
                 },
                 "norm": {
@@ -380,7 +380,7 @@ class QKNormConfigValidationTests(unittest.TestCase):
                     "hidden_size": 64,
                     "num_layers": 2,
                     "num_heads": 4,
-                    "layer_pattern": ["retnet", "standard_attn"],
+                    "layer_pattern": ["retnet", "standard"],
                     "mode": "decoder",
                 },
                 "norm": {
@@ -415,7 +415,7 @@ class QKNormConfigValidationTests(unittest.TestCase):
                     "hidden_size": 64,
                     "num_layers": 1,
                     "num_heads": 4,
-                    "layer_pattern": ["gma_attn"],
+                    "layer_pattern": ["gma"],
                     "mode": "decoder",
                 },
                 "norm": {

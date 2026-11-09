@@ -8,10 +8,10 @@ model:
     num_heads: 8
     dropout: 0.1
     layer_pattern:
-    - standard_attn
+    - standard
     - retnet
     - mamba
-    - titan_attn
+    - titan
     mode: encoder
   norm:
     type: layer_norm

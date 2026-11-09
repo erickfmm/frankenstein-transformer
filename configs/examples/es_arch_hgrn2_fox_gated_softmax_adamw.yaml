@@ -7,14 +7,14 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - hgrn2_attn
-    - fox_attn
-    - gated_softmax_attn
-    - hgrn2_attn
-    - fox_attn
-    - gated_softmax_attn
-    - hgrn2_attn
-    - fox_attn
+    - hgrn2
+    - fox
+    - gated_softmax
+    - hgrn2
+    - fox
+    - gated_softmax
+    - hgrn2
+    - fox
   norm:
     type: dynamic_tanh
   embedding:

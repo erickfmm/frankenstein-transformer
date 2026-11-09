@@ -140,7 +140,7 @@ The window-banded decay mask factors as $M = D \cdot \operatorname{Diag}(\boldsy
 
 \subsection{Configuration Interface}
 
-All six variants share one nested block, \texttt{model.attention.falcon}, selected through the \texttt{layer\_pattern} entries \texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn}, \texttt{falcon3a\_attn}:
+All six variants share one nested block, \texttt{model.attention.falcon}, selected through the \texttt{layer\_pattern} entries \texttt{falcon1}, \texttt{falcon2}, \texttt{falcon3}, \texttt{falcon1a}, \texttt{falcon2a}, \texttt{falcon3a}:
 
 \begin{table}[H]
 \centering
@@ -159,7 +159,7 @@ All six variants share one nested block, \texttt{model.attention.falcon}, select
 \texttt{eps} / \texttt{eps\_gamma} & $10^{-6}$ / $10^{-4}$ & Step-size stabilizer and positive-decay clamp floor \\
 \bottomrule
 \end{tabularx}
-\caption{Shared Falcon configuration knobs (\texttt{model.attention.falcon}). Each variant additionally exposes a per-mixer positional-encoding opt-out \texttt{falcon\{1,2,3,1a,2a,3a\}\_attn\_use\_pe}, default \texttt{False} like other recurrent/decay mixers.}
+\caption{Shared Falcon configuration knobs (\texttt{model.attention.falcon}). Each variant additionally exposes a per-mixer positional-encoding opt-out \texttt{falcon\{1,2,3,1a,2a,3a\}\_use\_pe}, default \texttt{False} like other recurrent/decay mixers.}
 \label{tab:falcon-knobs}
 \end{table}
 

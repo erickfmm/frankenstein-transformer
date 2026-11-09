@@ -1,0 +1,219 @@
+"""Multi-Head Low-Rank Attention (MLRA).
+
+Implements Multi-Head Low-Rank Attention, arXiv:2603.02188 (Liu et al.
+2026). MLRA extends Multi-Head Latent Attention (MLA) by splitting the
+single shared latent head into ``mlra_num_latent_heads`` independent
+latent sub-spaces, each of rank ``r = latent_rank / num_latent_heads``.
+The key property is **partitionability**: each latent sub-head can be
+assigned to a different tensor-parallel device, so each device loads
+only ``1 / num_latent_heads`` of the KV cache instead of the whole
+cache (which MLA forces). This enables efficient 4-way TP decoding and
+delivers a 2.8x decoding speedup over MLA in the paper's experiments,
+while reaching state-of-the-art perplexity and downstream task scores.
+
+Formulation (per token ``x``): the latent cache is split into
+``L = num_latent_heads`` disjoint sub-vectors ``c_1, ..., c_L`` (concatenated
+into a single ``c_KV`` of rank ``r``); keys and values are reconstructed
+per sub-head via per-block up-projections and concatenated into the full
+``num_heads * head_dim`` dimension before standard softmax attention.
+
+Reference:
+    Liu, S., Peng, H., Zhang, Z., Chen, Z., & Guo, Y. (2026).
+    "Multi-Head Low-Rank Attention". arXiv:2603.02188.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from ...numerics import module_softmax
+from ...norm import attach_qk_norm, record_qk_max_logits
+
+from ..common import BitLinear
+from ...cache.hooks import cached_latent_attention
+
+
+class MLRAAttention(nn.Module):
+    """Multi-Head Low-Rank Attention with partitionable latent heads.
+
+    Args:
+        config: Configuration object. Relevant attributes: hidden_size,
+            num_heads, dropout, use_bitnet, mode, and optional
+            ``mlra_latent_rank`` (default ``hidden_size // 2``) and
+            ``mlra_num_latent_heads`` (default 4, must divide
+            ``latent_rank`` evenly).
+        pos_encoder: Shared positional encoding module applied to query
+            and key tensors. If ``None``, no PE is applied.
+
+    Attributes:
+        hidden_size: Input dimensionality.
+        num_heads: Number of query heads.
+        head_dim: Per-head dimensionality.
+        latent_rank: Total latent rank.
+        num_latent_heads: Number of disjoint latent sub-spaces (``L``).
+        sub_rank: ``latent_rank // num_latent_heads``.
+        dkv_proj: Latent down-projection ``hidden_size -> r``.
+        uk_projs, uv_projs: ModuleList of per-sub-head up-projections.
+        q_proj: Query projection.
+        out_proj: Output projection.
+        dropout, mode: As in the rest of the family.
+        pos_encoder: Shared positional encoding module (or ``None``).
+        pe_type: Positional encoding type string (lowercased).
+        use_pe: Whether PE is enabled for this mixer.
+
+    Raises:
+        ValueError: If ``hidden_size`` not divisible by ``num_heads``;
+            if ``mlra_num_latent_heads`` does not divide ``latent_rank``.
+    """
+
+    def __init__(self, config, pos_encoder=None):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        if self.hidden_size % self.num_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_heads for MLRAAttention")
+        self.latent_rank = int(getattr(config, "mlra_latent_rank", max(1, self.hidden_size // 2)))
+        self.num_latent_heads = int(getattr(config, "mlra_num_latent_heads", 4))
+        if self.latent_rank % self.num_latent_heads != 0:
+            raise ValueError("mlra_num_latent_heads must divide mlra_latent_rank")
+        self.sub_rank = self.latent_rank // self.num_latent_heads
+
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.dkv_proj = proj_cls(self.hidden_size, self.latent_rank, bias=False)
+        uk_target = self.num_heads * self.head_dim
+        if uk_target % self.num_latent_heads != 0:
+            raise ValueError("num_heads*head_dim must be divisible by mlra_num_latent_heads")
+        self.sub_out = uk_target // self.num_latent_heads
+        self.uk_projs = nn.ModuleList(
+            [proj_cls(self.sub_rank, self.sub_out, bias=False) for _ in range(self.num_latent_heads)]
+        )
+        self.uv_projs = nn.ModuleList(
+            [proj_cls(self.sub_rank, self.sub_out, bias=False) for _ in range(self.num_latent_heads)]
+        )
+        self.q_proj = proj_cls(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.out_proj = proj_cls(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.dropout = nn.Dropout(config.dropout)
+        self.mode = getattr(config, "mode", "encoder")
+        self.scale = self.head_dim ** -0.5
+        self.pos_encoder = pos_encoder
+        self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
+        self.use_pe = bool(getattr(config, "mlra_use_pe", True))
+        attach_qk_norm(self, config, self.head_dim)
+
+    def make_cache_slot(self, meta, cache):
+        """Cache the joint latent ``c_kv`` (per-token axis)."""
+        from ...cache.slots import LatentKVSlot
+
+        return LatentKVSlot(meta, axes={"c_kv": "token"}, **cache.codec_slot_kwargs())
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        logical_layer_idx: Optional[int] = None,
+        pos_encoder=None,
+        cache=None,
+        cache_position: Optional[int] = None,
+    ) -> torch.Tensor:
+        """Compute MLRA attention with partitioned latent sub-heads.
+
+        Args:
+            x: Input tensor of shape ``(batch_size, seq_len, hidden_size)``.
+            logical_layer_idx: Logical layer index passed to the positional
+                encoder. Defaults to ``0`` if ``None``.
+            pos_encoder: Optional positional encoding module overriding
+                ``self.pos_encoder`` for this forward call.
+            cache: Optional latent slot caching the joint latent (RoPE key
+                decoupling note: this repo applies PE to the decompressed
+                K, so expansion happens per step). ``None`` runs the legacy
+                path (D4).
+            cache_position: Absolute index of the first token in ``x``.
+
+        Returns:
+            Output tensor of shape ``(batch_size, seq_len, hidden_size)``.
+        """
+        bsz, seq_len, _ = x.shape
+        pe = pos_encoder if pos_encoder is not None else self.pos_encoder
+
+        slot = cache if getattr(cache, "kind", "") == "latent_kv" else None
+        if slot is not None:
+            from ...cache.hooks import cached_latent_attention
+
+            c_kv = self.dkv_proj(x)
+            q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            if self.qk_norm is not None:
+                q = self.qk_norm.normalize_q(q)
+
+            def _expand(c_all):
+                c = c_all["c_kv"]
+                t = c.size(1)
+                c_chunks = c.view(bsz, t, self.num_latent_heads, self.sub_rank)
+                k_parts = [
+                    uk(c_chunks[:, :, i]).view(bsz, t, 1, -1)
+                    for i, uk in enumerate(self.uk_projs)
+                ]
+                v_parts = [
+                    uv(c_chunks[:, :, i]).view(bsz, t, 1, -1)
+                    for i, uv in enumerate(self.uv_projs)
+                ]
+                k = torch.cat(k_parts, dim=2).view(bsz, t, self.num_heads, self.head_dim).transpose(1, 2)
+                if self.qk_norm is not None:
+                    k = self.qk_norm.normalize_k(k)
+                v = torch.cat(v_parts, dim=2).view(bsz, t, self.num_heads, self.head_dim).transpose(1, 2)
+                return k, v
+
+            attended = cached_latent_attention(
+                slot,
+                q,
+                {"c_kv": c_kv},
+                cache_position=cache_position,
+                scale=self.scale,
+                expand_fn=_expand,
+                pe=pe,
+                pe_type=self.pe_type,
+                use_pe=self.use_pe,
+                x_for_pe=x,
+                logical_layer_idx=logical_layer_idx or 0,
+                dropout=self.dropout,
+                causal=True,
+                use_fixed_softmax=self.use_fixed_softmax,
+            )
+            out = attended.transpose(1, 2).contiguous().view(bsz, seq_len, -1)
+            return self.out_proj(out)
+
+        c_kv = self.dkv_proj(x)
+        c_chunks = c_kv.view(bsz, seq_len, self.num_latent_heads, self.sub_rank)
+        k_parts = [
+            uk(c_chunks[:, :, i]).view(bsz, seq_len, 1, -1)
+            for i, uk in enumerate(self.uk_projs)
+        ]
+        v_parts = [
+            uv(c_chunks[:, :, i]).view(bsz, seq_len, 1, -1)
+            for i, uv in enumerate(self.uv_projs)
+        ]
+        k = torch.cat(k_parts, dim=2).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = torch.cat(v_parts, dim=2).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        if self.qk_norm is not None:
+            q, k = self.qk_norm(q, k)
+
+        from ..common import apply_pe_to_qk, apply_pe_to_scores
+        q, k = apply_pe_to_qk(pe, self.pe_type, q, k, x, logical_layer_idx or 0, self.use_pe)
+
+        attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_scores = apply_pe_to_scores(pe, self.pe_type, attn_scores, q, self.use_pe)
+        record_qk_max_logits(self, attn_scores)
+        if self.mode == "decoder":
+            causal_mask = torch.triu(
+                torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool), diagonal=1
+            )
+            attn_scores = attn_scores.masked_fill(
+                causal_mask.unsqueeze(0).unsqueeze(0), float("-inf")
+            )
+        attn_weights = module_softmax(self, attn_scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+        out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, -1)
+        return self.out_proj(out)

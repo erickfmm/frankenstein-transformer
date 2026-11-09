@@ -8,7 +8,7 @@ model:
     num_heads: 8
     num_kv_heads: 4
     layer_pattern:
-    - ssog_attn
+    - ssog
   norm:
     type: layer_norm
   embedding:

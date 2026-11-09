@@ -45,7 +45,6 @@ from .attention.gated import (
     GatedSoftmaxAttention,
     HGRN2Attention,
     KDAAttention,
-    RetNetAttention,
 )
 from .attention.ode import ODEAttentionBlock
 from .attention.retnet import MultiScaleRetention
@@ -92,8 +91,8 @@ class HybridLayer(nn.Module):
     top-capacity tokens are passed through the full layer; remaining tokens
     are scattered back unchanged.
 
-    Mixers listed in :attr:`TRAINING_FREE_LAYERS` (``fasa_attn``,
-    ``sparge_attn``) define only an inference-time sparse heuristic. In
+    Mixers listed in :attr:`TRAINING_FREE_LAYERS` (``fasa``,
+    ``sparge``) define only an inference-time sparse heuristic. In
     training mode this layer substitutes standard dense attention over the
     mixer's own projections (``mixer.dense_forward``), so they train from
     scratch and switch to the sparse path at eval time. A one-time warning is
@@ -121,7 +120,7 @@ class HybridLayer(nn.Module):
             recent forward pass.
     """
 
-    TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}
+    TRAINING_FREE_LAYERS = {"fasa", "sparge"}
 
     def __init__(self, config: FrankensteinModelConfig, layer_type: str, pos_encoder=None):
         """Initialize a hybrid layer for the given mixer type.
@@ -186,51 +185,50 @@ class HybridLayer(nn.Module):
         mixer_registry = {
             "ode": ODEAttentionBlock,
             "retnet": MultiScaleRetention,
-            "retnet_attn": RetNetAttention,
-            "titan_attn": TitanAttention,
-            "standard_attn": StandardAttention,
-            "sigmoid_attn": SigmoidAttention,
-            "sparse_transformer_attn": SparseTransformerAttention,
-            "longformer_attn": LongformerAttention,
-            "swa_attn": SlidingWindowAttention,
-            "bigbird_attn": BigBirdAttention,
-            "sparsek_attn": SparseKAttention,
-            "nsa_attn": NSAAttention,
-            "sparge_attn": SpargeAttention,
-            "fasa_attn": FASAAttention,
-            "gla_attn": GatedLinearAttention,
-            "deltanet_attn": DeltaNetAttention,
-            "gated_deltanet_attn": GatedDeltaNetAttention,
-            "gated_deltanet2_attn": GatedDeltaNet2Attention,
-            "hgrn2_attn": HGRN2Attention,
-            "fox_attn": ForgettingAttention,
-            "gated_softmax_attn": GatedSoftmaxAttention,
-            "kda_attn": KDAAttention,
-            "falcon1_attn": Falcon1Attention,
-            "falcon2_attn": Falcon2Attention,
-            "falcon3_attn": Falcon3Attention,
-            "falcon1a_attn": Falcon1AAttention,
-            "falcon2a_attn": Falcon2AAttention,
-            "falcon3a_attn": Falcon3AAttention,
-            "engram_attn": EngramLayer,
-            "gqa_attn": GroupedQueryAttention,
-            "mla_attn": MLAAttention,
-            "gqla_attn": GQLAAttention,
-            "mlra_attn": MLRAAttention,
-            "tucker_attn": TuckerAttention,
-            "iha_attn": IHAAttention,
-            "gta_attn": GTAAttention,
-            "mtla_attn": MTLAAttention,
-            "cca_attn": CCAAttention,
-            "ccgqa_attn": CCGQAAttention,
-            "msa_attn": MSAAttention,
-            "sparda_attn": SparDAAttention,
-            "gma_attn": GaussianMixtureAttention,
-            "ssog_attn": SSOGAttention,
-            "conformer_attn": ConformerAttention,
-            "memory_attn": MemoryAttention,
-            "lsa_attn": LSAAttention,
-            "fastconformer_attn": FastConformerAttention,
+            "titan": TitanAttention,
+            "standard": StandardAttention,
+            "sigmoid": SigmoidAttention,
+            "sparse_transformer": SparseTransformerAttention,
+            "longformer": LongformerAttention,
+            "swa": SlidingWindowAttention,
+            "bigbird": BigBirdAttention,
+            "sparsek": SparseKAttention,
+            "nsa": NSAAttention,
+            "sparge": SpargeAttention,
+            "fasa": FASAAttention,
+            "gla": GatedLinearAttention,
+            "deltanet": DeltaNetAttention,
+            "gated_deltanet": GatedDeltaNetAttention,
+            "gated_deltanet2": GatedDeltaNet2Attention,
+            "hgrn2": HGRN2Attention,
+            "fox": ForgettingAttention,
+            "gated_softmax": GatedSoftmaxAttention,
+            "kda": KDAAttention,
+            "falcon1": Falcon1Attention,
+            "falcon2": Falcon2Attention,
+            "falcon3": Falcon3Attention,
+            "falcon1a": Falcon1AAttention,
+            "falcon2a": Falcon2AAttention,
+            "falcon3a": Falcon3AAttention,
+            "engram": EngramLayer,
+            "gqa": GroupedQueryAttention,
+            "mla": MLAAttention,
+            "gqla": GQLAAttention,
+            "mlra": MLRAAttention,
+            "tucker": TuckerAttention,
+            "iha": IHAAttention,
+            "gta": GTAAttention,
+            "mtla": MTLAAttention,
+            "cca": CCAAttention,
+            "ccgqa": CCGQAAttention,
+            "msa": MSAAttention,
+            "sparda": SparDAAttention,
+            "gma": GaussianMixtureAttention,
+            "ssog": SSOGAttention,
+            "conformer": ConformerAttention,
+            "memory": MemoryAttention,
+            "lsa": LSAAttention,
+            "fastconformer": FastConformerAttention,
         }
 
         if layer_type == "mamba":
@@ -350,7 +348,7 @@ class HybridLayer(nn.Module):
     ) -> torch.Tensor:
         """Run the dense surrogate for a training-free mixer.
 
-        Training-free mixers (``fasa_attn``, ``sparge_attn``) only implement
+        Training-free mixers (``fasa``, ``sparge``) only implement
         their sparse heuristic for inference. During training the layer runs
         standard dense attention with the mixer's own projections so gradients
         land on the weights the eval path reads.
@@ -446,9 +444,9 @@ class HybridLayer(nn.Module):
                 )
             else:
                 x = self.mixer(x)
-        elif self.layer_type == "engram_attn":
+        elif self.layer_type == "engram":
             x = self.mixer(x, input_ids=input_ids, logical_layer_idx=logical_layer_idx, pos_encoder=self.pos_encoder)
-        elif self.layer_type == "memory_attn":
+        elif self.layer_type == "memory":
             # Memory Attention indexes a token-ID memory table, so it needs the
             # token IDs on every path (legacy and cached).
             x = self.mixer(
@@ -572,14 +570,14 @@ class HybridLayer(nn.Module):
                 )
             else:
                 attn_out = self.mixer(attn_in)
-        elif self.layer_type == "engram_attn":
+        elif self.layer_type == "engram":
             attn_out = self.mixer(
                 attn_in,
                 input_ids=input_ids,
                 logical_layer_idx=logical_layer_idx,
                 pos_encoder=self.pos_encoder,
             )
-        elif self.layer_type == "memory_attn":
+        elif self.layer_type == "memory":
             attn_out = self.mixer(
                 attn_in,
                 input_ids=input_ids,

@@ -281,22 +281,22 @@ El módulo de memoria $\mathcal{M}$ se actualiza literalmente durante el paso ha
 
 \subsection{Despacho de Mezclador Guiado por Patrón}
 
-El código base selecciona un mezclador por bloque a partir del \texttt{layer\_pattern} configurado. La lógica de despacho enruta los bloques dispersos en tiempo de inferencia (\texttt{fasa\_attn}, \texttt{sparge\_attn}) a atención estándar densa mientras el modelo está en modo entrenamiento, y a su implementación dispersa durante la evaluación; el resto de bloques se enruta a la implementación de familia correspondiente.
+El código base selecciona un mezclador por bloque a partir del \texttt{layer\_pattern} configurado. La lógica de despacho enruta los bloques dispersos en tiempo de inferencia (\texttt{fasa}, \texttt{sparge}) a atención estándar densa mientras el modelo está en modo entrenamiento, y a su implementación dispersa durante la evaluación; el resto de bloques se enruta a la implementación de familia correspondiente.
 
 \begin{algorithm}[t]
 \caption{Paso Adelante del Mezclador Guiado por Patrón (Conceptual)}
 \begin{algorithmic}[1]
 \Require Estados ocultos $H$, patrón $P$, índice de capa $\ell$
 \State $m \gets P[\ell \bmod |P|]$
-\If{$m \in \{\texttt{fasa\_attn}, \texttt{sparge\_attn}\}$ y el modelo está en modo entrenamiento}
+\If{$m \in \{\texttt{fasa}, \texttt{sparge}\}$ y el modelo está en modo entrenamiento}
     \State $H \gets \text{softmax-attention}(H)$ \Comment{atención densa sustituta, mismas proyecciones}
-\ElsIf{$m=\texttt{standard\_attn}$}
+\ElsIf{$m=\texttt{standard}$}
     \State $H \gets \text{softmax-attention}(H)$
-\ElsIf{$m=\texttt{sigmoid\_attn}$}
+\ElsIf{$m=\texttt{sigmoid}$}
     \State $H \gets \text{sigmoid-attention}(H)$
-\ElsIf{$m=\texttt{memory\_attn}$}
+\ElsIf{$m=\texttt{memory}$}
     \State $H \gets \text{memory-attention}(H)$
-\ElsIf{$m\in\{\texttt{retnet},\texttt{retnet\_attn}\}$}
+\ElsIf{$m\in\{\texttt{retnet},\texttt{retnet}\}$}
     \State $H \gets \text{retention}(H)$
 \ElsIf{$m=\texttt{mamba}$}
     \State $H \gets \text{selective-ssm}(H)$

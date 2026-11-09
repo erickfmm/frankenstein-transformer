@@ -8,10 +8,10 @@ model:
     num_heads: 16
     dropout: 0.0
     layer_pattern:
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - gated_deltanet_attn
-    - gqa_attn
+    - gated_deltanet
+    - gated_deltanet
+    - gated_deltanet
+    - gqa
     mode: decoder
     num_kv_heads: 2
   norm:

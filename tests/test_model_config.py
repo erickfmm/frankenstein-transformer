@@ -20,7 +20,7 @@ def _minimal_dict(**overrides):
         num_experts=2,
         top_k_experts=1,
         dropout=0.0,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         ode_solver="rk4",
         ode_steps=1,
         use_bitnet=False,
@@ -138,13 +138,13 @@ class FrankensteinModelConfigDefaultsTests(unittest.TestCase):
 
     def test_per_mixer_use_pe_defaults(self):
         cfg = FrankensteinModelConfig(**_minimal_dict())
-        self.assertTrue(cfg.standard_attn_use_pe)
-        self.assertTrue(cfg.titan_attn_use_pe)
+        self.assertTrue(cfg.standard_use_pe)
+        self.assertTrue(cfg.titan_use_pe)
         self.assertFalse(cfg.retnet_use_pe)
         self.assertFalse(cfg.mamba_use_pe)
         self.assertFalse(cfg.ode_use_pe)
-        self.assertFalse(cfg.gla_attn_use_pe)
-        self.assertTrue(cfg.gated_softmax_attn_use_pe)
+        self.assertFalse(cfg.gla_use_pe)
+        self.assertTrue(cfg.gated_softmax_use_pe)
 
     def test_encoder_mode_accepted(self):
         cfg = FrankensteinModelConfig(**_minimal_dict(mode="encoder"))

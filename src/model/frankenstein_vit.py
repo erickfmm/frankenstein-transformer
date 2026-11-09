@@ -145,9 +145,9 @@ class FrankensteinViT(nn.Module):
 
         # ---- [CLS] token (for classification with cls pooling) ----
         self.use_cls_token = bool(cfg.cls_token and cfg.pooling_mode == "cls")
-        if self.use_cls_token and "ssog_attn" in (cfg.layer_pattern or []):
+        if self.use_cls_token and "ssog" in (cfg.layer_pattern or []):
             raise ValueError(
-                "ssog_attn requires the raw patch grid: a prepended [CLS] "
+                "ssog requires the raw patch grid: a prepended [CLS] "
                 "token breaks the grid_h x grid_w raster the Gaussian field "
                 "is defined on. Set image.cls_token=false (and "
                 "image.pooling_mode='gap' for global average pooling)."
@@ -278,14 +278,14 @@ class FrankensteinViT(nn.Module):
             in_channels: Input channels. Default: 3.
             use_bitnet: Whether to use BitNet. Default: False.
             layer_pattern: Custom layer pattern. If None, defaults to
-                ``["standard_attn"] * 12`` (pure ViT).
+                ``["standard"] * 12`` (pure ViT).
             **kwargs: Additional FrankensteinModelConfig fields.
 
         Returns:
             A pre-configured :class:`FrankensteinModelConfig` with ViT defaults.
         """
         if layer_pattern is None:
-            layer_pattern = ["standard_attn"] * num_layers
+            layer_pattern = ["standard"] * num_layers
         # Remove any kwargs that duplicate explicit params to avoid conflicts.
         explicit_keys = {
             "hidden_size", "num_layers", "num_heads", "num_loops", "patch_size",

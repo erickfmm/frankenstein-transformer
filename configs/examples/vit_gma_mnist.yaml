@@ -1,6 +1,6 @@
 # ViT de clasificación MNIST con Gaussian Mixture Attention (GMA, arXiv:2606.18283)
 # Dataset: Hugging Face `ylecun/mnist` (imágenes 28x28 en escala de grises, 10 dígitos)
-# Arquitectura: ViT-Tiny (D=128, L=6, heads=4, patch=14 -> 2x2=4 parches) con `gma_attn`
+# Arquitectura: ViT-Tiny (D=128, L=6, heads=4, patch=14 -> 2x2=4 parches) con `gma`
 # en cada capa. GMA aporta mezcla de secuencia en tiempo lineal O(NK) para K fijo.
 model_class: frankenstein_vit
 model:
@@ -10,7 +10,7 @@ model:
     num_layers: 6
     num_heads: 4
     num_loops: 1
-    layer_pattern: ["gma_attn"]
+    layer_pattern: ["gma"]
     mode: encoder
     dropout: 0.1
   norm:

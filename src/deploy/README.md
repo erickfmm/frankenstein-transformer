@@ -227,7 +227,7 @@ Create a custom config JSON:
   "hidden_size": 2048,
   "num_layers": 12,
   "num_loops": 2,
-  "layer_pattern": ["retnet", "ode", "mamba", "titan_attn"],
+  "layer_pattern": ["retnet", "ode", "mamba", "titan"],
   "ode_solver": "rk4",
   "ode_steps": 2,
   "retention_heads": 8,

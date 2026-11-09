@@ -7,7 +7,7 @@ properties:
     title: "Fast Conformer Limited-Context Attention"
     title_es: "Atención de Contexto Limitado Fast Conformer"
     description: |-
-      Hyperparameters for `fastconformer_attn` (Fast Conformer limited-context
+      Hyperparameters for `fastconformer` (Fast Conformer limited-context
       attention with a head-pinned global token (paper: arxiv:2305.05084)).
       Every query attends to a symmetric local window around it plus the first
       `global_tokens` positions of the sequence (spaced `global_tokens_spacing`
@@ -16,11 +16,11 @@ properties:
       query/key/value projections (+3*H^2 parameters, the paper's §2.2
       Longformer-style variant); with `false` it shares the local projections
       (the paper's §3.4 long-form model). In decoder mode the pattern is
-      causal. Only applies when `fastconformer_attn` appears in `layer_pattern`.
+      causal. Only applies when `fastconformer` appears in `layer_pattern`.
 
       **References:** (paper: arxiv:2305.05084) (paper: arxiv:2004.05150)
     description_es: |-
-      Hiperparámetros para `fastconformer_attn` (atención de contexto limitado
+      Hiperparámetros para `fastconformer` (atención de contexto limitado
       Fast Conformer con un token global anclado a la cabecera (paper:
       arxiv:2305.05084)). Cada consulta atiende a una ventana local simétrica a
       su alrededor más las primeras `global_tokens` posiciones de la secuencia
@@ -29,7 +29,7 @@ properties:
       global usa sus propias proyecciones query/key/value (+3*H^2 parámetros,
       la variante §2.2 del paper, estilo Longformer); con `false` comparte las
       proyecciones locales (el modelo de forma larga §3.4 del paper). En modo
-      decoder el patrón es causal. Solo aplica cuando `fastconformer_attn`
+      decoder el patrón es causal. Solo aplica cuando `fastconformer`
       aparece en `layer_pattern`.
 
       **Referencias:** (paper: arxiv:2305.05084) (paper: arxiv:2004.05150)
@@ -40,7 +40,7 @@ properties:
         title: "Fast Conformer Window Size"
         title_es: "Tamaño de Ventana Fast Conformer"
         description: |-
-          Total local span `w` each query attends to in `fastconformer_attn`
+          Total local span `w` each query attends to in `fastconformer`
           (paper: arxiv:2305.05084); the per-side context is `window_size / 2`.
           The paper's long-form model uses 128 steps on each side of a token
           (~10 seconds of audio after 8x subsampling), i.e. `window_size: 256`.
@@ -55,7 +55,7 @@ properties:
           **References:** (paper: arxiv:2305.05084)
         description_es: |-
           Tramo local total `w` al que atiende cada consulta en
-          `fastconformer_attn` (paper: arxiv:2305.05084); el contexto por lado
+          `fastconformer` (paper: arxiv:2305.05084); el contexto por lado
           es `window_size / 2`. El modelo de forma larga del paper usa 128
           pasos a cada lado del token (~10 segundos de audio tras el
           submuestreo 8x), es decir, `window_size: 256`. Ventanas mayores
@@ -76,7 +76,7 @@ properties:
         title: "Fast Conformer Global Tokens"
         title_es: "Tokens Globales Fast Conformer"
         description: |-
-          Number `g` of leading global attention tokens in `fastconformer_attn`
+          Number `g` of leading global attention tokens in `fastconformer`
           (paper: arxiv:2305.05084). Global tokens are the first `g` positions
           of the input sequence (spaced `global_tokens_spacing` apart): they
           attend to all positions and are attended by all positions. The paper
@@ -87,7 +87,7 @@ properties:
           **References:** (paper: arxiv:2305.05084)
         description_es: |-
           Número `g` de tokens de atención globales iniciales en
-          `fastconformer_attn` (paper: arxiv:2305.05084). Los tokens globales
+          `fastconformer` (paper: arxiv:2305.05084). Los tokens globales
           son las primeras `g` posiciones de la secuencia de entrada
           (espaciadas `global_tokens_spacing`): atienden a todas las
           posiciones y son atendidos por todas. El paper usa "un único token de
@@ -105,7 +105,7 @@ properties:
         title_es: "Espaciado de Tokens Globales Fast Conformer"
         description: |-
           Stride `s` between the leading global attention tokens of
-          `fastconformer_attn` (paper: arxiv:2305.05084): the global positions
+          `fastconformer` (paper: arxiv:2305.05084): the global positions
           are `{0, s, 2s, ..., (g-1)*s}`. The paper uses a single global token
           (`g = 1`), where the spacing is irrelevant; `s > 1` spreads several
           global tokens across the head of the sequence (the NeMo recipe's
@@ -114,7 +114,7 @@ properties:
           **References:** (paper: arxiv:2305.05084)
         description_es: |-
           Paso `s` entre los tokens de atención globales iniciales de
-          `fastconformer_attn` (paper: arxiv:2305.05084): las posiciones
+          `fastconformer` (paper: arxiv:2305.05084): las posiciones
           globales son `{0, s, 2s, ..., (g-1)*s}`. El paper usa un único token
           global (`g = 1`), donde el espaciado es irrelevante; `s > 1` reparte
           varios tokens globales por la cabecera de la secuencia (el
@@ -128,7 +128,7 @@ properties:
         title: "Separate Global Projections"
         title_es: "Proyecciones Globales Separadas"
         description: |-
-          Whether the global attention tokens of `fastconformer_attn` use a
+          Whether the global attention tokens of `fastconformer` use a
           separate set of query/key/value linear projections (paper:
           arxiv:2305.05084 §2.2, the Longformer-style global attention design;
           adds 3*H^2 parameters) or share the local projections (the paper's
@@ -138,7 +138,7 @@ properties:
 
           **References:** (paper: arxiv:2305.05084) (paper: arxiv:2004.05150)
         description_es: |-
-          Si los tokens de atención globales de `fastconformer_attn` usan un
+          Si los tokens de atención globales de `fastconformer` usan un
           conjunto separado de proyecciones lineales query/key/value (paper:
           arxiv:2305.05084 §2.2, el diseño de atención global estilo Longformer;
           añade 3*H^2 parámetros) o comparten las proyecciones locales (el

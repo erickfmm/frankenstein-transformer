@@ -34,7 +34,7 @@ def _vision_config(csv_path: str) -> dict:
                 "num_loops": 1,
                 "num_heads": 4,
                 "dropout": 0.0,
-                "layer_pattern": ["conformer_attn"],
+                "layer_pattern": ["conformer"],
                 "mode": "encoder",
             },
             "norm": {"type": "layer_norm"},

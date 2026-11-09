@@ -98,7 +98,7 @@ class MixerParityTests(unittest.TestCase):
     def test_heterogeneous_stack_parity(self):
         """A mixed layer stack (KV + latent + state) caches layer-by-layer."""
         torch.manual_seed(42)
-        pattern = ["standard_attn", "mla_attn", "gla_attn", "fox_attn"]
+        pattern = ["standard", "mla", "gla", "fox"]
         m1 = FrankensteinDecoder(
             FrankensteinModelConfig(
                 vocab_size=64, hidden_size=32, num_layers=4, num_loops=1,
@@ -128,7 +128,7 @@ class MixerParityTests(unittest.TestCase):
 
 
 def _build_lsa_small(pe: str = "nope"):
-    """Tiny ``lsa_attn`` decoder whose 4-token blocks complete during the test."""
+    """Tiny ``lsa`` decoder whose 4-token blocks complete during the test."""
     cfg = FrankensteinModelConfig(
         vocab_size=64,
         hidden_size=32,
@@ -139,7 +139,7 @@ def _build_lsa_small(pe: str = "nope"):
         num_kv_heads=1,
         dropout=0.0,
         use_bitnet=False,
-        layer_pattern=["lsa_attn"],
+        layer_pattern=["lsa"],
         mode="decoder",
         positional_encoding=pe,
         norm_type="layer_norm",
@@ -157,7 +157,7 @@ def _build_lsa_small(pe: str = "nope"):
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class LSABucketParityTests(unittest.TestCase):
-    """``lsa_attn`` parity with real bucket formation (tiny knobs)."""
+    """``lsa`` parity with real bucket formation (tiny knobs)."""
 
     def test_prefill_decode_parity_with_buckets(self):
         torch.manual_seed(42)

@@ -120,7 +120,7 @@ class TestConfigLoaderAcceptsNewNames(unittest.TestCase):
                 '    num_heads: 4\n'
                 '    num_layers: 1\n'
                 '    num_loops: 1\n'
-                '    layer_pattern: [standard_attn]\n'
+                '    layer_pattern: [standard]\n'
                 'training:\n'
                 '  task: mlm\n'
             )
@@ -188,6 +188,49 @@ class TestNoOldNomenclatureInSource(unittest.TestCase):
     def test_schema_yaml_clean(self):
         hits = self._scan(_SRC_DIR / "schema", "*.yaml")
         self.assertEqual(hits, [], "Banned tokens found in schema/: " + "; ".join(hits))
+
+
+class TestMixerNamesHaveNoAttnSuffix(unittest.TestCase):
+    """Mixer identifiers must not carry the legacy ``_attn`` suffix.
+
+    The schema enum is the contract: every ``layer_pattern`` value is the
+    mixer name, and ``retnet_attn`` was a duplicate alias of ``retnet``
+    that has been removed.
+    """
+
+    def setUp(self):
+        from src.utils.schema_loader import resolve_schema
+        schema = resolve_schema(_SRC_DIR / "schema.yaml")
+        props = schema["properties"]["model"]["properties"]["dims"]["properties"]
+        self.enum = list(props["layer_pattern"]["items"]["enum"])
+
+    def test_enum_has_no_attn_suffix(self):
+        offenders = [m for m in self.enum if m.endswith("_attn")]
+        self.assertEqual(offenders, [], f"mixers still end with _attn: {offenders}")
+
+    def test_retnet_alias_is_gone(self):
+        self.assertIn("retnet", self.enum)
+        self.assertNotIn("retnet_attn", self.enum)
+
+    def test_no_retnet_attn_in_src(self):
+        hits = []
+        for path in _SRC_DIR.rglob("*"):
+            if path.suffix not in {".py", ".yaml"} or not path.is_file():
+                continue
+            if "__pycache__" in path.parts:
+                continue
+            if "retnet_attn" in path.read_text(encoding="utf-8", errors="ignore"):
+                hits.append(str(path))
+        self.assertEqual(hits, [], f"retnet_attn still referenced: {hits}")
+
+    def test_mixer_modules_have_no_attn_suffix(self):
+        attention_dir = _SRC_DIR / "model" / "attention"
+        offenders = [
+            str(p)
+            for p in attention_dir.rglob("*_attn.py")
+            if "__pycache__" not in p.parts
+        ]
+        self.assertEqual(offenders, [], f"mixer modules still end with _attn: {offenders}")
 
 
 class TestPackageMetadata(unittest.TestCase):

@@ -107,29 +107,29 @@ class FrankensteinModelConfig:
         layer_pattern: Ordered list of mixer types assigned to each physical
             layer. The pattern is cycled modulo its length when
             ``num_layers`` exceeds the pattern length. Supported values:
-            ``"ode"``, ``"retnet"``, ``"retnet_attn"``, ``"titan_attn"``,
-            ``"standard_attn"``, ``"sigmoid_attn"``, ``"mamba"``,
-            ``"sparse_transformer_attn"``, ``"longformer_attn"``,
-            ``"bigbird_attn"``, ``"sparsek_attn"``, ``"nsa_attn"``,
-            ``"sparge_attn"``, ``"fasa_attn"``, ``"gla_attn"``,
-            ``"deltanet_attn"``, ``"gated_deltanet_attn"``,
-            ``"gated_deltanet2_attn"``,
-            ``"hgrn2_attn"``, ``"fox_attn"``, ``"gated_softmax_attn"``,
-            ``"kda_attn"``,
-            ``"falcon1_attn"``, ``"falcon2_attn"``, ``"falcon3_attn"``,
-            ``"falcon1a_attn"``, ``"falcon2a_attn"``, ``"falcon3a_attn"``,
-            ``"engram_attn"``, ``"gqa_attn"``,
-            ``"mla_attn"``, ``"gqla_attn"``, ``"mlra_attn"``,
-            ``"tucker_attn"``, ``"iha_attn"``, ``"gta_attn"``,
-            ``"mtla_attn"``, ``"cca_attn"``, ``"ccgqa_attn"``,
-            ``"msa_attn"``, ``"sparda_attn"``, ``"lsa_attn"``.
-            Default: ``["retnet", "ode", "mamba", "titan_attn"] * 3``.
+            ``"ode"``, ``"retnet"``, ``"titan"``,
+            ``"standard"``, ``"sigmoid"``, ``"mamba"``,
+            ``"sparse_transformer"``, ``"longformer"``,
+            ``"bigbird"``, ``"sparsek"``, ``"nsa"``,
+            ``"sparge"``, ``"fasa"``, ``"gla"``,
+            ``"deltanet"``, ``"gated_deltanet"``,
+            ``"gated_deltanet2"``,
+            ``"hgrn2"``, ``"fox"``, ``"gated_softmax"``,
+            ``"kda"``,
+            ``"falcon1"``, ``"falcon2"``, ``"falcon3"``,
+            ``"falcon1a"``, ``"falcon2a"``, ``"falcon3a"``,
+            ``"engram"``, ``"gqa"``,
+            ``"mla"``, ``"gqla"``, ``"mlra"``,
+            ``"tucker"``, ``"iha"``, ``"gta"``,
+            ``"mtla"``, ``"cca"``, ``"ccgqa"``,
+            ``"msa"``, ``"sparda"``, ``"lsa"``.
+            Default: ``["retnet", "ode", "mamba", "titan"] * 3``.
         ode_solver: ODE solver for ``ode`` mixer layers. One of ``"rk4"``
             (Runge-Kutta 4th order) or ``"euler"``. Default: ``"rk4"``.
         ode_steps: Number of ODE integration steps per ``ode`` layer.
             Default: 2.
-        retention_heads: Number of retention heads for ``retnet`` /
-            ``retnet_attn`` layers. Default: 8.
+        retention_heads: Number of retention heads for ``retnet``
+            layers. Default: 8.
         num_heads: Number of attention heads for standard / sparse / gated
             attention mixers. Default: 16.
         num_experts: Total number of FFN experts when ``use_moe`` is True.
@@ -277,75 +277,71 @@ class FrankensteinModelConfig:
             positional embedding table. Default: 512.
         learned_init_std: Initialisation standard deviation for the
             learned absolute positional embedding. Default: 0.02.
-        standard_attn_use_pe: Whether ``standard_attn`` layers consume the
+        standard_use_pe: Whether ``standard`` layers consume the
             model-wide positional encoding. Default: True.
-        titan_attn_use_pe: Whether ``titan_attn`` layers consume the
+        titan_use_pe: Whether ``titan`` layers consume the
             model-wide positional encoding. Default: True.
-        sigmoid_attn_use_pe: Whether ``sigmoid_attn`` layers consume the
+        sigmoid_use_pe: Whether ``sigmoid`` layers consume the
             model-wide positional encoding. Default: True.
-        memory_attn_use_pe: Whether ``memory_attn`` layers consume the
+        memory_use_pe: Whether ``memory`` layers consume the
             model-wide positional encoding (RoPE on the scoring pair only;
             values are built from the unrotated keys). Default: True.
-        gated_softmax_attn_use_pe: Whether ``gated_softmax_attn`` layers
+        gated_softmax_use_pe: Whether ``gated_softmax`` layers
             consume the model-wide positional encoding. Default: True.
-        gqa_attn_use_pe: Whether ``gqa_attn`` layers consume the
+        gqa_use_pe: Whether ``gqa`` layers consume the
             model-wide positional encoding. Default: True.
-        mla_attn_use_pe: Whether ``mla_attn`` layers consume the
+        mla_use_pe: Whether ``mla`` layers consume the
             model-wide positional encoding. Default: True.
-        gqla_attn_use_pe: Whether ``gqla_attn`` layers consume the
+        gqla_use_pe: Whether ``gqla`` layers consume the
             model-wide positional encoding. Default: True.
-        mlra_attn_use_pe: Whether ``mlra_attn`` layers consume the
+        mlra_use_pe: Whether ``mlra`` layers consume the
             model-wide positional encoding. Default: True.
-        tucker_attn_use_pe: Whether ``tucker_attn`` layers consume the
+        tucker_use_pe: Whether ``tucker`` layers consume the
             model-wide positional encoding. Default: True.
-        iha_attn_use_pe: Whether ``iha_attn`` layers consume the
+        iha_use_pe: Whether ``iha`` layers consume the
             model-wide positional encoding. Default: True.
-        gta_attn_use_pe: Whether ``gta_attn`` layers consume the
+        gta_use_pe: Whether ``gta`` layers consume the
             model-wide positional encoding. Default: True.
-        mtla_attn_use_pe: Whether ``mtla_attn`` layers consume the
+        mtla_use_pe: Whether ``mtla`` layers consume the
             model-wide positional encoding. Disabled by default because
             MTLA is a recurrent/decay mixer. Default: False.
-        cca_attn_use_pe: Whether ``cca_attn`` layers consume the
+        cca_use_pe: Whether ``cca`` layers consume the
             model-wide positional encoding. Default: True.
-        ccgqa_attn_use_pe: Whether ``ccgqa_attn`` layers consume the
+        ccgqa_use_pe: Whether ``ccgqa`` layers consume the
             model-wide positional encoding. Default: True.
-        msa_attn_use_pe: Whether ``msa_attn`` layers consume the
+        msa_use_pe: Whether ``msa`` layers consume the
             model-wide positional encoding. Default: True.
-        sparda_attn_use_pe: Whether ``sparda_attn`` layers consume the
+        sparda_use_pe: Whether ``sparda`` layers consume the
             model-wide positional encoding. Default: True.
-        lsa_attn_use_pe: Whether ``lsa_attn`` layers consume the model-wide
+        lsa_use_pe: Whether ``lsa`` layers consume the model-wide
             positional encoding. Native LSA trains without PE. Default: False.
-        gma_attn_use_pe: Whether ``gma_attn`` layers consume the
+        gma_use_pe: Whether ``gma`` layers consume the
             model-wide positional encoding. Default: True.
-        longformer_attn_use_pe: Whether ``longformer_attn`` layers consume
+        longformer_use_pe: Whether ``longformer`` layers consume
             the model-wide positional encoding. Default: True.
-        swa_attn_use_pe: Whether ``swa_attn`` layers consume the model-wide
+        swa_use_pe: Whether ``swa`` layers consume the model-wide
             positional encoding. Default: True.
-        fastconformer_attn_use_pe: Whether ``fastconformer_attn`` layers
+        fastconformer_use_pe: Whether ``fastconformer`` layers
             consume the model-wide positional encoding (windowed softmax
             attention). Default: True.
-        bigbird_attn_use_pe: Whether ``bigbird_attn`` layers consume the
+        bigbird_use_pe: Whether ``bigbird`` layers consume the
             model-wide positional encoding. Default: True.
-        sparse_transformer_attn_use_pe: Whether ``sparse_transformer_attn``
+        sparse_transformer_use_pe: Whether ``sparse_transformer``
             layers consume the model-wide positional encoding.
             Default: True.
-        sparsek_attn_use_pe: Whether ``sparsek_attn`` layers consume the
+        sparsek_use_pe: Whether ``sparsek`` layers consume the
             model-wide positional encoding. Default: True.
-        nsa_attn_use_pe: Whether ``nsa_attn`` layers consume the
+        nsa_use_pe: Whether ``nsa`` layers consume the
             model-wide positional encoding. Default: True.
-        fasa_attn_use_pe: Whether ``fasa_attn`` layers consume the
+        fasa_use_pe: Whether ``fasa`` layers consume the
             model-wide positional encoding. Default: True.
-        sparge_attn_use_pe: Whether ``sparge_attn`` layers consume the
+        sparge_use_pe: Whether ``sparge`` layers consume the
             model-wide positional encoding. Default: True.
-        engram_attn_use_pe: Whether ``engram_attn`` layers consume the
+        engram_use_pe: Whether ``engram`` layers consume the
             model-wide positional encoding. Default: True.
         retnet_use_pe: Whether ``retnet`` layers consume the model-wide
             positional encoding. Disabled by default because RetNet uses
             decay-based positional information. Default: False.
-        retnet_attn_use_pe: Whether ``retnet_attn`` layers consume the
-            model-wide positional encoding. Disabled by default because
-            RetNet-Attn uses decay-based positional information.
-            Default: False.
         mamba_use_pe: Whether ``mamba`` layers consume the model-wide
             positional encoding. Disabled by default because Mamba is a
             state-space mixer with implicit positional information.
@@ -353,31 +349,31 @@ class FrankensteinModelConfig:
         ode_use_pe: Whether ``ode`` layers consume the model-wide
             positional encoding. Disabled by default because ODE layers
             integrate over the hidden state directly. Default: False.
-        gla_attn_use_pe: Whether ``gla_attn`` layers consume the
+        gla_use_pe: Whether ``gla`` layers consume the
             model-wide positional encoding. Disabled by default because
             GLA is a gated linear attention mixer. Default: False.
-        deltanet_attn_use_pe: Whether ``deltanet_attn`` layers consume
+        deltanet_use_pe: Whether ``deltanet`` layers consume
             the model-wide positional encoding. Disabled by default
             because DeltaNet is a gated linear attention mixer.
             Default: False.
-        gated_deltanet_attn_use_pe: Whether ``gated_deltanet_attn``
+        gated_deltanet_use_pe: Whether ``gated_deltanet``
             layers consume the model-wide positional encoding. Disabled
             by default because gated DeltaNet is a gated linear attention
             mixer. Default: False.
-        gated_deltanet2_attn_use_pe: Whether ``gated_deltanet2_attn``
+        gated_deltanet2_use_pe: Whether ``gated_deltanet2``
             layers consume the model-wide positional encoding. Disabled
             by default because gated DeltaNet-2 is a gated linear
             attention mixer. Default: False.
-        hgrn2_attn_use_pe: Whether ``hgrn2_attn`` layers consume the
+        hgrn2_use_pe: Whether ``hgrn2`` layers consume the
             model-wide positional encoding. Disabled by default because
             HGRN-2 is a gated linear attention mixer. Default: False.
-        fox_attn_use_pe: Whether ``fox_attn`` layers consume the
+        fox_use_pe: Whether ``fox`` layers consume the
             model-wide positional encoding. Disabled by default because
             Fox is a gated linear attention mixer. Default: False.
-        kda_attn_use_pe: Whether ``kda_attn`` layers consume the
+        kda_use_pe: Whether ``kda`` layers consume the
             model-wide positional encoding. Disabled by default because
             KDA is a gated linear attention mixer. Default: False.
-        falcon{1,2,3,1a,2a,3a}_attn_use_pe: Whether the corresponding
+        falcon{1,2,3,1a,2a,3a}_use_pe: Whether the corresponding
             Falcon fast-weight attention layer consumes the model-wide
             positional encoding. Disabled by default because the Falcon
             family is a recurrent fast-weight mixer whose one-step-shifted
@@ -403,8 +399,8 @@ class FrankensteinModelConfig:
             "static"``. Must be in (0, 2). Default: 1.0.
         falcon_lambda: Static ridge used when ``falcon_lambda_mode =
             "static"``. Must be >= 0. Default: 0.0.
-        falcon_window: Sliding window ``B`` for ``falcon3_attn`` /
-            ``falcon3a_attn`` (bounded rehearsal). Must be >= 1.
+        falcon_window: Sliding window ``B`` for ``falcon3`` /
+            ``falcon3a`` (bounded rehearsal). Must be >= 1.
             Default: 4.
         falcon_short_conv: If True, apply causal depth-wise short
             convolutions (kernel ``falcon_conv_kernel``) on the q/k/v
@@ -510,7 +506,7 @@ class FrankensteinModelConfig:
     num_layers: int = 12
     num_loops: int = 2
 
-    layer_pattern: List[str] = field(default_factory=lambda: ["retnet", "ode", "mamba", "titan_attn"] * 3)
+    layer_pattern: List[str] = field(default_factory=lambda: ["retnet", "ode", "mamba", "titan"] * 3)
 
     ode_solver: str = "rk4"
     ode_steps: int = 2
@@ -598,54 +594,53 @@ class FrankensteinModelConfig:
     bam_eps: float = 1e-5
     bam_mu_init: float = 0.0
 
-    standard_attn_use_pe: bool = True
-    titan_attn_use_pe: bool = True
-    sigmoid_attn_use_pe: bool = True
-    memory_attn_use_pe: bool = True
-    gated_softmax_attn_use_pe: bool = True
-    gqa_attn_use_pe: bool = True
-    mla_attn_use_pe: bool = True
-    gqla_attn_use_pe: bool = True
-    mlra_attn_use_pe: bool = True
-    tucker_attn_use_pe: bool = True
-    iha_attn_use_pe: bool = True
-    gta_attn_use_pe: bool = True
-    mtla_attn_use_pe: bool = False
-    cca_attn_use_pe: bool = True
-    ccgqa_attn_use_pe: bool = True
-    msa_attn_use_pe: bool = True
-    sparda_attn_use_pe: bool = True
-    lsa_attn_use_pe: bool = False
-    gma_attn_use_pe: bool = True
-    longformer_attn_use_pe: bool = True
-    swa_attn_use_pe: bool = True
-    fastconformer_attn_use_pe: bool = True
-    bigbird_attn_use_pe: bool = True
-    sparse_transformer_attn_use_pe: bool = True
-    sparsek_attn_use_pe: bool = True
-    nsa_attn_use_pe: bool = True
-    fasa_attn_use_pe: bool = True
-    sparge_attn_use_pe: bool = True
-    engram_attn_use_pe: bool = True
+    standard_use_pe: bool = True
+    titan_use_pe: bool = True
+    sigmoid_use_pe: bool = True
+    memory_use_pe: bool = True
+    gated_softmax_use_pe: bool = True
+    gqa_use_pe: bool = True
+    mla_use_pe: bool = True
+    gqla_use_pe: bool = True
+    mlra_use_pe: bool = True
+    tucker_use_pe: bool = True
+    iha_use_pe: bool = True
+    gta_use_pe: bool = True
+    mtla_use_pe: bool = False
+    cca_use_pe: bool = True
+    ccgqa_use_pe: bool = True
+    msa_use_pe: bool = True
+    sparda_use_pe: bool = True
+    lsa_use_pe: bool = False
+    gma_use_pe: bool = True
+    longformer_use_pe: bool = True
+    swa_use_pe: bool = True
+    fastconformer_use_pe: bool = True
+    bigbird_use_pe: bool = True
+    sparse_transformer_use_pe: bool = True
+    sparsek_use_pe: bool = True
+    nsa_use_pe: bool = True
+    fasa_use_pe: bool = True
+    sparge_use_pe: bool = True
+    engram_use_pe: bool = True
     retnet_use_pe: bool = False
-    retnet_attn_use_pe: bool = False
     mamba_use_pe: bool = False
     ode_use_pe: bool = False
-    gla_attn_use_pe: bool = False
-    deltanet_attn_use_pe: bool = False
-    gated_deltanet_attn_use_pe: bool = False
-    gated_deltanet2_attn_use_pe: bool = False
-    hgrn2_attn_use_pe: bool = False
-    fox_attn_use_pe: bool = False
-    kda_attn_use_pe: bool = False
-    falcon1_attn_use_pe: bool = False
-    falcon2_attn_use_pe: bool = False
-    falcon3_attn_use_pe: bool = False
-    falcon1a_attn_use_pe: bool = False
-    falcon2a_attn_use_pe: bool = False
-    falcon3a_attn_use_pe: bool = False
-    ssog_attn_use_pe: bool = True
-    conformer_attn_use_pe: bool = True
+    gla_use_pe: bool = False
+    deltanet_use_pe: bool = False
+    gated_deltanet_use_pe: bool = False
+    gated_deltanet2_use_pe: bool = False
+    hgrn2_use_pe: bool = False
+    fox_use_pe: bool = False
+    kda_use_pe: bool = False
+    falcon1_use_pe: bool = False
+    falcon2_use_pe: bool = False
+    falcon3_use_pe: bool = False
+    falcon1a_use_pe: bool = False
+    falcon2a_use_pe: bool = False
+    falcon3a_use_pe: bool = False
+    ssog_use_pe: bool = True
+    conformer_use_pe: bool = True
 
     use_moe: bool = True
     use_mixture_of_depths: bool = False
@@ -842,7 +837,7 @@ class FrankensteinModelConfig:
 
     # ---- Falcon: Fast Weight Attention for Continual Learning
     # (arXiv:2608.27763) ----
-    # Shared knobs of the six falcon{1,2,3,1a,2a,3a}_attn mixers: read-
+    # Shared knobs of the six falcon{1,2,3,1a,2a,3a} mixers: read-
     # after-write prefix-aligned fast-weight updates with normalized
     # first-order step sizes and positive-decay renormalization.
     # ``None`` chunk_size forces the recurrent reference scan.
@@ -860,7 +855,7 @@ class FrankensteinModelConfig:
     falcon_lambda_mode: str = "ctx"
     falcon_beta: float = 1.0
     falcon_lambda: float = 0.0
-    # Sliding window B for falcon3_attn / falcon3a_attn (paper: 4).
+    # Sliding window B for falcon3 / falcon3a (paper: 4).
     falcon_window: int = 4
     # Causal depth-wise short convolutions on the attention projections
     # (paper default: enabled; H3/SLConv-style inductive bias, orthogonal
@@ -1128,10 +1123,10 @@ class FrankensteinModelConfig:
             raise ValueError(
                 f"ssog_max_offset must be > 0, got {self.ssog_max_offset}"
             )
-        if "ssog_attn" in (self.layer_pattern or []) and self.mode == "decoder":
+        if "ssog" in (self.layer_pattern or []) and self.mode == "decoder":
             raise ValueError(
-                "ssog_attn is encoder-only: the separable Gaussian field has "
-                "no causal formulation. Remove ssog_attn from layer_pattern "
+                "ssog is encoder-only: the separable Gaussian field has "
+                "no causal formulation. Remove ssog from layer_pattern "
                 "for decoder models."
             )
 

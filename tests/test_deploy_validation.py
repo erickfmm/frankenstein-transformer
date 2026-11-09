@@ -32,7 +32,7 @@ def _text_config():
         num_experts=2,
         top_k_experts=1,
         dropout=0.0,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         norm_type="layer_norm",
         use_bitnet=False,
         use_moe=False,
@@ -56,7 +56,7 @@ def _vit_config(task):
         num_experts=2,
         top_k_experts=1,
         dropout=0.0,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         norm_type="layer_norm",
         use_bitnet=False,
         use_moe=False,
@@ -91,7 +91,7 @@ def _audio_config(feature="raw", asr_loss="ctc"):
         num_experts=2,
         top_k_experts=1,
         dropout=0.0,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         norm_type="layer_norm",
         use_bitnet=False,
         use_moe=False,
@@ -123,7 +123,7 @@ def test_validation_input_text_encoder_is_token_ids():
 def test_validation_input_ssog_uses_the_configured_grid():
     """SSOG requires seq_len == grid_h * grid_w; the default 64 would crash."""
     config = _text_config()
-    config.layer_pattern = ["ssog_attn"]
+    config.layer_pattern = ["ssog"]
     config.ssog_grid_h = 1
     config.ssog_grid_w = 32
     deployer = ModelDeployer(config)

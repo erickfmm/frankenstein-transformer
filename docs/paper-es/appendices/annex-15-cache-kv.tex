@@ -221,14 +221,14 @@ Algunos mezcladores necesitan una pequeña FIFO junto a su caché de activacione
 \textbf{Mezclador} & \textbf{Por qué se ejecuta sin caché en v1} \\
 \midrule
 \texttt{mamba} & marcador de posición lineal; sin estado por token, inherentemente incremental \\
-\texttt{ssog\_attn} & rejilla de visión bidireccional; no existe formulación causal \\
+\texttt{ssog} & rejilla de visión bidireccional; no existe formulación causal \\
 \texttt{ode} & el solver re-deriva los estados intermedios de todos los tokens en cada paso \\
 \texttt{falcon1..3a} & FIFO de repetición chunk-parallel (diseño \texttt{conv\_tail} pendiente) \\
-\texttt{cca\_attn}, \texttt{ccgqa\_attn} & dos convoluciones causales + valor desplazado \\
-\texttt{engram\_attn} & cola de ids de token (diseño \texttt{token\_tail} pendiente) \\
+\texttt{cca}, \texttt{ccgqa} & dos convoluciones causales + valor desplazado \\
+\texttt{engram} & cola de ids de token (diseño \texttt{token\_tail} pendiente) \\
 \texttt{nsa}, \texttt{msa}, \texttt{sparda}, \texttt{sparge} & la selección de bloques usa estadísticos de fragmento, no locales a la fila \\
-\texttt{mtla\_attn} & calendario dinámico de fusión por hiper-red (riesgo R1) \\
-\texttt{sparsek\_attn} & diseño de política de expulsión (SparseK es una política, no un slot) \\
+\texttt{mtla} & calendario dinámico de fusión por hiper-red (riesgo R1) \\
+\texttt{sparsek} & diseño de política de expulsión (SparseK es una política, no un slot) \\
 capas PaPE & augmentación q/k dependiente del contenido; exactitud no demostrada \\
 \bottomrule
 \end{tabularx}

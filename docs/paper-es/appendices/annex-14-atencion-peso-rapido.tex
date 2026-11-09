@@ -140,7 +140,7 @@ La máscara de decaimiento con banda de ventana factoriza como $M = D \cdot \ope
 
 \subsection{Interfaz de Configuración}
 
-Las seis variantes comparten un bloque anidado, \texttt{model.attention.falcon}, seleccionado mediante las entradas de \texttt{layer\_pattern} \texttt{falcon1\_attn}, \texttt{falcon2\_attn}, \texttt{falcon3\_attn}, \texttt{falcon1a\_attn}, \texttt{falcon2a\_attn}, \texttt{falcon3a\_attn}:
+Las seis variantes comparten un bloque anidado, \texttt{model.attention.falcon}, seleccionado mediante las entradas de \texttt{layer\_pattern} \texttt{falcon1}, \texttt{falcon2}, \texttt{falcon3}, \texttt{falcon1a}, \texttt{falcon2a}, \texttt{falcon3a}:
 
 \begin{table}[H]
 \centering
@@ -159,7 +159,7 @@ Las seis variantes comparten un bloque anidado, \texttt{model.attention.falcon},
 \texttt{eps} / \texttt{eps\_gamma} & $10^{-6}$ / $10^{-4}$ & Estabilizador del tamaño de paso y piso de fijación del decaimiento positivo \\
 \bottomrule
 \end{tabularx}
-\caption{Perillas de configuración compartidas de Falcon (\texttt{model.attention.falcon}). Cada variante expone además un opt-out de codificación posicional por mezclador \texttt{falcon\{1,2,3,1a,2a,3a\}\_attn\_use\_pe}, por defecto \texttt{False} como los demás mezcladores recurrentes/de decaimiento.}
+\caption{Perillas de configuración compartidas de Falcon (\texttt{model.attention.falcon}). Cada variante expone además un opt-out de codificación posicional por mezclador \texttt{falcon\{1,2,3,1a,2a,3a\}\_use\_pe}, por defecto \texttt{False} como los demás mezcladores recurrentes/de decaimiento.}
 \label{tab:falcon-knobs}
 \end{table}
 

@@ -37,7 +37,6 @@ from .gated import (
     GatedSoftmaxAttention,
     HGRN2Attention,
     KDAAttention,
-    RetNetAttention,
 )
 from .latent import (
     CCAAttention,
@@ -81,7 +80,6 @@ __all__ = [
     "DeltaNetAttention",
     "GatedDeltaNetAttention",
     "GatedDeltaNet2Attention",
-    "RetNetAttention",
     "HGRN2Attention",
     "ForgettingAttention",
     "GatedSoftmaxAttention",

@@ -7,7 +7,7 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - standard_attn
+    - standard
   norm:
     type: layer_norm
   embedding:

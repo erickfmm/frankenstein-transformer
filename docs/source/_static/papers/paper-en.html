@@ -638,23 +638,23 @@ unified configuration interface.</p>
 <p><strong>Sequence Mixer Pattern Selection</strong>: The
 <code>layer_pattern</code> field accepts an ordered list of mixer
 identifiers spanning six families: dense baselines
-(<code>standard_attn</code>, <code>sigmoid_attn</code>,
+(<code>standard</code>, <code>sigmoid</code>,
 <code>gqa</code>), recurrent/retentive (<code>retnet</code>,
-<code>retnet_attn</code>, <code>mamba</code>, <code>ode</code>,
-<code>titan_attn</code>), sparse attention
-(<code>sparse_transformer_attn</code>, <code>longformer_attn</code>,
-<code>bigbird_attn</code>, <code>sparsek_attn</code>,
-<code>nsa_attn</code>, <code>sparge_attn</code>, <code>fasa_attn</code>,
-<code>msa_attn</code>, <code>sparda_attn</code>), gated mechanisms
-(<code>gla_attn</code>, <code>deltanet_attn</code>,
-<code>gated_deltanet_attn</code>, <code>gated_deltanet2_attn</code>,
-<code>hgrn2_attn</code>, <code>fox_attn</code>,
-<code>gated_softmax_attn</code>, <code>kda_attn</code>), latent
-compression (<code>mla_attn</code>, <code>gqla_attn</code>,
-<code>mlra_attn</code>, <code>tucker_attn</code>, <code>iha_attn</code>,
-<code>gta_attn</code>, <code>mtla_attn</code>, <code>cca_attn</code>,
-<code>ccgqa_attn</code>), and conditional memory
-(<code>engram_attn</code>). The complete taxonomy with references is
+<code>retnet</code>, <code>mamba</code>, <code>ode</code>,
+<code>titan</code>), sparse attention
+(<code>sparse_transformer</code>, <code>longformer</code>,
+<code>bigbird</code>, <code>sparsek</code>,
+<code>nsa</code>, <code>sparge</code>, <code>fasa</code>,
+<code>msa</code>, <code>sparda</code>), gated mechanisms
+(<code>gla</code>, <code>deltanet</code>,
+<code>gated_deltanet</code>, <code>gated_deltanet2</code>,
+<code>hgrn2</code>, <code>fox</code>,
+<code>gated_softmax</code>, <code>kda</code>), latent
+compression (<code>mla</code>, <code>gqla</code>,
+<code>mlra</code>, <code>tucker</code>, <code>iha</code>,
+<code>gta</code>, <code>mtla</code>, <code>cca</code>,
+<code>ccgqa</code>), and conditional memory
+(<code>engram</code>). The complete taxonomy with references is
 provided in Section <a href="#sec:architecture-taxonomy"
 data-reference-type="ref"
 data-reference="sec:architecture-taxonomy">4</a> and Appendix <a
@@ -821,7 +821,7 @@ architectural comparison table are collected in Appendix <a
 href="#sec:annex-transformer" data-reference-type="ref"
 data-reference="sec:annex-transformer">14</a>. The pattern-driven mixer
 dispatch algorithm (including the training-free enforcement policy for
-<code>fasa_attn</code> and <code>sparge_attn</code>) is likewise
+<code>fasa</code> and <code>sparge</code>) is likewise
 detailed there.</p>
 <h2 id="latent-and-low-rank-attention-family">Latent and Low-Rank
 Attention Family</h2>
@@ -837,25 +837,25 @@ href="#sec:annex-latent" data-reference-type="ref"
 data-reference="sec:annex-latent">15</a>.</p>
 <h2 id="sparse-attention-extensions">Sparse Attention Extensions</h2>
 <p>The mixer registry includes nine sparse blocks:
-<code>sparse_transformer_attn</code>, <code>longformer_attn</code>,
-<code>bigbird_attn</code>, <code>sparsek_attn</code>,
-<code>nsa_attn</code>, <code>sparge_attn</code>, <code>fasa_attn</code>,
-<code>msa_attn</code>, and <code>sparda_attn</code> <span
+<code>sparse_transformer</code>, <code>longformer</code>,
+<code>bigbird</code>, <code>sparsek</code>,
+<code>nsa</code>, <code>sparge</code>, <code>fasa</code>,
+<code>msa</code>, and <code>sparda</code> <span
 class="citation"
 data-cites="child_sparse_transformer_2019 beltagy_longformer_2020 zaheer_bigbird_2020 lou_sparsek_2024 yuan_nsa_2025 zhang_spargeattn_2025 wang_fasa_2026 lai_minimax_2026 fu_sparda_2026"></span>.
 The implementation enforces an explicit execution policy for
-training-free sparse methods: <code>fasa_attn</code> and
-<code>sparge_attn</code> are eval/inference-only and raise runtime
+training-free sparse methods: <code>fasa</code> and
+<code>sparge</code> are eval/inference-only and raise runtime
 errors if used while the model is in training mode. Mathematical
 formulations, algorithmic pseudocode, per-block characteristics, and a
 comparison table are collected in Appendix <a href="#sec:annex-sparse"
 data-reference-type="ref" data-reference="sec:annex-sparse">16</a>.</p>
 <h2 id="gated-attention-extensions">Gated Attention Extensions</h2>
 <p>The mixer registry includes eight gated blocks:
-<code>gla_attn</code>, <code>deltanet_attn</code>,
-<code>gated_deltanet_attn</code>, <code>gated_deltanet2_attn</code>,
-<code>hgrn2_attn</code>, <code>fox_attn</code>,
-<code>gated_softmax_attn</code>, and <code>kda_attn</code> <span
+<code>gla</code>, <code>deltanet</code>,
+<code>gated_deltanet</code>, <code>gated_deltanet2</code>,
+<code>hgrn2</code>, <code>fox</code>,
+<code>gated_softmax</code>, and <code>kda</code> <span
 class="citation"
 data-cites="yang_gla_2023 yang_deltanet_2024 yang_gated_deltanet_2024 hatamizadeh_gated_deltanet2_2026 qin_hgrn2_2024 lin_forgetting_transformer_2025 qiu_gated_attention_2025 kimi_kda_2025"></span>.
 The unifying idea is that gating controls <em>what information
@@ -1543,7 +1543,7 @@ capture local n-gram patterns.</td>
 <td style="text-align: left;">use_hope</td>
 <td style="text-align: left;">bool</td>
 <td style="text-align: left;">Legacy flag for HoPE in
-<code>titan_attn</code>. Deprecated; prefer
+<code>titan</code>. Deprecated; prefer
 <code>positional_encoding</code>.</td>
 </tr>
 <tr class="even">
@@ -1647,7 +1647,7 @@ divide <code>num_heads</code> exactly.</td>
 <td style="text-align: left;">positional_encoding</td>
 <td style="text-align: left;">enum (hope, rope)</td>
 <td style="text-align: left;">Positional encoding method for
-<code>titan_attn</code> layers.</td>
+<code>titan</code> layers.</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">rope_base</td>
@@ -1944,34 +1944,34 @@ class="math inline">\(\times\)</span> = not supported.</caption>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">standard_attn</td>
+<td style="text-align: left;">standard</td>
 <td style="text-align: left;">Classic multi-head self-attention
 (BERT-style)</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sigmoid_attn</td>
+<td style="text-align: left;">sigmoid</td>
 <td style="text-align: left;">Sigmoid-gated attention</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">gated_softmax_attn</td>
+<td style="text-align: left;">gated_softmax</td>
 <td style="text-align: left;">Gated softmax attention with post-SDPA
 sigmoid</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">titan_attn</td>
+<td style="text-align: left;">titan</td>
 <td style="text-align: left;">Titan attention with positional encoding
 (HoPE/RoPE)</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">retnet / retnet_attn</td>
+<td style="text-align: left;">retnet / retnet</td>
 <td style="text-align: left;">Retention Network (RNN+transformer
 hybrid)</td>
 <td style="text-align: center;"></td>
@@ -1990,95 +1990,95 @@ hybrid)</td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gla_attn</td>
+<td style="text-align: left;">gla</td>
 <td style="text-align: left;">Gated Linear Attention with multiplicative
 decay</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">deltanet_attn / gated_deltanet_attn</td>
+<td style="text-align: left;">deltanet / gated_deltanet</td>
 <td style="text-align: left;">DeltaNet with corrective delta rule</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gated_deltanet2_attn</td>
+<td style="text-align: left;">gated_deltanet2</td>
 <td style="text-align: left;">Gated DeltaNet-2 with decoupled
 channel-wise erase/write gates</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">hgrn2_attn</td>
+<td style="text-align: left;">hgrn2</td>
 <td style="text-align: left;">HGRN2 with hierarchical forget gates</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">fox_attn</td>
+<td style="text-align: left;">fox</td>
 <td style="text-align: left;">Forgetting Transformer (FoX) with forget
 bias in logits</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">nsa_attn</td>
+<td style="text-align: left;">nsa</td>
 <td style="text-align: left;">Native Sparse Attention
 (three-branch)</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">engram_attn</td>
+<td style="text-align: left;">engram</td>
 <td style="text-align: left;">N-gram conditional memory lookup</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">gqa_attn</td>
+<td style="text-align: left;">gqa</td>
 <td style="text-align: left;">Grouped-Query Attention with configurable
 KV heads</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">longformer_attn</td>
+<td style="text-align: left;">longformer</td>
 <td style="text-align: left;">Longformer: sliding windows + global
 tokens</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">bigbird_attn</td>
+<td style="text-align: left;">bigbird</td>
 <td style="text-align: left;">BigBird: local + random + global
 attention</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sparse_transformer_attn</td>
+<td style="text-align: left;">sparse_transformer</td>
 <td style="text-align: left;">Sparse Transformer: factorized
 patterns</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sparsek_attn</td>
+<td style="text-align: left;">sparsek</td>
 <td style="text-align: left;">SparseK: differentiable top-k KV
 selection</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sparge_attn</td>
+<td style="text-align: left;">sparge</td>
 <td style="text-align: left;">SpargeAttn — two-stage block pruning</td>
 <td style="text-align: center;"><span
 class="math inline">\(\times\)</span></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">fasa_attn</td>
+<td style="text-align: left;">fasa</td>
 <td style="text-align: left;">FASA — frequency-aware token
 selection</td>
 <td style="text-align: center;"><span
@@ -2086,83 +2086,83 @@ class="math inline">\(\times\)</span></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">msa_attn</td>
+<td style="text-align: left;">msa</td>
 <td style="text-align: left;">MiniMax Sparse Attention — block-sparse on
 GQA</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sparda_attn</td>
+<td style="text-align: left;">sparda</td>
 <td style="text-align: left;">SparDA — decoupled sparse attention with
 Forecast projection</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">kda_attn</td>
+<td style="text-align: left;">kda</td>
 <td style="text-align: left;">Kimi Delta Attention — channel-wise decay
 + scalar write gate</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mla_attn</td>
+<td style="text-align: left;">mla</td>
 <td style="text-align: left;">Multi-Head Latent Attention + RoPE</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gqla_attn</td>
+<td style="text-align: left;">gqla</td>
 <td style="text-align: left;">Group-Query Latent Attention — two
 decoding paths</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mlra_attn</td>
+<td style="text-align: left;">mlra</td>
 <td style="text-align: left;">Multi-Head Low-Rank Attention —
 partitionable latent</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">tucker_attn</td>
+<td style="text-align: left;">tucker</td>
 <td style="text-align: left;">Tucker Attention — generalised low-rank
 factorisation</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">iha_attn</td>
+<td style="text-align: left;">iha</td>
 <td style="text-align: left;">Interleaved Head Attention — cross-head
 pseudo-heads</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gta_attn</td>
+<td style="text-align: left;">gta</td>
 <td style="text-align: left;">Grouped-head laTenT Attention — shared map
 + latent values</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mtla_attn</td>
+<td style="text-align: left;">mtla</td>
 <td style="text-align: left;">Multi-head Temporal Latent Attention —
 temporal KV merge</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">cca_attn</td>
+<td style="text-align: left;">cca</td>
 <td style="text-align: left;">Compressed Convolutional Attention —
 latent-space attention + convs</td>
 <td style="text-align: center;"></td>
 <td style="text-align: center;"></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">ccgqa_attn</td>
+<td style="text-align: left;">ccgqa</td>
 <td style="text-align: left;">Compressed Convolutional Grouped Query
 Attention — CCA + GQA in latent</td>
 <td style="text-align: center;"></td>
@@ -2779,7 +2779,7 @@ is required. If <code>task=mlm</code>,
 <code>task: sbert</code> requires <code>training.sbert</code>.</p></li>
 <li><p><code>bitnet_routers=true</code> requires
 <code>use_bitnet=true</code>. The flag has no effect otherwise.</p></li>
-<li><p><code>fasa_attn</code> and <code>sparge_attn</code> are
+<li><p><code>fasa</code> and <code>sparge</code> are
 evaluation-only layer types. They raise <code>RuntimeError</code> if
 used during training. They must not appear in <code>layer_pattern</code>
 for training runs.</p></li>
@@ -2847,7 +2847,7 @@ page</em></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">standard_attn</td>
+<td style="text-align: left;">standard</td>
 <td style="text-align: left;">Dense</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -2859,7 +2859,7 @@ sequences</td>
 data-cites="vaswani_attention_2017"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sigmoid_attn</td>
+<td style="text-align: left;">sigmoid</td>
 <td style="text-align: left;">Dense</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -2888,7 +2888,7 @@ data-cites="ainslie_gqa_2023"></span></td>
 (5)</strong></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">retnet_attn</td>
+<td style="text-align: left;">retnet</td>
 <td style="text-align: left;">Recurrent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span> parallel</td>
@@ -2924,7 +2924,7 @@ step solver</td>
 data-cites="zhang_continuous_2021"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">titan_attn</td>
+<td style="text-align: left;">titan</td>
 <td style="text-align: left;">Recurrent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(c^2 + n f)\)</span></td>
@@ -2936,7 +2936,7 @@ surprise-driven write dynamics</td>
 data-cites="behrouz_titans_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">engram_attn</td>
+<td style="text-align: left;">engram</td>
 <td style="text-align: left;">Memory</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(n
 \cdot N \cdot H)\)</span></td>
@@ -2952,7 +2952,7 @@ data-cites="cheng2026conditionalmemoryscalablelookup"></span></td>
 (9)</strong></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sparse_transformer_attn</td>
+<td style="text-align: left;">sparse_transformer</td>
 <td style="text-align: left;">Sparse</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(n
 \sqrt{n} \cdot d)\)</span></td>
@@ -2964,7 +2964,7 @@ class="math inline">\(\sqrt{n}\)</span> sparsity pattern</td>
 data-cites="child_sparse_transformer_2019"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">longformer_attn</td>
+<td style="text-align: left;">longformer</td>
 <td style="text-align: left;">Sparse</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(n
 \cdot w \cdot d)\)</span></td>
@@ -2976,7 +2976,7 @@ linear in <span class="math inline">\(n\)</span></td>
 data-cites="beltagy_longformer_2020"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">bigbird_attn</td>
+<td style="text-align: left;">bigbird</td>
 <td style="text-align: left;">Sparse</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n)\)</span></td>
@@ -2988,7 +2988,7 @@ attention</td>
 data-cites="zaheer_bigbird_2020"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sparsek_attn</td>
+<td style="text-align: left;">sparsek</td>
 <td style="text-align: left;">Sparse</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(n
 \cdot d)\)</span></td>
@@ -3000,7 +3000,7 @@ class="math inline">\(k\)</span> selection; learned sparsity mask</td>
 data-cites="lou_sparsek_2024"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">nsa_attn</td>
+<td style="text-align: left;">nsa</td>
 <td style="text-align: left;">Sparse</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}((t/d + n_l + w)d)\)</span></td>
@@ -3012,7 +3012,7 @@ token/neighbor/window</td>
 data-cites="yuan_nsa_2025"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">sparge_attn</td>
+<td style="text-align: left;">sparge</td>
 <td style="text-align: left;">Sparse</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 \cdot s \cdot d)\)</span></td>
@@ -3024,7 +3024,7 @@ training)</td>
 data-cites="zhang_spargeattn_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">fasa_attn</td>
+<td style="text-align: left;">fasa</td>
 <td style="text-align: left;">Sparse</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(t
 \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)\)</span></td>
@@ -3036,7 +3036,7 @@ eval-only</td>
 data-cites="wang_fasa_2026"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">msa_attn</td>
+<td style="text-align: left;">msa</td>
 <td style="text-align: left;">Sparse</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}}
@@ -3049,7 +3049,7 @@ class="math inline">\(\mathcal{O}(n)\)</span></td>
 data-cites="lai_minimax_2026"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">sparda_attn</td>
+<td style="text-align: left;">sparda</td>
 <td style="text-align: left;">Sparse</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot
@@ -3066,7 +3066,7 @@ data-cites="fu_sparda_2026"></span></td>
 (8)</strong></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gla_attn</td>
+<td style="text-align: left;">gla</td>
 <td style="text-align: left;">Gated</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3078,7 +3078,7 @@ attention with gating</td>
 data-cites="yang_gla_2023"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">deltanet_attn</td>
+<td style="text-align: left;">deltanet</td>
 <td style="text-align: left;">Gated</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3090,7 +3090,7 @@ attention</td>
 data-cites="yang_deltanet_2024"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gated_deltanet_attn</td>
+<td style="text-align: left;">gated_deltanet</td>
 <td style="text-align: left;">Gated</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3102,7 +3102,7 @@ delta framework</td>
 data-cites="yang_gated_deltanet_2024"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">gated_deltanet2_attn</td>
+<td style="text-align: left;">gated_deltanet2</td>
 <td style="text-align: left;">Gated</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3114,7 +3114,7 @@ improved gating</td>
 data-cites="hatamizadeh_gated_deltanet2_2026"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">hgrn2_attn</td>
+<td style="text-align: left;">hgrn2</td>
 <td style="text-align: left;">Gated</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3126,7 +3126,7 @@ multi-scale recurrence</td>
 data-cites="qin_hgrn2_2024"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">fox_attn</td>
+<td style="text-align: left;">fox</td>
 <td style="text-align: left;">Gated</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(L^2 d)\)</span></td>
@@ -3138,7 +3138,7 @@ compatible</td>
 data-cites="lin_forgetting_transformer_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gated_softmax_attn</td>
+<td style="text-align: left;">gated_softmax</td>
 <td style="text-align: left;">Gated</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(L^2 d)\)</span></td>
@@ -3150,7 +3150,7 @@ mitigation</td>
 data-cites="qiu_gated_attention_2025"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">kda_attn</td>
+<td style="text-align: left;">kda</td>
 <td style="text-align: left;">Gated</td>
 <td style="text-align: left;"><span class="math inline">\(\mathcal{O}(L
 d^2)\)</span></td>
@@ -3166,7 +3166,7 @@ data-cites="kimi_kda_2025"></span></td>
 (9)</strong></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mla_attn</td>
+<td style="text-align: left;">mla</td>
 <td style="text-align: left;">Latent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3179,7 +3179,7 @@ DeepSeek-style</td>
 data-cites="mehta_mla_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gqla_attn</td>
+<td style="text-align: left;">gqla</td>
 <td style="text-align: left;">Latent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3191,7 +3191,7 @@ latent fusion</td>
 data-cites="meng_gqla_2026"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mlra_attn</td>
+<td style="text-align: left;">mlra</td>
 <td style="text-align: left;">Latent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3203,7 +3203,7 @@ sub-heads; 4-way tensor-parallel compatible</td>
 data-cites="liu_mlra_2026"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">tucker_attn</td>
+<td style="text-align: left;">tucker</td>
 <td style="text-align: left;">Latent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d)\)</span></td>
@@ -3215,7 +3215,7 @@ MHA/GQA/MLA</td>
 data-cites="klein_tucker_2026"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">iha_attn</td>
+<td style="text-align: left;">iha</td>
 <td style="text-align: left;">Latent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 H^2)\)</span></td>
@@ -3227,7 +3227,7 @@ class="math inline">\(\Theta(\sqrt{k})\)</span> parameter scaling</td>
 data-cites="duvvuri_iha_2026"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gta_attn</td>
+<td style="text-align: left;">gta</td>
 <td style="text-align: left;">Latent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 \cdot G \cdot d_h)\)</span></td>
@@ -3239,7 +3239,7 @@ reduction</td>
 data-cites="sun_gta_2025"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">mtla_attn</td>
+<td style="text-align: left;">mtla</td>
 <td style="text-align: left;">Latent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d / m)\)</span></td>
@@ -3252,7 +3252,7 @@ class="math inline">\(5.3\times\)</span> decode speedup</td>
 data-cites="deng_mtla_2025"></span></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">cca_attn</td>
+<td style="text-align: left;">cca</td>
 <td style="text-align: left;">Latent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d / C)\)</span></td>
@@ -3264,7 +3264,7 @@ class="math inline">\(C\times\)</span> fewer FLOPs</td>
 data-cites="figliola_cca_2025"></span></td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">ccgqa_attn</td>
+<td style="text-align: left;">ccgqa</td>
 <td style="text-align: left;">Latent</td>
 <td style="text-align: left;"><span
 class="math inline">\(\mathcal{O}(n^2 d / C_1)\)</span></td>
@@ -8155,7 +8155,7 @@ layer.</p></li>
 router regularization.</p></li>
 </ul>
 <h2 id="engram-conditional-memory">Engram Conditional Memory</h2>
-<p>Engram (<code>engram_attn</code>) implements conditional memory via
+<p>Engram (<code>engram</code>) implements conditional memory via
 scalable N-gram lookup <span class="citation"
 data-cites="cheng2026conditionalmemoryscalablelookup"></span>. It builds
 hash-based lookup tables for N-gram contexts from size 2 up to

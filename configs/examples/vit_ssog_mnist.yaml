@@ -1,7 +1,7 @@
 # ViT de clasificación MNIST con SSOG-Attention (Separable Sum of Gaussians,
 # Pisoni 2026, https://www.pisoni.ai/posts/ssog/)
 # Dataset: Hugging Face `ylecun/mnist` (imágenes 28x28 en escala de grises, 10 dígitos)
-# Arquitectura: ViT-Tiny (D=128, L=6, heads=4, patch=14 -> 2x2=4 parches) con `ssog_attn`
+# Arquitectura: ViT-Tiny (D=128, L=6, heads=4, patch=14 -> 2x2=4 parches) con `ssog`
 # en cada capa. La rejilla del campo se deriva automáticamente: 28/14 x 28/14 = 2x2.
 # Nota: `cls_token: false` + `pooling_mode: gap` — SSOG requiere el raster puro de la
 # rejilla (sin [CLS] prepended). El costo de atención es O(R·N·√N·d), nunca N².
@@ -13,7 +13,7 @@ model:
     num_layers: 6
     num_heads: 4
     num_loops: 1
-    layer_pattern: ["ssog_attn"]
+    layer_pattern: ["ssog"]
     mode: encoder
     dropout: 0.1
   norm:

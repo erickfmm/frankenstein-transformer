@@ -54,7 +54,7 @@ def _tiny_config() -> "FrankensteinModelConfig":
         num_layers=2,
         num_loops=1,
         num_heads=4,
-        layer_pattern=["standard_attn", "standard_attn"],
+        layer_pattern=["standard", "standard"],
     )
 
 

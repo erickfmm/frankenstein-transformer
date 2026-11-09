@@ -112,7 +112,7 @@ class MemoryAttention(nn.Module):
         self.mode = getattr(config, "mode", "encoder")
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "memory_attn_use_pe", True))
+        self.use_pe = bool(getattr(config, "memory_use_pe", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def _memory_lookup(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -167,7 +167,7 @@ class MemoryAttention(nn.Module):
         """
         if input_ids is None:
             raise ValueError(
-                "memory_attn requires input_ids: its value memory is indexed by token ID"
+                "memory requires input_ids: its value memory is indexed by token ID"
             )
         bsz, seq_len, hidden = x.shape
         pe = pos_encoder if pos_encoder is not None else self.pos_encoder

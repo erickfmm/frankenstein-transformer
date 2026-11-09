@@ -27,7 +27,7 @@ def _model():
         num_kv_heads=2,
         dropout=0.0,
         use_bitnet=False,
-        layer_pattern=["standard_attn", "gqa_attn"],
+        layer_pattern=["standard", "gqa"],
         mode="decoder",
         positional_encoding="rope",
         norm_type="layer_norm",

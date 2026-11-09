@@ -6,7 +6,7 @@ It mirrors :class:`~src.model.frankenstein_vit.FrankensteinViT`: it replaces
 the NLP token embedding with a waveform frontend (log-mel filterbanks,
 log-power spectrogram or a raw multichannel 1-D signal) followed by the
 paper's convolutional subsampling stack (arXiv:2005.08100, Sec. 2), stacks
-:class:`HybridLayer` blocks (so every mixer — notably ``conformer_attn`` —
+:class:`HybridLayer` blocks (so every mixer — notably ``conformer`` —
 plus MoE, MoD, mHC, AttnRes, Hyperloop, BitNet and every norm/optimizer
 keeps working), and exposes task heads:
 
@@ -704,7 +704,7 @@ class FrankensteinAudio(nn.Module):
             num_loops: Loop iterations. Default: 1.
             use_bitnet: Whether to use BitNet. Default: False.
             layer_pattern: Custom layer pattern. If None, defaults to
-                ``["conformer_attn"] * num_layers``.
+                ``["conformer"] * num_layers``.
             **kwargs: Additional FrankensteinModelConfig fields.
 
         Returns:
@@ -712,7 +712,7 @@ class FrankensteinAudio(nn.Module):
             defaults.
         """
         if layer_pattern is None:
-            layer_pattern = ["conformer_attn"] * num_layers
+            layer_pattern = ["conformer"] * num_layers
         explicit_keys = {
             "hidden_size",
             "num_layers",

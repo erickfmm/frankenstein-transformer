@@ -14,8 +14,8 @@ model:
     num_kv_heads: 4
     dropout: 0.0
     layer_pattern:
-    - gqa_attn
-    - standard_attn
+    - gqa
+    - standard
     mode: decoder
   norm:
     type: layer_norm

@@ -22,7 +22,7 @@ load.
 
 | Dimension | Count | Defined in |
 |---|---:|---|
-| `model.dims.layer_pattern` values | **48** (47 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
+| `model.dims.layer_pattern` values | **47** (46 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
 | Optimizer families | **36** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
@@ -35,7 +35,7 @@ load.
 | Deployment formats | **4** | `src/cli.py` (`deploy --format`) |
 
 > The schema enums are the executable contract for code. README badges say
-> "48 mixers / 11 positional encodings": the mixer badge follows the schema
+> "47 mixers / 11 positional encodings": the mixer badge follows the schema
 > enum (including the `mamba` placeholder), while the PE badge excludes the
 > `none` encoding. The mathematical definitions stay in the paper; this
 > document tracks what is actually wired up.
@@ -79,7 +79,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/frankenstein_audio.py` | Audio model class: log-mel/spectrogram/raw frontend, conv subsampling, ASR and classification heads (forces `mode=encoder`) |
 | `src/model/mhc.py`, `src/model/hyperloop.py` | Manifold-constrained hyper-connections and loop-level variants |
 | `src/model/residuals/**` | Residual strategies + factory |
-| `src/model/attention/**` | 47 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
+| `src/model/attention/**` | 46 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
 | `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
@@ -266,7 +266,7 @@ Cross-field rules enforced in `config_loader.py` and
 - `base_model` requires `training` and (for MLM/causal LM) `tokenizer.name_or_path`.
 - `mlm` requires `training.optimizer`; `sbert` requires `training.sbert`.
 - `bitnet.routers: true` ⇒ `bitnet.enabled: true`; `bitnet.conv` only applies when BitNet and `embedding.conv.enabled` are both true.
-- `norm.qk_norm.enabled: true` ⇒ every mixer in `layer_pattern` must be QK-capable (`QK_NORM_MIXERS`); `method: qk_clip` additionally requires per-head dot-product logits (`QK_CLIP_MIXERS`, excludes `gma_attn`). Enforced in `config_loader._validate_qk_norm`.
+- `norm.qk_norm.enabled: true` ⇒ every mixer in `layer_pattern` must be QK-capable (`QK_NORM_MIXERS`); `method: qk_clip` additionally requires per-head dot-product logits (`QK_CLIP_MIXERS`, excludes `gma`). Enforced in `config_loader._validate_qk_norm`.
 
 ## 7. Component reference
 
@@ -348,81 +348,80 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-48 enum values in 10 families. `config subkey` is the optional
+47 enum values in 10 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
 |---|---|---|---|
-| `standard_attn` | Dense | — | yes |
-| `sigmoid_attn` | Dense | — | yes |
-| `gqa_attn` | GQA | `dims.num_kv_heads` | yes |
+| `standard` | Dense | — | yes |
+| `sigmoid` | Dense | — | yes |
+| `gqa` | GQA | `dims.num_kv_heads` | yes |
 | `retnet` | Recurrent | `retnet.heads` | yes |
-| `retnet_attn` | Recurrent | — | yes |
 | `mamba` | Recurrent | — (linear placeholder) | yes |
 | `ode` | Recurrent | `ode.solver`, `ode.steps` | yes |
-| `titan_attn` | Recurrent | — | yes |
-| `engram_attn` | Recurrent / memory | `engram.*` | yes |
-| `sparse_transformer_attn` | Sparse | — | yes |
-| `longformer_attn` | Sparse | — | yes |
-| `swa_attn` | Sparse | `swa.*` | yes |
-| `bigbird_attn` | Sparse | — | yes |
-| `sparsek_attn` | Sparse | — | yes |
-| `nsa_attn` | Sparse | — | yes |
-| `msa_attn` | Sparse | `msa.*` | yes |
-| `sparda_attn` | Sparse | `sparda.*` | yes |
-| `sparge_attn` | Sparse | — | yes (dense train, sparse eval) |
-| `fasa_attn` | Sparse | — | yes (dense train, sparse eval) |
-| `gla_attn` | Gated | — | yes |
-| `deltanet_attn` | Gated | — | yes |
-| `gated_deltanet_attn` | Gated | — | yes |
-| `gated_deltanet2_attn` | Gated | — | yes |
-| `hgrn2_attn` | Gated | — | yes |
-| `fox_attn` | Gated | — | yes |
-| `gated_softmax_attn` | Gated | — | yes |
-| `kda_attn` | Gated | — | yes |
-| `falcon1_attn` | Fast-weight | `falcon.*` | yes |
-| `falcon2_attn` | Fast-weight | `falcon.*` | yes |
-| `falcon3_attn` | Fast-weight | `falcon.*` | yes |
-| `falcon1a_attn` | Fast-weight | `falcon.*` | yes |
-| `falcon2a_attn` | Fast-weight | `falcon.*` | yes |
-| `falcon3a_attn` | Fast-weight | `falcon.*` | yes |
-| `mla_attn` | Latent | `mla.latent_rank` | yes |
-| `gqla_attn` | Latent | `gqla.*` | yes |
-| `mlra_attn` | Latent | `mlra.*` | yes |
-| `tucker_attn` | Latent | `tucker.*` | yes |
-| `iha_attn` | Latent | `iha.*` | yes |
-| `gta_attn` | Latent | `gta.*` | yes |
-| `mtla_attn` | Latent | `mtla.*` | yes |
-| `cca_attn` | Latent + conv | `cca.*` | yes |
-| `ccgqa_attn` | Latent + GQA + conv | `ccgqa.*` | yes |
-| `gma_attn` | Latent (Gaussian mixture) | `gma.*` | yes |
-| `ssog_attn` | Geometric field | `ssog.*` | yes (encoder, grid input) |
-| `conformer_attn` | Convolution-augmented | `conformer.*` | yes |
-| `memory_attn` | Memory | `dims.num_kv_heads` | yes |
-| `lsa_attn` | Sparse (semantic) | `lsa.*` | yes |
-| `fastconformer_attn` | Sparse | `fastconformer.*` | yes |
+| `titan` | Recurrent | — | yes |
+| `engram` | Recurrent / memory | `engram.*` | yes |
+| `sparse_transformer` | Sparse | — | yes |
+| `longformer` | Sparse | — | yes |
+| `swa` | Sparse | `swa.*` | yes |
+| `bigbird` | Sparse | — | yes |
+| `sparsek` | Sparse | — | yes |
+| `nsa` | Sparse | — | yes |
+| `msa` | Sparse | `msa.*` | yes |
+| `sparda` | Sparse | `sparda.*` | yes |
+| `sparge` | Sparse | — | yes (dense train, sparse eval) |
+| `fasa` | Sparse | — | yes (dense train, sparse eval) |
+| `gla` | Gated | — | yes |
+| `deltanet` | Gated | — | yes |
+| `gated_deltanet` | Gated | — | yes |
+| `gated_deltanet2` | Gated | — | yes |
+| `hgrn2` | Gated | — | yes |
+| `fox` | Gated | — | yes |
+| `gated_softmax` | Gated | — | yes |
+| `kda` | Gated | — | yes |
+| `falcon1` | Fast-weight | `falcon.*` | yes |
+| `falcon2` | Fast-weight | `falcon.*` | yes |
+| `falcon3` | Fast-weight | `falcon.*` | yes |
+| `falcon1a` | Fast-weight | `falcon.*` | yes |
+| `falcon2a` | Fast-weight | `falcon.*` | yes |
+| `falcon3a` | Fast-weight | `falcon.*` | yes |
+| `mla` | Latent | `mla.latent_rank` | yes |
+| `gqla` | Latent | `gqla.*` | yes |
+| `mlra` | Latent | `mlra.*` | yes |
+| `tucker` | Latent | `tucker.*` | yes |
+| `iha` | Latent | `iha.*` | yes |
+| `gta` | Latent | `gta.*` | yes |
+| `mtla` | Latent | `mtla.*` | yes |
+| `cca` | Latent + conv | `cca.*` | yes |
+| `ccgqa` | Latent + GQA + conv | `ccgqa.*` | yes |
+| `gma` | Latent (Gaussian mixture) | `gma.*` | yes |
+| `ssog` | Geometric field | `ssog.*` | yes (encoder, grid input) |
+| `conformer` | Convolution-augmented | `conformer.*` | yes |
+| `memory` | Memory | `dims.num_kv_heads` | yes |
+| `lsa` | Sparse (semantic) | `lsa.*` | yes |
+| `fastconformer` | Sparse | `fastconformer.*` | yes |
 
-Inference-sparse mixers: `HybridLayer.TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}`
+Inference-sparse mixers: `HybridLayer.TRAINING_FREE_LAYERS = {"fasa", "sparge"}`
 run standard dense attention in `train()` mode (via `mixer.dense_forward`, sharing
 the mixer's own `q/k/v/out` projections) and their sparse heuristic in `eval()`
 mode. They can therefore appear in a training preset; the one-time `UserWarning`
 marks the dense surrogate. See §2 (dispatch) and §9 (cache).
 
-`swa_attn` implements SWA($w$, $s$) from arXiv:2608.28444: every query attends
+`swa` implements SWA($w$, $s$) from arXiv:2608.28444: every query attends
 to the first `swa.num_sinks` tokens plus the `swa.window_size -
 swa.num_sinks` most recent tokens (causal in decoder mode, symmetric in
 encoder mode). The mask is built vectorized; there are no extra parameters
 beyond the standard attention projections, and the receptive field after `l`
 layers is `l·(w−s)` plus the always-visible sink prefix.
 
-`memory_attn` implements Memory Attention from arXiv:2609.28399: the value
+`memory` implements Memory Attention from arXiv:2609.28399: the value
 projection is removed and values are `V = K + RMSNorm(E[s])`, where
 `E ∈ R^{vocab_size × d_v}` is a per-layer token-ID memory table and
 `d_v = num_kv_heads · head_dim`. RoPE applies to the scoring pair only (values
-come from the unrotated keys); the mixer needs `input_ids` like `engram_attn`.
+come from the unrotated keys); the mixer needs `input_ids` like `engram`.
 Attention weights are standard softmax, so the KV cache is a plain `KVSlot`.
 
-`lsa_attn` implements Native-LSA from arXiv:2610.42147: keys are L2-normalised,
+`lsa` implements Native-LSA from arXiv:2610.42147: keys are L2-normalised,
 pooled every `lsa.pool_size` tokens and Ward-clustered per complete
 `lsa.cluster_block` into `lsa.cluster_block / lsa.keys_per_bucket` buckets
 whose unit-norm centroids are scored by the best query head
@@ -430,12 +429,12 @@ whose unit-norm centroids are scored by the best query head
 buckets, best first, into `lsa.num_long_range` long-range keys and attends to
 `lsa.num_sinks` sinks + selection + its own block (window `n_w =
 lsa.cluster_block`), with one index list shared by every head. The mixer adds
-no parameters, defaults `lsa_attn_use_pe` to `false` (N-LSA trains without
+no parameters, defaults `lsa_use_pe` to `false` (N-LSA trains without
 positional encoding) and stops the gradient through the selection. Buckets are
 immutable once a block completes, so the `BucketKVSlot` incremental branch is
 exact; flat search scores about `T/keys_per_bucket` centroids per decode step.
 
-`fastconformer_attn` implements Fast Conformer limited-context attention from
+`fastconformer` implements Fast Conformer limited-context attention from
 arXiv:2305.05084: every query attends to a symmetric local window
 (`fastconformer.window_size`, paper §3.4: 128 per side, i.e. 256) plus
 `fastconformer.global_tokens` global attention tokens pinned at the head
@@ -650,30 +649,30 @@ logical roles). Per-layer storage is typed:
 | `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
 
 **Capability registry (D5).** `src/model/cache/capabilities.py` holds one
-`CacheSpec` per `layer_pattern` enum value (48). A layer caches only when
+`CacheSpec` per `layer_pattern` enum value (47). A layer caches only when
 the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
 (incremental branch implemented + parity-tested). Everything else receives
 `cache=None` and runs the legacy path — **inference never fails because of
 the cache**; `config_loader` warns about the fallback mixers.
 
 Implemented cached branches (parity-tested in
-`tests/test_kv_cache_mixers.py`): `standard_attn`, `gqa_attn`,
-`sigmoid_attn`, `gated_softmax_attn`, `titan_attn`, `fox_attn`,
-`mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`,
-`gta_attn`, `swa_attn`, `longformer_attn`, `bigbird_attn`,
-`sparse_transformer_attn`, `fasa_attn`, `retnet`, `retnet_attn`,
-`gla_attn`, `deltanet_attn`, `gated_deltanet_attn`,
-`gated_deltanet2_attn`, `hgrn2_attn`, `kda_attn`, `gma_attn`, `memory_attn`,
-`lsa_attn` (`BucketKVSlot`: KV + immutable per-block bucket centroids/index
-table, never quantized), `fastconformer_attn` (`RingSlot`: pinned head prefix
+`tests/test_kv_cache_mixers.py`): `standard`, `gqa`,
+`sigmoid`, `gated_softmax`, `titan`, `fox`,
+`mla`, `gqla`, `mlra`, `tucker`, `iha`,
+`gta`, `swa`, `longformer`, `bigbird`,
+`sparse_transformer`, `fasa`, `retnet`, `retnet`,
+`gla`, `deltanet`, `gated_deltanet`,
+`gated_deltanet2`, `hgrn2`, `kda`, `gma`, `memory`,
+`lsa` (`BucketKVSlot`: KV + immutable per-block bucket centroids/index
+table, never quantized), `fastconformer` (`RingSlot`: pinned head prefix
 covers the global tokens).
-Documented fallbacks: `mamba` (stateless), `ssog_attn` (bidirectional
+Documented fallbacks: `mamba` (stateless), `ssog` (bidirectional
 vision grid, no causal formulation), `ode` (solver re-derives all
 intermediate states each step), `falcon*` (chunk-parallel rehearsal FIFO),
-`cca_attn`/`ccgqa_attn` (conv tails), `engram_attn` (token tail),
-`nsa_attn`/`msa_attn`/`sparda_attn`/`sparge_attn` (chunk-level block
-statistics are not row-local), `mtla_attn` (dynamic merge schedule),
-`sparsek_attn` (policy in F4), plus every PaPE-configured layer (D10).
+`cca`/`ccgqa` (conv tails), `engram` (token tail),
+`nsa`/`msa`/`sparda`/`sparge` (chunk-level block
+statistics are not row-local), `mtla` (dynamic merge schedule),
+`sparsek` (policy in F4), plus every PaPE-configured layer (D10).
 
 **Positional encodings (§8 of the plan).** RoPE/HoPE/sinusoidal-rotary
 accept `position_offset` (blocker B1); ALiBi/BAM accept
@@ -936,7 +935,7 @@ last. Every step below ends with the gates in §12.
 6. Add `configs/examples/<family>_<mixer>_adamw.yaml`.
 7. If the mixer has an incremental branch, add a `CacheSpec` to
    `src/model/cache/capabilities.py` and list it in `IMPLEMENTED_MIXERS`;
-   otherwise register `supported=False` (as `conformer_attn` does) and rely
+   otherwise register `supported=False` (as `conformer` does) and rely
    on the legacy full-recompute path.
 8. Test: `tests/test_schema_attention_layers.py`,
    `tests/test_attention_refactor.py`, plus the family test
@@ -1091,7 +1090,7 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 | D2 | Keep one flat `FrankensteinModelConfig` plus an explicit flattener | The runtime stays simple and old checkpoints stay loadable |
 | D3 | Split the old `frankenstein_model.py` into `config.py`, `hybrid_layer.py`, encoder/decoder/ViT | Smaller coupling surface; enforced by a regression test |
 | D4 | `model.bitnet.enabled` defaults to **true** | BitNet is the project's deployment story; disable explicitly for FP32 |
-| D5 | `fasa_attn` and `sparge_attn` train as dense attention and infer sparsely | Their selection/pruning rules are inference-time by design; the dense surrogate shares the projections so trained weights are exactly the ones the sparse path reads |
+| D5 | `fasa` and `sparge` train as dense attention and infer sparsely | Their selection/pruning rules are inference-time by design; the dense surrogate shares the projections so trained weights are exactly the ones the sparse path reads |
 | D6 | mHC and Mixture-of-Depths are mutually exclusive | MoD routes a single C-dimensional stream; mHC keeps `n` streams |
 | D7 | Develop and test on CPU | Reproducible, CI-parity, no GPU required; CUDA is only for real runs |
 | D8 | Every preset/example is schema-smoke-tested | A broken YAML cannot reach `main` |
@@ -1102,10 +1101,10 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 
 ## 14. Known limitations
 
-- `fasa_attn` / `sparge_attn` train as standard dense attention (no learned sparse rule); their sparse path is inference-only.
-- `lsa_attn` is a CPU-first reference implementation: it materialises the per-query key set `J_i` densely, so its memory grows with `num_long_range + cluster_block + num_sinks` per query. The paper's kernels (`docs/paper/`, arXiv:2610.42147) chunk and threshold the scan; that is out of scope here, and the tree search variant is not implemented.
+- `fasa` / `sparge` train as standard dense attention (no learned sparse rule); their sparse path is inference-only.
+- `lsa` is a CPU-first reference implementation: it materialises the per-query key set `J_i` densely, so its memory grows with `num_long_range + cluster_block + num_sinks` per query. The paper's kernels (`docs/paper/`, arXiv:2610.42147) chunk and threshold the scan; that is out of scope here, and the tree search variant is not implemented.
 - mHC and MoD cannot be enabled together.
-- `ssog_attn` is encoder-oriented and expects a `grid_h × grid_w` raster.
+- `ssog` is encoder-oriented and expects a `grid_h × grid_w` raster.
 - `mamba` is currently a linear placeholder in the registry, not a full SSM.
 - Looped depth shares weights; it increases compute, not capacity.
 - BitNet is experimental; ternary weights may degrade quality.
@@ -1113,14 +1112,14 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
   registry (`src/model/cache/capabilities.py`) marks a mixer cacheable only
   when `supported` *and* listed in `IMPLEMENTED_MIXERS`; the rest fall back
   to the full-recompute path (never an error, D5). Current fallbacks:
-  `mamba` (stateless), `ssog_attn` (no causal formulation), `ode` (the
+  `mamba` (stateless), `ssog` (no causal formulation), `ode` (the
   solver re-derives every token's intermediate state each step, so a
   converged-state cache is not exact), the `falcon*` family (chunk-parallel
-  rehearsal FIFO), `cca_attn`/`ccgqa_attn` (conv tails), `engram_attn`
-  (token tail), `nsa_attn`/`msa_attn`/`sparda_attn`/`sparge_attn` (their
-  block-selection statistics are chunk-level, not row-local), `mtla_attn`
-  (dynamic hyper-network merge schedule; named risk R1), `sparsek_attn`
-  (eviction-policy work, F4), `conformer_attn` (the depthwise-convolution
+  rehearsal FIFO), `cca`/`ccgqa` (conv tails), `engram`
+  (token tail), `nsa`/`msa`/`sparda`/`sparge` (their
+  block-selection statistics are chunk-level, not row-local), `mtla`
+  (dynamic hyper-network merge schedule; named risk R1), `sparsek`
+  (eviction-policy work, F4), `conformer` (the depthwise-convolution
   state and BatchNorm running statistics are not carried), and any
   PaPE-configured layer (D10 — content-dependent q/k augmentation, caching
   exactness unproven).

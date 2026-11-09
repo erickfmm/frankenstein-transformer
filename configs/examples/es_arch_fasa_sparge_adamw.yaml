@@ -1,6 +1,6 @@
 # Inference-sparse mixers trained as dense attention.
 #
-# `fasa_attn` (FASA; arXiv:2602.03152) and `sparge_attn` (SpargeAttn;
+# `fasa` (FASA; arXiv:2602.03152) and `sparge` (SpargeAttn;
 # arXiv:2502.18137) define only an inference-time sparse heuristic
 # (frequency-aware token selection / two-stage block pruning). The enclosing
 # `HybridLayer` therefore substitutes standard dense attention over the same
@@ -18,16 +18,16 @@ model:
     num_heads: 8
     num_kv_heads: 4
     layer_pattern:
-    - fasa_attn
-    - sparge_attn
-    - fasa_attn
-    - sparge_attn
-    - fasa_attn
-    - sparge_attn
-    - fasa_attn
-    - sparge_attn
-    - fasa_attn
-    - sparge_attn
+    - fasa
+    - sparge
+    - fasa
+    - sparge
+    - fasa
+    - sparge
+    - fasa
+    - sparge
+    - fasa
+    - sparge
   norm:
     type: layer_norm
   embedding:

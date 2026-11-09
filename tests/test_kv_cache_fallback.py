@@ -21,7 +21,7 @@ if TORCH_AVAILABLE:
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.hybrid_layer import HybridLayer
 
-EVAL_ONLY = {"fasa_attn", "sparge_attn"}
+EVAL_ONLY = {"fasa", "sparge"}
 
 
 def _schema_enum():
@@ -59,24 +59,24 @@ def _build(pattern, pe="rope", **extra):
 class RegistryConsistencyTests(unittest.TestCase):
     def test_capacity_spec_covers_every_enum_value(self):
         enum = _schema_enum()
-        self.assertEqual(len(enum), 48)
+        self.assertEqual(len(enum), 47)
         self.assertEqual(set(CACHE_SPECS), set(enum))
         # All implemented mixers must exist in the schema enum.
         self.assertTrue(IMPLEMENTED_MIXERS.issubset(set(enum)))
 
     def test_never_cached_mixers(self):
-        self.assertFalse(is_cacheable("ssog_attn"))
-        self.assertFalse(is_cacheable("conformer_attn"))
+        self.assertFalse(is_cacheable("ssog"))
+        self.assertFalse(is_cacheable("conformer"))
         self.assertFalse(is_cacheable("mamba"))
         self.assertFalse(is_cacheable("not_a_mixer"))
 
     def test_eval_only_mixers_are_cacheable(self):
         # FASA has an implemented cached branch (row-local top-k).
-        self.assertTrue(is_cacheable("fasa_attn"))
+        self.assertTrue(is_cacheable("fasa"))
         # SpargeAttn is registered as cacheable-in-principle but v1 falls
         # back (block means are not row-local) — no exception, D5.
-        self.assertTrue(CACHE_SPECS["sparge_attn"].supported)
-        self.assertFalse(is_cacheable("sparge_attn"))
+        self.assertTrue(CACHE_SPECS["sparge"].supported)
+        self.assertFalse(is_cacheable("sparge"))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -93,8 +93,8 @@ class FallbackTests(unittest.TestCase):
         the legacy path does not already have.
         """
         extra_cfg = {
-            "msa_attn": {"msa_block_size": 4, "msa_topk_blocks": 1},
-            "ssog_attn": {"ssog_grid_h": 2, "ssog_grid_w": 3},
+            "msa": {"msa_block_size": 4, "msa_topk_blocks": 1},
+            "ssog": {"ssog_grid_h": 2, "ssog_grid_w": 3},
         }
         for mixer in _schema_enum():
             with self.subTest(mixer=mixer):
@@ -103,7 +103,7 @@ class FallbackTests(unittest.TestCase):
                     model = _build([mixer], **kwargs)
                 except Exception:
                     continue  # pre-existing construction constraint
-                if mixer == "ssog_attn":
+                if mixer == "ssog":
                     x = torch.randint(0, 64, (1, 6))
                     with torch.inference_mode():
                         out = model(x)
@@ -126,7 +126,7 @@ class FallbackTests(unittest.TestCase):
         """Mixers without an implemented branch produce identical logits."""
         from src.model.cache import FrankensteinCache
 
-        for mixer in ("ode", "falcon1_attn", "engram_attn", "nsa_attn"):
+        for mixer in ("ode", "falcon1", "engram", "nsa"):
             with self.subTest(mixer=mixer):
                 model = _build([mixer])
                 x = torch.randint(0, 64, (1, 6))
@@ -137,7 +137,7 @@ class FallbackTests(unittest.TestCase):
                 self.assertTrue(torch.equal(legacy, cached))
 
     def test_pape_layer_falls_back_while_others_cache(self):
-        model = _build(["standard_attn", "standard_attn"], pe="pape")
+        model = _build(["standard", "standard"], pe="pape")
         prompt = torch.randint(0, 64, (1, 5))
         with torch.inference_mode():
             legacy = model.generate(prompt.clone(), max_new_tokens=3, greedy=True)
@@ -147,7 +147,7 @@ class FallbackTests(unittest.TestCase):
         self.assertTrue(torch.equal(legacy, cached))
 
     def test_mamba_runs_unchanged_in_cached_loop(self):
-        model = _build(["mamba", "standard_attn"])
+        model = _build(["mamba", "standard"])
         prompt = torch.randint(0, 64, (1, 5))
         with torch.inference_mode():
             legacy = model.generate(prompt.clone(), max_new_tokens=3, greedy=True)

@@ -7,7 +7,7 @@ model:
     num_loops: 1
     num_heads: 10
     layer_pattern:
-    - sigmoid_attn
+    - sigmoid
   norm:
     type: derf
   embedding:

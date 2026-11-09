@@ -102,7 +102,7 @@ class MhcModelTests(unittest.TestCase):
             norm_type="layer_norm",
             use_bitnet=False,
             use_moe=False,
-            layer_pattern=["standard_attn", "retnet"],
+            layer_pattern=["standard", "retnet"],
             positional_encoding="hope",
             mode="encoder",
             use_mhc=True,
@@ -151,7 +151,7 @@ class MhcModelTests(unittest.TestCase):
     def test_mod_incompatible_with_mhc(self):
         cfg = self._cfg(use_mixture_of_depths=True)
         with self.assertRaises(ValueError):
-            HybridLayer(cfg, layer_type="standard_attn")
+            HybridLayer(cfg, layer_type="standard")
 
     def test_stream_expansion_modules_present(self):
         cfg = self._cfg()
@@ -174,7 +174,7 @@ class MhcHybridLayerTests(unittest.TestCase):
             norm_type="layer_norm",
             use_bitnet=False,
             use_moe=False,
-            layer_pattern=["standard_attn"],
+            layer_pattern=["standard"],
             use_mhc=True,
             mhc_expansion_rate=2,
             positional_encoding="hope",
@@ -182,7 +182,7 @@ class MhcHybridLayerTests(unittest.TestCase):
         )
 
     def test_hybrid_layer_nstream_output(self):
-        layer = HybridLayer(self._cfg(), layer_type="standard_attn")
+        layer = HybridLayer(self._cfg(), layer_type="standard")
         x = torch.randn(2, 8, 2, 48)
         y = layer(x)
         self.assertEqual(y.shape, (2, 8, 2, 48))
@@ -309,12 +309,12 @@ class HyperloopModelTests(unittest.TestCase):
             mode="encoder",
             positional_encoding="hope",
             layer_pattern=[
-                "standard_attn",
+                "standard",
                 "retnet",
-                "titan_attn",
-                "standard_attn",
+                "titan",
+                "standard",
                 "retnet",
-                "titan_attn",
+                "titan",
             ],
             use_mhc=True,
             mhc_expansion_rate=4,
@@ -425,7 +425,7 @@ class HyperloopModelTests(unittest.TestCase):
 
         cfg = self._cfg(mhc_hyperloop=False, use_mixture_of_depths=True)
         with self.assertRaises(ValueError):
-            HybridLayer(cfg, layer_type="standard_attn")
+            HybridLayer(cfg, layer_type="standard")
 
 
 if __name__ == "__main__":

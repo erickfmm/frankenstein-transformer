@@ -62,16 +62,16 @@ class FrankensteinDecoder(nn.Module):
             use_bitnet: Whether to use BitNet ternary quantization.
                 Default: True.
             layer_pattern: Optional custom layer pattern. If None, defaults
-                to ``["titan_attn", "retnet", "titan_attn", "mamba"] * 3``.
+                to ``["titan", "retnet", "titan", "mamba"] * 3``.
 
         Returns:
             A pre-configured :class:`FrankensteinModelConfig` with ``mode='decoder'``.
         """
         if layer_pattern is None:
             layer_pattern = [
-                "titan_attn",
+                "titan",
                 "retnet",
-                "titan_attn",
+                "titan",
                 "mamba",
             ] * 3
         return FrankensteinModelConfig(

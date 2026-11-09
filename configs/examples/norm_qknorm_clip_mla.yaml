@@ -11,7 +11,7 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - mla_attn
+    - mla
     mode: decoder
   norm:
     type: rms_norm

@@ -45,39 +45,39 @@ QK_NORM_METHODS = FORWARD_METHODS | TRAINING_METHODS
 #: :func:`attach_qk_norm` and record per-head max logits.
 QK_NORM_MIXERS = frozenset(
     {
-        "standard_attn",
-        "sigmoid_attn",
-        "gqa_attn",
-        "mla_attn",
-        "swa_attn",
-        "longformer_attn",
-        "fastconformer_attn",
-        "bigbird_attn",
-        "sparse_transformer_attn",
-        "gta_attn",
-        "iha_attn",
-        "mtla_attn",
-        "gma_attn",
-        "nsa_attn",
-        "sparsek_attn",
-        "msa_attn",
-        "sparda_attn",
-        "conformer_attn",
-        "fox_attn",
-        "gated_softmax_attn",
-        "titan_attn",
-        "gqla_attn",
-        "mlra_attn",
-        "memory_attn",
-        "lsa_attn",
+        "standard",
+        "sigmoid",
+        "gqa",
+        "mla",
+        "swa",
+        "longformer",
+        "fastconformer",
+        "bigbird",
+        "sparse_transformer",
+        "gta",
+        "iha",
+        "mtla",
+        "gma",
+        "nsa",
+        "sparsek",
+        "msa",
+        "sparda",
+        "conformer",
+        "fox",
+        "gated_softmax",
+        "titan",
+        "gqla",
+        "mlra",
+        "memory",
+        "lsa",
     }
 )
 
 #: Mixers that additionally form per-head dot-product logits and therefore
 #: support QK-Clip (which needs the per-head maximum pre-softmax logit).
-#: ``gma_attn`` routes tokens through Gaussian mixture responsibilities rather
+#: ``gma`` routes tokens through Gaussian mixture responsibilities rather
 #: than a QK dot product, so QK-Clip is not meaningful there.
-QK_CLIP_MIXERS = QK_NORM_MIXERS - {"gma_attn"}
+QK_CLIP_MIXERS = QK_NORM_MIXERS - {"gma"}
 
 
 class QKNorm(nn.Module):

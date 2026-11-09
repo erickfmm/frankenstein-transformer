@@ -25,7 +25,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 |:------:|:----------:|:--------------:|:-----------:|:-----:|:-------------:|:-----:|:-------:|:------------:|
 | **47** | **36** | **12** | **43** | **6** | **4** | **9** | **175** | **4** |
 
-> **47 distinct mixer architectures** — the schema exposes 48 `layer_pattern` keys because `retnet` remains a legacy alias of `retnet_attn`. The positional-encoding count includes `none`; 11 methods inject position.
+> **47 mixer architectures** — the schema exposes 47 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
 
 ## How It Works
 
@@ -72,7 +72,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | **47 distinct** across 10 families (48 `layer_pattern` keys incl. the `retnet` alias): Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
+| Sequence mixer architectures | **47** across 10 families: Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
 | Optimizer families | 36 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
 | FFN activations | 43 (40 elementwise + `swiglu`, `geglu`, `reglu`) |
@@ -92,7 +92,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
-| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 47 mixer architectures (48 `layer_pattern` keys incl. alias) |
+| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 47 mixer architectures |
 | `frankenstein_text_decoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 | `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `vision_dataset:` blocks |
 | `frankenstein_audio` | Encoder (audio) | Audio Transformer for ASR and audio/signal classification; log-mel/spectrogram/raw frontend, conv subsampling, CTC/RNN-T or classification heads; forces `mode: encoder`, requires `audio:` + `audio_dataset:` blocks |
@@ -114,20 +114,20 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 | Category | Code Names | Description |
 |----------|------------|-------------|
-| **Dense** (2) | `standard_attn`, `sigmoid_attn` | Full quadratic attention variants |
-| **GQA** (1) | `gqa_attn` | Grouped-query attention with configurable KV heads |
-| **Recurrent** (5) | `retnet_attn` (`retnet` alias), `mamba`, `ode`, `titan_attn`, `engram_attn` | Retention networks, state-space models, continuous-depth ODE layers, memory-augmented attention, and n-gram memory |
-| **Sparse** (12) | `sparse_transformer_attn`, `longformer_attn`, `swa_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn` ⚠️, `fasa_attn` ⚠️, `msa_attn`, `sparda_attn`, `lsa_attn`, `fastconformer_attn` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), semantic key-clustering, and head-pinned global-token long-form patterns |
-| **Gated** (8) | `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `gated_deltanet2_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`, `kda_attn` | Linear attention with multiplicative gates, delta rules, and gated softmax |
-| **Fast-Weight** (6) | `falcon1_attn`, `falcon2_attn`, `falcon3_attn`, `falcon1a_attn`, `falcon2a_attn`, `falcon3a_attn` | Fast-weight / online-learning attention with per-layer fast-weight update rules |
-| **Latent** (10) | `mla_attn`, `gqla_attn`, `mlra_attn`, `tucker_attn`, `iha_attn`, `gta_attn`, `mtla_attn`, `cca_attn`, `ccgqa_attn`, `gma_attn` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
-| **Geometric** (1) | `ssog_attn` | Separable Sum of Gaussians — geometric field attention |
-| **Convolution-augmented** (1) | `conformer_attn` | Macaron FFN₁ + MHSA + depthwise-conv module (arXiv:2005.08100) |
-| **Memory** (1) | `memory_attn` | Token-ID memory values: `V = K + Norm(E[s])`; removes the value projection (arXiv:2609.28399) |
+| **Dense** (2) | `standard`, `sigmoid` | Full quadratic attention variants |
+| **GQA** (1) | `gqa` | Grouped-query attention with configurable KV heads |
+| **Recurrent** (5) | `retnet`, `mamba`, `ode`, `titan`, `engram` | Retention networks, state-space models, continuous-depth ODE layers, memory-augmented attention, and n-gram memory |
+| **Sparse** (12) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa`, `fastconformer` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), semantic key-clustering, and head-pinned global-token long-form patterns |
+| **Gated** (8) | `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `gated_softmax`, `kda` | Linear attention with multiplicative gates, delta rules, and gated softmax |
+| **Fast-Weight** (6) | `falcon1`, `falcon2`, `falcon3`, `falcon1a`, `falcon2a`, `falcon3a` | Fast-weight / online-learning attention with per-layer fast-weight update rules |
+| **Latent** (10) | `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`, `cca`, `ccgqa`, `gma` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
+| **Geometric** (1) | `ssog` | Separable Sum of Gaussians — geometric field attention |
+| **Convolution-augmented** (1) | `conformer` | Macaron FFN₁ + MHSA + depthwise-conv module (arXiv:2005.08100) |
+| **Memory** (1) | `memory` | Token-ID memory values: `V = K + Norm(E[s])`; removes the value projection (arXiv:2609.28399) |
 
-⚠️ `sparge_attn` and `fasa_attn` are **inference-sparse**: they train as dense attention over their own projections, then activate their sparse heuristic in `eval()`. They are valid in training presets.
+⚠️ `sparge` and `fasa` are **inference-sparse**: they train as dense attention over their own projections, then activate their sparse heuristic in `eval()`. They are valid in training presets.
 
-Configure via `layer_pattern` in YAML. The schema accepts 48 keys for 47 distinct architectures: `retnet` is a legacy alias of `retnet_attn`. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
+Configure via `layer_pattern` in YAML. The schema accepts 47 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
 
 ## Optimizer Categories
 
@@ -251,7 +251,7 @@ model:
   hidden_size: 256
   num_layers: 4
   num_heads: 8
-  layer_pattern: [standard_attn, standard_attn, standard_attn, standard_attn]
+  layer_pattern: [standard, standard, standard, standard]
 training:
   task: mlm
   batch_size: 8
@@ -304,7 +304,7 @@ model:
     hidden_size: 768
     num_layers: 12
     num_heads: 12
-    layer_pattern: [standard_attn]
+    layer_pattern: [standard]
     mode: encoder
   norm: {type: layer_norm}
   use_moe: false

@@ -68,7 +68,7 @@ class GroupedQueryAttention(nn.Module):
         self.mode = getattr(config, "mode", "encoder")
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "gqa_attn_use_pe", True))
+        self.use_pe = bool(getattr(config, "gqa_use_pe", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def forward(

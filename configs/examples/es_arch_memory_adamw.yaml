@@ -12,10 +12,10 @@ model:
     num_kv_heads: 4
     dropout: 0.1
     layer_pattern:
-    - memory_attn
-    - memory_attn
-    - memory_attn
-    - memory_attn
+    - memory
+    - memory
+    - memory
+    - memory
     mode: encoder
   norm:
     type: layer_norm

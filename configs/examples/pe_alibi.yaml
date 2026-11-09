@@ -6,7 +6,7 @@ model:
     num_layers: 2
     num_heads: 4
     layer_pattern:
-    - standard_attn
+    - standard
     mode: encoder
   positional_encoding: alibi
   positional_encoding_parameters:

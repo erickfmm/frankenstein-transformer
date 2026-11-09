@@ -89,7 +89,7 @@ class TitanAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = positional_encoding
-        self.use_pe = bool(getattr(config, "titan_attn_use_pe", True))
+        self.use_pe = bool(getattr(config, "titan_use_pe", True))
         attach_qk_norm(self, config, self.head_dim)
 
         self.dropout = nn.Dropout(config.dropout)

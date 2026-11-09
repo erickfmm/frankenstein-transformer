@@ -12,7 +12,7 @@ position-based sparse patterns (plan §5.6 / blocker B5).
 
 Constraints (plan §10): policies apply only to position-indexed slots
 (``KVSlot`` / ``RingSlot`` / ``LatentKVSlot``) and never run on
-``mtla_attn`` slots (D13 — MTLA manages its own merging schedule).
+``mtla`` slots (D13 — MTLA manages its own merging schedule).
 """
 
 from __future__ import annotations

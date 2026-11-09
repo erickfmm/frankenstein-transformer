@@ -24,7 +24,7 @@ if TORCH_AVAILABLE:
 
 def _meta(idx=0):
     return SlotMeta(
-        mixer_key="standard_attn",
+        mixer_key="standard",
         logical_layer_idx=idx,
         num_heads=2,
         num_kv_heads=2,
@@ -87,7 +87,7 @@ class WindowSinksModelTests(unittest.TestCase):
         cfg = FrankensteinModelConfig(
             vocab_size=64, hidden_size=32, num_layers=1, num_loops=1,
             num_heads=4, num_kv_heads=2, dropout=0.0, use_bitnet=False,
-            layer_pattern=["standard_attn"], mode="decoder",
+            layer_pattern=["standard"], mode="decoder",
             positional_encoding="rope", norm_type="layer_norm", ffn_hidden_size=64,
         )
         torch.manual_seed(0)

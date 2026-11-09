@@ -221,14 +221,14 @@ Some mixers need a small FIFO beside their activation cache. Falcon's chunk-para
 \textbf{Mixer} & \textbf{Why it runs uncached in v1} \\
 \midrule
 \texttt{mamba} & linear placeholder; stateless per token, inherently incremental \\
-\texttt{ssog\_attn} & bidirectional vision grid; no causal formulation exists \\
+\texttt{ssog} & bidirectional vision grid; no causal formulation exists \\
 \texttt{ode} & solver re-derives all tokens' intermediate states each step \\
 \texttt{falcon1..3a} & chunk-parallel rehearsal FIFO (\texttt{conv\_tail} design pending) \\
-\texttt{cca\_attn}, \texttt{ccgqa\_attn} & two causal convolutions + shifted value \\
-\texttt{engram\_attn} & token-id tail (\texttt{token\_tail} design pending) \\
+\texttt{cca}, \texttt{ccgqa} & two causal convolutions + shifted value \\
+\texttt{engram} & token-id tail (\texttt{token\_tail} design pending) \\
 \texttt{nsa}, \texttt{msa}, \texttt{sparda}, \texttt{sparge} & block selection uses chunk-level statistics, not row-local \\
-\texttt{mtla\_attn} & dynamic hyper-network merge schedule (risk R1) \\
-\texttt{sparsek\_attn} & eviction-policy design (SparseK is a policy, not a slot) \\
+\texttt{mtla} & dynamic hyper-network merge schedule (risk R1) \\
+\texttt{sparsek} & eviction-policy design (SparseK is a policy, not a slot) \\
 PaPE layers & content-dependent q/k augmentation; exactness unproven \\
 \bottomrule
 \end{tabularx}

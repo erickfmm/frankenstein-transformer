@@ -8,8 +8,8 @@ model:
     num_heads: 8
     num_kv_heads: 4
     layer_pattern:
-    - gqa_attn
-    - gqa_attn
+    - gqa
+    - gqa
   norm:
     type: layer_norm
   embedding:

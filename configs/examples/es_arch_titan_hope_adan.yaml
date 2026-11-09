@@ -6,7 +6,7 @@ model:
     num_layers: 8
     num_heads: 12
     layer_pattern:
-    - titan_attn
+    - titan
   attention:
     retnet:
       heads: 12

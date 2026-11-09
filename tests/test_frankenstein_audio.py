@@ -4,7 +4,7 @@
 Covers the waveform frontends (log-mel, spectrogram, raw multichannel
 signals), the exact ``output_lengths`` bookkeeping, CTC/RNN-Transducer and
 audio-classification heads, pooling modes, forced ``mode: encoder``, gradient
-flow, mixer combinations (``conformer_attn`` + ``standard_attn``), mHC /
+flow, mixer combinations (``conformer`` + ``standard``), mHC /
 AttnRes / Hyperloop smoke tests, positional-encoding length changes and
 ``configure_optimizers``.
 """
@@ -40,7 +40,7 @@ def _tiny_audio_config(**overrides) -> "FrankensteinModelConfig":
         dropout=0.0,
         norm_type="layer_norm",
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         use_moe=False,
         ode_solver="rk4",
         ode_steps=1,
@@ -223,7 +223,7 @@ class TestFrankensteinAudio:
 
     def test_conformer_and_standard_mixers(self, dummy_waveform):
         cfg = _tiny_audio_config(
-            layer_pattern=["conformer_attn", "standard_attn"],
+            layer_pattern=["conformer", "standard"],
             positional_encoding="sinusoidal_absolute",
         )
         model = FrankensteinAudio(cfg)
@@ -308,7 +308,7 @@ class TestFrankensteinAudio:
         cfg = FrankensteinAudio.build_audio_config()
         assert cfg.hidden_size == 256
         assert cfg.num_layers == 17
-        assert cfg.layer_pattern == ["conformer_attn"] * 17
+        assert cfg.layer_pattern == ["conformer"] * 17
         assert cfg.mode == "encoder"
         assert cfg.audio_feature == "logmel"
         assert cfg.ffn_activation == "silu"

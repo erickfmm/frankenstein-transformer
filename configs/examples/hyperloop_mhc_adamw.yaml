@@ -9,12 +9,12 @@ model:
     num_loops: 3
     num_heads: 6
     layer_pattern:
-    - titan_attn
+    - titan
     - retnet
-    - standard_attn
-    - sigmoid_attn
+    - standard
+    - sigmoid
     - retnet
-    - titan_attn
+    - titan
   norm:
     type: layer_norm
   embedding:

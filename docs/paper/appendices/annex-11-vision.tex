@@ -84,7 +84,7 @@ A fraction $P_\text{mask}$ of patches is masked during training, with the fracti
 Because the \texttt{HybridLayer} stack is modality-agnostic and operates purely on $(B, S, D)$ tensors, the Vision Transformer reuses the entire encoder-side machinery without modification:
 
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Attention mixers:} all 34 sequence mixers are available, except \texttt{engram\_attn}, which requires discrete token IDs and is therefore not meaningful for continuous patch embeddings.
+    \item \textbf{Attention mixers:} all 34 sequence mixers are available, except \texttt{engram}, which requires discrete token IDs and is therefore not meaningful for continuous patch embeddings.
     \item \textbf{Normalization:} all 6 norm variants (LayerNorm, RMSNorm, pRMSNorm, DyT, Derf, FlashNorm).
     \item \textbf{Residuals:} all 4 residual variants.
     \item \textbf{Activations:} all 42 activation functions (including GLU gated FFN units).

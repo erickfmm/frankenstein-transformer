@@ -7,7 +7,7 @@ model:
     num_loops: 1
     num_heads: 8
     layer_pattern:
-    - standard_attn
+    - standard
   norm:
     type: prms_norm
     partial_ratio: 0.0625

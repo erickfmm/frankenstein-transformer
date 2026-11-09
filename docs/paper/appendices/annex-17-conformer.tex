@@ -3,7 +3,7 @@
 
 \subsection{Executive Summary}
 
-The Conformer block \citep{Gulati2020} is the toolkit's convolution-augmented sequence mixer, exposed as \texttt{conformer\_attn}. It keeps the global receptive field of scaled dot-product attention and adds a depthwise-convolution branch that models local, narrow-band structure---the inductive bias speech recognition needs and the one plain self-attention lacks. The block sandwiches multi-head self-attention (MHSA) with relative sinusoidal positional encodings between two Macaron-style half-step feed-forward layers \citep{Lu2019}, and inserts the convolution module between the attention and the second FFN. In the reference recipe it reaches $1.9\%$/$3.9\%$ WER on LibriSpeech \emph{test-clean}/\emph{test-other} without an external language model (Conformer-L, 118.8M parameters), and it is the mixer recommended for the audio model class of Appendix~\ref{sec:annex-18}. The toolkit runs both feed-forward layers at full step (the paper's ``full-step'' variant of its Table~5) and lets the outer layer own the second one; Table~\ref{tab:conformer-mapping} lists the deviations.
+The Conformer block \citep{Gulati2020} is the toolkit's convolution-augmented sequence mixer, exposed as \texttt{conformer}. It keeps the global receptive field of scaled dot-product attention and adds a depthwise-convolution branch that models local, narrow-band structure---the inductive bias speech recognition needs and the one plain self-attention lacks. The block sandwiches multi-head self-attention (MHSA) with relative sinusoidal positional encodings between two Macaron-style half-step feed-forward layers \citep{Lu2019}, and inserts the convolution module between the attention and the second FFN. In the reference recipe it reaches $1.9\%$/$3.9\%$ WER on LibriSpeech \emph{test-clean}/\emph{test-other} without an external language model (Conformer-L, 118.8M parameters), and it is the mixer recommended for the audio model class of Appendix~\ref{sec:annex-18}. The toolkit runs both feed-forward layers at full step (the paper's ``full-step'' variant of its Table~5) and lets the outer layer own the second one; Table~\ref{tab:conformer-mapping} lists the deviations.
 
 The mixer is available to every model class: the text encoder, the causal decoder (where depthwise padding is shifted to stay streaming-safe), the Vision Transformer, and \texttt{frankenstein\_audio}. Because the block lives inside \texttt{HybridLayer}, it composes with all 45 mixers, the 6 norms, the 4 residual strategies, MoE, Mixture-of-Depths, mHC, AttnRes, BitNet and the 23 optimizer families.
 
@@ -52,7 +52,7 @@ R_{\delta,\,2m} = \sin\!\big(\delta\,/\,10000^{2m/d_h}\big),
 R_{\delta,\,2m+1} = \cos\!\big(\delta\,/\,10000^{2m/d_h}\big).
 \label{eq:conformer-sinusoid}
 \end{equation}
-Because the encoding depends only on $\delta = i-j$, the block generalizes across utterance lengths. The toolkit routes positional information through the model-wide machinery that every other mixer uses: \texttt{model.positional\_encoding} (RoPE by default) is applied to $Q/K$, and \texttt{conformer\_attn\_use\_pe} (default \texttt{true}) lets a layer opt out. The paper's relative sinusoidal scheme is closest to \texttt{sinusoidal\_rotary} (sinusoidal frequencies applied as a rotation on $Q/K$, relative by construction); \texttt{alibi}/\texttt{bam} supply a distance bias instead of a rotation. A dedicated Transformer-XL-style relative-sinusoidal module is not implemented. In decoder mode the score matrix receives the usual causal mask before the softmax, and the fixed-softmax path of Appendix~\ref{sec:fixed-implementation} is used when \texttt{numerics.fixed\_softmax} is enabled.
+Because the encoding depends only on $\delta = i-j$, the block generalizes across utterance lengths. The toolkit routes positional information through the model-wide machinery that every other mixer uses: \texttt{model.positional\_encoding} (RoPE by default) is applied to $Q/K$, and \texttt{conformer\_use\_pe} (default \texttt{true}) lets a layer opt out. The paper's relative sinusoidal scheme is closest to \texttt{sinusoidal\_rotary} (sinusoidal frequencies applied as a rotation on $Q/K$, relative by construction); \texttt{alibi}/\texttt{bam} supply a distance bias instead of a rotation. A dedicated Transformer-XL-style relative-sinusoidal module is not implemented. In decoder mode the score matrix receives the usual causal mask before the softmax, and the fixed-softmax path of Appendix~\ref{sec:fixed-implementation} is used when \texttt{numerics.fixed\_softmax} is enabled.
 
 \paragraph{Convolution module.} The module applies a gated depthwise convolution over the time axis:
 \begin{align}
@@ -72,7 +72,7 @@ In decoder mode the sum in Equation~\ref{eq:conformer-depthwise} is shifted to $
 \subsubsection{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
-\caption{Conformer block (\texttt{conformer\_attn})}
+\caption{Conformer block (\texttt{conformer})}
 \begin{algorithmic}[1]
 \Require block input $x \in \mathbb{R}^{B \times n \times d}$, kernel $K=32$, heads $H$, Macaron flag, mode
 \Ensure block-level delta $\Delta$ such that $x + \Delta$ enters the outer $\mathrm{norm}_2 + \mathrm{FFN}_2$
@@ -94,7 +94,7 @@ In decoder mode the sum in Equation~\ref{eq:conformer-depthwise} is shifted to $
 
 \subsubsection{Implementation Mapping and Deviations}
 
-Table~\ref{tab:conformer-mapping} maps the paper block onto the toolkit. The substantive deviations are the two residual scalings and the second feed-forward layer: the paper keeps both $\tfrac12$ Macaron coefficients and wraps $\mathrm{FFN}_2$ in the block, whereas \texttt{conformer\_attn} uses full steps and returns the state after the convolution module, letting the outer \texttt{HybridLayer} apply its shared $\mathrm{norm}_2 + \mathrm{FFN}$ (also at full step). The decomposition is deliberate---it keeps MoE routing, Mixture-of-Depths, mHC/Hyperloop streams, AttnRes, FlashNorm fusion, BitNet projections and the per-parameter-group optimizer routing available for the second FFN, none of which would survive a private FFN inside the mixer.
+Table~\ref{tab:conformer-mapping} maps the paper block onto the toolkit. The substantive deviations are the two residual scalings and the second feed-forward layer: the paper keeps both $\tfrac12$ Macaron coefficients and wraps $\mathrm{FFN}_2$ in the block, whereas \texttt{conformer} uses full steps and returns the state after the convolution module, letting the outer \texttt{HybridLayer} apply its shared $\mathrm{norm}_2 + \mathrm{FFN}$ (also at full step). The decomposition is deliberate---it keeps MoE routing, Mixture-of-Depths, mHC/Hyperloop streams, AttnRes, FlashNorm fusion, BitNet projections and the per-parameter-group optimizer routing available for the second FFN, none of which would survive a private FFN inside the mixer.
 
 \begin{table}[H]
 \centering
@@ -104,7 +104,7 @@ Table~\ref{tab:conformer-mapping} maps the paper block onto the toolkit. The sub
 \textbf{Paper component} & \textbf{Toolkit implementation} & \textbf{Notes} \\
 \midrule
 $\tfrac{1}{2}\mathrm{FFN}_1$ (pre-norm) & private FFN inside \texttt{ConformerAttention}; Swish; full-step residual & \texttt{conformer.macaron: true} (default); the $\tfrac12$ coefficient of the paper is dropped; disabling leaves attention $+$ convolution only \\
-MHSA, relative sinusoidal PE & own $q/k/v/out$ projections; model-wide PE via \texttt{conformer\_attn\_use\_pe} (default \texttt{true}) & paper's relative sinusoid $\approx$ \texttt{sinusoidal\_rotary}; no dedicated Transformer-XL module (RoPE is the model-wide default) \\
+MHSA, relative sinusoidal PE & own $q/k/v/out$ projections; model-wide PE via \texttt{conformer\_use\_pe} (default \texttt{true}) & paper's relative sinusoid $\approx$ \texttt{sinusoidal\_rotary}; no dedicated Transformer-XL module (RoPE is the model-wide default) \\
 Convolution module & LN $\to$ pointwise $\to$ GLU $\to$ depthwise $\to$ BN $\to$ Swish $\to$ pointwise $\to$ dropout & \texttt{conformer.kernel\_size} (32), \texttt{conformer.conv\_norm} (\texttt{batch}/\texttt{group}/\texttt{layer}) \\
 $\tfrac{1}{2}\mathrm{FFN}_2$ at half step & \texttt{HybridLayer} $\mathrm{norm}_2 + \mathrm{FFN}$, full step & justified by Table~5 of \citet{Gulati2020}: $1.9/4.4$ vs.\ $1.9/4.5$ dev WER (both coefficients dropped) \\
 Final LayerNorm & \texttt{HybridLayer} final norm & unchanged from every other mixer \\
@@ -149,13 +149,13 @@ Because \texttt{ConformerAttention} returns a delta and inherits the \texttt{mix
     \item \textbf{Normalization:} all 6 variants, including partial RMSNorm and FlashNorm fusion on $\mathrm{norm}_1$/$\mathrm{norm}_2$; the convolution module keeps its own BatchNorm unless \texttt{conformer.conv\_norm} selects group or layer normalization.
     \item \textbf{Routing and residuals:} MoE, Mixture-of-Depths, mHC, Hyperloop, AttnRes and the BitNet ternary projections (the private FFN and the convolution projections are BitLinear-aware).
     \item \textbf{Optimizers:} all 23 families with per-group prefixes; mixer parameters, including the depthwise kernel and the convolution norms, route to the \texttt{attention} group.
-    \item \textbf{KV cache:} \texttt{conformer\_attn} is registered as \emph{not} cacheable (\texttt{supported=False}), because the depthwise-convolution state and the BatchNorm running statistics would have to be carried across steps. \texttt{generate()} falls back to the full-recompute path, which is exact.
+    \item \textbf{KV cache:} \texttt{conformer} is registered as \emph{not} cacheable (\texttt{supported=False}), because the depthwise-convolution state and the BatchNorm running statistics would have to be carried across steps. \texttt{generate()} falls back to the full-recompute path, which is exact.
 \end{itemize}
 
 \subsection{When to Use It}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Speech:} the default mixer for \texttt{asr} and \texttt{audio\_classification}; at 40\,ms frames after $4\times$ subsampling the kernel of 32 spans $\sim$1.28\,s of context, roughly the width of a phone sequence.
-    \item \textbf{Text and vision:} a strong drop-in for \texttt{standard\_attn} when the data has local structure (character-level models, code, OCR, patch sequences); it costs one depthwise convolution and two extra norms per layer over a plain attention block.
+    \item \textbf{Text and vision:} a strong drop-in for \texttt{standard} when the data has local structure (character-level models, code, OCR, patch sequences); it costs one depthwise convolution and two extra norms per layer over a plain attention block.
     \item \textbf{Streaming decoding:} usable in \texttt{mode: decoder} with causal convolution padding, but without the incremental cache of Appendix~\ref{sec:annex-kv-cache}; the depthwise recurrence is the missing piece.
 \end{itemize}

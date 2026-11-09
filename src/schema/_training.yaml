@@ -183,7 +183,7 @@ properties:
       
       Memory cost: O(seq_len²) for standard attention. For sequences > 512, use sparse attention layers
       
-      (`longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`) in `layer_pattern`.
+      (`longformer`, `bigbird`, `sparsek`, `nsa`) in `layer_pattern`.
       
       
       **Examples explained:**
@@ -201,7 +201,7 @@ properties:
       
       Costo de memoria: O(seq_len²) para atención estándar. Para secuencias > 512, usar capas de atención dispersa
       
-      (`longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`) en `layer_pattern`.
+      (`longformer`, `bigbird`, `sparsek`, `nsa`) en `layer_pattern`.
       
       
       **Ejemplos explicados:**

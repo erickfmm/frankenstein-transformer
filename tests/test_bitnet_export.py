@@ -31,7 +31,7 @@ def _yaml_text(model_overrides: str) -> str:
         "  num_heads: 4\n"
         "  num_experts: 4\n"
         "  top_k_experts: 2\n"
-        "  layer_pattern: [standard_attn]\n"
+        "  layer_pattern: [standard]\n"
         "  use_moe: true\n"
         "  ffn_hidden_size: 128\n"
         f"{model_overrides}\n"
@@ -46,7 +46,7 @@ def _cfg(mode="encoder", bitnet_routers=False):
         num_experts=4, top_k_experts=2, dropout=0.0,
         use_bitnet=True, bitnet_routers=bitnet_routers,
         use_moe=True, ffn_hidden_size=128, mode=mode,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
     )
 
 

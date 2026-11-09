@@ -12,7 +12,7 @@ dispatchable layer types (see ``capabilities.py``):
 * :class:`RingSlot` — capacity-bounded K/V ring buffer with pinned sinks
   (sliding-window family / ``window_sinks`` policy).
 * :class:`BucketKVSlot` — KV plus the block-level semantic bucket cache of
-  Latent Sparse Attention (``lsa_attn``, arXiv:2610.42147).
+  Latent Sparse Attention (``lsa``, arXiv:2610.42147).
 * :class:`ConvTailSlot` — FIFO of the last ``kernel - 1`` pre-conv rows.
 * :class:`TokenTailSlot` — FIFO of the last ``n`` token ids.
 
@@ -572,8 +572,8 @@ class RingSlot(KVSlot):
     """Capacity-bounded K/V ring buffer with a pinned sink region.
 
     Fixed-capacity sliding window used by the bounded-context mixers
-    (``swa_attn``, ``longformer_attn``, ``bigbird_attn``, bounded
-    ``sparse_transformer_attn``) and by the ``window_sinks`` policy. When
+    (``swa``, ``longformer``, ``bigbird``, bounded
+    ``sparse_transformer``) and by the ``window_sinks`` policy. When
     the buffer overflows, the oldest non-protected tokens are evicted —
     position remapping on wrap is not needed for correctness because the
     ``positions`` metadata is stored, and Mistral-style unrolled
@@ -853,7 +853,7 @@ class StateSlot:
 class ConvTailSlot:
     """FIFO of the last ``kernel - 1`` pre-conv rows (causal short conv).
 
-    Used by the falcon family, ``cca_attn``/``ccgqa_attn`` and the gated
+    Used by the falcon family, ``cca``/``ccgqa`` and the gated
     DeltaNet family when a causal short convolution is present.
     Compositional: a mixer can own one ``KVSlot``/``StateSlot`` AND one
     ``ConvTailSlot``.
@@ -902,7 +902,7 @@ class TokenTailSlot:
     """FIFO of the last ``n`` token ids (int64).
 
     Fed from the generation loop's token stream (not from activations);
-    consumed by ``engram_attn``'s n-gram-suffix lookup (needs the previous
+    consumed by ``engram``'s n-gram-suffix lookup (needs the previous
     ``max_ngram - 1`` ids) and other token-level consumers.
     """
 

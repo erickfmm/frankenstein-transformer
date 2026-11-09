@@ -163,9 +163,9 @@ class SSOGAttention(nn.Module):
             )
         if str(getattr(config, "mode", "encoder")) == "decoder":
             raise ValueError(
-                "ssog_attn is encoder-only: the separable Gaussian field has "
+                "ssog is encoder-only: the separable Gaussian field has "
                 "no causal formulation. Set model.dims.mode to 'encoder' and "
-                "remove ssog_attn from layer_pattern for decoder models."
+                "remove ssog from layer_pattern for decoder models."
             )
 
         self.num_atoms = int(getattr(config, "ssog_num_atoms", 4))
@@ -263,7 +263,7 @@ class SSOGAttention(nn.Module):
         bsz, seq_len, _ = x.shape
         if seq_len != self.grid_h * self.grid_w:
             raise ValueError(
-                f"ssog_attn received seq_len={seq_len} but its field is "
+                f"ssog received seq_len={seq_len} but its field is "
                 f"defined on a {self.grid_h}x{self.grid_w} raster "
                 f"({self.grid_h * self.grid_w} tokens). Set attention.ssog."
                 f"grid_h/grid_w to match (ViT configs derive it from "

@@ -39,7 +39,7 @@ def _cfg(bitnet_routers=False):
         use_moe=True,
         use_mixture_of_depths=True,
         ffn_hidden_size=128,
-        layer_pattern=["standard_attn", "gla_attn", "msa_attn", "sparsek_attn"],
+        layer_pattern=["standard", "gla", "msa", "sparsek"],
     )
 
 

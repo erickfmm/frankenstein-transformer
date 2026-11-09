@@ -7,14 +7,14 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - bigbird_attn
-    - sparsek_attn
-    - bigbird_attn
-    - sparsek_attn
-    - bigbird_attn
-    - sparsek_attn
-    - bigbird_attn
-    - sparsek_attn
+    - bigbird
+    - sparsek
+    - bigbird
+    - sparsek
+    - bigbird
+    - sparsek
+    - bigbird
+    - sparsek
   norm:
     type: layer_norm
   embedding:

@@ -483,7 +483,7 @@ class EndToEndDecoderTests(unittest.TestCase):
         kwargs = _base_kwargs(
             num_layers=4,
             num_loops=1,
-            layer_pattern=["titan_attn", "retnet", "titan_attn", "mamba"],
+            layer_pattern=["titan", "retnet", "titan", "mamba"],
             mode="decoder",
             block_attn_num_blocks=2,
         )

@@ -389,7 +389,7 @@ class FrankensteinEncoder(nn.Module):
         if cache is not None:
             # Bookkeeping for the generation loop: advance the absolute
             # write cursor and record the consumed token ids (token-tail
-            # consumers such as engram_attn read them from the manager).
+            # consumers such as engram read them from the manager).
             cache.advance(int(input_ids.shape[1]))
             cache.push_tokens(input_ids)
 

@@ -72,7 +72,7 @@ attention.ode.steps & int $\ge 1$ & Integration steps between consecutive transf
 \midrule
 \multicolumn{3}{l}{\textit{model.attention.retnet.*}} \\
 \midrule
-attention.retnet.heads & int $\ge 1$ & Retention heads for \texttt{retnet}/\texttt{retnet\_attn} layers. Must divide \texttt{hidden\_size}. Default: 8. \\
+attention.retnet.heads & int $\ge 1$ & Retention heads for \texttt{retnet}/\texttt{retnet} layers. Must divide \texttt{hidden\_size}. Default: 8. \\
 \midrule
 \multicolumn{3}{l}{\textit{model.attention.mla.*}} \\
 \midrule
@@ -238,49 +238,49 @@ The \texttt{model.dims.layer\_pattern} array accepts the following 47 mixer code
 \multicolumn{4}{r}{\textit{continued on next page}} \\
 \endfoot
 \bottomrule
-\caption{Complete \texttt{layer\_pattern} enumeration. $\checkmark$ = supported, $\times$ = not supported. \texttt{fasa\_attn} and \texttt{sparge\_attn} train as standard dense attention over their own projections and apply their sparse heuristic only at inference.}
+\caption{Complete \texttt{layer\_pattern} enumeration. $\checkmark$ = supported, $\times$ = not supported. \texttt{fasa} and \texttt{sparge} train as standard dense attention over their own projections and apply their sparse heuristic only at inference.}
 \label{tab:layer-pattern-enum}
 \endlastfoot
-standard\_attn & Classic multi-head self-attention (BERT-style) & \checkmark & \checkmark \\
-sigmoid\_attn & Sigmoid-gated attention & \checkmark & \checkmark \\
-memory\_attn & Memory Attention — token-ID memory values (V = K + Norm(E[s])) & \checkmark & \checkmark \\
-gated\_softmax\_attn & Gated softmax attention with post-SDPA sigmoid & \checkmark & \checkmark \\
-titan\_attn & Titan attention with positional encoding (HoPE/RoPE) & \checkmark & \checkmark \\
-retnet / retnet\_attn & Retention Network (RNN+transformer hybrid) & \checkmark & \checkmark \\
+standard & Classic multi-head self-attention (BERT-style) & \checkmark & \checkmark \\
+sigmoid & Sigmoid-gated attention & \checkmark & \checkmark \\
+memory & Memory Attention — token-ID memory values (V = K + Norm(E[s])) & \checkmark & \checkmark \\
+gated\_softmax & Gated softmax attention with post-SDPA sigmoid & \checkmark & \checkmark \\
+titan & Titan attention with positional encoding (HoPE/RoPE) & \checkmark & \checkmark \\
+retnet & Retention Network (RNN+transformer hybrid) & \checkmark & \checkmark \\
 mamba & Selective state-space model (SSM) & \checkmark & \checkmark \\
 ode & Continuous-depth ODE layer & \checkmark & \checkmark \\
-gla\_attn & Gated Linear Attention with multiplicative decay & \checkmark & \checkmark \\
-deltanet\_attn / gated\_deltanet\_attn & DeltaNet with corrective delta rule & \checkmark & \checkmark \\
-gated\_deltanet2\_attn & Gated DeltaNet-2 with decoupled channel-wise erase/write gates & \checkmark & \checkmark \\
-hgrn2\_attn & HGRN2 with hierarchical forget gates & \checkmark & \checkmark \\
-fox\_attn & Forgetting Transformer (FoX) with forget bias in logits & \checkmark & \checkmark \\
-nsa\_attn & Native Sparse Attention (three-branch) & \checkmark & \checkmark \\
-engram\_attn & N-gram conditional memory lookup & \checkmark & \checkmark \\
-gqa\_attn & Grouped-Query Attention with configurable KV heads & \checkmark & \checkmark \\
-longformer\_attn & Longformer: sliding windows + global tokens & \checkmark & \checkmark \\
-bigbird\_attn & BigBird: local + random + global attention & \checkmark & \checkmark \\
-sparse\_transformer\_attn & Sparse Transformer: factorized patterns & \checkmark & \checkmark \\
-sparsek\_attn & SparseK: differentiable top-k KV selection & \checkmark & \checkmark \\
-sparge\_attn & SpargeAttn --- two-stage block pruning; dense training, sparse inference & \checkmark & \checkmark \\
-fasa\_attn & FASA --- frequency-aware token selection; dense training, sparse inference & \checkmark & \checkmark \\
-msa\_attn & MiniMax Sparse Attention --- block-sparse on GQA & \checkmark & \checkmark \\
-sparda\_attn & SparDA --- decoupled sparse attention with Forecast projection & \checkmark & \checkmark \\
-lsa\_attn & Latent Sparse Attention --- semantic key clustering with top-k selection & \checkmark & \checkmark \\
-fastconformer\_attn & Fast Conformer --- limited-context window + head-pinned global token & \checkmark & \checkmark \\
-kda\_attn & Kimi Delta Attention --- channel-wise decay + scalar write gate & \checkmark & \checkmark \\
-falcon1\_attn / falcon2\_attn / falcon3\_attn & Falcon regression family --- RAW prefix-aligned NLMS delta rule & \checkmark & \checkmark \\
-falcon1a\_attn / falcon2a\_attn / falcon3a\_attn & Falcon inner-product family --- shifted additive writes with ridge decay & \checkmark & \checkmark \\
-mla\_attn & Multi-Head Latent Attention + RoPE & \checkmark & \checkmark \\
-gqla\_attn & Group-Query Latent Attention --- two decoding paths & \checkmark & \checkmark \\
-mlra\_attn & Multi-Head Low-Rank Attention --- partitionable latent & \checkmark & \checkmark \\
-tucker\_attn & Tucker Attention --- generalised low-rank factorisation & \checkmark & \checkmark \\
-iha\_attn & Interleaved Head Attention --- cross-head pseudo-heads & \checkmark & \checkmark \\
-gta\_attn & Grouped-head laTenT Attention --- shared map + latent values & \checkmark & \checkmark \\
-mtla\_attn & Multi-head Temporal Latent Attention --- temporal KV merge & \checkmark & \checkmark \\
-cca\_attn & Compressed Convolutional Attention --- latent-space attention + convs & \checkmark & \checkmark \\
-ccgqa\_attn & Compressed Convolutional Grouped Query Attention --- CCA + GQA in latent & \checkmark & \checkmark \\
-gma\_attn & Gaussian Mixture Attention --- probabilistic latent routing, $\mathcal{O}(NK)$ linear-time & \checkmark & \checkmark \\
-ssog\_attn & Separable Sum of Gaussians --- Gaussian field over relative position, near-linear $\mathcal{O}(R N \sqrt{N})$ & \checkmark & \checkmark \\
+gla & Gated Linear Attention with multiplicative decay & \checkmark & \checkmark \\
+deltanet / gated\_deltanet & DeltaNet with corrective delta rule & \checkmark & \checkmark \\
+gated\_deltanet2 & Gated DeltaNet-2 with decoupled channel-wise erase/write gates & \checkmark & \checkmark \\
+hgrn2 & HGRN2 with hierarchical forget gates & \checkmark & \checkmark \\
+fox & Forgetting Transformer (FoX) with forget bias in logits & \checkmark & \checkmark \\
+nsa & Native Sparse Attention (three-branch) & \checkmark & \checkmark \\
+engram & N-gram conditional memory lookup & \checkmark & \checkmark \\
+gqa & Grouped-Query Attention with configurable KV heads & \checkmark & \checkmark \\
+longformer & Longformer: sliding windows + global tokens & \checkmark & \checkmark \\
+bigbird & BigBird: local + random + global attention & \checkmark & \checkmark \\
+sparse\_transformer & Sparse Transformer: factorized patterns & \checkmark & \checkmark \\
+sparsek & SparseK: differentiable top-k KV selection & \checkmark & \checkmark \\
+sparge & SpargeAttn --- two-stage block pruning; dense training, sparse inference & \checkmark & \checkmark \\
+fasa & FASA --- frequency-aware token selection; dense training, sparse inference & \checkmark & \checkmark \\
+msa & MiniMax Sparse Attention --- block-sparse on GQA & \checkmark & \checkmark \\
+sparda & SparDA --- decoupled sparse attention with Forecast projection & \checkmark & \checkmark \\
+lsa & Latent Sparse Attention --- semantic key clustering with top-k selection & \checkmark & \checkmark \\
+fastconformer & Fast Conformer --- limited-context window + head-pinned global token & \checkmark & \checkmark \\
+kda & Kimi Delta Attention --- channel-wise decay + scalar write gate & \checkmark & \checkmark \\
+falcon1 / falcon2 / falcon3 & Falcon regression family --- RAW prefix-aligned NLMS delta rule & \checkmark & \checkmark \\
+falcon1a / falcon2a / falcon3a & Falcon inner-product family --- shifted additive writes with ridge decay & \checkmark & \checkmark \\
+mla & Multi-Head Latent Attention + RoPE & \checkmark & \checkmark \\
+gqla & Group-Query Latent Attention --- two decoding paths & \checkmark & \checkmark \\
+mlra & Multi-Head Low-Rank Attention --- partitionable latent & \checkmark & \checkmark \\
+tucker & Tucker Attention --- generalised low-rank factorisation & \checkmark & \checkmark \\
+iha & Interleaved Head Attention --- cross-head pseudo-heads & \checkmark & \checkmark \\
+gta & Grouped-head laTenT Attention --- shared map + latent values & \checkmark & \checkmark \\
+mtla & Multi-head Temporal Latent Attention --- temporal KV merge & \checkmark & \checkmark \\
+cca & Compressed Convolutional Attention --- latent-space attention + convs & \checkmark & \checkmark \\
+ccgqa & Compressed Convolutional Grouped Query Attention --- CCA + GQA in latent & \checkmark & \checkmark \\
+gma & Gaussian Mixture Attention --- probabilistic latent routing, $\mathcal{O}(NK)$ linear-time & \checkmark & \checkmark \\
+ssog & Separable Sum of Gaussians --- Gaussian field over relative position, near-linear $\mathcal{O}(R N \sqrt{N})$ & \checkmark & \checkmark \\
 \end{longtable}
 
 \subsection{Training Configuration}
@@ -506,7 +506,7 @@ The schema enforces the following cross-component validation rules, implemented 
     \item \texttt{task: mlm} requires \texttt{training.optimizer}; \texttt{task: sbert} requires \texttt{training.sbert}; \texttt{task: causal\_lm} requires \texttt{training.optimizer} and \texttt{model\_class='frankenstein\_text\_decoder'}.
     \item \texttt{bitnet.routers=true} requires \texttt{bitnet.enabled=true}. The flag has no effect otherwise.
     \item \texttt{mhc.enabled=true} (mHC n-stream residual) and \texttt{mixture\_of\_depths.enabled=true} are mutually exclusive. Enabling both raises a \texttt{ValueError}: MoD token routing operates on a single $C$-dimensional stream, which conflicts with the n-stream residual.
-    \item \texttt{fasa\_attn} and \texttt{sparge\_attn} are inference-sparse layer types: they apply their sparse heuristic only in evaluation mode. During training the enclosing hybrid layer substitutes standard dense attention over the same $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$ projections, so they can appear in \texttt{model.dims.layer\_pattern} for training runs; the trained weights are the ones the sparse path reads at inference.
+    \item \texttt{fasa} and \texttt{sparge} are inference-sparse layer types: they apply their sparse heuristic only in evaluation mode. During training the enclosing hybrid layer substitutes standard dense attention over the same $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$ projections, so they can appear in \texttt{model.dims.layer\_pattern} for training runs; the trained weights are the ones the sparse path reads at inference.
     \item \texttt{model\_class: frankenstein\_text\_decoder} forces \texttt{model.dims.mode: decoder} at runtime. Setting \texttt{model.dims.mode: encoder} with this class is overridden.
     \item Either \texttt{base\_model} must be present, or both \texttt{model\_class} and \texttt{model} must be present. The schema rejects configurations that provide neither or an incomplete combination.
 \end{enumerate}

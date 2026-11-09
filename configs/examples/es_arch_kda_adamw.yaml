@@ -8,7 +8,7 @@ model:
     num_heads: 8
     num_kv_heads: 4
     layer_pattern:
-    - kda_attn
+    - kda
   norm:
     type: layer_norm
   embedding:

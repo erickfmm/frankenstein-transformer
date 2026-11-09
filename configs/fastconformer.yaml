@@ -23,23 +23,23 @@ model:
     dropout: 0.1
     mode: encoder
     layer_pattern:
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
-    - fastconformer_attn
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
+    - fastconformer
   norm:
     type: layer_norm
   embedding:

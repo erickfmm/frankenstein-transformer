@@ -7,14 +7,14 @@ model:
     num_loops: 1
     num_heads: 12
     layer_pattern:
-    - nsa_attn
-    - retnet_attn
-    - nsa_attn
-    - retnet_attn
-    - nsa_attn
-    - retnet_attn
-    - nsa_attn
-    - retnet_attn
+    - nsa
+    - retnet
+    - nsa
+    - retnet
+    - nsa
+    - retnet
+    - nsa
+    - retnet
   embedding:
     conv:
       enabled: false

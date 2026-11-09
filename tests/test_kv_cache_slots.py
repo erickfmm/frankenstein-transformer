@@ -24,7 +24,7 @@ if TORCH_AVAILABLE:
     )
 
 
-def _meta(mixer="standard_attn", idx=0):
+def _meta(mixer="standard", idx=0):
     return SlotMeta(
         mixer_key=mixer,
         logical_layer_idx=idx,
@@ -74,7 +74,7 @@ class KVSlotTests(unittest.TestCase):
         self.assertEqual(slot.read()["k"].device.type, "cpu")
 
     def test_extras_are_stored_and_truncated(self):
-        slot = KVSlot(_meta("fox_attn"))
+        slot = KVSlot(_meta("fox"))
         c = torch.randn(1, 2, 3)  # (B, H, T) FoX cumulative log-forget
         slot.append(
             k=torch.randn(1, 2, 3, 4),
@@ -106,7 +106,7 @@ class KVSlotTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class RingSlotTests(unittest.TestCase):
     def test_wraparound_keeps_sinks_and_recent_positions(self):
-        slot = RingSlot(_meta("swa_attn"), capacity=4, num_sinks=2)
+        slot = RingSlot(_meta("swa"), capacity=4, num_sinks=2)
         for i in range(6):
             slot.append(
                 k=torch.full((1, 2, 1, 4), float(i)),
@@ -128,7 +128,7 @@ class RingSlotTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class LatentKVSlotTests(unittest.TestCase):
     def test_named_streams(self):
-        slot = LatentKVSlot(_meta("mla_attn"), axes={"c_kv": "token"})
+        slot = LatentKVSlot(_meta("mla"), axes={"c_kv": "token"})
         c = torch.randn(1, 3, 6)  # (B, T, r)
         slot.append(positions=torch.arange(3), c_kv=c)
         slot.append(positions=torch.tensor([3]), c_kv=torch.randn(1, 1, 6))
@@ -137,7 +137,7 @@ class LatentKVSlotTests(unittest.TestCase):
         self.assertTrue(torch.equal(out["c_kv"][:, :3], c))
 
     def test_heterogeneous_4d_stream(self):
-        slot = LatentKVSlot(_meta("gta_attn"), axes={"k_g": "channel", "v_lat": "token"})
+        slot = LatentKVSlot(_meta("gta"), axes={"k_g": "channel", "v_lat": "token"})
         slot.append(
             positions=torch.arange(2),
             k_g=torch.randn(1, 2, 2, 4),   # (B, G, T, D)
@@ -156,7 +156,7 @@ class LatentKVSlotTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class StateSlotTests(unittest.TestCase):
     def test_in_place_update(self):
-        slot = StateSlot(_meta("gla_attn"))
+        slot = StateSlot(_meta("gla"))
         s1 = torch.randn(1, 2, 4, 4)
         slot.update(state=s1)
         self.assertTrue(torch.equal(slot.read()["state"], s1))
@@ -176,7 +176,7 @@ class StateSlotTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class ConvTailSlotTests(unittest.TestCase):
     def test_fifo_order(self):
-        slot = ConvTailSlot(_meta("falcon1_attn"), capacity=3)
+        slot = ConvTailSlot(_meta("falcon1"), capacity=3)
         for i in range(5):
             slot.append(torch.full((1, 1, 2), float(i)))
         out = slot.read()

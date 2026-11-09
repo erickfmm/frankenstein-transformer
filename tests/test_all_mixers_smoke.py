@@ -1,7 +1,7 @@
 """Forward/backward smoke test for every trainable mixer at harness dims.
 
-Regression gate for experiment 2's 164 wasted e2e runs: ``cca_attn``,
-``ccgqa_attn``, ``msa_attn`` and ``ssog_attn`` crashed on the full sweep
+Regression gate for experiment 2's 164 wasted e2e runs: ``cca``,
+``ccgqa``, ``msa`` and ``ssog`` crashed on the full sweep
 (``hidden_size=96``, ``num_heads=8``, ``seq_len=64``, model-wide RoPE) while
 the unit suite only covered 29 of the schema mixers and the KV-cache parity
 suite only parametrizes ``IMPLEMENTED_MIXERS``. This module builds one tiny
@@ -11,13 +11,13 @@ fails here in seconds instead of after hours of subprocess compute.
 
 Covered regressions:
 
-* ``cca_attn`` — default ``latent_rank`` must resolve to an even per-head
+* ``cca`` — default ``latent_rank`` must resolve to an even per-head
   latent dim (``96 // 4 = 24`` is odd per head with 8 heads).
-* ``cca_attn``/``ccgqa_attn`` — rotary PEs must rotate the *latent* q/k at
+* ``cca``/``ccgqa`` — rotary PEs must rotate the *latent* q/k at
   ``latent_head_dim`` width, not the model-wide ``hidden_size / num_heads``.
-* ``msa_attn`` — ``topk_blocks`` must be clamped when the sequence yields
+* ``msa`` — ``topk_blocks`` must be clamped when the sequence yields
   fewer blocks than requested (``seq_len=64`` < ``block_size=128``).
-* ``ssog_attn`` — the text grid must match the padded sequence length.
+* ``ssog`` — the text grid must match the padded sequence length.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 #: Training-free sparse heuristics (D5): train through the dense path but the
 #: documented smoke contract runs them in eval mode, like the e2e harness.
-TRAINING_FREE = {"fasa_attn", "sparge_attn"}
+TRAINING_FREE = {"fasa", "sparge"}
 
 #: e2e harness geometry (``full_tests/run_e2e.py`` base config): these exact
 #: dims produced the experiment-2 failures, so do not "simplify" them.
@@ -75,7 +75,7 @@ def _build_config(layer_pattern, positional_encoding="rope", seq_len=64):
     kwargs = dict(HARNESS_DIMS)
     kwargs["layer_pattern"] = list(layer_pattern)
     kwargs["positional_encoding"] = positional_encoding
-    if "ssog_attn" in layer_pattern:
+    if "ssog" in layer_pattern:
         kwargs["ssog_grid_h"] = 1
         kwargs["ssog_grid_w"] = seq_len
     return FrankensteinModelConfig(**kwargs)
@@ -98,7 +98,7 @@ def test_mixer_forward_backward_at_harness_dims(mixer):
 
 
 @pytest.mark.parametrize("pe", ["rope", "hope", "sinusoidal_rotary"])
-@pytest.mark.parametrize("mixer", ["cca_attn", "ccgqa_attn"])
+@pytest.mark.parametrize("mixer", ["cca", "ccgqa"])
 def test_latent_mixers_support_every_rotary_pe(mixer, pe):
     """Rotary PEs must be applied through a latent-sized encoder.
 
@@ -115,7 +115,7 @@ def test_latent_mixers_support_every_rotary_pe(mixer, pe):
 
 
 @pytest.mark.parametrize("pe", ["alibi", "bam", "nope", "none"])
-@pytest.mark.parametrize("mixer", ["cca_attn", "ccgqa_attn"])
+@pytest.mark.parametrize("mixer", ["cca", "ccgqa"])
 def test_latent_mixers_support_additive_pes(mixer, pe):
     """Score-bias PEs (no q/k rotation) keep working through the shared encoder."""
     config = _build_config([mixer], positional_encoding=pe)
@@ -125,11 +125,11 @@ def test_latent_mixers_support_additive_pes(mixer, pe):
     assert y.shape == (2, 64, config.vocab_size)
 
 
-@pytest.mark.parametrize("mixer", ["cca_attn", "ccgqa_attn"])
+@pytest.mark.parametrize("mixer", ["cca", "ccgqa"])
 def test_latent_mixers_reject_pape_with_clear_error(mixer):
     """PaPE augments q/k from the full-width hidden state: explicit error, not a shape crash."""
     config = _build_config([mixer], positional_encoding="pape")
-    with pytest.raises(ValueError, match="not supported with cca_attn"):
+    with pytest.raises(ValueError, match="not supported with cca"):
         FrankensteinEncoder(config)
 
 
@@ -139,7 +139,7 @@ def test_msa_short_sequence_clamps_topk():
     Defaults are ``msa_block_size=128`` / ``msa_topk_blocks=16``; a 6-token
     input produced ``RuntimeError: selected index k out of range``.
     """
-    config = _build_config(["msa_attn"], seq_len=6)
+    config = _build_config(["msa"], seq_len=6)
     assert config.msa_block_size == 128
     assert config.msa_topk_blocks == 16
     model = FrankensteinEncoder(config)
@@ -154,7 +154,7 @@ def test_msa_short_sequence_clamps_topk():
 )
 def test_cca_ccgqa_defaults_are_always_buildable(hidden, heads):
     """Resolved defaults give divisible ranks and even per-head latent dims."""
-    config = _build_config(["cca_attn", "ccgqa_attn"])
+    config = _build_config(["cca", "ccgqa"])
     # Re-resolve from scratch at the new geometry.
     config.hidden_size = hidden
     config.num_heads = heads
@@ -173,7 +173,7 @@ def test_cca_ccgqa_defaults_are_always_buildable(hidden, heads):
     assert q_dh % 2 == 0
     assert config.ccgqa_kv_latent_rank <= config.ccgqa_query_latent_rank
 
-    from src.model.attention.latent.cca_attn import (
+    from src.model.attention.latent.cca import (
         CCAAttention,
         CCGQAAttention,
     )
@@ -186,7 +186,7 @@ def test_cca_latent_pe_is_sized_to_latent_head_dim():
     """The mixer's rotary encoder pairs ``latent_head_dim // 2`` dims, not ``head_dim // 2``."""
     from src.model.embeddings.rope import RoPE
 
-    config = _build_config(["cca_attn"], positional_encoding="rope")
+    config = _build_config(["cca"], positional_encoding="rope")
     model = FrankensteinEncoder(config)
     layer = model.layers[0]
     mixer = layer.mixer

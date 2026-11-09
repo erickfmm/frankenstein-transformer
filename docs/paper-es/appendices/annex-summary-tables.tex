@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 48 mezcladores de secuencia en diez familias, 36 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 47 mezcladores de secuencia en diez familias, 36 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -27,81 +27,81 @@ La Tabla~\ref{tab:all-mixers} enumera cada mezclador de secuencia soportado por 
 
 \multicolumn{6}{c}{\textbf{Densos y aumentados con convolución (4)}} \\
 \midrule
-standard\_attn & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Contexto global completo; cuello de botella KV en secuencias largas & \citep{vaswani_attention_2017} \\
-sigmoid\_attn & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Compuerta elemento a elemento; reemplazo eficiente en hardware para softmax & \citep{ramapuram_theory_2024} \\
+standard & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Contexto global completo; cuello de botella KV en secuencias largas & \citep{vaswani_attention_2017} \\
+sigmoid & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Compuerta elemento a elemento; reemplazo eficiente en hardware para softmax & \citep{ramapuram_theory_2024} \\
 gqa & Denso & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Compresión KV ajustable; reducción de caché $G\times$ mediante cabezas compartidas & \citep{ainslie_gqa_2023} \\
-conformer\_attn & Aumentado conv. & $\mathcal{O}(n^2 d + n K d)$ & $\mathcal{O}(n)$ (recómputo completo) & FFN Macaron alrededor de MHSA sinusoidal relativa y un módulo conv depthwise ($K=32$); contexto local y global en un solo bloque & \citep{Gulati2020} \\
+conformer & Aumentado conv. & $\mathcal{O}(n^2 d + n K d)$ & $\mathcal{O}(n)$ (recómputo completo) & FFN Macaron alrededor de MHSA sinusoidal relativa y un módulo conv depthwise ($K=32$); contexto local y global en un solo bloque & \citep{Gulati2020} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Recurrente (5)}} \\
 \midrule
-retnet\_attn & Recurrente & $\mathcal{O}(n^2 d)$ paralelo & $\mathcal{O}(1)$ & Decaimiento multi-escala; triple modo de cómputo (paralelo/recurrente/por fragmentos) & \citep{sun_retentive_2023} \\
+retnet & Recurrente & $\mathcal{O}(n^2 d)$ paralelo & $\mathcal{O}(1)$ & Decaimiento multi-escala; triple modo de cómputo (paralelo/recurrente/por fragmentos) & \citep{sun_retentive_2023} \\
 mamba & Recurrente & $\mathcal{O}(n d)$ & $\mathcal{O}(1)$ & Modelo de espacio de estado selectivo; escaneo paralelo consciente del hardware & \citep{gu_mamba_2023} \\
 ode & Recurrente & $\mathcal{O}(k \cdot n^2 d)$ & $\mathcal{O}(k n)$ & Integración RK4 de profundidad continua; solucionador de paso adaptativo & \citep{zhang_continuous_2021} \\
-titan\_attn & Recurrente & $\mathcal{O}(c^2 + n f)$ & $\mathcal{O}(c^2 + 1)$ & Adaptación de memoria en tiempo de prueba; dinámica de escritura impulsada por sorpresa & \citep{behrouz_titans_2025} \\
-engram\_attn & Memoria & $\mathcal{O}(n \cdot N \cdot H)$ & $\mathcal{O}(1)$ lookup & Memoria condicional de N-gramas; recuperación escalable basada en hash & \citep{cheng2026conditionalmemoryscalablelookup} \\
+titan & Recurrente & $\mathcal{O}(c^2 + n f)$ & $\mathcal{O}(c^2 + 1)$ & Adaptación de memoria en tiempo de prueba; dinámica de escritura impulsada por sorpresa & \citep{behrouz_titans_2025} \\
+engram & Memoria & $\mathcal{O}(n \cdot N \cdot H)$ & $\mathcal{O}(1)$ lookup & Memoria condicional de N-gramas; recuperación escalable basada en hash & \citep{cheng2026conditionalmemoryscalablelookup} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Disperso (12)}} \\
 \midrule
-sparse\_transformer\_attn & Disperso & $\mathcal{O}(n \sqrt{n} \cdot d)$ & $\mathcal{O}(n)$ & Máscaras factorizadas estrideadas + fijas; patrón de dispersidad $\sqrt{n}$ & \citep{child_sparse_transformer_2019} \\
-longformer\_attn & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(n)$ & Ventana deslizante + dilatación + tokens globales; lineal en $n$ & \citep{beltagy_longformer_2020} \\
-swa\_attn & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(w)$ & Ventana deslizante + sumideros de atención; sin entrenamiento, caché KV fija & \citep{jolicoeur_sliding_window_2026} \\
-bigbird\_attn & Disperso & $\mathcal{O}(n)$ & $\mathcal{O}(n)$ & Aleatorio + local + global; atención Turing completa & \citep{zaheer_bigbird_2020} \\
-sparsek\_attn & Disperso & $\mathcal{O}(n \cdot d)$ & $\mathcal{O}(k)$ & Selección top-$k$ diferenciable; máscara de dispersidad aprendida & \citep{lou_sparsek_2024} \\
-nsa\_attn & Disperso & $\mathcal{O}((t/d + n_l + w)d)$ & $\mathcal{O}(n)$ & Diseño de 3 ramas alineado con hardware; token/vecino/ventana & \citep{yuan_nsa_2025} \\
-sparge\_attn & Disperso & $\mathcal{O}(n^2 \cdot s \cdot d)$ & $\mathcal{O}(n)$ & Filtrado de bloques en dos etapas; entrenamiento denso, inferencia dispersa & \citep{zhang_spargeattn_2025} \\
-fasa\_attn & Disperso & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ & $\mathcal{O}(n)$ & Dispersidad consciente de frecuencia RoPE; entrenamiento denso, inferencia dispersa & \citep{wang_fasa_2026} \\
-msa\_attn & Disperso & $\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}} \cdot N^2 + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Bloques dispersos con rama índice; desplegado a escala 109B & \citep{lai_minimax_2026} \\
-sparda\_attn & Disperso & $\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot N_b + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Prefetch anticipado guiado por pronóstico; dispersidad predictiva & \citep{fu_sparda_2026} \\
-lsa\_attn & Disperso & $\mathcal{O}(N^2/\bar{n}_b + N\,(k+n_w+n_{\text{sink}})\,d_h)$ & $\mathcal{O}(N/\bar{n}_b + k+n_w+n_{\text{sink}})$ & Clustering Ward semántico de claves; selección top-$k$ de largo alcance; entrenable de forma nativa, sin parámetros extra & \citep{kubicek_lsa_2026} \\
-fastconformer\_attn & Disperso & $\mathcal{O}(n \cdot (w + g) \cdot d)$ & $\mathcal{O}(w + g)$ & Ventana de contexto limitado + token global anclado a la cabecera; proyecciones globales separadas opcionales; forma larga de memoria lineal & \citep{rekesh_fastconformer_2023} \\
+sparse\_transformer & Disperso & $\mathcal{O}(n \sqrt{n} \cdot d)$ & $\mathcal{O}(n)$ & Máscaras factorizadas estrideadas + fijas; patrón de dispersidad $\sqrt{n}$ & \citep{child_sparse_transformer_2019} \\
+longformer & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(n)$ & Ventana deslizante + dilatación + tokens globales; lineal en $n$ & \citep{beltagy_longformer_2020} \\
+swa & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(w)$ & Ventana deslizante + sumideros de atención; sin entrenamiento, caché KV fija & \citep{jolicoeur_sliding_window_2026} \\
+bigbird & Disperso & $\mathcal{O}(n)$ & $\mathcal{O}(n)$ & Aleatorio + local + global; atención Turing completa & \citep{zaheer_bigbird_2020} \\
+sparsek & Disperso & $\mathcal{O}(n \cdot d)$ & $\mathcal{O}(k)$ & Selección top-$k$ diferenciable; máscara de dispersidad aprendida & \citep{lou_sparsek_2024} \\
+nsa & Disperso & $\mathcal{O}((t/d + n_l + w)d)$ & $\mathcal{O}(n)$ & Diseño de 3 ramas alineado con hardware; token/vecino/ventana & \citep{yuan_nsa_2025} \\
+sparge & Disperso & $\mathcal{O}(n^2 \cdot s \cdot d)$ & $\mathcal{O}(n)$ & Filtrado de bloques en dos etapas; entrenamiento denso, inferencia dispersa & \citep{zhang_spargeattn_2025} \\
+fasa & Disperso & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ & $\mathcal{O}(n)$ & Dispersidad consciente de frecuencia RoPE; entrenamiento denso, inferencia dispersa & \citep{wang_fasa_2026} \\
+msa & Disperso & $\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}} \cdot N^2 + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Bloques dispersos con rama índice; desplegado a escala 109B & \citep{lai_minimax_2026} \\
+sparda & Disperso & $\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot N_b + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Prefetch anticipado guiado por pronóstico; dispersidad predictiva & \citep{fu_sparda_2026} \\
+lsa & Disperso & $\mathcal{O}(N^2/\bar{n}_b + N\,(k+n_w+n_{\text{sink}})\,d_h)$ & $\mathcal{O}(N/\bar{n}_b + k+n_w+n_{\text{sink}})$ & Clustering Ward semántico de claves; selección top-$k$ de largo alcance; entrenable de forma nativa, sin parámetros extra & \citep{kubicek_lsa_2026} \\
+fastconformer & Disperso & $\mathcal{O}(n \cdot (w + g) \cdot d)$ & $\mathcal{O}(w + g)$ & Ventana de contexto limitado + token global anclado a la cabecera; proyecciones globales separadas opcionales; forma larga de memoria lineal & \citep{rekesh_fastconformer_2023} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Con Compuerta (8)}} \\
 \midrule
-gla\_attn & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimiento diagonal dependiente de datos; atención lineal con compuerta & \citep{yang_gla_2023} \\
-deltanet\_attn & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Regla delta; atención lineal con corrección de errores & \citep{yang_deltanet_2024} \\
-gated\_deltanet\_attn & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Síntesis de decaimiento + compuerta de escritura; marco delta unificado & \citep{yang_gated_deltanet_2024} \\
-gated\_deltanet2\_attn & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Compuertas de borrado/escritura canalizadas desacopladas; compuerta mejorada & \citep{hatamizadeh_gated_deltanet2_2026} \\
-hgrn2\_attn & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Compuertas de olvido acotadas jerárquicas; recurrencia multi-escala & \citep{qin_hgrn2_2024} \\
-fox\_attn & Con compuerta & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Sesgo de recencia en espacio de logits; compatible con FlashAttn & \citep{lin_forgetting_transformer_2025} \\
-gated\_softmax\_attn & Con compuerta & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Compuerta sigmoide post-SDPA; mitigación del sumidero de atención & \citep{qiu_gated_attention_2025} \\
-kda\_attn & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimiento por canal + escritura escalar; diseño Kimi Linear & \citep{kimi_kda_2025} \\
+gla & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimiento diagonal dependiente de datos; atención lineal con compuerta & \citep{yang_gla_2023} \\
+deltanet & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Regla delta; atención lineal con corrección de errores & \citep{yang_deltanet_2024} \\
+gated\_deltanet & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Síntesis de decaimiento + compuerta de escritura; marco delta unificado & \citep{yang_gated_deltanet_2024} \\
+gated\_deltanet2 & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Compuertas de borrado/escritura canalizadas desacopladas; compuerta mejorada & \citep{hatamizadeh_gated_deltanet2_2026} \\
+hgrn2 & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Compuertas de olvido acotadas jerárquicas; recurrencia multi-escala & \citep{qin_hgrn2_2024} \\
+fox & Con compuerta & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Sesgo de recencia en espacio de logits; compatible con FlashAttn & \citep{lin_forgetting_transformer_2025} \\
+gated\_softmax & Con compuerta & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L)$ KV & Compuerta sigmoide post-SDPA; mitigación del sumidero de atención & \citep{qiu_gated_attention_2025} \\
+kda & Con compuerta & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimiento por canal + escritura escalar; diseño Kimi Linear & \citep{kimi_kda_2025} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Peso Rápido (6)}} \\
 \midrule
-falcon1\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Regla delta NLMS prefix-alineada (RAW); mejor perplejidad LM de la familia & \citep{zhang_falcon_2026} \\
-falcon2\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Tamaños de paso NLMS por canal de valor & \citep{zhang_falcon_2026} \\
-falcon3\_attn & Peso rápido & $\mathcal{O}(L d^2 B)$ & $\mathcal{O}(d^2)$ + cola $\mathcal{O}(B)$ & Repetición de minilote con ventana deslizante y estadísticos exactos & \citep{zhang_falcon_2026} \\
-falcon1a\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Atención lineal aditiva desplazada con decaimiento por ridge & \citep{zhang_falcon_2026} \\
-falcon2a\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimientos aditivos por canal & \citep{zhang_falcon_2026} \\
-falcon3a\_attn & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ + cola $\mathcal{O}(B)$ & Aditivo con ventana; mejor extrapolación de longitud & \citep{zhang_falcon_2026} \\
+falcon1 & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Regla delta NLMS prefix-alineada (RAW); mejor perplejidad LM de la familia & \citep{zhang_falcon_2026} \\
+falcon2 & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Tamaños de paso NLMS por canal de valor & \citep{zhang_falcon_2026} \\
+falcon3 & Peso rápido & $\mathcal{O}(L d^2 B)$ & $\mathcal{O}(d^2)$ + cola $\mathcal{O}(B)$ & Repetición de minilote con ventana deslizante y estadísticos exactos & \citep{zhang_falcon_2026} \\
+falcon1a & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Atención lineal aditiva desplazada con decaimiento por ridge & \citep{zhang_falcon_2026} \\
+falcon2a & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimientos aditivos por canal & \citep{zhang_falcon_2026} \\
+falcon3a & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ + cola $\mathcal{O}(B)$ & Aditivo con ventana; mejor extrapolación de longitud & \citep{zhang_falcon_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Latente (10)}} \\
 \midrule
-mla\_attn & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & KV latente de rango $r_{\text{kv}} \approx d/2$; estilo DeepSeek & \citep{mehta_mla_2025} \\
-gqla\_attn & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & Rutas de decodificación duales adaptativas al hardware; fusión GQA + latente & \citep{meng_gqla_2026} \\
-mlra\_attn & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & $L$ sub-cabezas; compatible con tensor-paralelismo de 4 vías & \citep{liu_mlra_2026} \\
-tucker\_attn & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(k_{\text{rank}} \cdot n)$ & Factorización Tucker; unifica MHA/GQA/MLA & \citep{klein_tucker_2026} \\
-iha\_attn & Latente & $\mathcal{O}(n^2 H^2)$ & $\mathcal{O}(H \cdot n \cdot d_h)$ & Pseudo-cabezas; escalado de parámetros $\Theta(\sqrt{k})$ & \citep{duvvuri_iha_2026} \\
-gta\_attn & Latente & $\mathcal{O}(n^2 \cdot G \cdot d_h)$ & $\mathcal{O}(r_v \cdot n)$ & Mapa compartido + decodificador SiLU; reducción de FLOPs del 62.5\% & \citep{sun_gta_2025} \\
-mtla\_attn & Latente & $\mathcal{O}(n^2 d / m)$ & $\mathcal{O}(r_{\text{kv}} \cdot n / m)$ & Fusión temporal; aceleración de decodificación de $5.3\times$ & \citep{deng_mtla_2025} \\
-cca\_attn & Latente & $\mathcal{O}(n^2 d / C)$ & $\mathcal{O}(\tilde{e} \cdot n)$ & Atención completa en latente comprimido; $C\times$ menos FLOPs & \citep{figliola_cca_2025} \\
-ccgqa\_attn & Latente & $\mathcal{O}(n^2 d / C_1)$ & $\mathcal{O}(\tilde{e}_{\text{kv}} \cdot n)$ & CCA + GQA desacoplada; mejor pérdida a $8\times$ reducción de caché & \citep{figliola_cca_2025} \\
-gma\_attn & Latente & $\mathcal{O}(nK d_r + nK d_v)$ & $\mathcal{O}(K)$/paso & Atención de Mezcla Gaussiana; enrutamiento latente probabilístico a través de $K$ componentes GMM aprendidos por cabeza; tiempo lineal para $K$ fijo; causal vía cumsums de prefijo & \citep{huang_gma_2026} \\
+mla & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & KV latente de rango $r_{\text{kv}} \approx d/2$; estilo DeepSeek & \citep{mehta_mla_2025} \\
+gqla & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & Rutas de decodificación duales adaptativas al hardware; fusión GQA + latente & \citep{meng_gqla_2026} \\
+mlra & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & $L$ sub-cabezas; compatible con tensor-paralelismo de 4 vías & \citep{liu_mlra_2026} \\
+tucker & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(k_{\text{rank}} \cdot n)$ & Factorización Tucker; unifica MHA/GQA/MLA & \citep{klein_tucker_2026} \\
+iha & Latente & $\mathcal{O}(n^2 H^2)$ & $\mathcal{O}(H \cdot n \cdot d_h)$ & Pseudo-cabezas; escalado de parámetros $\Theta(\sqrt{k})$ & \citep{duvvuri_iha_2026} \\
+gta & Latente & $\mathcal{O}(n^2 \cdot G \cdot d_h)$ & $\mathcal{O}(r_v \cdot n)$ & Mapa compartido + decodificador SiLU; reducción de FLOPs del 62.5\% & \citep{sun_gta_2025} \\
+mtla & Latente & $\mathcal{O}(n^2 d / m)$ & $\mathcal{O}(r_{\text{kv}} \cdot n / m)$ & Fusión temporal; aceleración de decodificación de $5.3\times$ & \citep{deng_mtla_2025} \\
+cca & Latente & $\mathcal{O}(n^2 d / C)$ & $\mathcal{O}(\tilde{e} \cdot n)$ & Atención completa en latente comprimido; $C\times$ menos FLOPs & \citep{figliola_cca_2025} \\
+ccgqa & Latente & $\mathcal{O}(n^2 d / C_1)$ & $\mathcal{O}(\tilde{e}_{\text{kv}} \cdot n)$ & CCA + GQA desacoplada; mejor pérdida a $8\times$ reducción de caché & \citep{figliola_cca_2025} \\
+gma & Latente & $\mathcal{O}(nK d_r + nK d_v)$ & $\mathcal{O}(K)$/paso & Atención de Mezcla Gaussiana; enrutamiento latente probabilístico a través de $K$ componentes GMM aprendidos por cabeza; tiempo lineal para $K$ fijo; causal vía cumsums de prefijo & \citep{huang_gma_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Campo geométrico (1)}} \\
 \midrule
-ssog\_attn & Campo geométrico & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$/pasada & SSOG: campo Gaussiano separable sobre posición relativa; el contenido dirige (residuos acotados $\mu/\sigma/\lambda$ detrás de compuertas de arranque en frío), nunca puntúa; solo encoder & \citep{pisoni_ssog_2026} \\
+ssog & Campo geométrico & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$/pasada & SSOG: campo Gaussiano separable sobre posición relativa; el contenido dirige (residuos acotados $\mu/\sigma/\lambda$ detrás de compuertas de arranque en frío), nunca puntúa; solo encoder & \citep{pisoni_ssog_2026} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Memoria (1)}} \\
 \midrule
-memory\_attn & Memoria & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Valores de memoria por ID de token $V = K + \mathrm{Norm}(E[s])$; elimina la proyección de valores; $+Nd_v$ parámetros por capa & \citep{kang_memory_attention_2026} \\
+memory & Memoria & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Valores de memoria por ID de token $V = K + \mathrm{Norm}(E[s])$; elimina la proyección de valores; $+Nd_v$ parámetros por capa & \citep{kang_memory_attention_2026} \\
 \bottomrule
 \end{longtable}
 \normalsize

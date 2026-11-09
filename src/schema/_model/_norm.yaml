@@ -168,21 +168,21 @@ properties:
 
       **Supported mixers.** The forward methods and QuacK require explicit
       per-head Q/K projections; QK-Clip additionally requires per-head
-      dot-product logits. Supported mixers: `standard_attn`, `sigmoid_attn`,
-      `gqa_attn`, `mla_attn`, `swa_attn`, `longformer_attn`, `bigbird_attn`,
-      `sparse_transformer_attn`, `gta_attn`, `iha_attn`, `mtla_attn`,
-      `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`, `sparda_attn`,
-      `conformer_attn`, `fox_attn`, `gated_softmax_attn`, `titan_attn`,
-      `gqla_attn`, `mlra_attn`, `memory_attn`. `gma_attn` supports every method except
+      dot-product logits. Supported mixers: `standard`, `sigmoid`,
+      `gqa`, `mla`, `swa`, `longformer`, `bigbird`,
+      `sparse_transformer`, `gta`, `iha`, `mtla`,
+      `gma`, `nsa`, `sparsek`, `msa`, `sparda`,
+      `conformer`, `fox`, `gated_softmax`, `titan`,
+      `gqla`, `mlra`, `memory`. `gma` supports every method except
       `qk_clip` (it routes through Gaussian mixture responsibilities instead
       of a QK dot product). Enabling this block while `dims.layer_pattern`
       contains any other mixer is rejected at load time; for `qk_clip` the
-      pattern must also exclude `gma_attn`.
+      pattern must also exclude `gma`.
 
       **Examples explained:**
       - `rms_norm` on a standard-attention stack: the common ViT-22B/Gemma-style
         recipe; cheapest effective stabilizer when keys are materialized.
-      - `qk_clip` with `clip_tau: 100` on an `mla_attn` decoder: reproduces the
+      - `qk_clip` with `clip_tau: 100` on an `mla` decoder: reproduces the
         Kimi K2 / MuonClip recipe, the reference stabilization used at
         trillion-parameter scale with MLA.
       - `quack` with `quack_tau: 1.0`: enables higher base learning rates
@@ -235,23 +235,23 @@ properties:
 
       **Mixers soportados.** Los métodos de forward y QuacK requieren
       proyecciones Q/K explícitas por cabeza; QK-Clip requiere además logits de
-      producto punto por cabeza. Mixers soportados: `standard_attn`,
-      `sigmoid_attn`, `gqa_attn`, `mla_attn`, `swa_attn`, `longformer_attn`,
-      `bigbird_attn`, `sparse_transformer_attn`, `gta_attn`, `iha_attn`,
-      `mtla_attn`, `gma_attn`, `nsa_attn`, `sparsek_attn`, `msa_attn`,
-      `sparda_attn`, `conformer_attn`, `fox_attn`, `gated_softmax_attn`,
-      `titan_attn`, `gqla_attn`, `mlra_attn`, `memory_attn`. `gma_attn` soporta todos los
+      producto punto por cabeza. Mixers soportados: `standard`,
+      `sigmoid`, `gqa`, `mla`, `swa`, `longformer`,
+      `bigbird`, `sparse_transformer`, `gta`, `iha`,
+      `mtla`, `gma`, `nsa`, `sparsek`, `msa`,
+      `sparda`, `conformer`, `fox`, `gated_softmax`,
+      `titan`, `gqla`, `mlra`, `memory`. `gma` soporta todos los
       métodos excepto `qk_clip` (enruta mediante responsabilidades de mezcla
       Gaussiana en lugar de un producto punto QK). Activar este bloque con
       cualquier otro mixer en `dims.layer_pattern` se rechaza al cargar la
       configuración; para `qk_clip` el patrón tampoco puede incluir
-      `gma_attn`.
+      `gma`.
 
       **Ejemplos explicados:**
       - `rms_norm` en una pila de atención estándar: la receta habitual estilo
         ViT-22B/Gemma; el estabilizador efectivo más barato cuando las keys se
         materializan.
-      - `qk_clip` con `clip_tau: 100` en un decoder `mla_attn`: reproduce la
+      - `qk_clip` con `clip_tau: 100` en un decoder `mla`: reproduce la
         receta Kimi K2 / MuonClip, la estabilización de referencia usada a
         escala de billones de parámetros con MLA.
       - `quack` con `quack_tau: 1.0`: permite learning rates base más altos sin

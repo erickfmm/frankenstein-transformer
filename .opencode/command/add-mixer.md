@@ -73,7 +73,7 @@ Extract and record verbatim (everything downstream depends on it):
   `ft-param-estimator.js` and `full_tests/param_count_check.py` must agree on.
 - **Hyperparameters/knobs**: name, type, default, range, constraints — these
   become the `model.attention.<subkey>` block (schema + `_ATTENTION_MIXER_RENAMES`
-  + dataclass fields). "No knobs" is a valid outcome (e.g. `kda_attn`).
+  + dataclass fields). "No knobs" is a valid outcome (e.g. `kda`).
 - **State & cache**: recurrent state / KV / latent / ring buffers (shape, count),
   per-step decode cost, and which cache compatibility class (i)–(vii) of
   `src/model/cache/capabilities.py` it matches, if any.
@@ -81,12 +81,12 @@ Extract and record verbatim (everything downstream depends on it):
   `tab:all-mixers`.
 - **Trainability**: does the paper define a trainable from-scratch form, or is it
   an inference-only/training-free method (→ `TRAINING_FREE_LAYERS` dense surrogate
-  path like `fasa_attn`/`sparge_attn`, hard rule 5)?
+  path like `fasa`/`sparge`, hard rule 5)?
 - **Positional encoding**: does the mixer consume positional information?
   Determines the `per_mixer_use_pe` default (`true` softmax-attention-like,
   `false` recurrent/decay-like).
 - **Mode constraints**: encoder, decoder, or both; causal formulation present?
-  Grid/vision-only (like `ssog_attn`)? Audio-compatible?
+  Grid/vision-only (like `ssog`)? Audio-compatible?
 - **BibTeX data**: authors, year, title, arXiv ID.
 
 **Decision gate.** If the paper is not a sequence-mixing method, duplicates a
@@ -107,8 +107,8 @@ plan:
 - `docs/architecture.md` §7.4 (mixer table, census, `TRAINING_FREE_LAYERS`
   note), §7.13 (cache lists), §11.1 (recipe), §12 (gates).
 - Peers in `src/model/attention/`: pick the **closest peer by family and shape**
-  (e.g. `gated/kda_attn.py` for a gated delta-rule mixer, `latent/cca_attn.py`
-  for a latent+conv mixer, `sparse/swa_attn.py` for a masked-window mixer) and
+  (e.g. `gated/kda.py` for a gated delta-rule mixer, `latent/cca.py`
+  for a latent+conv mixer, `sparse/swa.py` for a masked-window mixer) and
   note exactly which parts will be mirrored (constructor signature, `use_pe`
   handling, `use_fixed_softmax` dispatch via `numerics.module_softmax`, decoder
   masking, `forward`/cached call shapes S1/S2 per §7.13).
@@ -142,7 +142,7 @@ plan:
 - Figures: `docs/paper/figures/mixers/<peer>.mmd` (house style),
   `mixer-taxonomy.mmd`, the family `*-map.mmd`, `build-figures.sh`.
 - Paper EN/ES: the family annex for the chosen family (grep the peer's escaped
-  name, e.g. `kda\_attn`, across `docs/paper{,-es}/appendices/*.tex`),
+  name, e.g. `kda`, across `docs/paper{,-es}/appendices/*.tex`),
   `sections/04-architecture-taxonomy.tex` (+ ES), `annex-summary-tables.tex`
   (+ ES), `annex-schema.tex` (+ ES), `docs/bibliography/attention_types.bib`.
 - Website: `.opencode/command/sync-website.md` (file map, site-only files,
@@ -172,8 +172,8 @@ Record these decisions explicitly, with the evidence that supports them. Use the
 question tool to ask the user whenever a decision is genuinely ambiguous
 (family assignment, registry name, cache scope, preset — see below):
 
-- registry name `<name>_attn` (snake_case, from the paper's short name; bare
-  `<name>` only for legacy top-level forms) and class name `<Name>Attention`;
+- registry name `<name>` (snake_case, from the paper's short name; no
+  `_attn` suffix — it was removed in 1.2) and class name `<Name>Attention`;
 - family directory `gated/ | latent/ | sparse/ |` top level, and the **paper
   family label** used by every census table (Dense/GQA/Recurrent/Sparse/Gated/
   Fast-weight/Latent/Geometric/Convolution-augmented — or a justified new one,
@@ -237,17 +237,17 @@ intent:
 |---|---|---|
 | 1 | `src/model/attention/<family>/<name>.py` | Module citing the paper in the docstring; `from __future__ import annotations`; Google-style docstrings; CPU-safe; `(config, pos_encoder=…)` constructor; equations mapped to code lines; `use_pe` via `getattr(config, "<name>_use_pe", <default>)`; honor `self.use_fixed_softmax`; decoder causal path; `forward` call shape S1/S2 per §7.13; `dense_forward` only if training-free. |
 | 2 | `src/model/attention/<family>/__init__.py` + `attention/__init__.py` | Import + `__all__` entry (quote surrounding lines). |
-| 3 | `src/model/hybrid_layer.py` | `mixer_registry["<name>_attn"] = <Class>` (+ `TRAINING_FREE_LAYERS` when eval-only). |
+| 3 | `src/model/hybrid_layer.py` | `mixer_registry["<name>"] = <Class>` (+ `TRAINING_FREE_LAYERS` when eval-only). |
 | 4 | `src/model/config.py` | Flat knob fields with defaults + `<name>_use_pe: bool` + validation (quote the peer's field block). |
 | 5 | `src/utils/config_flatten.py` | `_ATTENTION_MIXER_RENAMES["<subkey>"] = {…}` (only if knobs). |
 | 6 | `src/schema/_model/_dims.yaml` | Enum entry (position) + one row in **both** the EN and ES tables with `(paper: arxiv:<id>)`; ⚠️ wording if training-free. |
 | 7 | `src/schema/_model/_attention_<mixer>.yaml` | Knob block (only if knobs) — draft the full bilingual YAML (title/title_es, descriptions with examples + references, defaults matching the dataclass). |
 | 8 | `src/schema/_model.yaml` | Property-level `$ref` under `model.attention` + the new name appended to both attention description lists. |
 | 9 | `src/schema/_model/_positional_encoding.yaml` | `per_mixer_use_pe.<name>` entry with default + bilingual one-liners. |
-| 10 | `src/model/cache/capabilities.py` | `CACHE_SPECS["<name>_attn"] = CacheSpec(…)` with paper-based `notes`; `IMPLEMENTED_MIXERS` + incremental branch + parity tests only under KV-cache decision 1. |
+| 10 | `src/model/cache/capabilities.py` | `CACHE_SPECS["<name>"] = CacheSpec(…)` with paper-based `notes`; `IMPLEMENTED_MIXERS` + incremental branch + parity tests only under KV-cache decision 1. |
 | 11 | `configs/examples/<family>_<mixer>_adamw.yaml` | Tiny example; must pass `load_training_config`. Draft the full YAML. |
 | 12 | *(optional)* `configs/<name>.yaml` | Full preset if the user approved it (D-C3-style question). Draft it. |
-| 13 | `full_tests/run_e2e.py` | Append the name to `ATTENTIONS` (~lines 224–238). This **auto-generates the e2e combos**: `attn_single_<name>` (1-layer solo) and every `attn_<a>__<name>` / `attn_<name>__<b>` pair — no builder edits needed. Skip when training-free (see the list's header comment; `fasa_attn`/`sparge_attn` precedent). |
+| 13 | `full_tests/run_e2e.py` | Append the name to `ATTENTIONS` (~lines 224–238). This **auto-generates the e2e combos**: `attn_single_<name>` (1-layer solo) and every `attn_<a>__<name>` / `attn_<name>__<b>` pair — no builder edits needed. Skip when training-free (see the list's header comment; `fasa`/`sparge` precedent). |
 | 14 | `tests/test_schema_attention_layers.py` | Add the name to the expected enum set. |
 | 15 | Family test (`tests/test_<family>_attention.py` or `test_attention_modules.py`) | Test class: builds on a tiny config, forward in encoder + decoder modes, output shape, knobs honored, no NaN/Inf, BitNet on; name the methods. |
 | 16 | `tests/test_bitnet_coverage.py` | Add the name to the mixer list. |
@@ -268,7 +268,7 @@ intent:
 Hard rules to restate in the plan: the schema is the contract
 (`additionalProperties: false`); `hidden_size % num_heads == 0`, `num_kv_heads`
 divides `num_heads`, `len(layer_pattern) == num_layers`; inference never fails
-because of the cache (D5); `fasa_attn`/`sparge_attn`-style mixers train dense and
+because of the cache (D5); `fasa`/`sparge`-style mixers train dense and
 go sparse only in eval (rule 5); the papers are the theory source of truth (D11),
 so annex formulations must match the arXiv paper and `paper-es` must translate
 them faithfully.
@@ -375,7 +375,7 @@ Spell out the `/sync-website` steps for this change:
    `docs/paper/**` + `docs/paper-es/**` (tex, bbl, pdf, figures incl. the new
    `.mmd`/`.pdf`/`.svg`), `docs/bibliography/**`, `docs/architecture.md`.
 2. **Site-only edits** (mirror is the source of truth for these):
-   - `ft-diagram.js`: add `CATS["<name>_attn"]` and a `SUBSTRUCT["<name>_attn"]`
+   - `ft-diagram.js`: add `CATS["<name>"]` and a `SUBSTRUCT["<name>"]`
      tensor-flow template (or string alias to the closest peer) matching the
      paper's dataflow; add a `STYLES`/`STYLES_PRINT` class only for a new family
      category.

@@ -11,8 +11,8 @@ model:
     num_heads: 4
     dropout: 0.1
     layer_pattern:
-      - conformer_attn
-      - conformer_attn
+      - conformer
+      - conformer
     mode: encoder
   norm:
     type: layer_norm

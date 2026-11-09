@@ -38,7 +38,7 @@ def _cfg(norm_type="layer_norm", hidden_size=32):
         dropout=0.0,
         norm_type=norm_type,
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         use_moe=False,
     )
 

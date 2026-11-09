@@ -29,7 +29,7 @@ def _cfg(**overrides):
         dropout=0.0,
         norm_type="layer_norm",
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         use_moe=False,
         ode_solver="rk4",
         ode_steps=1,
@@ -211,8 +211,8 @@ class MemoryAttentionTests(unittest.TestCase):
                 return x + 1.0
 
         torch.manual_seed(0)
-        on = self._make(memory_attn_use_pe=True)
-        off = self._make(memory_attn_use_pe=False)
+        on = self._make(memory_use_pe=True)
+        off = self._make(memory_use_pe=False)
         off.load_state_dict(on.state_dict())
         pe = _AddOne()
         x, ids = self._x(), self._ids()

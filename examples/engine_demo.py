@@ -54,7 +54,7 @@ def tiny_config() -> FrankensteinModelConfig:
         num_experts=2,
         top_k_experts=1,
         dropout=0.0,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         ode_solver="rk4",
         ode_steps=1,
         use_bitnet=False,

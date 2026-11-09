@@ -25,11 +25,11 @@ A single PE module is built once in the encoder
 \texttt{forward(..., pos\_encoder=None)}.
 
 Each mixer carries a per-mixer \texttt{use\_pe} flag
-(\texttt{<mixer>\_attn\_use\_pe}, default \texttt{True} for attention
+(\texttt{<mixer>\_use\_pe}, default \texttt{True} for attention
 mixers, \texttt{False} for recurrent/decay mixers such as
-\texttt{retnet}, \texttt{mamba}, \texttt{ode}, \texttt{gla\_attn},
-\texttt{deltanet\_attn}, \texttt{mtla\_attn}, and the six Falcon
-mixers \texttt{falcon\{1,2,3,1a,2a,3a\}\_attn}). When \texttt{use\_pe} is
+\texttt{retnet}, \texttt{mamba}, \texttt{ode}, \texttt{gla},
+\texttt{deltanet}, \texttt{mtla}, and the six Falcon
+mixers \texttt{falcon\{1,2,3,1a,2a,3a\}}). When \texttt{use\_pe} is
 \texttt{False} the mixer ignores the injected module entirely.
 
 The PE is applied in two phases via the shared helpers
@@ -204,29 +204,29 @@ sinusoidal absolute, the mixers take no per-layer action.
 
 \subsection{Per-Mixer \texttt{use\_pe} Flags}
 
-Each mixer exposes a \texttt{<mixer>\_attn\_use\_pe} config field
-(e.g.\ \texttt{standard\_attn\_use\_pe}, \texttt{titan\_attn\_use\_pe}).
+Each mixer exposes a \texttt{<mixer>\_use\_pe} config field
+(e.g.\ \texttt{standard\_use\_pe}, \texttt{titan\_use\_pe}).
 The defaults are:
 
 \begin{itemize}
-\item \textbf{True} (attention mixers): \texttt{standard\_attn},
-  \texttt{titan\_attn}, \texttt{sigmoid\_attn},
-  \texttt{gated\_softmax\_attn}, \texttt{gqa\_attn}, all latent mixers
-  (\texttt{mla\_attn}, \texttt{gqla\_attn}, \texttt{mlra\_attn},
-  \texttt{tucker\_attn}, \texttt{iha\_attn}, \texttt{gta\_attn},
-  \texttt{cca\_attn}, \texttt{ccgqa\_attn}, \texttt{gma\_attn}), all
-  sparse mixers (\texttt{longformer\_attn}, \texttt{bigbird\_attn},
-  \texttt{sparse\_transformer\_attn}, \texttt{sparsek\_attn},
-  \texttt{nsa\_attn}, \texttt{msa\_attn}, \texttt{sparda\_attn},
-  \texttt{fasa\_attn}, \texttt{sparge\_attn}), and
-  \texttt{engram\_attn}, and \texttt{memory\_attn} (RoPE on the scoring pair
+\item \textbf{True} (attention mixers): \texttt{standard},
+  \texttt{titan}, \texttt{sigmoid},
+  \texttt{gated\_softmax}, \texttt{gqa}, all latent mixers
+  (\texttt{mla}, \texttt{gqla}, \texttt{mlra},
+  \texttt{tucker}, \texttt{iha}, \texttt{gta},
+  \texttt{cca}, \texttt{ccgqa}, \texttt{gma}), all
+  sparse mixers (\texttt{longformer}, \texttt{bigbird},
+  \texttt{sparse\_transformer}, \texttt{sparsek},
+  \texttt{nsa}, \texttt{msa}, \texttt{sparda},
+  \texttt{fasa}, \texttt{sparge}), and
+  \texttt{engram}, and \texttt{memory} (RoPE on the scoring pair
   only; values are built from the unrotated keys).
 \item \textbf{False} (recurrent/decay mixers): \texttt{retnet},
-  \texttt{retnet\_attn}, \texttt{mamba}, \texttt{ode},
-  \texttt{gla\_attn}, \texttt{deltanet\_attn},
-  \texttt{gated\_deltanet\_attn}, \texttt{gated\_deltanet2\_attn},
-  \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{kda\_attn},
-  \texttt{mtla\_attn}.
+  \texttt{retnet}, \texttt{mamba}, \texttt{ode},
+  \texttt{gla}, \texttt{deltanet},
+  \texttt{gated\_deltanet}, \texttt{gated\_deltanet2},
+  \texttt{hgrn2}, \texttt{fox}, \texttt{kda},
+  \texttt{mtla}.
 \end{itemize}
 
 The \texttt{False} default for recurrent/decay mixers reflects that
@@ -252,7 +252,7 @@ The legacy \texttt{use\_hope} boolean flag is deprecated and mapped to
 the new enum: \texttt{use\_hope=True} $\to$ \texttt{positional\_encoding=hope},
 \texttt{use\_hope=False} $\to$ \texttt{positional\_encoding=rope}. The
 per-mixer \texttt{positional\_encoding} override that previously
-existed only on \texttt{titan\_attn} is now a no-op: the model-wide
+existed only on \texttt{titan} is now a no-op: the model-wide
 enum is the single source of truth, and the TitanAttention allow-list
 that restricted PE to \texttt{\{hope, rope, none, nope\}} has been
 removed --- all 12 values now work with every mixer.

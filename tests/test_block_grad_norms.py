@@ -143,7 +143,7 @@ def _tiny_encoder(**overrides) -> "FrankensteinEncoder":
         dropout=0.0,
         norm_type="layer_norm",
         use_bitnet=False,
-        layer_pattern=["standard_attn"],
+        layer_pattern=["standard"],
         use_moe=True,
         ffn_hidden_size=96,
         ffn_activation="gelu",
