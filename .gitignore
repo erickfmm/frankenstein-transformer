@@ -45,3 +45,7 @@ experimentos/**/*.txt
 experimentos/**/out/
 
 erickfmm.github.io/
+
+# LaTeX build byproducts (PDFs/BIBs stay tracked)
+*.fdb_latexmk
+*.fls
