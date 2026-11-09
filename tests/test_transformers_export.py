@@ -115,7 +115,9 @@ class TransformersExportTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "ok")
             self.assertTrue((out_dir / "config.json").exists())
-            self.assertTrue((out_dir / "pytorch_model.bin").exists())
+            self.assertTrue((out_dir / "model.safetensors").exists())
+            self.assertFalse((out_dir / "pytorch_model.bin").exists())
+            self.assertTrue((out_dir / "quantization_frankenstein.py").exists())
             self.assertTrue((out_dir / "configuration_frankenstein.py").exists())
             self.assertTrue((out_dir / "modeling_frankenstein.py").exists())
             self.assertTrue((out_dir / "compatibility_report.json").exists())

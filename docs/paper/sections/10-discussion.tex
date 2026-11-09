@@ -27,7 +27,7 @@ The implementation quality varies across optimizers: classical methods (AdamW, S
 
 \subsection{Deployment and Production Considerations}
 
-The quantization pipeline demonstrates practical deployment concerns but makes specific engineering trade-offs. Ternary weight packing reduces storage to approximately $1.58$ bits per parameter, but this aggressive compression may degrade performance, especially for smaller models where quantization error is more significant. The current implementation applies quantization uniformly across parameter types.
+The quantization pipeline demonstrates practical deployment concerns but makes specific engineering trade-offs. Ternary weight packing reduces storage to approximately $1.58$ bits per parameter, but this aggressive compression may degrade performance, especially for smaller models where quantization error is more significant. The safetensors exporter instead offers block-affine \texttt{Q8\_0} and \texttt{Q4\_0} formats (8.5 and 4.5 bits per weight) and applies all three only to two-dimensional linear weights whose input dimension is divisible by 32; embeddings, normalization parameters and biases remain in FP32, so the effective compression ratio depends on the linear fraction of the model. The packed-linear runtime keeps the artifact compact at the cost of a dequantization step in every forward pass.
 
 The SBERT workflows provide practical utility for semantic similarity and retrieval tasks, but implementation assumes standard pooling strategies (CLS token, mean pooling). Recent advances such as Matryoshka embeddings \citep{muennighoff_matryoshka_2021} and contrastive learning refinements \citep{chen_supervised_2020} are not yet incorporated.
 

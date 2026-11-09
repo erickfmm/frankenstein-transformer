@@ -50,6 +50,7 @@ RESULTS_TRAINING_METRICS_DIR = RESULTS_DIR / "training_metrics"
 RESULTS_PARAM_METRICS_PATH = RESULTS_DIR / "param_metrics.json"
 #: Inference-vs-real comparison rows (``inference.csv``).
 RESULTS_INFERENCE_CSV_PATH = RESULTS_DIR / "inference.csv"
+RESULTS_INFERENCE_ACCURACY_CSV_PATH = RESULTS_DIR / "inference_accuracy.csv"
 #: Downloaded/cached real corpora used by ``--realonall``.
 REAL_DATA_DIR = DATA_DIR / "real"
 
@@ -1056,6 +1057,8 @@ def run_transformers_export(
     runner: List[str],
     env_extra: dict,
     timeout: Optional[int] = 300,
+    quant: str = "none",
+    quant_runtime: str = "dequantize_on_load",
 ) -> RunResult:
     output_dir.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, **env_extra, "FRANKENSTEIN_TEST_SEED": str(SEED)}
@@ -1069,6 +1072,8 @@ def run_transformers_export(
         "--yaml", str(yaml_path),
         "--output", str(output_dir),
         "--format", "transformers",
+        "--quant", str(quant),
+        "--quant-runtime", str(quant_runtime),
     ]
     start = time.time()
     try:
@@ -1191,6 +1196,18 @@ INFERENCE_CSV_COLUMNS = [
     "notes",
 ]
 
+INFERENCE_ACCURACY_COLUMNS = [
+    "combo_id",
+    "model_class",
+    "task",
+    "deploy_format",
+    "metric_name",
+    "samples",
+    "ok_samples",
+    "accuracy",
+    "status_counts",
+]
+
 
 def run_inference_eval(
     deploy_dir: Path,
@@ -1205,6 +1222,7 @@ def run_inference_eval(
     samples: int = 4,
     timeout: Optional[int] = 300,
     device: str = "cpu",
+    engine: str = "native",
 ) -> Tuple["RunResult", List[dict]]:
     """Compare a deployed artifact's predictions against real sample targets.
 
@@ -1249,6 +1267,7 @@ def run_inference_eval(
         "--model-class", model_class,
         "--task", task,
         "--deploy-format", deploy_format,
+        "--engine", str(engine),
         "--samples", str(samples),
         "--device", device,
         "--out", str(out_path),
@@ -1410,7 +1429,68 @@ def write_inference_csv(rows: List[dict]) -> Path:
         for row in rows:
             writer.writerow({column: row.get(column, "") for column in INFERENCE_CSV_COLUMNS})
     logging.info("Inference comparison rows written to %s", RESULTS_INFERENCE_CSV_PATH)
+    write_inference_accuracy_csv(rows)
     return RESULTS_INFERENCE_CSV_PATH
+
+
+def write_inference_accuracy_csv(rows: List[dict]) -> Path:
+    """Aggregate inference rows into per-artifact accuracy rows.
+
+    Groups by ``(combo_id, deploy_format, metric_name)`` and reports the mean
+    ``metric_value`` over ``OK`` rows, so the harness can compare the plain,
+    q8_0, q4_0 and i2_s exports (and both load runtimes) for every combo.
+
+    Args:
+        rows: Inference rows produced by ``_infer_eval.py``.
+
+    Returns:
+        Path to ``results/inference_accuracy.csv``.
+    """
+    groups: Dict[tuple, Dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            str(row.get("combo_id", "")),
+            str(row.get("deploy_format", "")),
+            str(row.get("metric_name", "")),
+        )
+        group = groups.setdefault(
+            key,
+            {
+                "combo_id": key[0],
+                "model_class": row.get("model_class", ""),
+                "task": row.get("task", ""),
+                "deploy_format": key[1],
+                "metric_name": key[2],
+                "samples": 0,
+                "values": [],
+                "status_counts": {},
+            },
+        )
+        status = str(row.get("status", "UNKNOWN"))
+        group["samples"] += 1
+        group["status_counts"][status] = group["status_counts"].get(status, 0) + 1
+        if status == "OK" and row.get("metric_value") not in ("", None):
+            try:
+                group["values"].append(float(row["metric_value"]))
+            except (TypeError, ValueError):
+                pass
+
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    with RESULTS_INFERENCE_ACCURACY_CSV_PATH.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=INFERENCE_ACCURACY_COLUMNS)
+        writer.writeheader()
+        for group in sorted(groups.values(), key=lambda item: (item["combo_id"], item["deploy_format"], item["metric_name"])):
+            values = group.pop("values")
+            writer.writerow(
+                {
+                    **group,
+                    "ok_samples": len(values),
+                    "accuracy": (sum(values) / len(values)) if values else "",
+                    "status_counts": json.dumps(group["status_counts"], sort_keys=True),
+                }
+            )
+    logging.info("Inference accuracy summary written to %s", RESULTS_INFERENCE_ACCURACY_CSV_PATH)
+    return RESULTS_INFERENCE_ACCURACY_CSV_PATH
 
 
 def write_param_metrics(metrics: Dict[str, Dict[str, Any]]) -> Path:

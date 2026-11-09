@@ -2,7 +2,7 @@
 
 Verifies that exported ``config.json`` declares a ``quantization_config``
 block when ``use_bitnet=True``, that BitLinear weights are baked to faithful
-ternary values in ``pytorch_model.bin``, and that decoder (autoregressive)
+ternary values in ``model.safetensors``, and that decoder (autoregressive)
 forward/backward works end-to-end with BitNet enabled.
 """
 import os
@@ -87,9 +87,10 @@ class TestBitNetHFExport(unittest.TestCase):
         ckpt = self._save_ckpt(m)
         overrides = "  use_bitnet: true\n  bitnet_routers: false"
         res, out = self._export(ckpt, _yaml_text(overrides))
-        sd = torch.load(os.path.join(out, "pytorch_model.bin"),
-                        map_location="cpu", weights_only=False)
-        w = sd["layers.0.mixer.q_proj.weight"]
+        from safetensors.torch import load_file
+
+        sd = load_file(os.path.join(out, "model.safetensors"))
+        w = sd["model.layers.0.mixer.q_proj.weight"]
         gamma = w.abs().max().item()
         nz = w[w.abs() > 1e-6]
         self.assertTrue(torch.allclose(nz.abs(), torch.full_like(nz.abs(), gamma),

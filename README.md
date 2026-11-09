@@ -35,7 +35,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 | **2. Schema validation** | Strict JSON Schema plus cross-field rules; invalid configs are rejected before any compute |
 | **3. Train** | 36 optimizer families, AMP, schedulers and a GPU thermal guard |
 | **4. Checkpoint** | Save rolling checkpoints for resuming or deployment |
-| **5. Deploy** | Quantize (`quantized`/`standard`) or export to HuggingFace Transformers / GGUF |
+| **5. Deploy** | Quantize (`quantized`/`standard`) or export to HuggingFace safetensors (`q8_0`/`q4_0`/`i2_s`) / GGUF |
 | **6. Infer / Export** | Batch, interactive and benchmark inference; SBERT similarity/search/cluster/encode |
 
 <p align="center"><i>The Streamlit schema-driven YAML builder (<code>web-server</code>).</i></p>
@@ -84,7 +84,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 | Config presets | 52 named presets + 123 example configs (schema smoke-tested in CI) |
 | CLI subcommands | 4 (`train`, `deploy`, `infer`, `web-server`) |
 | Web configuration UI | Streamlit schema-driven YAML builder |
-| Quantized deployment | BitNet + checkpoint export pipeline (HF Transformers / GGUF) |
+| Quantized deployment | BitNet + checkpoint export pipeline (HF safetensors `q8_0`/`q4_0`/`i2_s` / GGUF) |
 | SBERT workflows | Training + inference (similarity, search, cluster, encode) |
 | DashAI integration | `dashai-frankenstein` plugin (MLM classifier, causal decoder, ViT classifier, ViT segmenter) |
 
@@ -105,6 +105,7 @@ See [configs/README.md](configs/README.md) for preset details and [docs/architec
 |------------|---------|---------|
 | `train` | Run schema-validated training | `frankenstein-transformer train --config-name frankenstein_text_encoder --device auto` |
 | `deploy` | Export checkpoint to deployment artifacts (`quantized`/`standard`) or formats (`transformers`, `gguf`) | `frankenstein-transformer deploy --checkpoint ckpt.pt --output deployed/ --format quantized` |
+| `deploy --format transformers` | Safetensors-only HuggingFace export; optional block quantization | `frankenstein-transformer deploy --checkpoint ckpt.pt --yaml train.yaml --output hf/ --format transformers --quant q4_0 --quant-runtime quantized_linear` |
 | `infer` | Batch/interactive/benchmark inference (`--task mlm`) or SBERT similarity/search/cluster/encode (`--task sbert`) | `frankenstein-transformer infer --model deployed/ --text "hello" --device auto` |
 | `web-server` | Launch Streamlit config builder UI | `frankenstein-transformer web-server` |
 

@@ -1081,6 +1081,10 @@ def build_cli_command(
         add("--output", extra_args.get("output"))
         add("--format", extra_args.get("format"))
         add("--yaml", extra_args.get("yaml"))
+        if extra_args.get("quant") not in (None, "", "none"):
+            add("--quant", extra_args.get("quant"))
+        if extra_args.get("quant_runtime"):
+            add("--quant-runtime", extra_args.get("quant_runtime"))
         add("--validate", extra_args.get("validate"), store_true=True)
         add("--check", extra_args.get("check"), store_true=True)
         add("--device", extra_args.get("device"))
@@ -1148,6 +1152,22 @@ def render_command_args(command: str) -> Dict[str, Any]:
             index=0,
             key="deploy.format",
         )
+        if args["format"] == "transformers":
+            args["quant"] = st.selectbox(
+                "Safetensors Quantization",
+                ["none", "q8_0", "q4_0", "i2_s"],
+                index=0,
+                key="deploy.quant",
+            )
+            args["quant_runtime"] = st.selectbox(
+                "Quantization Runtime",
+                ["dequantize_on_load", "quantized_linear"],
+                index=0,
+                key="deploy.quant_runtime",
+            )
+        else:
+            args["quant"] = None
+            args["quant_runtime"] = None
         args["validate"] = st.checkbox(
             "Validate Output (standard/quantized)", value=False, key=f"{command}.validate"
         )

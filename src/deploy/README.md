@@ -61,6 +61,32 @@ deployed_model/
 └── deployment_info.json     # Metadata
 ```
 
+### 1b. Export a HuggingFace safetensors artifact
+
+```bash
+frankenstein-transformer deploy \
+    --checkpoint path/to/checkpoint.pt \
+    --yaml path/to/train.yaml \
+    --output hf_model/ \
+    --format transformers \
+    --quant q4_0 \
+    --quant-runtime quantized_linear
+```
+
+`--quant` accepts `none`, `q8_0` (8.5 bpw), `q4_0` (4.5 bpw) and `i2_s`
+(BitNet ternary, 2 bpw). The artifact is `model.safetensors` + custom
+`modeling_frankenstein.py`; load it with the bundled helper:
+
+```python
+import sys; sys.path.insert(0, "hf_model")
+from load_frankenstein import load_pretrained
+model = load_pretrained("hf_model")
+```
+
+`--quant-runtime dequantize_on_load` expands blocks to fp32 at load time;
+`--quant-runtime quantized_linear` keeps `PackedLinear` buffers packed and
+dequantizes in `forward`.
+
 ### 2. Run Inference
 
 #### Interactive Mode

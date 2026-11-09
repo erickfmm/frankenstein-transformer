@@ -38,12 +38,15 @@ timeout (e.g. ``--timeout 1800``).
 
 Every combo now runs its **whole pipeline in the same worker, sequentially**:
 training → deploy (``standard``) → inference evaluation → deploy
-(``quantized``) → inference evaluation → Transformers export (audio export
-must be rejected with the documented message) → result persistence, and (in
-``--save-to delete|memory``) artifact cleanup. The harness writes, under
-``tmp/results/``:
+(``quantized``) → inference evaluation → Transformers exports (plain, plus
+``q8_0``/``q4_0``/``i2_s`` in both v1/v2 runtimes for text combos; audio export
+must be rejected with the documented message) → HF inference evaluation →
+result persistence, and (in ``--save-to delete|memory``) artifact cleanup. The
+harness writes, under ``tmp/results/``:
 
 * ``inference.csv`` — predicted vs real comparisons per deployed artifact,
+* ``inference_accuracy.csv`` — accuracy aggregated per combo/artifact (plain,
+  ``hf_q8_0_v1``, ``hf_q4_0_v2``, ``hf_i2_s_v2``, ...),
 * ``param_metrics.json`` — ``{model: {block: nparams, ..., "total": n}}`` using
   the canonical 10 block categories,
 * ``training_metrics/<model>.csv`` — one ready-to-process training-metrics CSV
@@ -1883,6 +1886,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip deploy/infer/export smoke tests.",
     )
     parser.add_argument(
+        "--hf-quant-formats",
+        default="q8_0,q4_0,i2_s",
+        metavar="FORMATS",
+        help=(
+            "Comma-separated safetensors quantization formats exported for "
+            "every text combo (default: q8_0,q4_0,i2_s)."
+        ),
+    )
+    parser.add_argument(
+        "--hf-quant-runtimes",
+        default="dequantize_on_load,quantized_linear",
+        metavar="RUNTIMES",
+        help=(
+            "Comma-separated load runtimes tested per format "
+            "(default: dequantize_on_load,quantized_linear = v1,v2)."
+        ),
+    )
+    parser.add_argument(
+        "--skip-hf-quant",
+        action="store_true",
+        help="Skip the q8_0/q4_0/i2_s transformers exports and their accuracy evals.",
+    )
+    parser.add_argument(
         "--vocab-size",
         type=int,
         default=helpers.TOY_VOCAB_SIZE,
@@ -2033,6 +2059,30 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error("--test-percentage must be between 0 and 100")
     if args.save_to == "memory" and args.resume:
         parser.error("--resume is incompatible with --save-to memory (nothing persists)")
+
+    hf_quant_formats = [
+        item.strip().lower()
+        for item in str(args.hf_quant_formats).split(",")
+        if item.strip()
+    ]
+    hf_quant_runtimes = [
+        item.strip().lower()
+        for item in str(args.hf_quant_runtimes).split(",")
+        if item.strip()
+    ]
+    for fmt in hf_quant_formats:
+        if fmt not in {"q8_0", "q4_0", "i2_s"}:
+            parser.error(
+                f"unknown --hf-quant-formats entry {fmt!r}; expected q8_0, q4_0 or i2_s"
+            )
+    for runtime in hf_quant_runtimes:
+        if runtime not in {"dequantize_on_load", "quantized_linear"}:
+            parser.error(
+                f"unknown --hf-quant-runtimes entry {runtime!r}; expected "
+                "dequantize_on_load or quantized_linear"
+            )
+    args.hf_quant_format_list = hf_quant_formats
+    args.hf_quant_runtime_list = hf_quant_runtimes
 
     # 0 (or any non-positive value) disables the timeout for ``subprocess.run``,
     # which expects ``None`` to wait forever.
@@ -2327,18 +2377,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     def deploy_and_evaluate(
         training_result: helpers.RunResult,
     ) -> Tuple[List[helpers.RunResult], List[dict]]:
-        """Deploy every format, evaluate inference and export one checkpoint.
+        """Deploy every format, evaluate inference and export each checkpoint.
 
         Runs, in order, ``deploy --format standard`` + inference evaluation, the
-        same pair for ``quantized``, and the Transformers export. Audio models
-        have no Transformers equivalent, so that export must be rejected with
-        the documented message and is scored ``OK`` when it is.
+        same pair for ``quantized``, then the plain Transformers export and the
+        ``q8_0``/``q4_0``/``i2_s`` variants in both v1/v2 runtimes (text models
+        only), each followed by an HF accuracy evaluation. Audio models have no
+        Transformers equivalent, so that export must be rejected with the
+        documented message and is scored ``OK`` when it is.
 
         Safe to call from a worker thread: every artifact path is keyed by
         ``combo_id`` (``tmp/deploy/<combo>_<fmt>``,
         ``tmp/inference_eval/<combo>_<fmt>.json``,
-        ``tmp/transformers-export/<combo>``), so independent checkpoints never
-        touch the same files.
+        ``tmp/transformers-export/<combo>/<label>``), so independent
+        checkpoints never touch the same files.
 
         Args:
             training_result: A successful training ``RunResult`` with a checkpoint.
@@ -2414,43 +2466,105 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         # transformers-export (needs the original YAML).
         if yaml_path.exists():
-            export_dir = helpers.TMP_DIR / "transformers-export" / combo_id
-            logging.info("Running transformers-export %s -> %s", combo_id, export_dir)
-            export_result = helpers.run_transformers_export(
-                checkpoint_path,
-                yaml_path,
-                export_dir,
-                f"{combo_id}_export",
-                runner,
-                env_extra,
-                timeout=timeout_secs,
-            )
-            if is_audio:
-                combined = f"{export_result.stdout}\n{export_result.stderr}".lower()
-                rejected_as_documented = (
-                    export_result.status == "FAILED"
-                    and "frankenstein_audio" in combined
-                    and "not currently exportable" in combined
+            hf_variants: List[Tuple[str, str, str]] = [
+                ("none", "dequantize_on_load", "hf_none")
+            ]
+            if is_text and not args.skip_hf_quant:
+                for runtime in args.hf_quant_runtime_list:
+                    runtime_label = (
+                        "v1" if runtime == "dequantize_on_load" else "v2"
+                    )
+                    for quant in args.hf_quant_format_list:
+                        hf_variants.append(
+                            (quant, runtime, f"hf_{quant}_{runtime_label}")
+                        )
+
+            for quant, quant_runtime, label in hf_variants:
+                export_dir = (
+                    helpers.TMP_DIR / "transformers-export" / combo_id / label
                 )
-                if rejected_as_documented:
-                    export_result.status = "OK"
-                    export_result.notes = (
-                        "audio transformers export rejected with the documented message"
+                logging.info(
+                    "Running transformers-export (%s/%s) %s -> %s",
+                    quant,
+                    quant_runtime,
+                    combo_id,
+                    export_dir,
+                )
+                export_result = helpers.run_transformers_export(
+                    checkpoint_path,
+                    yaml_path,
+                    export_dir,
+                    f"{combo_id}_export_{label}",
+                    runner,
+                    env_extra,
+                    timeout=timeout_secs,
+                    quant=quant,
+                    quant_runtime=quant_runtime,
+                )
+                if is_audio:
+                    combined = f"{export_result.stdout}\n{export_result.stderr}".lower()
+                    rejected_as_documented = (
+                        export_result.status == "FAILED"
+                        and "frankenstein_audio" in combined
+                        and "not currently exportable" in combined
                     )
-                else:
-                    export_result.status = "FAILED"
-                    export_result.notes = (
-                        "audio transformers export was not rejected as documented "
-                        f"(returncode={export_result.returncode})"
-                    )
-            produced.append(export_result)
-            logging.info(
-                "%s -> %s (%.1fs) %s",
-                export_result.combo_id,
-                export_result.status,
-                export_result.duration_sec,
-                export_result.notes,
-            )
+                    if rejected_as_documented:
+                        export_result.status = "OK"
+                        export_result.notes = (
+                            "audio transformers export rejected with the documented message"
+                        )
+                    else:
+                        export_result.status = "FAILED"
+                        export_result.notes = (
+                            "audio transformers export was not rejected as documented "
+                            f"(returncode={export_result.returncode})"
+                        )
+                produced.append(export_result)
+                logging.info(
+                    "%s -> %s (%.1fs) %s",
+                    export_result.combo_id,
+                    export_result.status,
+                    export_result.duration_sec,
+                    export_result.notes,
+                )
+
+                if (
+                    export_result.status != "OK"
+                    or not is_text
+                    or (args.skip_hf_quant and label != "hf_none")
+                ):
+                    continue
+
+                # The HF accuracy evaluator tokenizes real text with the
+                # deployed tokenizer.
+                helpers.copy_tokenizer_to_deploy_dir(
+                    export_dir,
+                    vocab_size,
+                    run_dir=helpers.RUNS_DIR / combo_id,
+                )
+                eval_result, rows = helpers.run_inference_eval(
+                    export_dir,
+                    yaml_path,
+                    combo_id,
+                    python_runner,
+                    env_extra,
+                    model_class=model_class,
+                    task=task,
+                    deploy_format=label,
+                    samples=args.infer_samples,
+                    timeout=timeout_secs,
+                    device=args.device,
+                    engine="hf",
+                )
+                produced.append(eval_result)
+                rows_out.extend(rows)
+                logging.info(
+                    "%s -> %s (%.1fs) %s",
+                    eval_result.combo_id,
+                    eval_result.status,
+                    eval_result.duration_sec,
+                    eval_result.notes,
+                )
 
         return produced, rows_out
 

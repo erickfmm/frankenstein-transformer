@@ -32,11 +32,13 @@ Usage (normally invoked by ``_helpers.run_inference_eval``):
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import logging
 import sys
 import traceback
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -154,6 +156,32 @@ def _load_raw_model(deploy_dir: Path, model_class: str, device: str) -> torch.nn
             or checkpoint
         )
         model.load_state_dict(state_dict, strict=False)
+    model.eval()
+    model.to(device)
+    return model
+
+
+def _load_hf_export(deploy_dir: Path, device: str) -> Any:
+    """Load a safetensors Transformers export through its own package code.
+
+    ``transformers``' dynamic-module loader cannot copy the nested ``model/``
+    package shipped next to the generated wrappers, so the export ships a
+    ``load_frankenstein.py`` helper that imports the directory as a package.
+
+    Args:
+        deploy_dir: Exported HF directory.
+        device: Torch device string.
+
+    Returns:
+        The loaded wrapper model in eval mode.
+    """
+    deploy_dir = Path(deploy_dir)
+    if str(deploy_dir) not in sys.path:
+        sys.path.insert(0, str(deploy_dir))
+    importlib.invalidate_caches()
+    sys.modules.pop("load_frankenstein", None)
+    loader = importlib.import_module("load_frankenstein")
+    model = loader.load_pretrained(str(deploy_dir))
     model.eval()
     model.to(device)
     return model
@@ -521,6 +549,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model-class", required=True)
     parser.add_argument("--task", required=True)
     parser.add_argument("--deploy-format", default="standard")
+    parser.add_argument(
+        "--engine",
+        choices=["native", "hf"],
+        default="native",
+        help="native: deployment .pt artifact; hf: transformers safetensors export",
+    )
     parser.add_argument("--samples", type=int, default=4)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--out", required=True)
@@ -557,7 +591,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                 )
             ]
         elif model_class in TEXT_MODEL_CLASSES:
-            engine = FrankensteinInference(str(deploy_dir), device=device)
+            if args.engine == "hf":
+                wrapper = _load_hf_export(deploy_dir, device)
+                engine = SimpleNamespace(model=wrapper.model)
+            else:
+                engine = FrankensteinInference(str(deploy_dir), device=device)
             loaded = load_training_config(str(run_config_path))
             tokenizer = _load_text_tokenizer(run_config, run_config_path, deploy_dir)
             if task == "causal_lm":
@@ -566,6 +604,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                 rows = eval_text_classification(args, engine, loaded, device, tokenizer)
             else:
                 rows = eval_text_mlm(args, engine, loaded, device, tokenizer)
+        elif args.engine == "hf":
+            rows = [
+                _skip_row(
+                    args,
+                    "SKIPPED_NO_INFER",
+                    f"HF safetensors accuracy evaluation is text-only (got {model_class})",
+                )
+            ]
         elif model_class == "frankenstein_vit":
             model = _load_raw_model(deploy_dir, model_class, device)
             if task == "classification":

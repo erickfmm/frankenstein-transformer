@@ -82,6 +82,29 @@ class BuildParserStructureTests(unittest.TestCase):
             ])
             self.assertEqual(args.format, fmt)
 
+    def test_deploy_quant_defaults(self):
+        args = self.parser.parse_args([
+            "deploy", "--checkpoint", "/tmp/ckpt.pt", "--output", "/tmp/out",
+        ])
+        self.assertEqual(args.quant, "none")
+        self.assertEqual(args.quant_runtime, "dequantize_on_load")
+
+    def test_deploy_quant_choices(self):
+        for quant in ("none", "q8_0", "q4_0", "i2_s"):
+            args = self.parser.parse_args([
+                "deploy", "--checkpoint", "/tmp/ckpt.pt", "--output", "/tmp/out",
+                "--format", "transformers", "--yaml", "/tmp/train.yaml",
+                "--quant", quant,
+            ])
+            self.assertEqual(args.quant, quant)
+        for runtime in ("dequantize_on_load", "quantized_linear"):
+            args = self.parser.parse_args([
+                "deploy", "--checkpoint", "/tmp/ckpt.pt", "--output", "/tmp/out",
+                "--format", "transformers", "--yaml", "/tmp/train.yaml",
+                "--quant-runtime", runtime,
+            ])
+            self.assertEqual(args.quant_runtime, runtime)
+
     def test_infer_defaults(self):
         args = self.parser.parse_args(["infer", "--model", "/tmp/model"])
         self.assertEqual(args.command, "infer")
@@ -234,6 +257,35 @@ class MainDispatchTests(unittest.TestCase):
                 ])
         self.assertEqual(rc, 1)
         export_main.assert_not_called()
+
+    def test_deploy_transformers_quant_forwarded(self):
+        mocked = Mock(return_value=0)
+        with patch.dict(
+            "sys.modules",
+            {"src.deploy.transformers_export": SimpleNamespace(main=mocked)},
+        ):
+            with patch(
+                "src.cli._validate_transformers_export_compatibility",
+                return_value=(True, {"issues": []}),
+            ):
+                rc = main([
+                    "deploy", "--checkpoint", "/tmp/ckpt.pt", "--output", "/tmp/out",
+                    "--format", "transformers", "--yaml", "/tmp/train.yaml",
+                    "--quant", "q4_0", "--quant-runtime", "quantized_linear",
+                ])
+        self.assertEqual(rc, 0)
+        forwarded = mocked.call_args[0][0]
+        self.assertIn("--quant", forwarded)
+        self.assertIn("q4_0", forwarded)
+        self.assertIn("--quant-runtime", forwarded)
+        self.assertIn("quantized_linear", forwarded)
+
+    def test_deploy_quant_rejected_outside_transformers(self):
+        rc = main([
+            "deploy", "--checkpoint", "/tmp/ckpt.pt", "--output", "/tmp/out",
+            "--format", "standard", "--quant", "q8_0",
+        ])
+        self.assertEqual(rc, 2)
 
     def test_deploy_gguf_dispatches_to_bitnet_gguf_main(self):
         mocked = Mock(return_value=0)

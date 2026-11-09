@@ -234,7 +234,23 @@ con des-cuantización $x\approx q/\alpha$. Para $N$ parámetros, las estimacione
 \]
 lo que se alinea con objetivos de despliegue ligero \citep{samson_lightweight_2026,bravin_embbert_2026}.
 
+\subsection{Cuantización Afín por Bloques y Exportación Safetensors}
+\label{sec:annex-block-affine}
+
+La exportación a HuggingFace aplica cuantización afín por bloques a cada peso lineal bidimensional cuya dimensión de entrada es múltiplo de 32. Sean $w_1,\ldots,w_{32}$ un bloque. El diseño \texttt{Q8\_0} almacena
+\[
+d=\frac{\max_i |w_i|}{127},\qquad q_i=\operatorname{round}\!\left(\frac{w_i}{d}\right)\in[-127,127],
+\]
+como una escala FP16 más 32 bytes con signo (34 bytes por bloque, 8.5 bits por peso). El diseño \texttt{Q4\_0} sigue la convención del máximo con signo: selecciona el valor con signo $m$ de mayor magnitud, fija $d=m/(-8)$ y almacena
+\[
+q_i=\min\!\bigl(15,\operatorname{trunc}(w_i/d+8.5)\bigr)\in[0,15],
+\]
+como una escala FP16 más 16 bytes de nibbles (18 bytes por bloque, 4.5 bits por peso). El elemento $j$ ocupa el nibble bajo y el elemento $j+16$ el nibble alto; la des-cuantización es $\hat w_i=d\,(q_i-8)$. El diseño ternario \texttt{i2\_s} reutiliza la escala de BitNet $s=\text{mean}(|W|)$ (o $\max|W|$ si los pesos ya son ternarios), empaqueta cuatro símbolos por byte y añade una escala FP32 por tensor (2 bits por peso). El almacenamiento nominal es, por tanto, de $8.5$, $4.5$ y $2.0$ bits por peso lineal cuantizado, antes de los metadatos del tensor.
+
+El artefacto safetensors registra el formato y la forma original de cada tensor en \texttt{config.json}. Dos runtimes lo consumen: \emph{dequantize-on-load} (v1) reconstruye parámetros FP32 durante la carga, mientras que \emph{packed-linear} (v2) conserva los búferes empaquetados en un módulo \texttt{PackedLinear} y des-cuantiza en \texttt{forward}, preservando la normalización de entrada y la cuantización INT8 de activaciones de BitLinear cuando corresponde. El exportador no utiliza kernels enteros fusionados, y el harness experimental evalúa \texttt{Q8\_0}, \texttt{Q4\_0} e \texttt{i2\_s} en ambos runtimes.
+
 \subsection{Enrutamiento de Tokens Mixture-of-Depths (MoD)}
+
 
 Cuando \texttt{use\_mixture\_of\_depths=true}, cada bloque del transformer puntúa los tokens con un enrutador ligero. Solo el subconjunto superior de \texttt{mixture\_of\_depths\_capacity\_ratio} se actualiza; los tokens omitidos pasan sin cambios \citep{zhu2026mixtureofdepthsattention}. Esto asigna más profundidad a los tokens destacados, reduciendo el cómputo por capa.
 

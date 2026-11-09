@@ -39,6 +39,7 @@
 | Training loop | `src/training/trainer.py` |
 | Framework-neutral builder | `src/engine.py` (`build_model`) |
 | Deployment / export / inference | `src/deploy/` |
+| HF safetensors quantization codecs | `src/deploy/safetensors_quant.py` (`q8_0`, `q4_0`, `i2_s`) |
 | SBERT | `src/sbert/` |
 | Streamlit UI | `src/streamlit_gui/app.py` |
 | Presets | `configs/*.yaml`, `configs/examples/*.yaml` |
@@ -89,7 +90,8 @@
 - `tests/test_frankenstein_audio.py`, `test_audio_dataset.py`, `test_audio_loss.py`,
   `test_audio_training.py`, `test_audio_param_categories.py`.
 - `tests/test_kv_cache_*.py` — slot/codec/mixer-parity/fallback/mechanism/eval-only/quant suites;
-  `test_inference_config.py`, `test_inference_generate.py`, `test_transformers_export.py`.
+  `test_inference_config.py`, `test_inference_generate.py`, `test_transformers_export.py`,
+  `test_transformers_safetensors_quant.py`, `test_safetensors_quant.py`.
   `test_kv_cache_mixers.py` parametrizes every mixer in `IMPLEMENTED_MIXERS`
   (`src/model/cache/capabilities.py`): full-forward vs prefill+decode parity.
 

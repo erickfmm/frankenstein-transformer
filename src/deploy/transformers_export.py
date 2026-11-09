@@ -1,10 +1,24 @@
 """Export Frankenstein checkpoints to HuggingFace Transformers format.
 
 Generates a self-contained directory with ``config.json``,
-``pytorch_model.bin``, custom ``configuration_frankenstein.py`` and
-``modeling_frankenstein.py`` wrappers, and the model source tree, enabling
-loading via ``AutoModelForMaskedLM`` or ``AutoModelForCausalLM`` with
-``trust_remote_code=True``.
+``model.safetensors``, custom ``configuration_frankenstein.py`` and
+``modeling_frankenstein.py`` wrappers, a ``quantization_frankenstein.py``
+codec module, a ``load_frankenstein.py`` loader, and the model source tree.
+Load with ``load_frankenstein.load_pretrained(<dir>)``: the nested ``model/``
+package is not copied by HF's ``trust_remote_code`` dynamic-module loader.
+
+Quantization targets only the safetensors artifact: ``q8_0``/``q4_0`` use
+32-weight affine blocks and ``i2_s`` uses BitNet ternary packing.
+Two load-time runtimes are supported:
+
+* ``dequantize_on_load`` (v1): packed blocks are expanded to fp32 while the
+  artifact loads; the runtime model is a normal Frankenstein model.
+* ``quantized_linear`` (v2): every quantized ``nn.Linear`` is replaced by a
+  :class:`PackedLinear` that keeps the packed buffers and dequantizes inside
+  ``forward``.
+
+No ``pytorch_model.bin``, bitsandbytes or other quantization runtime is
+produced by this exporter.
 """
 
 from __future__ import annotations
@@ -22,11 +36,45 @@ import yaml
 try:
     from .quantization import bake_bitnet_weights
     from ..model.attention.common import BitLinear
+    from ..utils.config_flatten import flatten_model_dict
 except ImportError:
     # transformers_export may be invoked from a flat sys.path context; the
     # helpers are optional for the compatibility-check path.
     bake_bitnet_weights = None  # type: ignore
     BitLinear = None  # type: ignore
+    from utils.config_flatten import flatten_model_dict  # type: ignore
+
+try:
+    from .safetensors_quant import (
+        BLOCK_SIZE,
+        I2_S,
+        PACKED_SUFFIX,
+        Q4_0,
+        Q8_0,
+        SCALE_SUFFIX,
+        SUPPORTED_FORMATS,
+        bits_per_weight,
+        quantize_weight,
+    )
+except ImportError:  # flat sys.path context
+    from safetensors_quant import (  # type: ignore
+        BLOCK_SIZE,
+        I2_S,
+        PACKED_SUFFIX,
+        Q4_0,
+        Q8_0,
+        SCALE_SUFFIX,
+        SUPPORTED_FORMATS,
+        bits_per_weight,
+        quantize_weight,
+    )
+
+#: Quantization formats accepted by :func:`export_transformers_model`.
+QUANT_FORMATS = ("none",) + tuple(SUPPORTED_FORMATS)
+#: Load-time quantization runtimes.
+QUANT_RUNTIMES = ("dequantize_on_load", "quantized_linear")
+SAFETENSORS_NAME = "model.safetensors"
+QUANT_MODULE_NAME = "quantization_frankenstein.py"
 
 
 _CONFIGURATION_FILE = """from __future__ import annotations
@@ -64,17 +112,30 @@ class FrankensteinConfig(PretrainedConfig):
         self.task = task
         self.frankenstein_config = model_cfg
 
-        for key, value in model_cfg.items():
-            setattr(self, key, value)
-
         super().__init__(**passthrough)
+
+        for key, value in model_cfg.items():
+            if key in {"model_class", "task", "model_type", "architectures"}:
+                continue
+            if key == "num_labels" and value is None:
+                # `num_labels` is a reserved HF property; a None value breaks
+                # its id2label/label2id map creation.
+                continue
+            setattr(self, key, value)
 
     def to_dict(self) -> Dict[str, Any]:
         payload = super().to_dict()
         payload["model_class"] = self.model_class
         payload["task"] = self.task
         payload["frankenstein_config"] = dict(self.frankenstein_config)
-        payload.update(self.frankenstein_config)
+        payload.update(
+            {
+                key: value
+                for key, value in self.frankenstein_config.items()
+                if key not in {"model_class", "task", "model_type", "architectures"}
+                and not (key == "num_labels" and value is None)
+            }
+        )
         return payload
 """
 
@@ -82,10 +143,12 @@ class FrankensteinConfig(PretrainedConfig):
 _MODELING_FILE = """from __future__ import annotations
 
 from dataclasses import fields
+from pathlib import Path
 from typing import Any, Dict
 
 import torch
 import torch.nn.functional as F
+from safetensors.torch import load_file
 from torch import nn
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
@@ -94,6 +157,12 @@ from .configuration_frankenstein import FrankensteinConfig
 from .model.config import FrankensteinModelConfig
 from .model.frankenstein_decoder import FrankensteinDecoder
 from .model.frankenstein_encoder import FrankensteinEncoder
+from .quantization_frankenstein import (
+    PACKED_SUFFIX,
+    SCALE_SUFFIX,
+    dequantize_weight,
+    packed_numel,
+)
 
 
 _MODEL_KEYS = {field.name for field in fields(FrankensteinModelConfig)}
@@ -115,9 +184,109 @@ def _build_core_model(config: FrankensteinConfig) -> nn.Module:
             model_cfg.mode = "decoder"
         return FrankensteinDecoder(model_cfg)
     if model_class == "frankenstein_vit":
-        from ..model.frankenstein_vit import FrankensteinViT
+        from .model.frankenstein_vit import FrankensteinViT
         return FrankensteinViT(model_cfg)
     return FrankensteinEncoder(model_cfg)
+
+
+def _quantization_config(config: FrankensteinConfig) -> Dict[str, Any]:
+    payload = getattr(config, "frankenstein_quantization", None)
+    if isinstance(payload, dict) and payload.get("runtime"):
+        return dict(payload)
+    return {}
+
+
+def _resolve_safetensors_file(source: str) -> str:
+    path = Path(source)
+    if path.is_dir():
+        candidate = path / "model.safetensors"
+        if candidate.exists():
+            return str(candidate)
+        raise FileNotFoundError(f"No model.safetensors in {path}")
+    if path.exists():
+        return str(path)
+    from huggingface_hub import hf_hub_download
+
+    return hf_hub_download(source, "model.safetensors")
+
+
+def _dequantize_state_dict(
+    state_dict: Dict[str, torch.Tensor],
+    quantization_config: Dict[str, Any],
+) -> Dict[str, torch.Tensor]:
+    tensors = quantization_config.get("tensors") or {}
+    result = {
+        name: tensor
+        for name, tensor in state_dict.items()
+        if not name.endswith(PACKED_SUFFIX) and not name.endswith(SCALE_SUFFIX)
+    }
+    for name, metadata in tensors.items():
+        module_name = name[: -len(".weight")] if name.endswith(".weight") else name
+        packed = state_dict.get(module_name + PACKED_SUFFIX)
+        if packed is None:
+            continue
+        result[name] = dequantize_weight(
+            packed,
+            state_dict.get(module_name + SCALE_SUFFIX),
+            metadata["shape"],
+            metadata["format"],
+        )
+    return result
+
+
+class PackedLinear(nn.Module):
+    # nn.Linear whose weights stay packed and dequantize in forward().
+
+    def __init__(self, base: nn.Linear, fmt: str) -> None:
+        super().__init__()
+        self.in_features = int(base.in_features)
+        self.out_features = int(base.out_features)
+        self.bias = base.bias
+        self._format = str(fmt)
+        self._shape = (self.out_features, self.in_features)
+        # BitLinear also normalizes and int8-quantizes activations; preserve
+        # that runtime behavior when the packed layer replaces one.
+        self._bitlinear = getattr(base, "bake_ternary_weights", None) is not None
+        self.register_buffer(
+            "__packed__",
+            torch.empty(packed_numel(self._shape, self._format), dtype=torch.uint8),
+        )
+        if self._format == "i2_s":
+            self.register_buffer("__scale__", torch.zeros((), dtype=torch.float32))
+
+    @property
+    def weight(self) -> torch.Tensor:
+        return dequantize_weight(
+            self.__packed__,
+            getattr(self, "__scale__", None),
+            self._shape,
+            self._format,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        weight = self.weight.to(dtype=x.dtype)
+        if not self._bitlinear:
+            return F.linear(x, weight, self.bias)
+        x_norm = F.layer_norm(x, (x.shape[-1],))
+        scale = 127.0 / x_norm.abs().max(dim=-1, keepdim=True).values.clamp(min=1e-5)
+        x_q = (x_norm * scale).round().clamp(-128, 127) / scale
+        return F.linear(x_q, weight, self.bias)
+
+
+def _apply_packed_linears(model: nn.Module, quantization_config: Dict[str, Any]) -> None:
+    if str(quantization_config.get("runtime") or "") != "quantized_linear":
+        return
+    for name, metadata in (quantization_config.get("tensors") or {}).items():
+        if not name.endswith(".weight"):
+            continue
+        core_name = name[6:] if name.startswith("model.") else name
+        module_path = core_name[: -len(".weight")]
+        parent_path, _, child = module_path.rpartition(".")
+        parent = model.get_submodule(parent_path) if parent_path else model
+        base = getattr(parent, child, None)
+        if not isinstance(base, nn.Linear):
+            continue
+        setattr(parent, child, PackedLinear(base, metadata["format"]))
 
 
 class FrankensteinPreTrainedModel(PreTrainedModel):
@@ -125,11 +294,38 @@ class FrankensteinPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = False
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        config = kwargs.get("config")
+        if config is None:
+            config = FrankensteinConfig.from_pretrained(pretrained_model_name_or_path)
+            kwargs["config"] = config
+        quantization_config = _quantization_config(config)
+        runtime = str(quantization_config.get("runtime") or "")
+        if runtime != "dequantize_on_load":
+            return super().from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        state_dict = _dequantize_state_dict(
+            load_file(_resolve_safetensors_file(str(pretrained_model_name_or_path))),
+            quantization_config,
+        )
+        model = cls(config)
+        model.load_state_dict(state_dict, strict=False)
+        dtype = kwargs.get("torch_dtype") or kwargs.get("dtype")
+        if dtype is not None:
+            model.to(dtype=dtype)
+        device = kwargs.get("device")
+        if isinstance(device, str) and device not in ("auto", "disk"):
+            model.to(device)
+        return model.eval()
+
 
 class FrankensteinForMaskedLM(FrankensteinPreTrainedModel):
     def __init__(self, config: FrankensteinConfig) -> None:
         super().__init__(config)
         self.model = _build_core_model(config)
+        _apply_packed_linears(self.model, _quantization_config(config))
         self.post_init()
 
     def get_input_embeddings(self):
@@ -164,6 +360,7 @@ class FrankensteinForCausalLM(FrankensteinPreTrainedModel):
     def __init__(self, config: FrankensteinConfig) -> None:
         super().__init__(config)
         self.model = _build_core_model(config)
+        _apply_packed_linears(self.model, _quantization_config(config))
         self.post_init()
 
     def get_input_embeddings(self):
@@ -242,6 +439,64 @@ __all__ = [
     "FrankensteinForCausalLM",
 ]
 """
+
+
+_LOADER_FILE = '''"""Load this exported Frankenstein model without HF dynamic-module copying.
+
+``transformers``' ``trust_remote_code`` loader only copies sibling ``*.py``
+files, not the nested ``model/`` package this artifact ships. Import the
+export directory directly as a package instead::
+
+    from load_frankenstein import load_pretrained
+    model = load_pretrained("<this-directory>")
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+
+
+def load_pretrained(export_dir=None, **kwargs):
+    """Load the exported wrapper class and its ``model.safetensors`` weights.
+
+    Args:
+        export_dir: Export directory; defaults to this file's directory.
+        **kwargs: Forwarded to the wrapper's ``from_pretrained``.
+
+    Returns:
+        ``FrankensteinForMaskedLM`` or ``FrankensteinForCausalLM`` in eval mode.
+    """
+    if export_dir is None:
+        export_dir = Path(__file__).resolve().parent
+    else:
+        export_dir = Path(export_dir).resolve()
+    module_name = "frankenstein_export"
+    for key in [
+        k for k in sys.modules
+        if k == module_name or k.startswith(module_name + ".")
+    ]:
+        del sys.modules[key]
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        export_dir / "__init__.py",
+        submodule_search_locations=[str(export_dir)],
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot import the export package from {export_dir}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    config = module.FrankensteinConfig.from_pretrained(str(export_dir))
+    wrapper = (
+        module.FrankensteinForCausalLM
+        if str(getattr(config, "model_class", "")).lower()
+        == "frankenstein_text_decoder"
+        else module.FrankensteinForMaskedLM
+    )
+    return wrapper.from_pretrained(str(export_dir), **kwargs)
+'''
 
 
 def _repo_root() -> Path:
@@ -544,13 +799,17 @@ def _build_transformers_config(
     model_class: str,
     task: str,
     modeling_class: str,
+    quantization_config: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = dict(model_config)
     payload["model_type"] = "frankenstein"
     payload["architectures"] = [modeling_class]
     payload["model_class"] = model_class
     payload["task"] = task
-    payload["frankenstein_config"] = dict(model_config)
+    # `frankenstein_config` must be flat: the generated wrapper calls
+    # FrankensteinModelConfig(**frankenstein_config) and the schema runtime
+    # config is the flat dataclass.
+    payload["frankenstein_config"] = flatten_model_dict(model_config)
     payload["auto_map"] = {
         "AutoConfig": "configuration_frankenstein.FrankensteinConfig",
         "AutoModelForMaskedLM": "modeling_frankenstein.FrankensteinForMaskedLM",
@@ -616,7 +875,11 @@ def _build_transformers_config(
                 model_config.get("moe_activation_clamp", 0.0)
             ),
         }
-    if bool(model_config.get("use_bitnet", False)):
+    if quantization_config is not None:
+        # Dedicated key: HF reserves `quantization_config` for its own quant
+        # runtimes (bitsandbytes/GPTQ/...) and warns/skips unknown schemes.
+        payload["frankenstein_quantization"] = dict(quantization_config)
+    elif bool(model_config.get("use_bitnet", False)):
         payload["quantization_config"] = {
             "quant_method": "bitnet",
             "bits": 1.58,
@@ -624,6 +887,8 @@ def _build_transformers_config(
             "activation_bits": 8,
             "bitnet_routers": bool(model_config.get("bitnet_routers", False)),
             "modules_to_not_convert": None,
+            "storage": "float32_baked",
+            "compressed": False,
         }
     return payload
 
@@ -674,27 +939,191 @@ def check_yaml_export_compatibility(yaml_path: str) -> Dict[str, Any]:
     return compatibility
 
 
-def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) -> Dict[str, Any]:
+def _build_export_model(
+    model_config: Dict[str, Any],
+    model_class: str,
+    state_dict: Dict[str, torch.Tensor],
+):
+    """Instantiate the core model that the exported wrapper will rebuild.
+
+    Args:
+        model_config: Flat or nested model configuration.
+        model_class: Lower-cased model class string.
+        state_dict: Core-model weights to load before quantization.
+
+    Returns:
+        The instantiated core model in eval mode.
+    """
+    from src.model.config import FrankensteinModelConfig
+    from src.model.frankenstein_decoder import FrankensteinDecoder
+    from src.model.frankenstein_encoder import FrankensteinEncoder
+    from src.utils.config_flatten import flatten_model_dict
+
+    model_cfg = FrankensteinModelConfig(**flatten_model_dict(model_config))
+    if str(model_class).lower() == "frankenstein_text_decoder" or model_cfg.mode == "decoder":
+        if model_cfg.mode != "decoder":
+            model_cfg.mode = "decoder"
+        model = FrankensteinDecoder(model_cfg)
+    elif str(model_class).lower() == "frankenstein_vit":
+        from src.model.frankenstein_vit import FrankensteinViT
+
+        model = FrankensteinViT(model_cfg)
+    else:
+        model = FrankensteinEncoder(model_cfg)
+    model.load_state_dict(state_dict, strict=False)
+    model.eval()
+    return model
+
+
+def _quantizable_linear_names(model: torch.nn.Module) -> List[str]:
+    """Return module paths whose 2-D weights can be block-quantized.
+
+    Only ``nn.Linear`` modules (including ``BitLinear``) whose last dimension
+    is a multiple of :data:`BLOCK_SIZE` are eligible; embeddings, norms,
+    biases, convolutions and odd-sized projections stay full precision.
+
+    Args:
+        model: Core model to traverse.
+
+    Returns:
+        Sorted module paths.
+    """
+    names: List[str] = []
+    for name, module in model.named_modules():
+        if not isinstance(module, torch.nn.Linear):
+            continue
+        weight = getattr(module, "weight", None)
+        if weight is None or weight.dim() != 2:
+            continue
+        if weight.shape[-1] % BLOCK_SIZE != 0:
+            continue
+        names.append(name)
+    return sorted(names)
+
+
+def _quantize_export_state(
+    state_dict: Dict[str, torch.Tensor],
+    model: torch.nn.Module,
+    fmt: str,
+) -> Tuple[Dict[str, torch.Tensor], Dict[str, Dict[str, Any]]]:
+    """Replace eligible weight tensors with packed safetensors payloads.
+
+    Args:
+        state_dict: Core-model state dict (unprefixed keys).
+        model: Core model used to discover quantizable modules.
+        fmt: ``q8_0``, ``q4_0`` or ``i2_s``.
+
+    Returns:
+        Tuple of ``(packed_state_dict, tensor_metadata)``. Metadata keys use
+        the unprefixed weight name and record ``format`` and original
+        ``shape``.
+    """
+    packed_state = dict(state_dict)
+    metadata: Dict[str, Dict[str, Any]] = {}
+    for module_name in _quantizable_linear_names(model):
+        key = f"{module_name}.weight" if module_name else "weight"
+        weight = packed_state.pop(key, None)
+        if weight is None:
+            continue
+        payload = quantize_weight(weight, fmt)
+        packed_state[module_name + PACKED_SUFFIX] = payload[PACKED_SUFFIX]
+        if SCALE_SUFFIX in payload:
+            packed_state[module_name + SCALE_SUFFIX] = payload[SCALE_SUFFIX]
+        metadata[key] = {
+            "format": fmt,
+            "shape": [int(dim) for dim in weight.shape],
+        }
+    return packed_state, metadata
+
+
+def _build_quantization_config(
+    fmt: str,
+    runtime: str,
+    tensors: Dict[str, Dict[str, Any]],
+    use_bitnet: bool,
+) -> Dict[str, Any]:
+    """Build the ``quantization_config`` block stored in ``config.json``.
+
+    Args:
+        fmt: Storage format (``q8_0``, ``q4_0`` or ``i2_s``).
+        runtime: ``dequantize_on_load`` (v1) or ``quantized_linear`` (v2).
+        tensors: Per-weight metadata keyed by the prefixed weight name.
+        use_bitnet: Whether the source model was BitNet-baked.
+
+    Returns:
+        JSON-serializable quantization config.
+    """
+    return {
+        "quant_method": "frankenstein_block",
+        "format": fmt,
+        "runtime": runtime,
+        "block_size": BLOCK_SIZE,
+        "bits_per_weight": bits_per_weight(fmt),
+        "compressed": True,
+        "bitnet_baked": bool(use_bitnet),
+        "tensors": dict(tensors),
+    }
+
+
+def _save_safetensors(state_dict: Dict[str, torch.Tensor], path: Path) -> None:
+    """Write a state dict as a single safetensors file.
+
+    Args:
+        state_dict: Tensor mapping to serialize.
+        path: Destination ``*.safetensors`` file.
+    """
+    from safetensors.torch import save_file
+
+    # safetensors forbids shared storage and non-contiguous tensors.
+    clean = {
+        name: tensor.detach().to(device="cpu").contiguous().clone()
+        for name, tensor in state_dict.items()
+    }
+    save_file(clean, str(path), metadata={"format": "pt"})
+
+
+def export_transformers_model(
+    model_path: str,
+    yaml_path: str,
+    output_dir: str,
+    quant: str = "none",
+    quant_runtime: str = "dequantize_on_load",
+) -> Dict[str, Any]:
     """Export a checkpoint and training YAML to a HuggingFace Transformers folder.
 
     Produces a self-contained directory with ``config.json``,
-    ``pytorch_model.bin``, custom configuration/modeling Python wrappers,
-    the model source tree, and a compatibility report.
+    ``model.safetensors``, custom configuration/modeling Python wrappers, the
+    ``quantization_frankenstein.py`` codec module, the model source tree and a
+    compatibility report.
 
     Args:
         model_path: Path to the training checkpoint (``.pt``).
         yaml_path: Path to the YAML config used during training.
         output_dir: Directory to write the exported model into.
+        quant: Storage format: ``none``, ``q8_0``, ``q4_0`` or ``i2_s``.
+        quant_runtime: Load-time runtime: ``dequantize_on_load`` (v1) or
+            ``quantized_linear`` (v2).
 
     Returns:
         Dictionary with ``status`` (``"ok"`` or ``"incompatible"``),
-        ``output_dir``, ``modeling_class``, and ``compatibility_report``.
+        ``output_dir``, ``modeling_class``, ``quantization`` summary and
+        ``compatibility_report``.
 
     Raises:
         FileNotFoundError: If model or YAML file does not exist.
-        ValueError: If the checkpoint is not a dict or model config
-            cannot be inferred.
+        ValueError: If the checkpoint is not a dict, model config cannot be
+            inferred, or the quantization format/runtime is unknown.
     """
+    quant = str(quant or "none").strip().lower()
+    quant_runtime = str(quant_runtime or "dequantize_on_load").strip().lower()
+    if quant not in QUANT_FORMATS:
+        raise ValueError(
+            f"Unknown quantization format {quant!r}; expected one of {QUANT_FORMATS}"
+        )
+    if quant_runtime not in QUANT_RUNTIMES:
+        raise ValueError(
+            f"Unknown quantization runtime {quant_runtime!r}; expected one of {QUANT_RUNTIMES}"
+        )
     model_file = Path(model_path).expanduser().resolve()
     yaml_file = Path(yaml_path).expanduser().resolve()
     output_path = Path(output_dir).expanduser().resolve()
@@ -717,6 +1146,13 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
         model_config = _as_plain_dict(checkpoint.get("config"))
     if not model_config:
         raise ValueError("Unable to infer model config from YAML `model` section or checkpoint `config`")
+
+    # The trained checkpoint is authoritative for runtime fields that the
+    # tokenizer/training pipeline may have changed (e.g. vocab_size). Merge it
+    # over the YAML model block so the exported wrapper rebuilds a model whose
+    # shapes match the saved weights.
+    checkpoint_config = flatten_model_dict(_as_plain_dict(checkpoint.get("config")))
+    model_config = {**flatten_model_dict(model_config), **checkpoint_config}
 
     model_class = str(yaml_data.get("model_class") or "frankenstein_text_encoder").strip().lower()
     if model_class == "frankenstein_audio":
@@ -773,16 +1209,13 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
             "size advantage of the hash embedding is not preserved in this "
             "artifact."
         )
-    elif bool(model_config.get("use_bitnet", False)) and bake_bitnet_weights is not None:
-        # Instantiate the model so BitLinear layers can be baked to faithful
-        # {-1, 0, 1} * scale weights before serialization. The exported
-        # pytorch_model.bin then carries self-describing ternary values.
+
+    # Build the core model once so BitNet baking and block quantization see
+    # the exact module graph the exported wrapper will rebuild.
+    export_model = _build_export_model(model_config, model_class, export_state_dict)
+    if bool(model_config.get("use_bitnet", False)) and bake_bitnet_weights is not None:
         try:
-            export_state_dict, baked_layers = _bake_state_dict(
-                model_config=model_config,
-                model_class=model_class,
-                state_dict=state_dict,
-            )
+            baked_layers = bake_bitnet_weights(export_model)
         except Exception as exc:  # pragma: no cover - defensive
             warnings_log = compatibility.get("warnings", [])
             warnings_log.append(
@@ -790,11 +1223,40 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
             )
             compatibility["warnings"] = warnings_log
 
+    export_state_dict = {
+        name: tensor.detach().to(device="cpu").contiguous().clone()
+        for name, tensor in export_model.state_dict().items()
+    }
+
+    quantization_config: Dict[str, Any] | None = None
+    if quant != "none":
+        export_state_dict, tensor_metadata = _quantize_export_state(
+            export_state_dict, export_model, quant
+        )
+        # The HF wrappers nest the core model under `model.`.
+        prefixed_metadata = {
+            f"model.{name}": meta for name, meta in tensor_metadata.items()
+        }
+        quantization_config = _build_quantization_config(
+            quant,
+            quant_runtime,
+            prefixed_metadata,
+            bool(model_config.get("use_bitnet", False)),
+        )
+
+    # The HF wrappers hold the core model as `self.model`, so every tensor is
+    # stored under the `model.` prefix (this is also what makes both v1
+    # dequantize-on-load and v2 PackedLinear state-dict keys line up).
+    export_state_dict = {
+        f"model.{name}": tensor for name, tensor in export_state_dict.items()
+    }
+
     hf_config = _build_transformers_config(
         model_config=model_config,
         model_class=model_class,
         task=task,
         modeling_class=modeling_class,
+        quantization_config=quantization_config,
     )
 
     (output_path / "config.json").write_text(
@@ -802,7 +1264,13 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
         encoding="utf-8",
     )
 
-    torch.save(export_state_dict, output_path / "pytorch_model.bin")
+    _save_safetensors(export_state_dict, output_path / SAFETENSORS_NAME)
+    # Copy the codec into the artifact so `trust_remote_code=True` loads do
+    # not depend on the Frankenstein source tree.
+    shutil.copy2(
+        Path(__file__).with_name("safetensors_quant.py"),
+        output_path / QUANT_MODULE_NAME,
+    )
 
     model_src = _repo_root() / "src" / "model"
     shutil.copytree(model_src, output_path / "model", dirs_exist_ok=True)
@@ -810,6 +1278,7 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
     (output_path / "configuration_frankenstein.py").write_text(_CONFIGURATION_FILE, encoding="utf-8")
     (output_path / "modeling_frankenstein.py").write_text(_MODELING_FILE, encoding="utf-8")
     (output_path / "__init__.py").write_text(_INIT_FILE, encoding="utf-8")
+    (output_path / "load_frankenstein.py").write_text(_LOADER_FILE, encoding="utf-8")
     (output_path / "compatibility_report.json").write_text(
         json.dumps(compatibility, indent=2),
         encoding="utf-8",
@@ -817,19 +1286,45 @@ def export_transformers_model(model_path: str, yaml_path: str, output_dir: str) 
 
     usage = {
         "python_example": [
-            "from transformers import AutoConfig, AutoModelForMaskedLM, AutoModelForCausalLM",
-            "cfg = AutoConfig.from_pretrained('<model-dir>', trust_remote_code=True)",
-            "model = AutoModelForMaskedLM.from_pretrained('<model-dir>', trust_remote_code=True)",
-            "# or AutoModelForCausalLM.from_pretrained('<model-dir>', trust_remote_code=True)",
+            "import sys",
+            "sys.path.insert(0, '<model-dir>')",
+            "from load_frankenstein import load_pretrained",
+            "model = load_pretrained('<model-dir>')",
+            "# The artifact is a self-contained package; HF's trust_remote_code",
+            "# dynamic loader does not copy the nested model/ source tree.",
         ]
     }
-    (output_path / "export_info.json").write_text(json.dumps(usage, indent=2), encoding="utf-8")
+    (output_path / "export_info.json").write_text(
+        json.dumps(
+            {
+                "quantization": {
+                    "format": quant,
+                    "runtime": quant_runtime,
+                    "safetensors": SAFETENSORS_NAME,
+                },
+                **usage,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     return {
         "status": "ok",
         "output_dir": str(output_path),
         "modeling_class": modeling_class,
         "compatibility_report": str(output_path / "compatibility_report.json"),
+        "quantization": {
+            "format": quant,
+            "runtime": quant_runtime,
+            "compressed": quant != "none",
+            "bits_per_weight": (
+                None if quant == "none" else bits_per_weight(quant)
+            ),
+            "tensors": (
+                0 if quantization_config is None else len(quantization_config["tensors"])
+            ),
+        },
         "bitnet": {
             "enabled": bool(model_config.get("use_bitnet", False)),
             "bitnet_routers": bool(model_config.get("bitnet_routers", False)),
@@ -848,12 +1343,29 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument("--model", required=True, help="Path to training checkpoint (*.pt)")
     parser.add_argument("--yaml", required=True, help="Path to YAML used during training")
     parser.add_argument("--output", required=True, help="Output directory for exported model")
+    parser.add_argument(
+        "--quant",
+        choices=list(QUANT_FORMATS),
+        default="none",
+        help="Storage format for model.safetensors (default: none).",
+    )
+    parser.add_argument(
+        "--quant-runtime",
+        choices=list(QUANT_RUNTIMES),
+        default="dequantize_on_load",
+        help=(
+            "Load-time runtime: dequantize_on_load (v1) or quantized_linear "
+            "(v2). Ignored when --quant none (default: dequantize_on_load)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     result = export_transformers_model(
         model_path=args.model,
         yaml_path=args.yaml,
         output_dir=args.output,
+        quant=args.quant,
+        quant_runtime=args.quant_runtime,
     )
     print(json.dumps(result, indent=2))
     if result["status"] != "ok":

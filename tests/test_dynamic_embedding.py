@@ -282,9 +282,11 @@ class DynamicEmbeddingExportTests(unittest.TestCase):
             )
 
             self.assertEqual(result["status"], "ok")
-            state = torch.load(str(out_dir / "pytorch_model.bin"), weights_only=False)
-            self.assertIn("emb.weight", state)
-            self.assertEqual(tuple(state["emb.weight"].shape), (len(VOCAB), 32))
+            from safetensors.torch import load_file
+
+            state = load_file(str(out_dir / "model.safetensors"))
+            self.assertIn("model.emb.weight", state)
+            self.assertEqual(tuple(state["model.emb.weight"].shape), (len(VOCAB), 32))
 
             exported_config = json.loads((out_dir / "config.json").read_text())
             self.assertFalse(

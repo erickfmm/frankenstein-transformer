@@ -926,7 +926,7 @@ generation/KV-cache flags (CLI > YAML `inference:` > schema default).
 | Subcommand | Key flags | Behaviour |
 |---|---|---|
 | `train` | `--config`, `--config-name`, `--device`, `--list-configs` | Validates and trains (MLM, SBERT, causal LM, vision, text classification, ASR, audio classification) |
-| `deploy` | `--checkpoint`, `--output`, `--format`, `--yaml`, `--config`, `--validate`, `--check`, `--device` | `standard`/`quantized` artifacts; `transformers`/`gguf` exports. `--config` is a JSON model config for `standard`/`quantized` only. |
+| `deploy` | `--checkpoint`, `--output`, `--format`, `--yaml`, `--config`, `--validate`, `--check`, `--quant`, `--quant-runtime`, `--device` | `standard`/`quantized` artifacts; `transformers`/`gguf` exports. `--config` is a JSON model config for `standard`/`quantized` only. |
 | `infer` | `--model`, `--task {mlm,sbert,causal_lm}`, `--mode`, `--config`, `--device`, `--batch-size`, `--fp16`, `--benchmark`, `--benchmark-generation`, `--text`, `--input`, `--output`, `--sentence1`, `--sentence2`, `--query`, `--corpus-file`, `--sentences-file`, `--input-file`, `--output-file`, `--top-k`, `--n-clusters`, `--prompt`, `--max-new-tokens`, `--temperature`, `--top-p`, `--greedy`, `--kv-cache/--no-kv-cache`, `--kv-quant`, `--kv-group-size`, `--kv-protected-window`, `--kv-compress`, `--kv-num-sinks`, `--kv-window` | MLM, SBERT or autoregressive generation (with optional KV cache) |
 | `web-server` | `--server-port`, `--server-address`, `--server-headless`, `--development-mode` | Streamlit schema-driven YAML builder |
 
@@ -956,12 +956,20 @@ generation/cache flag defaults to `None` (no override).
 |---|---|---|
 | `standard` | FP32 checkpoint | no |
 | `quantized` | BitNet ternary / compact artifact | no |
-| `transformers` | HuggingFace `config.json` + `modeling_*.py` | yes |
+| `transformers` | HuggingFace `config.json` + `model.safetensors` + `modeling_*.py` (+ optional `--quant q8_0\|q4_0\|i2_s`, `--quant-runtime dequantize_on_load\|quantized_linear`) | yes |
 | `gguf` | GGUF file (BitNet), `--check` supported | yes |
 
 `infer` runs MLM/SBERT inference against a deployed artifact. The HuggingFace
 export is compatibility-checked against the YAML before writing anything; SBERT
 and audio artifacts are rejected explicitly (no upstream mapping).
+
+The HF artifact is safetensors-only: `q8_0` (8.5 bpw) and `q4_0` (4.5 bpw)
+store 32-weight affine blocks, `i2_s` (2.0 bpw) stores BitNet ternary values,
+all with the packed payloads in `model.safetensors` and the per-tensor map in
+`config.json` (`frankenstein_quantization`). `dequantize_on_load` (v1) expands
+blocks into fp32 parameters at load time; `quantized_linear` (v2) keeps
+`PackedLinear` buffers packed and dequantizes in `forward`. No
+`pytorch_model.bin` or bitsandbytes runtime is involved.
 
 ## 11. Extending the software
 
@@ -1194,6 +1202,11 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 - **KV quantization** v1 implements `none`/`int8`/`int4_kivi` only; the
   future codecs/policies listed in `src/model/cache/{quant,compress}` are
   interface-ready but raise a configuration error if requested.
+- **HF safetensors quantization** is storage-only: `q8_0`/`q4_0`/`i2_s`
+  pack `nn.Linear` weights (last dim divisible by 32) and dequantize on load
+  (v1) or in `PackedLinear.forward` (v2). There are no fused integer kernels,
+  embeddings/norms stay fp32, and the e2e accuracy sweep covers text models
+  only (ViT/audio have no HF wrapper mapping).
 - **Audio**: `torchaudio` is optional (pure-PyTorch log-mel fallback);
   SpecAugment covers frequency/time masking but not time warping. `raw` mode
   treats a multichannel signal as a `C × T` map, so the two stride-2 stages

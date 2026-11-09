@@ -8,7 +8,7 @@ The system's primary contributions are:
     \item \textbf{Schema-First Design}: A strict YAML-based configuration contract with validation and prefixed hyperparameter routing enabling reproducible experiments across forty-nine sequence mixers and twenty-four optimizer families.
     \item \textbf{Comprehensive Architecture Support}: Implementation spanning dense baselines, recurrent and retentive blocks, sparse attention, gated mechanisms, latent compression, conditional memory, fast-weight attention, and geometric-field attention, with encoder, decoder, and Vision Transformer model classes.
     \item \textbf{Unified Optimizer Framework}: Prefixed hyperparameter groups enabling fine-grained control over embeddings, normalization layers, attention weights, and the remaining parameters across classical baselines (SGD+Momentum, AdamW, RAdam), variance reduction (Adan, ADOPT, AdEMAMix, MARS, Cautious), memory-efficient and low-rank methods (Adafactor, GaLore, Lion, APOLLO, APOLLO-Mini, Q-APOLLO), large-batch and schedule simplification (LAMB, Schedule-Free AdamW, Prodigy), curvature-aware (Sophia), second-order (Shampoo, SOAP), geometry-oriented (Muon, Turbo-Muon, AF-Muon), and adaptivity-tunable (Anon) optimizers.
-    \item \textbf{End-to-End Workflows}: Integrated deployment pipeline supporting ternary weight packing and INT8 activation quantization; SBERT-inspired training and inference for semantic similarity, retrieval, and clustering tasks.
+    \item \textbf{End-to-End Workflows}: Integrated deployment pipeline supporting ternary weight packing, block-affine 8/4-bit safetensors export at both load-time runtimes, and INT8 activation quantization; SBERT-inspired training and inference for semantic similarity, retrieval, and clustering tasks.
     \item \textbf{Interactive Configuration}: Streamlit-based web interface providing schema-driven form generation, real-time validation, inline documentation, and CLI command synthesis.
 \end{enumerate}
 
@@ -21,7 +21,7 @@ Several limitations and promising directions for future work emerge from this sy
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Architecture Integration}: Recent hybrid architectures (Griffin, Jamba, Mamba-X) demonstrate benefits of combining multiple mechanisms into unified blocks. Future versions should integrate these architectures and explore systematic composition patterns.
     
-    \item \textbf{Advanced Quantization}: Current implementation uses uniform ternary packing across all parameters. Research on layer-wise, channel-wise, and importance-aware quantization suggests more sophisticated strategies could improve quality-efficiency trade-offs.
+    \item \textbf{Advanced Quantization}: Current safetensors quantization is weight-only and packs two-dimensional linear weights, dequantizing without fused integer kernels; layer-wise, channel-wise and importance-aware policies remain future work.
     
     \item \textbf{Plugin-Based Extensibility}: The current dispatch pattern becomes increasingly complex with each new addition. A plugin architecture allowing declarative registration of new mixers, optimizers, and normalization methods would improve maintainability and reduce risk of bugs in core dispatch logic.
     

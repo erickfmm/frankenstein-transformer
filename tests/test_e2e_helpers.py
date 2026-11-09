@@ -6,8 +6,12 @@ Real failures must surface as ``FAILED``; only unambiguous numerical
 
 from __future__ import annotations
 
+import csv
+import json
+
 import pytest
 
+from full_tests import _helpers
 from full_tests._helpers import looks_like_gradient_explosion
 
 
@@ -57,3 +61,51 @@ def test_marker_must_be_word_bounded() -> None:
 def test_indented_traceback_source_is_ignored() -> None:
     source = "Traceback (most recent call last):\n    logits = logits / float('inf')\n"
     assert not looks_like_gradient_explosion(source, "")
+
+
+def test_inference_accuracy_aggregates_quantized_variants(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(_helpers, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(
+        _helpers, "RESULTS_INFERENCE_ACCURACY_CSV_PATH", tmp_path / "accuracy.csv"
+    )
+    rows = [
+        {
+            "combo_id": "c1",
+            "model_class": "frankenstein_text_encoder",
+            "task": "mlm",
+            "deploy_format": "hf_none",
+            "metric_name": "mlm_top1",
+            "metric_value": 1.0,
+            "status": "OK",
+        },
+        {
+            "combo_id": "c1",
+            "model_class": "frankenstein_text_encoder",
+            "task": "mlm",
+            "deploy_format": "hf_none",
+            "metric_name": "mlm_top1",
+            "metric_value": 0.0,
+            "status": "OK",
+        },
+        {
+            "combo_id": "c1",
+            "model_class": "frankenstein_text_encoder",
+            "task": "mlm",
+            "deploy_format": "hf_q4_0_v2",
+            "metric_name": "mlm_top1",
+            "metric_value": "",
+            "status": "SKIPPED_NO_DATASET",
+        },
+    ]
+    path = _helpers.write_inference_accuracy_csv(rows)
+    assert path == tmp_path / "accuracy.csv"
+    with path.open(newline="", encoding="utf-8") as handle:
+        records = list(csv.DictReader(handle))
+    by_format = {record["deploy_format"]: record for record in records}
+    assert by_format["hf_none"]["ok_samples"] == "2"
+    assert float(by_format["hf_none"]["accuracy"]) == pytest.approx(0.5)
+    assert by_format["hf_q4_0_v2"]["ok_samples"] == "0"
+    assert by_format["hf_q4_0_v2"]["accuracy"] == ""
+    assert json.loads(by_format["hf_q4_0_v2"]["status_counts"]) == {
+        "SKIPPED_NO_DATASET": 1
+    }

@@ -57,6 +57,11 @@ def _run_deploy(args: argparse.Namespace) -> int:
     if args.check and args.format != "gguf":
         print("`--check` is only supported with `--format gguf`.")
         return 2
+    if args.format != "transformers" and (
+        args.quant != "none" or args.quant_runtime != "dequantize_on_load"
+    ):
+        print("`--quant`/`--quant-runtime` are only supported with `--format transformers`.")
+        return 2
     if args.format in ("transformers", "gguf"):
         if args.config:
             print("`--config` is only supported with `--format standard|quantized`.")
@@ -100,6 +105,10 @@ def _run_deploy(args: argparse.Namespace) -> int:
             args.yaml,
             "--output",
             args.output,
+            "--quant",
+            args.quant,
+            "--quant-runtime",
+            args.quant_runtime,
         ]
         result = transformers_export_main(argv)
         return int(result) if isinstance(result, int) else 0
@@ -301,6 +310,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     deploy_parser.add_argument("--validate", action="store_true", help="Validate artifact after creation (standard/quantized)")
     deploy_parser.add_argument("--check", action="store_true", help="Only run the GGUF compatibility check and exit (gguf only)")
+    deploy_parser.add_argument(
+        "--quant",
+        choices=["none", "q8_0", "q4_0", "i2_s"],
+        default="none",
+        help="safetensors storage format for --format transformers (default: none)",
+    )
+    deploy_parser.add_argument(
+        "--quant-runtime",
+        choices=["dequantize_on_load", "quantized_linear"],
+        default="dequantize_on_load",
+        help=(
+            "load-time quantization runtime for --format transformers: "
+            "dequantize_on_load (v1) or quantized_linear (v2)"
+        ),
+    )
     deploy_parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     deploy_parser.add_argument(
         "--task",
