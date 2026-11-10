@@ -1,9 +1,9 @@
 \section{Audio: Reconocimiento de Voz y Clasificación de Audio}
-\label{sec:annex-18}
+\label{sec:annex-audio}
 
 \subsection{Resumen Ejecutivo}
 
-\texttt{frankenstein\_audio} es la cuarta clase de modelo del conjunto de herramientas. Posee un frontend de audio---bancos de filtros log-mel o un espectrograma crudo, SpecAugment opcional \citep{Park2019} y dos convoluciones con stride 2 que reducen la tasa de tramas $4\times$---y luego ejecuta la misma pila de \texttt{HybridLayer} que el encoder de texto sobre la secuencia de tramas resultante. Como la pila es agnóstica de modalidad, todos los mezcladores de secuencia (incluido el Conformer del Anexo~\ref{sec:annex-17}), normas, estrategias de residual, codificaciones posicionales, optimizadores y bloques de enrutamiento están disponibles sin cambios. La clase soporta dos tareas: \textbf{reconocimiento automático de voz} (\texttt{asr}, con pérdida CTC \citep{Graves2006ctc} o RNN-Transducer \citep{Graves2012}) y \textbf{clasificación de audio} (\texttt{audio\_classification}, entropía cruzada a nivel de clip). El mismo frontend, con \texttt{audio.feature: raw}, acepta señales de sensores multicanales unidimensionales como EEG, EMG o acelerómetro para clasificación.
+\texttt{frankenstein\_audio} es la cuarta clase de modelo del conjunto de herramientas. Posee un frontend de audio---bancos de filtros log-mel o un espectrograma crudo, SpecAugment opcional \citep{Park2019} y dos convoluciones con stride 2 que reducen la tasa de tramas $4\times$---y luego ejecuta la misma pila de \texttt{HybridLayer} que el encoder de texto sobre la secuencia de tramas resultante. Como la pila es agnóstica de modalidad, todos los mezcladores de secuencia (incluido el Conformer del Anexo~\ref{sec:annex-conformer}), normas, estrategias de residual, codificaciones posicionales, optimizadores y bloques de enrutamiento están disponibles sin cambios. La clase soporta dos tareas: \textbf{reconocimiento automático de voz} (\texttt{asr}, con pérdida CTC \citep{Graves2006ctc} o RNN-Transducer \citep{Graves2012}) y \textbf{clasificación de audio} (\texttt{audio\_classification}, entropía cruzada a nivel de clip). El mismo frontend, con \texttt{audio.feature: raw}, acepta señales de sensores multicanales unidimensionales como EEG, EMG o acelerómetro para clasificación.
 
 La receta de referencia es el frontend Conformer de \citet{Gulati2020}: bancos de filtros log-mel de 80 canales con ventana de 25\,ms y salto de 10\,ms, dos convoluciones $3\times3$ con stride 2, una proyección lineal al ancho del modelo y SpecAugment con ancho de frecuencia $F=27$, diez máscaras temporales y una razón máxima de máscara temporal $p_S = 0.05$. Los tres tamaños de referencia (S/M/L) se reproducen en la Tabla~\ref{tab:audio-sizes}.
 
@@ -26,7 +26,7 @@ El módulo frontend convierte un lote de formas de onda $w \in \mathbb{R}^{B \ti
     \begin{itemize}[leftmargin=*]
         \item \texttt{logmel} (por defecto): banco de filtros mel de $80$ bins (Ecuación~\ref{eq:audio-mel}) seguido de compresión logarítmica;
         \item \texttt{spectrogram}: $\log|\mathrm{STFT}(w)|^2$ sin proyección mel;
-        \item \texttt{raw}: sin transformada espectral; el clip se entrega como mapa $C \times T$ (Sección~\ref{sec:annex-18-eeg}).
+        \item \texttt{raw}: sin transformada espectral; el clip se entrega como mapa $C \times T$ (Sección~\ref{sec:annex-audio-eeg}).
     \end{itemize}
     \item \textbf{SpecAugment} \citep{Park2019}: se enmascaran $F$ canales de frecuencia por clip y hasta \texttt{time\_masks} bandas temporales de ancho máximo $p_S \cdot T$, ambas con relleno de ceros (solo entrenamiento).
 \end{enumerate}
@@ -170,7 +170,7 @@ training:
 SpecAugment forma parte del frontend acústico (``\texttt{audio.spec\_augment}''), por lo que se aplica al mapa de características antes del submuestreo y solo está activo en entrenamiento. El bloque opcional \texttt{training.asr.loss} sobrescribe \texttt{audio.asr\_loss} para presets que quieran alternar entre CTC y RNN-T sin editar el bloque de arquitectura; ambos deben coincidir porque la cabeza transducer se construye a partir del parámetro del modelo.
 
 \subsection{Señales 1-D Genéricas: EEG y Más Allá}
-\label{sec:annex-18-eeg}
+\label{sec:annex-audio-eeg}
 
 El frontend no está atado a la voz. Con \texttt{audio.feature: raw}, el banco de filtros mel y SpecAugment se omiten y el clip se trata como un mapa multicanal $C \times T$, con \texttt{audio.in\_channels: C}. Las dos convoluciones con stride 2 actúan entonces como un banco de filtros aprendido sobre el tiempo (y, como efecto secundario, sobre el eje de canales), la proyección lineal produce tokens de ancho $d$, y la pila de \texttt{HybridLayer} ve una secuencia de tramas exactamente como en voz. Esto hace usable la clase, al menos para \textbf{clasificación}, en:
 

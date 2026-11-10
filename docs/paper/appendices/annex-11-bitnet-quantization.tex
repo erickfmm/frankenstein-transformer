@@ -1,0 +1,39 @@
+\section{BitNet Quantization and Safetensors Block Formats}
+\label{sec:annex-bitnet}
+
+This annex documents the BitNet ternary weight path and the block-affine quantization formats written by the safetensors export. The deployment section defers to this annex for the layouts and size estimates; bibliography keys resolve against \texttt{docs/bibliography/}.
+
+\subsection{BitNet Ternary Quantization Path}
+
+When \texttt{use\_bitnet=true}, BitLinear layers replace standard \texttt{nn.Linear} with ternary weight quantization ($-1, 0, +1$) following BitNet \citep{wang_bitnet_2023}. Given weight tensor $W$, a practical scaling is:
+\[
+s=\text{mean}(|W|),\qquad
+\tilde{W}=\text{clip}\left(\text{round}\left(\frac{W}{s}\right),-1,1\right).
+\]
+The packed mapping uses two bits per weight symbol for storage efficiency. This enables significant compression ($\sim 32\times$ versus FP32) but is experimental and may affect model quality; it is best suited for inference deployment.
+
+Activation quantization for the INT8 path is:
+\[
+q=\text{round}\left(x\cdot\frac{127}{\max(|x|)+\epsilon}\right),\qquad q\in[-128,127]
+\]
+with dequantization $x\approx q/\alpha$. For $N$ parameters, size estimates before metadata and packing overhead are:
+\[
+\text{FP32 size}\approx 4N,\quad \text{FP16 size}\approx 2N,\quad \text{1.58-bit size}\approx \frac{1.58}{8}N
+\]
+which aligns with lightweight deployment goals \citep{samson_lightweight_2026,bravin_embbert_2026}.
+
+\subsection{Block-Affine Quantization and Safetensors Export}
+\label{sec:annex-block-affine}
+
+The HuggingFace export applies block-affine quantization to every two-dimensional linear weight whose input dimension is a multiple of 32. Let $w_1,\ldots,w_{32}$ be one block. The \texttt{Q8\_0} layout stores
+\[
+d=\frac{\max_i |w_i|}{127},\qquad q_i=\operatorname{round}\!\left(\frac{w_i}{d}\right)\in[-127,127],
+\]
+as one FP16 scale plus 32 signed bytes (34 bytes per block, 8.5 bits per weight). The \texttt{Q4\_0} layout follows the signed-maximum convention: it selects the signed value $m$ with the largest magnitude, sets $d=m/(-8)$, and stores
+\[
+q_i=\min\!\bigl(15,\operatorname{trunc}(w_i/d+8.5)\bigr)\in[0,15],
+\]
+as one FP16 scale plus 16 nibble bytes (18 bytes per block, 4.5 bits per weight). Element $j$ occupies the low nibble and element $j+16$ the high nibble; dequantization is $\hat w_i=d\,(q_i-8)$. The ternary \texttt{i2\_s} layout reuses the BitNet scale $s=\text{mean}(|W|)$ (or $\max|W|$ when the weights are already ternary), packs four symbols per byte, and adds one FP32 scale per tensor (2 bits per weight). Nominal storage is therefore $8.5$, $4.5$ and $2.0$ bits per quantized linear weight, before tensor metadata.
+
+The safetensors artifact records the per-tensor format and original shape in \texttt{config.json}. Two runtimes consume it: \emph{dequantize-on-load} (v1) reconstructs FP32 parameters while loading, while \emph{packed-linear} (v2) keeps the packed buffers in a \texttt{PackedLinear} module and dequantizes in \texttt{forward}, preserving BitLinear's input normalization and INT8 activation quantization when applicable. The exporter does not use fused integer kernels, and the experiment harness evaluates \texttt{Q8\_0}, \texttt{Q4\_0} and \texttt{i2\_s} in both runtimes.
+

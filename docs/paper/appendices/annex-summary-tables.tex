@@ -257,7 +257,7 @@ Hyperloop (this codebase) & $y^{(l+1)}_t = H^{\text{res}}_l y^{(l)}_t + H^{\text
 
 \subsection{Activation Functions}
 
-Table~\ref{tab:all-activations} catalogs the 43 feed-forward activation functions available through the \texttt{ffn\_activation} schema field (40 elementwise plus 3 gated-FFN variants), grouped by family. ``Learn.'' marks activations with trainable parameters; the full formulas are in Annex~8.
+Table~\ref{tab:all-activations} catalogs the 43 feed-forward activation functions available through the \texttt{ffn\_activation} schema field (40 elementwise plus 3 gated-FFN variants), grouped by family. ``Learn.'' marks activations with trainable parameters; the full formulas are in Appendix~\ref{sec:annex-activation-functions}.
 
 \scriptsize
 \begin{longtable}{L{2.6cm}L{1.8cm}L{4.8cm}L{1.2cm}L{2.0cm}}
@@ -337,7 +337,7 @@ reglu & Gated & $\text{ReLU}(xW_g)\odot(xW_u)\,W_d$ & \textbf{yes} & \citep{shaz
 
 \subsection{Embedding Variants}
 
-Table~\ref{tab:all-embeddings} catalogs the positional encodings and structural embedding optimizations supported by the codebase. The 12 positional encodings are configured via the model-wide \texttt{positional\_encoding} field (see Annex~12 for full formulations); the two structural optimizations are controlled by their own flags.
+Table~\ref{tab:all-embeddings} catalogs the positional encodings and structural embedding optimizations supported by the codebase. The 12 positional encodings are configured via the model-wide \texttt{positional\_encoding} field (see Appendix~\ref{sec:annex-positional-encodings} for full formulations); the two structural optimizations are controlled by their own flags.
 
 \footnotesize
 \begin{longtable}{L{3.0cm}L{7.5cm}L{3.5cm}}
@@ -353,7 +353,7 @@ Table~\ref{tab:all-embeddings} catalogs the positional encodings and structural 
 \multicolumn{3}{r}{\textit{continued on next page}} \\
 \endfoot
 \bottomrule
-\caption{Embedding variants. $V$ = vocabulary size, $H$ = hidden size, $R$ = factorized intermediate dimension. The first 12 rows are positional encodings (Annex~12); the last four are structural embedding optimizations, including the audio input frontend.}
+\caption{Embedding variants. $V$ = vocabulary size, $H$ = hidden size, $R$ = factorized intermediate dimension. The first 12 rows are positional encodings (Appendix~\ref{sec:annex-positional-encodings}); the last four are structural embedding optimizations, including the audio input frontend.}
 \label{tab:all-embeddings}
 \endlastfoot
 \multicolumn{3}{c}{\textbf{Positional Encodings (12)}} \\
@@ -376,7 +376,7 @@ None & Null module; no positional information injected & --- \\
 Factorized Embeddings & Decomposes $V \times H$ embedding matrix into $V \times R$ and $R \times H$ factors; reduces parameters from $\mathcal{O}(VH)$ to $\mathcal{O}(V R + R H)$; controlled by \texttt{factorized\_embedding\_dim} & (internal) \\
 Embedding Convolution & Depthwise Conv1d applied over the embedding stream before the first transformer block; provides lightweight local-context filtering; controlled by \texttt{embedding\_conv\_kernel} & (internal) \\
 Dynamic Embeddings (EELBERT) & Replaces the $V \times H$ table with an on-the-fly $n$-gram pooling hash of the token strings; frozen, no trainable embedding parameters; controlled by the \texttt{embedding.dynamic.*} block (Appendix~\ref{sec:annex-dynamic-embeddings}) & \citep{cohn_eelbert_2023} \\
-Audio frontend & Log-mel/spectrogram/raw frames through two stride-2 Conv2d stages and a linear projection ($4\times$ frame reduction); input side of \texttt{frankenstein\_audio}; controlled by the \texttt{audio.*} block (Appendix~\ref{sec:annex-18}) & \citep{Gulati2020} \\
+Audio frontend & Log-mel/spectrogram/raw frames through two stride-2 Conv2d stages and a linear projection ($4\times$ frame reduction); input side of \texttt{frankenstein\_audio}; controlled by the \texttt{audio.*} block (Appendix~\ref{sec:annex-audio}) & \citep{Gulati2020} \\
 \bottomrule
 \end{longtable}
 \normalsize

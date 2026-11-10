@@ -1,0 +1,25 @@
+\section{Mixture-of-Depths Token Routing}
+\label{sec:annex-mod}
+
+This annex documents Mixture-of-Depths (MoD) token routing, the adaptive-depth mechanism that updates only a scored subset of tokens per block.
+
+\subsection{Mixture-of-Depths (MoD) Token Routing}
+
+When \texttt{use\_mixture\_of\_depths=true}, each transformer block scores tokens with a lightweight router. Only the top \texttt{mixture\_of\_depths\_capacity\_ratio} subset is updated; skipped tokens pass through unchanged \citep{zhu2026mixtureofdepthsattention}. This allocates more depth to salient tokens, reducing per-layer compute.
+
+\begin{algorithmic}[1]
+\State \textbf{Input:} hidden states $H \in \mathbb{R}^{n \times d}$, router $R$, capacity ratio $\rho$
+\State $\text{scores} \gets R(H)$ \Comment{per-token router score}
+\State $\mathcal{S} \gets \texttt{top-k}(\text{scores}, k=\lceil \rho \cdot n \rceil)$ \Comment{select salient subset}
+\State $H_{\text{update}} \gets \texttt{block}(H[\mathcal{S}])$ \Comment{apply transformer block to selected tokens}
+\State $H[\mathcal{S}] \gets H_{\text{update}}$ \Comment{write back; non-selected tokens bypass the block}
+\State \textbf{Output:} $H$ \Comment{auxiliary load-balancing loss added from \texttt{mixture\_of\_depths\_router\_aux\_loss\_weight}}
+\end{algorithmic}
+
+\subsubsection{Configuration}
+\begin{itemize}[leftmargin=*]
+    \item \texttt{use\_mixture\_of\_depths}: bool --- enable MoD token routing.
+    \item \texttt{mixture\_of\_depths\_capacity\_ratio}: float in $(0, 1]$ --- fraction of tokens updated per layer.
+    \item \texttt{mixture\_of\_depths\_router\_aux\_loss\_weight}: float $\ge 0$ --- auxiliary loss weight for router regularization.
+\end{itemize}
+

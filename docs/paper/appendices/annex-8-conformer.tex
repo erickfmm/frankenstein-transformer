@@ -1,9 +1,9 @@
 \section{Conformer: Convolution-Augmented Self-Attention}
-\label{sec:annex-17}
+\label{sec:annex-conformer}
 
 \subsection{Executive Summary}
 
-The Conformer block \citep{Gulati2020} is the toolkit's convolution-augmented sequence mixer, exposed as \texttt{conformer}. It keeps the global receptive field of scaled dot-product attention and adds a depthwise-convolution branch that models local, narrow-band structure---the inductive bias speech recognition needs and the one plain self-attention lacks. The block sandwiches multi-head self-attention (MHSA) with relative sinusoidal positional encodings between two Macaron-style half-step feed-forward layers \citep{Lu2019}, and inserts the convolution module between the attention and the second FFN. In the reference recipe it reaches $1.9\%$/$3.9\%$ WER on LibriSpeech \emph{test-clean}/\emph{test-other} without an external language model (Conformer-L, 118.8M parameters), and it is the mixer recommended for the audio model class of Appendix~\ref{sec:annex-18}. The toolkit runs both feed-forward layers at full step (the paper's ``full-step'' variant of its Table~5) and lets the outer layer own the second one; Table~\ref{tab:conformer-mapping} lists the deviations.
+The Conformer block \citep{Gulati2020} is the toolkit's convolution-augmented sequence mixer, exposed as \texttt{conformer}. It keeps the global receptive field of scaled dot-product attention and adds a depthwise-convolution branch that models local, narrow-band structure---the inductive bias speech recognition needs and the one plain self-attention lacks. The block sandwiches multi-head self-attention (MHSA) with relative sinusoidal positional encodings between two Macaron-style half-step feed-forward layers \citep{Lu2019}, and inserts the convolution module between the attention and the second FFN. In the reference recipe it reaches $1.9\%$/$3.9\%$ WER on LibriSpeech \emph{test-clean}/\emph{test-other} without an external language model (Conformer-L, 118.8M parameters), and it is the mixer recommended for the audio model class of Appendix~\ref{sec:annex-audio}. The toolkit runs both feed-forward layers at full step (the paper's ``full-step'' variant of its Table~5) and lets the outer layer own the second one; Table~\ref{tab:conformer-mapping} lists the deviations.
 
 The mixer is available to every model class: the text encoder, the causal decoder (where depthwise padding is shifted to stay streaming-safe), the Vision Transformer, and \texttt{frankenstein\_audio}. Because the block lives inside \texttt{HybridLayer}, it composes with all 45 mixers, the 6 norms, the 4 residual strategies, MoE, Mixture-of-Depths, mHC, AttnRes, BitNet and the 23 optimizer families.
 
@@ -108,7 +108,7 @@ MHSA, relative sinusoidal PE & own $q/k/v/out$ projections; model-wide PE via \t
 Convolution module & LN $\to$ pointwise $\to$ GLU $\to$ depthwise $\to$ BN $\to$ Swish $\to$ pointwise $\to$ dropout & \texttt{conformer.kernel\_size} (32), \texttt{conformer.conv\_norm} (\texttt{batch}/\texttt{group}/\texttt{layer}) \\
 $\tfrac{1}{2}\mathrm{FFN}_2$ at half step & \texttt{HybridLayer} $\mathrm{norm}_2 + \mathrm{FFN}$, full step & justified by Table~5 of \citet{Gulati2020}: $1.9/4.4$ vs.\ $1.9/4.5$ dev WER (both coefficients dropped) \\
 Final LayerNorm & \texttt{HybridLayer} final norm & unchanged from every other mixer \\
-4$\times$ convolutional subsampling & \texttt{frankenstein\_audio} frontend & Appendix~\ref{sec:annex-18}; text/ViT use their own embeddings \\
+4$\times$ convolutional subsampling & \texttt{frankenstein\_audio} frontend & Appendix~\ref{sec:annex-audio}; text/ViT use their own embeddings \\
 Dropout ($p=0.1$) & \texttt{model.dims.dropout} & global, per-block \\
 \bottomrule
 \end{tabularx}

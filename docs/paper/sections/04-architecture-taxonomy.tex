@@ -15,7 +15,7 @@ The system implements forty-nine sequence mixers organized into ten functional c
     \item \textbf{Token-indexed memory} (1): Memory Attention replaces the dedicated value projection with layer-specific token memory, constructing values as \(V = K + \mathrm{Norm}(E[s])\) while keeping the softmax weighting unchanged \citep{kang_memory_attention_2026}.
     \item \textbf{Fast-weight attention} (6): Falcon-1/2/3 and Falcon-1A/2A/3A treat the recurrent state transition as an online continual-learning rule \citep{zhang_falcon_2026}.
     \item \textbf{Geometric field} (1): SSOG applies a structured geometric prior over the attention matrix \citep{pisoni_ssog_2026}.
-    \item \textbf{Convolution-augmented} (1): the Conformer block \citep{Gulati2020} fuses multi-head self-attention with a depthwise-convolution module between two Macaron feed-forward layers, giving every layer a local branch alongside the global receptive field (Appendix~\ref{sec:annex-17}).
+    \item \textbf{Convolution-augmented} (1): the Conformer block \citep{Gulati2020} fuses multi-head self-attention with a depthwise-convolution module between two Macaron feed-forward layers, giving every layer a local branch alongside the global receptive field (Appendix~\ref{sec:annex-conformer}).
 \end{enumerate}
 
 \begin{figure}[t]

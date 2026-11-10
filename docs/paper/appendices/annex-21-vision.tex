@@ -14,7 +14,7 @@ E_\text{pos} \in \mathbb{R}^{(N+1) \times D}.
 \]
 
 \paragraph{Positional encoding.}
-The default positional encoding is a learnable 1D \texttt{nn.Parameter} of shape $(1, N+1, D)$, faithful to the original ViT. The alternative \texttt{none} drops the explicit embedding and relies on RoPE/HoPE applied inside the attention mixers (§\ref{sec:annex-norm-bitnet-mod}), which is consistent with the encoder's modality-agnostic handling of rotary embeddings.
+The default positional encoding is a learnable 1D \texttt{nn.Parameter} of shape $(1, N+1, D)$, faithful to the original ViT. The alternative \texttt{none} drops the explicit embedding and relies on RoPE/HoPE applied inside the attention mixers (Appendix~\ref{sec:annex-positional-encodings}), which is consistent with the encoder's modality-agnostic handling of rotary embeddings.
 
 \paragraph{\texttt{[CLS]} token.}
 A learnable \texttt{[CLS]} token is optionally prepended at position~$0$ for classification: the output of position~$0$ after the final normalization is fed to the task head. When \texttt{[CLS]} is disabled, classification relies on Global Average Pooling (GAP) over the patch tokens.

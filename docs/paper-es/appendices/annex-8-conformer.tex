@@ -1,9 +1,9 @@
 \section{Conformer: Atención Aumentada con Convolución}
-\label{sec:annex-17}
+\label{sec:annex-conformer}
 
 \subsection{Resumen Ejecutivo}
 
-El bloque Conformer \citep{Gulati2020} es el mezclador de secuencia aumentado con convolución del conjunto de herramientas, expuesto como \texttt{conformer}. Conserva el campo receptivo global de la atención de producto punto escalada y añade una rama de convolución depthwise que modela estructura local de banda estrecha---el sesgo inductivo que necesita el reconocimiento de voz y que la atención pura no aporta. El bloque intercala atención multi-cabeza (MHSA) con codificación posicional sinusoidal relativa entre dos capas feed-forward de medio paso estilo Macaron \citep{Lu2019}, e inserta el módulo de convolución entre la atención y la segunda FFN. En la receta de referencia alcanza $1.9\%$/$3.9\%$ WER en LibriSpeech \emph{test-clean}/\emph{test-other} sin modelo de lenguaje externo (Conformer-L, 118.8M parámetros), y es el mezclador recomendado para la clase de modelo de audio del Anexo~\ref{sec:annex-18}. El conjunto de herramientas ejecuta ambas capas feed-forward a paso completo (la variante ``full-step'' de la Tabla~5 del paper) y deja que la capa exterior posea la segunda; la Tabla~\ref{tab:conformer-mapping} lista las desviaciones.
+El bloque Conformer \citep{Gulati2020} es el mezclador de secuencia aumentado con convolución del conjunto de herramientas, expuesto como \texttt{conformer}. Conserva el campo receptivo global de la atención de producto punto escalada y añade una rama de convolución depthwise que modela estructura local de banda estrecha---el sesgo inductivo que necesita el reconocimiento de voz y que la atención pura no aporta. El bloque intercala atención multi-cabeza (MHSA) con codificación posicional sinusoidal relativa entre dos capas feed-forward de medio paso estilo Macaron \citep{Lu2019}, e inserta el módulo de convolución entre la atención y la segunda FFN. En la receta de referencia alcanza $1.9\%$/$3.9\%$ WER en LibriSpeech \emph{test-clean}/\emph{test-other} sin modelo de lenguaje externo (Conformer-L, 118.8M parámetros), y es el mezclador recomendado para la clase de modelo de audio del Anexo~\ref{sec:annex-audio}. El conjunto de herramientas ejecuta ambas capas feed-forward a paso completo (la variante ``full-step'' de la Tabla~5 del paper) y deja que la capa exterior posea la segunda; la Tabla~\ref{tab:conformer-mapping} lista las desviaciones.
 
 El mezclador está disponible en todas las clases de modelo: encoder de texto, decoder causal (donde el padding depthwise se desplaza para seguir siendo seguro en streaming), Vision Transformer y \texttt{frankenstein\_audio}. Como el bloque vive dentro de \texttt{HybridLayer}, compone con los 45 mezcladores, las 6 normas, las 4 estrategias de residual, MoE, Mixture-of-Depths, mHC, AttnRes, BitNet y las 23 familias de optimizadores.
 
@@ -108,7 +108,7 @@ MHSA, PE sinusoidal relativa & proyecciones propias $q/k/v/out$; PE de todo el m
 Módulo de convolución & LN $\to$ pointwise $\to$ GLU $\to$ depthwise $\to$ BN $\to$ Swish $\to$ pointwise $\to$ dropout & \texttt{conformer.kernel\_size} (32), \texttt{conformer.conv\_norm} (\texttt{batch}/\texttt{group}/\texttt{layer}) \\
 $\tfrac{1}{2}\mathrm{FFN}_2$ a medio paso & $\mathrm{norm}_2 + \mathrm{FFN}$ de \texttt{HybridLayer}, paso completo & justificado por la Tabla~5 de \citet{Gulati2020}: $1.9/4.4$ vs.\ $1.9/4.5$ WER dev (ambos coeficientes omitidos) \\
 LayerNorm final & norma final de \texttt{HybridLayer} & idéntica a la de cualquier otro mezclador \\
-Submuestreo convolucional $4\times$ & frontend de \texttt{frankenstein\_audio} & Anexo~\ref{sec:annex-18}; texto y ViT usan sus propios embeddings \\
+Submuestreo convolucional $4\times$ & frontend de \texttt{frankenstein\_audio} & Anexo~\ref{sec:annex-audio}; texto y ViT usan sus propios embeddings \\
 Dropout ($p=0.1$) & \texttt{model.dims.dropout} & global, por bloque \\
 \bottomrule
 \end{tabularx}

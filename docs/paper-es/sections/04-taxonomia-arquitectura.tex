@@ -15,7 +15,7 @@ El sistema implementa cuarenta y nueve mezcladores de secuencia organizados en d
     \item \textbf{Memoria indexada por token} (1): Memory Attention reemplaza la proyección de valores dedicada por memoria de tokens específica de capa, construyendo valores como \(V = K + \mathrm{Norm}(E[s])\) y manteniendo la ponderación softmax sin cambios \citep{kang_memory_attention_2026}.
     \item \textbf{Atención de peso rápido} (6): Falcon-1/2/3 y Falcon-1A/2A/3A tratan la transición de estado recurrente como una regla de aprendizaje continuo en línea \citep{zhang_falcon_2026}.
     \item \textbf{Campo geométrico} (1): SSOG aplica un prior geométrico estructurado sobre la matriz de atención \citep{pisoni_ssog_2026}.
-    \item \textbf{Aumentados con convolución} (1): el bloque Conformer \citep{Gulati2020} fusiona atención multi-cabeza con un módulo de convolución depthwise entre dos capas feed-forward Macaron, aportando a cada capa una rama local junto al campo receptivo global (Anexo~\ref{sec:annex-17}).
+    \item \textbf{Aumentados con convolución} (1): el bloque Conformer \citep{Gulati2020} fusiona atención multi-cabeza con un módulo de convolución depthwise entre dos capas feed-forward Macaron, aportando a cada capa una rama local junto al campo receptivo global (Anexo~\ref{sec:annex-conformer}).
 \end{enumerate}
 
 \begin{figure}[t]

@@ -1,0 +1,16 @@
+\small
+\begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
+\toprule
+\textbf{Grupo} & \textbf{Métodos} & \textbf{Objetivo Principal} & \textbf{Interpretación desde el Estudio} \\
+\midrule
+\endhead
+Línea base clásica & SGD, AdamW, RAdam & estabilidad y referencias base & Definen el piso de comparación para las afirmaciones de optimizadores más nuevos. \\
+Rediseño de momento & Adan, AdEMAMix, MARS, Cautious AdamW & adaptación de primer orden más rápida o segura & Mejor cuando la velocidad de convergencia o la estabilidad ante gradiente ruidoso es la preocupación principal. \\
+Simplificación de lotes grandes y programación & LAMB, Schedule-Free AdamW & robustez operacional a escala & Reducen la fragilidad debida al crecimiento del tamaño de lote o la ingeniería de programación. \\
+Eficiencia de memoria & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & reducción del estado del optimizador & Más útil cuando la VRAM está dominada por el estado del optimizador en lugar de las activaciones; los métodos de la familia APOLLO reemplazan los momentos densos de AdamW con escalado estructurado proyectado o cuantizado. \\
+Consciente de curvatura & Shampoo, SOAP, Sophia & mejor condicionamiento & Preferir cuando una geometría más rica justifica la sobrecarga de implementación y cómputo. \\
+Orientado a geometría & Muon, Turbo-Muon, AF-Muon, AdaMuon, Dion3 & estructura de actualización ortogonalizada & Opciones especializadas para geometría matricial y modelado de representaciones; AdaMuon añade un segundo momento por elemento sobre la dirección ortogonalizada con actualizaciones alineadas por RMS; AF-Muon asigna a la tabla de vocabulario atada una geometría de tabla con tope por fila y a los parámetros unidimensionales una actualización RMS, sin estado auxiliar de AdamW; Dion3 conserva la actualización espectral pero ortogonaliza solo una fracción de las filas del momentum por paso con Gram Newton--Schulz y error feedback. \\
+Híbrido evolutivo & EvE, EA4LLM & ranking rápido y monótono de candidatos para bucles de búsqueda; actualizaciones sin gradientes de parámetros completos & Una población de evolución diferencial en régimen estable con un rescate dirigido de Adam intercambia calidad final por velocidad de reloj; es mejor como optimizador interno de búsqueda de hiperparámetros o arquitecturas. EA4LLM elimina los gradientes por completo --- ES de orden cero con aptitud de log-verosimilitud por token y sin estado del optimizador, la opción centrada en memoria para preentrenar a escala. \\
+\bottomrule
+\end{longtable}
+\normalsize

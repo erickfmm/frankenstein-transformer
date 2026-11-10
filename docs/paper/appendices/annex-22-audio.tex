@@ -1,9 +1,9 @@
 \section{Audio: Speech Recognition and Audio Classification}
-\label{sec:annex-18}
+\label{sec:annex-audio}
 
 \subsection{Executive Summary}
 
-\texttt{frankenstein\_audio} is the fourth model class of the toolkit. It owns an audio frontend---log-mel filterbanks or a raw spectrogram, optional SpecAugment \citep{Park2019}, and two stride-2 convolutions that reduce the frame rate by $4\times$---and then runs the same \texttt{HybridLayer} stack as the text encoder over the resulting frame sequence. Because the stack is modality-agnostic, every sequence mixer (including the Conformer of Appendix~\ref{sec:annex-17}), normalization, residual strategy, positional encoding, optimizer and routing block is available unchanged. The class supports two tasks: \textbf{automatic speech recognition} (\texttt{asr}, with a CTC \citep{Graves2006ctc} or an RNN-Transducer \citep{Graves2012} loss) and \textbf{audio classification} (\texttt{audio\_classification}, clip-level cross-entropy). The same frontend, driven with \texttt{audio.feature: raw}, accepts multichannel one-dimensional sensor signals such as EEG, EMG or accelerometer traces for classification.
+\texttt{frankenstein\_audio} is the fourth model class of the toolkit. It owns an audio frontend---log-mel filterbanks or a raw spectrogram, optional SpecAugment \citep{Park2019}, and two stride-2 convolutions that reduce the frame rate by $4\times$---and then runs the same \texttt{HybridLayer} stack as the text encoder over the resulting frame sequence. Because the stack is modality-agnostic, every sequence mixer (including the Conformer of Appendix~\ref{sec:annex-conformer}), normalization, residual strategy, positional encoding, optimizer and routing block is available unchanged. The class supports two tasks: \textbf{automatic speech recognition} (\texttt{asr}, with a CTC \citep{Graves2006ctc} or an RNN-Transducer \citep{Graves2012} loss) and \textbf{audio classification} (\texttt{audio\_classification}, clip-level cross-entropy). The same frontend, driven with \texttt{audio.feature: raw}, accepts multichannel one-dimensional sensor signals such as EEG, EMG or accelerometer traces for classification.
 
 The reference recipe is the Conformer frontend of \citet{Gulati2020}: 80-channel log-mel filterbanks with a 25\,ms window and a 10\,ms stride, two $3\times3$ convolutions with stride 2, a linear projection to the model width, and SpecAugment with frequency width $F=27$, ten time masks and a maximum time-mask ratio $p_S = 0.05$. The three reference sizes (S/M/L) are reproduced in Table~\ref{tab:audio-sizes}.
 
@@ -26,7 +26,7 @@ The frontend module turns a batch of waveforms $w \in \mathbb{R}^{B \times T}$ (
     \begin{itemize}[leftmargin=*]
         \item \texttt{logmel} (default): an $80$-bin mel filterbank (Equation~\ref{eq:audio-mel}) followed by a log compression;
         \item \texttt{spectrogram}: $\log|\mathrm{STFT}(w)|^2$ with no mel projection;
-        \item \texttt{raw}: no spectral transform; the clip is fed as a $C \times T$ map (Section~\ref{sec:annex-18-eeg}).
+        \item \texttt{raw}: no spectral transform; the clip is fed as a $C \times T$ map (Section~\ref{sec:annex-audio-eeg}).
     \end{itemize}
     \item \textbf{SpecAugment} \citep{Park2019}: $F$ frequency channels are masked per clip, and up to \texttt{time\_masks} time bands of width at most $p_S \cdot T$ are masked, both with zero fill (training only).
 \end{enumerate}
@@ -169,7 +169,7 @@ training:
 SpecAugment is part of the acoustic frontend (``\texttt{audio.spec\_augment}''), so it is applied to the feature map before subsampling and is active only in training mode. The optional \texttt{training.asr.loss} block overrides \texttt{audio.asr\_loss} for presets that want to switch between CTC and RNN-T without editing the architecture block; the two must agree because the transducer head is built from the model-side knob.
 
 \subsection{Generic 1-D Signals: EEG and Beyond}
-\label{sec:annex-18-eeg}
+\label{sec:annex-audio-eeg}
 
 The frontend is not tied to speech. With \texttt{audio.feature: raw}, the mel filterbank and SpecAugment are skipped and the clip is treated as a multichannel $C \times T$ map, with \texttt{audio.in\_channels: C}. The two stride-2 convolutions then act as a learned filter bank over time (and, as a side effect, over the channel axis), the linear projection produces $d$-wide tokens, and the \texttt{HybridLayer} stack sees a sequence of frames exactly as it does for speech. This makes the class usable, at least for \textbf{classification}, on:
 

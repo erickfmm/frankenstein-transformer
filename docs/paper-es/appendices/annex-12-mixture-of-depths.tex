@@ -1,0 +1,26 @@
+\section{Enrutamiento de Tokens Mixture-of-Depths}
+\label{sec:annex-mod}
+
+Este anexo documenta el enrutamiento de tokens Mixture-of-Depths (MoD), el mecanismo de profundidad adaptativa que actualiza solo un subconjunto puntuado de tokens por bloque.
+
+\subsection{Enrutamiento de Tokens Mixture-of-Depths (MoD)}
+
+
+Cuando \texttt{use\_mixture\_of\_depths=true}, cada bloque del transformer puntúa los tokens con un enrutador ligero. Solo el subconjunto superior de \texttt{mixture\_of\_depths\_capacity\_ratio} se actualiza; los tokens omitidos pasan sin cambios \citep{zhu2026mixtureofdepthsattention}. Esto asigna más profundidad a los tokens destacados, reduciendo el cómputo por capa.
+
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} estados ocultos $H \in \mathbb{R}^{n \times d}$, enrutador $R$, ratio de capacidad $\rho$
+\State $\text{puntajes} \gets R(H)$ \Comment{puntaje del enrutador por token}
+\State $\mathcal{S} \gets \texttt{top-k}(\text{puntajes}, k=\lceil \rho \cdot n \rceil)$ \Comment{seleccionar subconjunto destacado}
+\State $H_{\text{actualizar}} \gets \texttt{bloque}(H[\mathcal{S}])$ \Comment{aplicar bloque transformer a tokens seleccionados}
+\State $H[\mathcal{S}] \gets H_{\text{actualizar}}$ \Comment{escribir de vuelta; los tokens no seleccionados bypassan el bloque}
+\State \textbf{Salida:} $H$ \Comment{pérdida auxiliar de balance de carga añadida desde \texttt{mixture\_of\_depths\_router\_aux\_loss\_weight}}
+\end{algorithmic}
+
+\subsubsection{Configuración}
+\begin{itemize}[leftmargin=*]
+    \item \texttt{use\_mixture\_of\_depths}: bool --- habilitar enrutamiento MoD de tokens.
+    \item \texttt{mixture\_of\_depths\_capacity\_ratio}: float en $(0, 1]$ --- fracción de tokens actualizados por capa.
+    \item \texttt{mixture\_of\_depths\_router\_aux\_loss\_weight}: float $\ge 0$ --- peso de pérdida auxiliar para regularización del enrutador.
+\end{itemize}
+

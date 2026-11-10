@@ -1,0 +1,147 @@
+\subsection{Línea Base Estándar y Optimizadores Adaptativos}
+\paragraph{SGD con Momentum.}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/sgd-momentum.pdf}}
+\caption{Flujo por paso de SGD con momentum: decaimiento L2 opcional, acumulación exponencial de momentum y actualización de parámetros con paso fijo.}
+\label{fig:opt-sgd-momentum}
+\end{figure}
+La actualización clásica acumula un búfer de momentum y luego aplica una tasa de aprendizaje fija. En cada iteración $t$, el algoritmo mantiene un promedio móvil exponencial $m_t$ de los gradientes pasados:
+\begin{align}
+m_t &= \beta m_{t-1} + g_t \\
+\theta_{t+1} &= \theta_t - \eta m_t
+\end{align}
+donde $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controla la decadencia del momentum y $\eta$ es la tasa de aprendizaje fija. El término de momentum actúa como velocidad: acelera el movimiento en direcciones consistentes mientras amortigua oscilaciones en direcciones variables.
+
+\begin{algorithm}[H]
+\caption{SGD con Momentum}
+\label{alg:sgd-momentum}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta_0$, tasa de aprendizaje $\eta$, coeficiente de momentum $\beta$, decadencia de peso $\lambda$
+\Ensure Parámetros actualizados $\theta_T$
+\State Inicializar: búfer de momentum $m \gets 0$
+\For{$t = 0, 1, 2, \ldots, T-1$}
+    \State Calcular gradiente: $g_t \gets \nabla f(\theta_t)$
+    \If{decadencia\_de\_peso $> 0$}
+        \State $g_t \gets g_t + \lambda \theta_t$ \Comment{Regularización L2}
+    \EndIf
+    \State Actualizar momentum: $m \gets \beta \cdot m + g_t$
+    \State Actualizar parámetros: $\theta_{t+1} \gets \theta_t - \eta \cdot m$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Escasa robustez frente a la heterogeneidad de curvatura: una única tasa global no puede adaptarse a todos los grupos de parámetros.
+\item Fuerte dependencia de programaciones de tasa de aprendizaje cuidadosamente diseñadas.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Baja sobrecarga de memoria: un único búfer de momentum por parámetro.
+\item Fuerte generalización cuando se ajusta cuidadosamente, y una actualización simple de implementar.
+\end{itemize}
+
+\paragraph{Adam y AdamW.}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/adamw.pdf}}
+\caption{Flujo por paso de AdamW: decaimiento de pesos desacoplado, EMAs de primer y segundo momento, corrección de sesgo y actualización adaptativa elemento a elemento.}
+\label{fig:opt-adamw}
+\end{figure}
+Adam rastrea promedios móviles exponenciales tanto del primer momento (media) como del segundo momento (varianza no centrada) para lograr tasas de aprendizaje adaptativas elemento a elemento. La regla de actualización es:
+\begin{align}
+m_t &= \beta_1 m_{t-1} + (1-\beta_1) g_t \\
+v_t &= \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \\
+\hat{m}_t &= \frac{m_t}{1-\beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1-\beta_2^t} \quad \text{(corrección de sesgo)} \\
+\theta_{t+1} &= \theta_t - \eta \left(\frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon}\right)
+\end{align}
+AdamW introduce una modificación crucial: la decadencia de peso se aplica directamente a los parámetros (desacoplada de los gradientes): $\theta_t \gets \theta_t(1-\eta\lambda)$ en lugar de añadir $\lambda\theta_t$ al gradiente. Este desacoplamiento evita que el escalado adaptativo interfiera con la fuerza de la regularización.
+
+\begin{algorithm}[H]
+\caption{AdamW (Adam con Decadencia de Peso Desacoplada)}
+\label{alg:adamw}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta_0$, tasa de aprendizaje $\eta$, tasas de decadencia exponencial $\beta_1, \beta_2 \in [0,1)$
+\Require Constante de momentum $\epsilon$, decadencia de peso $\lambda$
+\Ensure Parámetros actualizados $\theta_T$
+\State Inicializar: primer momento $m \gets 0$, segundo momento $v \gets 0$, contador de pasos $t \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State Calcular gradiente: $g_t \gets \nabla f(\theta_{t-1})$
+    \State Decadencia de peso (desacoplada): $\theta_{t-1} \gets \theta_{t-1}(1 - \eta\lambda)$
+    \State Actualizar momentos: $m \gets \beta_1 m + (1-\beta_1) g_t$
+    \State $v \gets \beta_2 v + (1-\beta_2) g_t^2$
+    \State Corrección de sesgo: $\hat{m} \gets m / (1 - \beta_1^t)$, $\hat{v} \gets v / (1 - \beta_2^t)$
+    \State Actualizar parámetros: $\theta_t \gets \theta_{t-1} - \eta (\hat{m} / (\sqrt{\hat{v}} + \epsilon))$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Almacena tensores de primer y segundo momento para cada parámetro, duplicando la memoria del estado del optimizador respecto a SGD.
+\item El escalado adaptativo elemento a elemento puede interferir con la regularización si el decaimiento de pesos no se desacopla.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Línea base práctica para el ajuste fino de transformadores: convergencia rápida y tolerancia a la variación de hiperparámetros.
+\item El decaimiento de pesos desacoplado mantiene la fuerza de la regularización independiente del escalado adaptativo.
+\end{itemize}
+
+\paragraph{RAdam (Adam Rectificado).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/radam.pdf}}
+\caption{Flujo por paso de RAdam: rectificación por ventana SMA con retroceso a SGD con momentum en los primeros pasos.}
+\label{fig:opt-radam}
+\end{figure}
+RAdam aborda la inestabilidad de Adam en el entrenamiento temprano rectificando dinámicamente la tasa de aprendizaje adaptativa. La observación clave es que el segundo momento $v_t$ tiene una varianza muy alta en los primeros pasos, causando un escalado adaptativo poco fiable. RAdam calcula la longitud efectiva de la ventana de promedio móvil simple (SMA):
+\[\rho_t = \rho_{\infty} - \frac{2t\beta_2^t}{1-\beta_2^t}, \quad \text{donde} \quad \rho_{\infty} = \frac{2}{1-\beta_2}-1\]
+Cuando $\rho_t > 4$ (suficientes muestras para la estimación de varianza), RAdam aplica el escalado adaptativo con un término de rectificación:
+\[r_t = \sqrt{\frac{(\rho_t-4)(\rho_t-2)\rho_{\infty}}{(\rho_{\infty}-4)(\rho_{\infty}-2)\rho_t}}, \quad \theta_{t+1} = \theta_t - \eta r_t \frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon}\]
+Cuando $\rho_t \leq 4$, RAdam retrocede a SGD con momentum: $\theta_{t+1} = \theta_t - \eta\hat{m}_t$.
+
+\begin{algorithm}[H]
+\caption{RAdam (Adam Rectificado)}
+\label{alg:radam}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta_0$, tasa de aprendizaje $\eta$, $\beta_1, \beta_2$, decadencia de peso $\lambda$
+\Ensure Parámetros actualizados $\theta_T$
+\State Inicializar: $m \gets 0$, $v \gets 0$, $t \gets 0$
+\State Calcular: $\rho_\infty \gets 2/(1-\beta_2) - 1$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla f(\theta_{t-1})$
+    \If{decadencia\_de\_peso $> 0$}
+        \State $\theta_{t-1} \gets \theta_{t-1}(1 - \eta\lambda)$
+    \EndIf
+    \State $m \gets \beta_1 m + (1-\beta_1) g_t$
+    \State $v \gets \beta_2 v + (1-\beta_2) g_t^2$
+    \State $\hat{m} \gets m/(1-\beta_1^t)$, $\hat{v} \gets v/(1-\beta_2^t)$
+    \State $\rho_t \gets \rho_\infty - 2t \beta_2^t / (1 - \beta_2^t)$
+    \If{$\rho_t > 4$}
+        \State $r_t \gets \sqrt{((\rho_t-4)(\rho_t-2)\rho_\infty) / ((\rho_\infty-4)(\rho_\infty-2)\rho_t)}$
+        \State $\theta_t \gets \theta_{t-1} - \eta r_t \hat{m} / (\sqrt{\hat{v}} + \epsilon)$
+    \Else
+        \State $\theta_t \gets \theta_{t-1} - \eta \hat{m}$ \Comment{SGD con momentum}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Añade contabilidad de rectificación sobre el estado de momentos de Adam.
+\item El beneficio se reduce cuando ya se usa una programación de calentamiento bien ajustada.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Elimina la necesidad de calentamiento manual al rectificar la tasa adaptativa.
+\item Retrocede con elegancia a SGD con momentum mientras las estimaciones de varianza no son fiables, mejorando la robustez.
+\end{itemize}
+

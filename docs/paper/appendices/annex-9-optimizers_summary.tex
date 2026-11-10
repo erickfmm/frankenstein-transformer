@@ -1,0 +1,16 @@
+\small
+\begin{longtable}{L{2.5cm}L{3.5cm}L{2.3cm}L{5.0cm}}
+\toprule
+\textbf{Group} & \textbf{Methods} & \textbf{Primary Goal} & \textbf{Interpretation from the Survey} \\
+\midrule
+\endhead
+Classical baseline & SGD, AdamW, RAdam & stability and reference baselines & These define the comparison floor for newer optimizer claims. \\
+Momentum redesign & Adan, AdEMAMix, MARS, Cautious AdamW & faster or safer first-order adaptation & Best when convergence speed or noisy-gradient stability is the main concern. \\
+Large-batch and schedule simplification & LAMB, Schedule-Free AdamW & operational robustness at scale & Reduce brittleness from batch-size growth or schedule engineering. \\
+Memory-efficient & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & optimizer-state reduction & Most useful when VRAM is dominated by optimizer state rather than activations; APOLLO-family methods replace dense AdamW moments with projected or quantized structured scaling. \\
+Curvature-aware & Shampoo, SOAP, Sophia & better conditioning & Prefer when richer geometry is worth implementation and compute overhead. \\
+Geometry-oriented & Muon, Turbo-Muon, AF-Muon, AdaMuon, Dion3 & orthogonalized update structure & Specialized options for matrix geometry and representation shaping; AdaMuon adds an element-wise second moment on the orthogonalized direction with RMS-aligned updates; AF-Muon assigns the tied vocabulary table a capped-row table geometry and one-dimensional parameters an RMS update, with no AdamW auxiliary state; Dion3 keeps the spectral update but orthogonalizes only a fraction of the momentum rows per step with Gram Newton--Schulz and error feedback. \\
+Evolutionary hybrid & EvE, EA4LLM & fast, monotone candidate ranking for search loops; gradient-free full-parameter updates & A steady-state differential-evolution population with a targeted Adam rescue trades final quality for wall-clock speed; best used as the inner optimizer of hyperparameter or architecture search. EA4LLM removes gradients entirely --- zeroth-order ES with token-level log-likelihood fitness and no optimizer state, the memory-first option for pretraining at scale. \\
+\bottomrule
+\end{longtable}
+\normalsize

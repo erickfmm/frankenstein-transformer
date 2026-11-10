@@ -1,0 +1,39 @@
+\section{Cuantización BitNet y Formatos de Bloque Safetensors}
+\label{sec:annex-bitnet}
+
+Este anexo documenta la ruta de pesos ternarios BitNet y los formatos de cuantización afín por bloques que escribe la exportación safetensors. La sección de despliegue remite a este anexo para los diseños de bloque y las estimaciones de tamaño; las claves bibliográficas se resuelven contra \texttt{docs/bibliography/}.
+
+\subsection{Ruta de Cuantización Ternaria BitNet}
+
+Cuando \texttt{use\_bitnet=true}, las capas BitLinear reemplazan a \texttt{nn.Linear} estándar con cuantización ternaria de pesos ($-1, 0, +1$) siguiendo BitNet \citep{wang_bitnet_2023}. Dado el tensor de pesos $W$, un escalado práctico es:
+\[
+s=\text{mean}(|W|),\qquad
+\tilde{W}=\text{clip}\left(\text{round}\left(\frac{W}{s}\right),-1,1\right).
+\]
+El mapeo empaquetado utiliza dos bits por símbolo de peso para eficiencia de almacenamiento. Esto permite una compresión significativa ($\sim 32\times$ frente a FP32) pero es experimental y puede afectar la calidad del modelo; es más adecuado para el despliegue de inferencia.
+
+La cuantización de activaciones para la ruta INT8 es:
+\[
+q=\text{round}\left(x\cdot\frac{127}{\max(|x|)+\epsilon}\right),\qquad q\in[-128,127]
+\]
+con des-cuantización $x\approx q/\alpha$. Para $N$ parámetros, las estimaciones de tamaño antes de metadatos y sobrecarga de empaquetado son:
+\[
+\text{Tamaño FP32}\approx 4N,\quad \text{Tamaño FP16}\approx 2N,\quad \text{Tamaño 1.58-bit}\approx \frac{1.58}{8}N
+\]
+lo que se alinea con objetivos de despliegue ligero \citep{samson_lightweight_2026,bravin_embbert_2026}.
+
+\subsection{Cuantización Afín por Bloques y Exportación Safetensors}
+\label{sec:annex-block-affine}
+
+La exportación a HuggingFace aplica cuantización afín por bloques a cada peso lineal bidimensional cuya dimensión de entrada es múltiplo de 32. Sean $w_1,\ldots,w_{32}$ un bloque. El diseño \texttt{Q8\_0} almacena
+\[
+d=\frac{\max_i |w_i|}{127},\qquad q_i=\operatorname{round}\!\left(\frac{w_i}{d}\right)\in[-127,127],
+\]
+como una escala FP16 más 32 bytes con signo (34 bytes por bloque, 8.5 bits por peso). El diseño \texttt{Q4\_0} sigue la convención del máximo con signo: selecciona el valor con signo $m$ de mayor magnitud, fija $d=m/(-8)$ y almacena
+\[
+q_i=\min\!\bigl(15,\operatorname{trunc}(w_i/d+8.5)\bigr)\in[0,15],
+\]
+como una escala FP16 más 16 bytes de nibbles (18 bytes por bloque, 4.5 bits por peso). El elemento $j$ ocupa el nibble bajo y el elemento $j+16$ el nibble alto; la des-cuantización es $\hat w_i=d\,(q_i-8)$. El diseño ternario \texttt{i2\_s} reutiliza la escala de BitNet $s=\text{mean}(|W|)$ (o $\max|W|$ si los pesos ya son ternarios), empaqueta cuatro símbolos por byte y añade una escala FP32 por tensor (2 bits por peso). El almacenamiento nominal es, por tanto, de $8.5$, $4.5$ y $2.0$ bits por peso lineal cuantizado, antes de los metadatos del tensor.
+
+El artefacto safetensors registra el formato y la forma original de cada tensor en \texttt{config.json}. Dos runtimes lo consumen: \emph{dequantize-on-load} (v1) reconstruye parámetros FP32 durante la carga, mientras que \emph{packed-linear} (v2) conserva los búferes empaquetados en un módulo \texttt{PackedLinear} y des-cuantiza en \texttt{forward}, preservando la normalización de entrada y la cuantización INT8 de activaciones de BitLinear cuando corresponde. El exportador no utiliza kernels enteros fusionados, y el harness experimental evalúa \texttt{Q8\_0}, \texttt{Q4\_0} e \texttt{i2\_s} en ambos runtimes.
+

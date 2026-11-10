@@ -257,7 +257,7 @@ Hyperloop (este código base) & $y^{(l+1)}_t = H^{\text{res}}_l y^{(l)}_t + H^{\
 
 \subsection{Funciones de Activación}
 
-La Tabla~\ref{tab:all-activations-es} cataloga las 43 funciones de activación disponibles a través del campo de esquema \texttt{ffn\_activation} (40 elementales más 3 variantes de FFN con compuerta), agrupadas por familia. ``Aprend.'' marca las activaciones con parámetros entrenables; las fórmulas completas están en el Anexo~8.
+La Tabla~\ref{tab:all-activations-es} cataloga las 43 funciones de activación disponibles a través del campo de esquema \texttt{ffn\_activation} (40 elementales más 3 variantes de FFN con compuerta), agrupadas por familia. ``Aprend.'' marca las activaciones con parámetros entrenables; las fórmulas completas están en el Apéndice~\ref{sec:annex-funciones-activacion}.
 
 \scriptsize
 \begin{longtable}{L{2.6cm}L{1.8cm}L{4.8cm}L{1.2cm}L{2.0cm}}
@@ -337,7 +337,7 @@ reglu & Compuerta & $\text{ReLU}(xW_g)\odot(xW_u)\,W_d$ & \textbf{sí} & \citep{
 
 \subsection{Variantes de Embedding}
 
-La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y optimizaciones estructurales de embedding soportadas por el código base. Las 12 codificaciones posicionales se configuran mediante el campo \texttt{positional\_encoding} de todo el modelo (ver Anexo~12 para las formulaciones completas); las dos optimizaciones estructurales se controlan con sus propias banderas.
+La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y optimizaciones estructurales de embedding soportadas por el código base. Las 12 codificaciones posicionales se configuran mediante el campo \texttt{positional\_encoding} de todo el modelo (ver Apéndice~\ref{sec:annex-codificaciones-posicionales} para las formulaciones completas); las dos optimizaciones estructurales se controlan con sus propias banderas.
 
 \footnotesize
 \begin{longtable}{L{3.0cm}L{7.5cm}L{3.5cm}}
@@ -353,7 +353,7 @@ La Tabla~\ref{tab:all-embeddings} cataloga las codificaciones posicionales y opt
 \multicolumn{3}{r}{\textit{continúa en la página siguiente}} \\
 \endfoot
 \bottomrule
-\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada. Las primeras 12 filas son codificaciones posicionales (Anexo~12); las últimas cuatro son optimizaciones estructurales de embedding, incluido el frontend de entrada de audio.}
+\caption{Variantes de embedding. $V$ = tamaño de vocabulario, $H$ = tamaño oculto, $R$ = dimensión intermedia factorizada. Las primeras 12 filas son codificaciones posicionales (Apéndice~\ref{sec:annex-codificaciones-posicionales}); las últimas cuatro son optimizaciones estructurales de embedding, incluido el frontend de entrada de audio.}
 \label{tab:all-embeddings}
 \endlastfoot
 \multicolumn{3}{c}{\textbf{Codificaciones Posicionales (12)}} \\
@@ -376,7 +376,7 @@ None & Módulo nulo; ninguna información posicional inyectada & --- \\
 Embeddings Factorizados & Descompone la matriz de embedding $V \times H$ en factores $V \times R$ y $R \times H$; reduce parámetros de $\mathcal{O}(VH)$ a $\mathcal{O}(V R + R H)$; controlado por \texttt{factorized\_embedding\_dim} & (interno) \\
 Convolución de Embedding & Conv1d depthwise aplicada sobre el flujo de embeddings antes del primer bloque transformer; proporciona filtrado ligero de contexto local; controlado por \texttt{embedding\_conv\_kernel} & (interno) \\
 Embeddings Dinámicos (EELBERT) & Reemplaza la tabla $V \times H$ por un hash de agrupación de $n$-gramas calculado al vuelo sobre las cadenas de tokens; congelado, sin parámetros de embedding entrenables; controlado por el bloque \texttt{embedding.dynamic.*} (Anexo~\ref{sec:annex-embeddings-dinamicos}) & \citep{cohn_eelbert_2023} \\
-Frontend de audio & Tramas log-mel/espectrograma/raw a través de dos etapas Conv2d con stride 2 y una proyección lineal (reducción de tramas $4\times$); lado de entrada de \texttt{frankenstein\_audio}; controlado por el bloque \texttt{audio.*} (Anexo~\ref{sec:annex-18}) & \citep{Gulati2020} \\
+Frontend de audio & Tramas log-mel/espectrograma/raw a través de dos etapas Conv2d con stride 2 y una proyección lineal (reducción de tramas $4\times$); lado de entrada de \texttt{frankenstein\_audio}; controlado por el bloque \texttt{audio.*} (Anexo~\ref{sec:annex-audio}) & \citep{Gulati2020} \\
 \bottomrule
 \end{longtable}
 \normalsize
