@@ -4,8 +4,9 @@
 This appendix documents the Mixture-of-Experts (MoE) contract implemented by
 \texttt{src/model/moe/} and declared in
 \texttt{src/schema/\_model/\_moe.yaml}. The schema is the executable source of
-truth: every key discussed here exists in the schema, is flattened to a
-\texttt{FrankensteinModelConfig} field, and is exercised by the test suite. The
+truth: every key discussed here exists in the schema, is materialised in the
+nested \texttt{FrankensteinModelConfig} \texttt{moe} block, and is exercised by
+the test suite. The
 text follows the anatomy of one MoE layer---router, routing strategy, load
 balancing, experts, layer layout, capacity, monitoring---and closes with the
 schema-contract and preset tables.

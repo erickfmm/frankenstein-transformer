@@ -31,7 +31,10 @@ def resolve_schema(schema_path: str | Path) -> Dict[str, Any]:
         schema = yaml.safe_load(handle) or {}
 
     resolved = _resolve_refs(schema, schema_path.parent)
-    from src.registry.schema_assembly import assemble_schema
+    try:
+        from src.registry.schema_assembly import assemble_schema
+    except ImportError:  # standalone mirror layout (``registry/`` package)
+        from registry.schema_assembly import assemble_schema
 
     return assemble_schema(resolved)
 

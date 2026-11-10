@@ -6,7 +6,7 @@
 
 Experimentation in this project is \emph{schema first}. Rather than exposing loosely checked flags, model topology, optimizer family, training limits, and telemetry pass through a single validated configuration document, which reduces ambiguity when reproducing results and lets many architectures share one operational interface.
 
-The authoritative contract is \path{src/schema.yaml}, a modular JSON Schema whose modules under \path{src/schema/} cover the model, model class, tokenizer, optimizer, SBERT, training, and dataset blocks. The top-level objects are \texttt{base\_model}, \texttt{tokenizer}, \texttt{model\_class}, \texttt{model}, \texttt{training}, \texttt{image}, \texttt{vision\_dataset}, and \texttt{text\_dataset}.
+The authoritative contract is \path{src/schema.yaml}, a modular JSON Schema whose modules under \path{src/schema/} cover the model, model class, tokenizer, optimizer, SBERT, training, and dataset blocks. The top-level objects are \texttt{base\_model}, \texttt{tokenizer}, \texttt{model\_class}, \texttt{model}, \texttt{training}, \texttt{image}, \texttt{vision\_dataset}, \texttt{audio}, \texttt{audio\_dataset}, \texttt{text\_dataset}, \texttt{inference}, and \texttt{plugins}.
 
 \paragraph{Model class.} The \texttt{model\_class} field selects among three variants:
 \begin{itemize}[leftmargin=*]
@@ -17,9 +17,11 @@ The authoritative contract is \path{src/schema.yaml}, a modular JSON Schema whos
 
 \paragraph{Training mode.} \texttt{model.dims.mode} controls masking: \texttt{encoder} uses bidirectional attention for masked language modeling, and \texttt{decoder} uses causal masking for autoregressive prediction.
 
+\paragraph{Declarative component registry.} The runtime configuration mirrors the validated document one-to-one: the nested \texttt{model:} block is materialised as a typed configuration tree and per-component knobs are bound through the component's declarative record, with no nested-to-flat rewriting stage. Every pluggable component---sequence mixer, optimizer, normalization, activation, residual strategy, positional encoding and token-embedding variant---is described by one registry entry holding its name, lazily imported implementation, parameter schema fragment, runtime defaults, capability flags (KV-cache support, training-time sparsity, QK-normalization support, gated-FFN status) and bilingual documentation. The schema enumerations, per-mixer parameter objects, optimizer prefix reference and conditional prefix rules are \emph{assembled from that registry} before validation, so a component is declared once and cannot drift across parallel lists; the closed-world validation guarantee (\texttt{additionalProperties:~false}) holds for every registered component. The same mechanism is the extension surface: a plugin module registers new components through a public authoring API, either listed under the configuration's \texttt{plugins:} key or discovered through the \texttt{frankenstein.plugins} entry-point group. Plugin-declared components therefore validate strictly, appear in the schema-generated web builder, and are dispatched by the same core code as the built-ins, while a plugin that does not declare KV-cache support simply falls back to the full-recompute path (decision D5).
+
 \paragraph{Mixer selection.} \texttt{model.dims.layer\_pattern} is an ordered list of mixer identifiers drawn from the eight families described in Section~\ref{sec:architecture-taxonomy}; the schema fixes the accepted identifiers, and the complete enumeration appears in Figure~\ref{fig:comprehensive-taxonomy} and Appendix~\ref{sec:annex-summary-tables}.
 
-\paragraph{Optimizer selection.} \texttt{training.optimizer.optimizer\_class} selects one of twenty-four optimizer families, summarized in Section~\ref{sec:optimizer-families} and detailed in Appendix~\ref{sec:annex-optimizers}.
+\paragraph{Optimizer selection.} \texttt{training.optimizer.optimizer\_class} selects one of thirty-six optimizer families, summarized in Section~\ref{sec:optimizer-families} and detailed in Appendix~\ref{sec:annex-optimizers}.
 
 \begin{figure}[t]
 \centering

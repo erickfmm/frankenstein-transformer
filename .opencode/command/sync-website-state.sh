@@ -103,7 +103,7 @@ echo ""
 echo "[drift]"
 
 # schema (single file + directory)
-pair_file "$REPO_ROOT/src/schema.yaml" "$SITE/schema.yaml" "src/schema.yaml" "schema.yaml"
+pair_file "$REPO_ROOT/docs/schema.assembled.yaml" "$SITE/schema.yaml" "docs/schema.assembled.yaml" "schema.yaml"
 pair_tree "$REPO_ROOT/src/schema" "$SITE/schema" "src/schema" "schema" -type f
 
 # configs -> examples (top-level yamls + README only; subdirs via explicit pair below)

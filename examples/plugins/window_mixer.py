@@ -34,7 +34,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.plugins.api import register_mixer
+try:
+    from src.plugins.api import register_mixer
+except ImportError:  # legacy flat sys.path layout (src/ on sys.path)
+    from plugins.api import register_mixer
 
 _PARAMS = {
     "type": "object",

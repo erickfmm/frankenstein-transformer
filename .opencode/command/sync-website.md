@@ -32,7 +32,7 @@ bash .opencode/command/sync-website-state.sh
 
 | Main repo | Mirror | Notes |
 |---|---|---|
-| `src/schema.yaml` | `schema.yaml` | strict JSON-Schema entry |
+| `docs/schema.assembled.yaml` | `schema.yaml` | fully assembled (registry-injected) schema snapshot; regenerate with `python -m src.registry.snapshot` |
 | `src/schema/**` | `schema/**` | `$ref` modules |
 | `configs/*.yaml` + `configs/README.md` | `examples/*.yaml` + `examples/README.md` | presets; **top level only**, do not recurse here |
 | `configs/examples/**` | `examples/examples/**` | full recursion, including `examples.md` |

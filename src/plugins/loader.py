@@ -19,8 +19,14 @@ import logging
 import pathlib
 from typing import Iterable, Optional
 
-from src.registry import ensure_builtins
-from src.registry.errors import PluginLoadError
+try:
+    from src.registry import ensure_builtins
+except ImportError:  # legacy flat sys.path layout (src/ on sys.path)
+    from registry import ensure_builtins
+try:
+    from src.registry.errors import PluginLoadError
+except ImportError:  # legacy flat sys.path layout
+    from registry.errors import PluginLoadError
 
 __all__ = ["load_plugins", "load_entry_point_plugins", "load_plugin_paths"]
 

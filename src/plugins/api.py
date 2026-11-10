@@ -11,18 +11,33 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from src.registry.spec import (
-    ActivationSpec,
-    CacheSpec,
-    EmbeddingSpec,
-    MixerSpec,
-    NormSpec,
-    OptimizerSpec,
-    ParamBinding,
-    PESpec,
-    ResidualSpec,
-)
-from src.registry import register_spec
+try:
+    from src.registry.spec import (
+        ActivationSpec,
+        CacheSpec,
+        EmbeddingSpec,
+        MixerSpec,
+        NormSpec,
+        OptimizerSpec,
+        ParamBinding,
+        PESpec,
+        ResidualSpec,
+    )
+    from src.registry import register_spec
+except ImportError:  # legacy flat sys.path layout
+    from registry.spec import (
+        ActivationSpec,
+        CacheSpec,
+        EmbeddingSpec,
+        MixerSpec,
+        NormSpec,
+        OptimizerSpec,
+        ParamBinding,
+        PESpec,
+        ResidualSpec,
+    )
+    from registry import register_spec
+
 
 __all__ = [
     "register_mixer",

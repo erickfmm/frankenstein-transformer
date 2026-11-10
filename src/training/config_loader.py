@@ -527,7 +527,10 @@ def load_inference_config(
 
     declared_plugins = data.get("plugins")
     if declared_plugins:
-        from ..plugins.loader import load_plugins
+        try:
+            from ..plugins.loader import load_plugins
+        except ImportError:  # legacy flat sys.path layout (src/ on sys.path)
+            from plugins.loader import load_plugins
 
         load_plugins(declared_plugins)
     if "inference" in data:
@@ -583,7 +586,10 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     # the config while it evolves).
     declared_plugins = data.get("plugins")
     if declared_plugins:
-        from ..plugins.loader import load_plugins
+        try:
+            from ..plugins.loader import load_plugins
+        except ImportError:  # legacy flat sys.path layout (src/ on sys.path)
+            from plugins.loader import load_plugins
 
         load_plugins(declared_plugins)
     model_schema_checked = _warn_unknown_schema_keys(data, source=str(path))

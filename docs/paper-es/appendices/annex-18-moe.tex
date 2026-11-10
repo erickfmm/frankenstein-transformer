@@ -4,8 +4,9 @@
 Este anexo documenta el contrato de Mezcla de Expertos (MoE) implementado en
 \texttt{src/model/moe/} y declarado en
 \texttt{src/schema/\_model/\_moe.yaml}. El esquema es la fuente de verdad
-ejecutable: cada clave discutida aquí existe en el esquema, se aplana a un campo
-de \texttt{FrankensteinModelConfig} y está cubierta por la suite de pruebas. El
+ejecutable: cada clave discutida aquí existe en el esquema, se materializa en el
+bloque anidado \texttt{moe} de \texttt{FrankensteinModelConfig} y está cubierta
+por la suite de pruebas. El
 texto sigue la anatomía de una capa MoE---router, estrategia de ruteo, balanceo
 de carga, expertos, disposición por capas, capacidad y monitoreo---y cierra con
 las tablas del contrato de esquema y de los presets.
