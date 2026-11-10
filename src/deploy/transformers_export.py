@@ -111,12 +111,13 @@ class FrankensteinConfig(PretrainedConfig):
                 # it as unset so artifacts exported before this guard still
                 # load; the model-side value lives in ``frankenstein_config``.
                 continue
-            if key in _MODEL_KEYS:
+            if key in _MODEL_KEYS or key in {"rope_scaling", "rope_parameters"}:
                 # Model keys never reach ``PretrainedConfig.__init__``: flat
                 # names can collide with reserved HF config properties whose
-                # kwargs are validated (``rope_scaling`` must be a dict in
-                # transformers >= 5, while the Frankenstein config stores a
-                # float factor). ``frankenstein_config`` stays authoritative.
+                # kwargs are validated. transformers >= 5 validates
+                # ``rope_scaling``/``rope_parameters`` as mappings, while the
+                # Frankenstein config stores a float scaling factor, so both
+                # stay inside ``frankenstein_config`` (authoritative).
                 model_cfg.setdefault(key, value)
             else:
                 passthrough[key] = value
@@ -128,7 +129,10 @@ class FrankensteinConfig(PretrainedConfig):
         super().__init__(**passthrough)
 
         for key, value in model_cfg.items():
-            if key in {"model_class", "task", "model_type", "architectures"}:
+            if key in {
+                "model_class", "task", "model_type", "architectures",
+                "rope_scaling", "rope_parameters",
+            }:
                 continue
             if key == "num_labels" and value is None:
                 # `num_labels` is a reserved HF property; a None value breaks
@@ -152,7 +156,10 @@ class FrankensteinConfig(PretrainedConfig):
             {
                 key: value
                 for key, value in self.frankenstein_config.items()
-                if key not in {"model_class", "task", "model_type", "architectures"}
+                if key not in {
+                    "model_class", "task", "model_type", "architectures",
+                    "rope_scaling", "rope_parameters",
+                }
                 and not (key == "num_labels" and value is None)
             }
         )
@@ -828,6 +835,12 @@ def _build_transformers_config(
     quantization_config: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = dict(model_config)
+    # Reserved HF config fields whose Frankenstein shape is incompatible with
+    # transformers >= 5 validation (``rope_scaling`` must be a mapping there,
+    # while the model stores a float factor). They stay in
+    # ``frankenstein_config`` below and are never emitted at the top level.
+    for reserved in ("rope_scaling", "rope_parameters"):
+        payload.pop(reserved, None)
     if payload.get("num_labels") is None:
         # `num_labels` is a reserved HF property. transformers 5.x takes an
         # explicit ``None`` literally and calls ``range(None)`` while building

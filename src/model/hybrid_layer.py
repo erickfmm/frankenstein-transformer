@@ -147,11 +147,12 @@ class HybridLayer(nn.Module):
         # Residual-connection strategy (arXiv:2603.15031). Decides whether
         # to add the layer output to the residual (standard / none / AttnRes
         # managed externally by the encoder).
+        ensure_builtins()
         self.residual_type = str(getattr(config, "residual_type", "standard")).lower()
-        if self.residual_type not in {"standard", "none", "full_attn", "block_attn"}:
+        if self.residual_type not in registry.names(ComponentFamily.RESIDUAL):
             raise ValueError(
                 f"Unknown residual_type {self.residual_type!r}; expected one of "
-                "'standard', 'none', 'full_attn', 'block_attn'."
+                f"{list(registry.names(ComponentFamily.RESIDUAL))}."
             )
         # AttnRes variants are handled by an external ResidualBase module
         # injected by FrankensteinEncoder — the layer itself never touches

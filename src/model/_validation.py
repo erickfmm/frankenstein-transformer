@@ -304,10 +304,14 @@ def validate_config(cfg: Any) -> None:
 
     # ---- Residuals ----
     rt = str(cfg.residuals.type).lower()
-    if rt not in {"standard", "none", "full_attn", "block_attn"}:
+    from src.registry import ComponentFamily, ensure_builtins, registry
+
+    ensure_builtins()
+    valid_residuals = set(registry.names(ComponentFamily.RESIDUAL))
+    if rt not in valid_residuals:
         raise ValueError(
-            "residual_type must be one of ['block_attn', 'full_attn', 'none', "
-            f"'standard'], got {cfg.residuals.type!r}"
+            f"residual_type must be one of {sorted(valid_residuals)}, got "
+            f"{cfg.residuals.type!r}"
         )
     cfg.residuals.type = rt
     if int(cfg.residuals.block_attn.num_blocks) < 1:

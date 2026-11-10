@@ -89,6 +89,22 @@ def _build_flash_norm(config: Any, params) -> nn.Module:
     )
 
 
+def _declared_norm_params(spec: Any, config: Any) -> dict:
+    """Return only the norm-block parameters declared by the spec.
+
+    Args:
+        spec: The normalization spec.
+        config: Model configuration.
+
+    Returns:
+        The subset of :func:`norm_params` declared by the spec's fragment.
+    """
+    from src.registry.fragments import allowed_param_keys
+
+    allowed = set(allowed_param_keys(spec))
+    return {key: value for key, value in norm_params(config).items() if key in allowed}
+
+
 def get_norm(config: Any) -> nn.Module:
     """Return the normalization module selected by ``config.norm.type``.
 
@@ -110,5 +126,5 @@ def get_norm(config: Any) -> nn.Module:
             "Unknown norm type %r; falling back to layer_norm.", config.norm.type
         )
         return nn.LayerNorm(config.hidden_size)
-    params = bind_params(spec, norm_params(config))
+    params = bind_params(spec, _declared_norm_params(spec, config))
     return resolve_builder(spec.builder)(config, params)

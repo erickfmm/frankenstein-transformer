@@ -118,6 +118,16 @@ class TransformersExportTests(unittest.TestCase):
             self.assertTrue((out_dir / "model.safetensors").exists())
             self.assertFalse((out_dir / "pytorch_model.bin").exists())
             self.assertTrue((out_dir / "quantization_frankenstein.py").exists())
+
+            # transformers >= 5 validates ``rope_scaling`` as a mapping; the
+            # Frankenstein config stores a float factor, so it must stay
+            # inside ``frankenstein_config`` and never reach PretrainedConfig.
+            exported = json.loads((out_dir / "config.json").read_text())
+            self.assertNotIn("rope_scaling", exported)
+            self.assertNotIn("rope_parameters", exported)
+            self.assertEqual(exported["frankenstein_config"]["rope_scaling"], 1.0)
+            wrapper = (out_dir / "configuration_frankenstein.py").read_text()
+            self.assertIn('"rope_scaling", "rope_parameters"', wrapper)
             self.assertTrue((out_dir / "configuration_frankenstein.py").exists())
             self.assertTrue((out_dir / "modeling_frankenstein.py").exists())
             self.assertTrue((out_dir / "compatibility_report.json").exists())

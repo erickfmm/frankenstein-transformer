@@ -12,7 +12,7 @@ from .alibi import ALiBi
 from .bam import BAM
 from .dynamic_embedding import DynamicEmbedding
 from .factorized_embedding import FactorizedEmbedding
-from .factory import build_pos_encoder
+from .factory import build_pos_encoder, build_token_embedding
 from .hope import HoPE
 from .learned_absolute import LearnedAbsolutePE
 from .nope import NoPE
@@ -39,4 +39,5 @@ __all__ = [
     "SinusoidalAbsolute",
     "SinusoidalRotary",
     "build_pos_encoder",
+    "build_token_embedding",
 ]

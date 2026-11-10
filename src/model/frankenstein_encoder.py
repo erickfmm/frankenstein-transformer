@@ -30,7 +30,7 @@ from .moe import aggregate_moe_aux_losses
 from .hyperloop import HyperloopConnections
 from .attention.common import BitLinear
 from .norm import get_norm
-from .embeddings import DynamicEmbedding, FactorizedEmbedding, build_pos_encoder
+from .embeddings import build_pos_encoder, build_token_embedding
 from .residuals import ResidualBase, build_residual
 
 
@@ -113,12 +113,9 @@ class FrankensteinEncoder(nn.Module):
         self.last_mixture_of_depths_stats = {}
         self.last_moe_stats = {}
 
-        if config.use_dynamic_embedding:
-            self.emb = DynamicEmbedding(config)
-        elif config.use_factorized_embedding:
-            self.emb = FactorizedEmbedding(config)
-        else:
-            self.emb = nn.Embedding(config.vocab_size, config.hidden_size)
+        # Token embedding variant is registry-driven (``model.embedding.type``);
+        # the legacy ``*.enabled`` flags are folded into ``type`` at load time.
+        self.emb = build_token_embedding(config)
         self.dropout = nn.Dropout(config.dropout)
 
         self.pos_encoder = build_pos_encoder(config)

@@ -82,6 +82,20 @@ class ResidualBase(nn.Module):
         """
         self.n_streams = max(1, int(n_streams))
 
+    def set_embedding(self, embedding_output) -> None:
+        """Store the token embedding as the first residual source.
+
+        AttnRes-style residuals override this to seed their source list with
+        ``v_0 = h_1``. Stateless / plugin residuals may ignore it; the base
+        implementation is a no-op so the encoder can call it unconditionally
+        when ``is_attn_res`` is set.
+
+        Args:
+            embedding_output: Token-embedding tensor ``(B, S, D)`` or the mHC
+                ``(B, S, n, D)`` stream.
+        """
+        pass
+
     def register_state(self, num_layers: int) -> None:
         """Pre-allocate the buffers needed for the upcoming forward pass.
 
