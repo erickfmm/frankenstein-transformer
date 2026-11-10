@@ -10,11 +10,16 @@ Task coverage:
   token against the masked (real) token.
 * ``causal_lm`` — teacher-forced next-token prediction on real text: first-token
   match and token-level accuracy against the real continuation.
-* ``text_classification`` — argmax class vs the real label.
+* ``text_classification`` — argmax class vs the real label (numeric
+  ``predicted_label``/``true_label`` are emitted for F1 aggregation).
 * ``classification`` (ViT) — argmax class vs the real image label.
 * ``audio_classification`` — argmax class vs the real audio label.
 * ``segmentation`` / ``patch_prediction`` / ``asr`` — no label-match metric;
   a single ``SKIPPED_NO_INFER`` row is emitted.
+
+When ``--test-split`` points at the trainer's ``test_split.json``, only the
+exact held-out dataset indices are evaluated, so the deployed/quantized/HF
+accuracy and F1 are measured on the same examples as ``test_metrics.json``.
 
 Rows are written as a JSON list to ``--out`` and are appended by the harness to
 ``tmp/results/inference.csv``. The helper never raises on a per-sample failure:
@@ -86,6 +91,10 @@ def _row(
     metric_name: str = "",
     metric_value: Any = "",
     notes: str = "",
+    predicted_label: Any = "",
+    true_label: Any = "",
+    top5_hit: Any = "",
+    token_accuracy: Any = "",
 ) -> Dict[str, Any]:
     """Build one inference-comparison row with the harness' CSV schema."""
     return {
@@ -99,6 +108,10 @@ def _row(
         "real": real,
         "metric_name": metric_name,
         "metric_value": metric_value,
+        "predicted_label": predicted_label,
+        "true_label": true_label,
+        "top5_hit": top5_hit,
+        "token_accuracy": token_accuracy,
         "status": status,
         "notes": notes,
     }
@@ -114,6 +127,39 @@ def _skip_row(args: argparse.Namespace, status: str, notes: str) -> Dict[str, An
         status=status,
         notes=notes,
     )
+
+
+def _load_test_indices(path: Optional[str]) -> Optional[set]:
+    """Read the held-out dataset indices from ``test_split.json``.
+
+    Args:
+        path: Path to the manifest written by the trainer.
+
+    Returns:
+        A set of integer indices, or ``None`` when the file is absent/invalid.
+    """
+    if not path:
+        return None
+    manifest = Path(path)
+    if not manifest.exists():
+        return None
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning("Could not read test split %s: %s", manifest, exc)
+        return None
+    indices = payload.get("test_indices") if isinstance(payload, dict) else payload
+    if not isinstance(indices, list):
+        return None
+    try:
+        return {int(index) for index in indices}
+    except (TypeError, ValueError):
+        return None
+
+
+def _allowed(index: int, allowed: Optional[set]) -> bool:
+    """Return ``True`` when ``index`` belongs to the held-out split."""
+    return allowed is None or int(index) in allowed
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +255,12 @@ def _text_loader(
     from src.training.text_dataset_builder import build_text_dataloader_from_config
 
     return build_text_dataloader_from_config(
-        loaded, tokenizer, device, cli_batch_size=batch_size, task=task
+        loaded,
+        tokenizer,
+        device,
+        cli_batch_size=batch_size,
+        task=task,
+        shuffle=False,
     )
 
 
@@ -276,12 +327,18 @@ def eval_text_mlm(
         return [_skip_row(args, "SKIPPED_NO_DATASET", "no text_dataset configured")]
 
     rows: List[Dict[str, Any]] = []
+    allowed = getattr(args, "allowed_indices", None)
+    dataset_index = 0
     sample = 0
     for batch in loader:
         input_ids = batch["input_ids"]
         labels = batch["labels"]
         attention_mask = batch.get("attention_mask")
         for row_idx in range(input_ids.shape[0]):
+            current_index = dataset_index
+            dataset_index += 1
+            if not _allowed(current_index, allowed):
+                continue
             if len(rows) >= args.samples:
                 break
             valid = int(attention_mask[row_idx].sum()) if attention_mask is not None else int(input_ids.shape[1])
@@ -311,6 +368,9 @@ def eval_text_mlm(
                     real=f"{_decode(tokenizer, [target])} (id={target})",
                     metric_name="mlm_top1",
                     metric_value=1.0 if top_ids[0] == target else 0.0,
+                    predicted_label=top_ids[0],
+                    true_label=target,
+                    top5_hit=1 if target in top_ids else 0,
                     notes=f"mask_position={position} top5_hit={target in top_ids}",
                 )
             )
@@ -337,11 +397,17 @@ def eval_text_causal_lm(
         return [_skip_row(args, "SKIPPED_NO_DATASET", "no text_dataset configured")]
 
     rows: List[Dict[str, Any]] = []
+    allowed = getattr(args, "allowed_indices", None)
+    dataset_index = 0
     sample = 0
     for batch in loader:
         input_ids = batch["input_ids"]
         attention_mask = batch.get("attention_mask")
         for row_idx in range(input_ids.shape[0]):
+            current_index = dataset_index
+            dataset_index += 1
+            if not _allowed(current_index, allowed):
+                continue
             if len(rows) >= args.samples:
                 break
             valid = int(attention_mask[row_idx].sum()) if attention_mask is not None else int(input_ids.shape[1])
@@ -370,6 +436,9 @@ def eval_text_causal_lm(
                     real=_decode(tokenizer, [first_real]),
                     metric_name="causal_next_token",
                     metric_value=1.0 if first_pred == first_real else 0.0,
+                    predicted_label=first_pred,
+                    true_label=first_real,
+                    token_accuracy=accuracy,
                     notes=f"first_token_match={first_pred == first_real} token_accuracy={accuracy:.4f}",
                 )
             )
@@ -398,6 +467,8 @@ def eval_text_classification(
         return [_skip_row(args, "SKIPPED_NO_DATASET", "no text_dataset configured")]
 
     rows: List[Dict[str, Any]] = []
+    allowed = getattr(args, "allowed_indices", None)
+    dataset_index = 0
     sample = 0
     for batch in loader:
         input_ids = batch["input_ids"]
@@ -406,6 +477,10 @@ def eval_text_classification(
             return [_skip_row(args, "SKIPPED_NO_INFER", "text_dataset did not expose labels")]
         attention_mask = batch.get("attention_mask")
         for row_idx in range(input_ids.shape[0]):
+            current_index = dataset_index
+            dataset_index += 1
+            if not _allowed(current_index, allowed):
+                continue
             if len(rows) >= args.samples:
                 break
             valid = int(attention_mask[row_idx].sum()) if attention_mask is not None else int(input_ids.shape[1])
@@ -429,6 +504,8 @@ def eval_text_classification(
                     real=f"label={real}",
                     metric_name="text_classification_accuracy",
                     metric_value=1.0 if predicted == real else 0.0,
+                    predicted_label=predicted,
+                    true_label=real,
                 )
             )
             sample += 1
@@ -459,7 +536,13 @@ def eval_vit_classification(
         return [_skip_row(args, "SKIPPED_NO_DATASET", "vision_dataset returned no rows")]
 
     rows: List[Dict[str, Any]] = []
-    for index in range(min(args.samples, len(dataset))):
+    allowed = getattr(args, "allowed_indices", None)
+    candidates = [
+        index
+        for index in range(len(dataset))
+        if _allowed(index, allowed)
+    ]
+    for index in candidates[: args.samples]:
         item = dataset[index]
         pixel_values = item["pixel_values"].unsqueeze(0).to(device)
         with torch.no_grad():
@@ -479,6 +562,8 @@ def eval_vit_classification(
                 real=f"label={real}",
                 metric_name="vit_classification_accuracy",
                 metric_value=1.0 if predicted == real else 0.0,
+                predicted_label=predicted,
+                true_label=real,
             )
         )
     return rows
@@ -492,8 +577,6 @@ def eval_audio_classification(
     device: str,
 ) -> List[Dict[str, Any]]:
     """Compare audio classification logits with the real audio labels."""
-    from itertools import islice
-
     from src.training.audio_dataset import build_audio_dataloader_from_config
 
     dataset_config = dict(run_config.get("audio_dataset") or {})
@@ -509,7 +592,13 @@ def eval_audio_classification(
         split=str(dataset_config.get("split") or "train"),
     )
     rows: List[Dict[str, Any]] = []
-    for index, batch in enumerate(islice(loader, args.samples)):
+    allowed = getattr(args, "allowed_indices", None)
+    dataset_index = 0
+    for batch in loader:
+        current_index = dataset_index
+        dataset_index += 1
+        if not _allowed(current_index, allowed):
+            continue
         waveform = batch["waveform"].to(device)
         with torch.no_grad():
             logits = model(waveform, task="audio_classification")
@@ -523,16 +612,20 @@ def eval_audio_classification(
                 model_class=args.model_class,
                 task=args.task,
                 deploy_format=args.deploy_format,
-                sample_id=index,
+                sample_id=current_index,
                 status="OK",
-                input_excerpt=f"{dataset_config.get('dataset_name')} #{index}",
+                input_excerpt=f"{dataset_config.get('dataset_name')} #{current_index}",
                 predicted=f"label={predicted}",
                 real=f"label={real}",
                 metric_name="audio_classification_accuracy",
                 metric_value=1.0 if predicted == real else 0.0,
+                predicted_label=predicted,
+                true_label=real,
                 notes=f"waveform_samples={int(waveform.reshape(waveform.shape[0], -1).shape[-1])}",
             )
         )
+        if len(rows) >= args.samples:
+            break
     if not rows:
         return [_skip_row(args, "SKIPPED_NO_DATASET", "audio_dataset returned no rows")]
     return rows
@@ -555,8 +648,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="native",
         help="native: deployment .pt artifact; hf: transformers safetensors export",
     )
-    parser.add_argument("--samples", type=int, default=4)
+    parser.add_argument("--samples", type=int, default=16)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument(
+        "--test-split",
+        default=None,
+        help=(
+            "Path to the run's test_split.json; when present, only the held-out "
+            "indices are evaluated."
+        ),
+    )
     parser.add_argument("--out", required=True)
     return parser
 
@@ -569,6 +670,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = build_parser().parse_args(argv)
     args.samples = max(1, int(args.samples))
+    args.allowed_indices = _load_test_indices(args.test_split)
     device = _resolve_device(args.device)
 
     deploy_dir = Path(args.deploy_dir)

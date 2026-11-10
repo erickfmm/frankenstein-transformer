@@ -676,7 +676,7 @@ def _train_from_config_path(
     logging.info("=" * 60)
 
     test_split = maybe_split_dataloader(
-        dataloader, training_runtime, seed=training_config.seed
+        dataloader, training_runtime, seed=training_config.seed, task=task
     )
     dataloader = test_split.train_loader
 
@@ -1057,7 +1057,8 @@ def _train_vision(
         )
 
     test_split = maybe_split_dataloader(
-        dataloader, loaded.training_runtime, seed=training_config.seed
+        dataloader, loaded.training_runtime, seed=training_config.seed,
+        task=loaded.task,
     )
     dataloader = test_split.train_loader
 
@@ -1216,7 +1217,8 @@ def _train_audio(
         )
 
     test_split = maybe_split_dataloader(
-        dataloader, loaded.training_runtime, seed=training_config.seed
+        dataloader, loaded.training_runtime, seed=training_config.seed,
+        task=loaded.task,
     )
     dataloader = test_split.train_loader
 

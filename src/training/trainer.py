@@ -45,6 +45,7 @@ try:
     from ..model.moe import update_moe_expert_bias
     from ..model.norm.qk import QuacKController, apply_qk_clip
     from ..model.numerics import fixed_cross_entropy, fixed_softmax
+    from .metrics import ClassificationMetrics
     from .rnnt import (
         character_error_rate,
         ctc_greedy_decode,
@@ -64,6 +65,7 @@ except ImportError:
     from model.moe import update_moe_expert_bias
     from model.norm.qk import QuacKController, apply_qk_clip
     from model.numerics import fixed_cross_entropy, fixed_softmax
+    from training.metrics import ClassificationMetrics
     from training.rnnt import (
         character_error_rate,
         ctc_greedy_decode,
@@ -73,6 +75,17 @@ except ImportError:
 
 
 # ==================== TRAINING CONFIGURATION ====================
+#: Tasks with one integer class label per example (F1/balanced accuracy apply).
+_CLASSIFICATION_TASKS = {
+    "classification",
+    "text_classification",
+    "audio_classification",
+}
+
+#: Tasks whose predictions are per-pixel class maps (pixel F1/IoU apply).
+_SEGMENTATION_TASKS = {"segmentation"}
+
+
 @dataclass
 class TrainingConfig:
     """Configuration for training behavior, checkpointing, and stability controls.
@@ -1514,6 +1527,74 @@ class TitanTrainer:
                     loss = loss + v
         return loss, accuracy
 
+    def _classification_logits(
+        self, batch: Dict[str, Any]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Return class logits and integer labels for a classification batch.
+
+        Args:
+            batch: Task batch with ``input_ids`` (text), ``pixel_values``
+                (vision) or ``waveform`` (audio), plus ``labels``.
+
+        Returns:
+            Tuple ``(logits, labels)`` where ``logits`` is ``(B, C)``.
+
+        Raises:
+            RuntimeError: If the model exposes no classification head.
+            ValueError: If the current task is not a classification task.
+        """
+        if self.task == "text_classification":
+            logits = self.model(batch["input_ids"])
+            if logits.dim() != 2 or logits.shape[-1] < 2:
+                raise RuntimeError(
+                    "task=text_classification requires the encoder classification "
+                    "head (Strategy A). Set num_labels > 0 in the model config."
+                )
+        elif self.task == "classification":
+            logits = self._forward_vision_logits(
+                batch["pixel_values"], task="classification"
+            )
+        elif self.task == "audio_classification":
+            logits = self._forward_audio_logits(
+                batch["waveform"], task="audio_classification"
+            )
+        else:
+            raise ValueError(
+                f"_classification_logits called for non-classification task "
+                f"{self.task!r}"
+            )
+        return logits, batch["labels"]
+
+    def _classification_step(
+        self, batch: Dict[str, Any]
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Compute the classification loss plus detached logits/labels.
+
+        Sharing this helper between the public ``compute_*`` methods and
+        :meth:`evaluate` keeps one forward pass per batch while making the
+        predictions available for F1/balanced-accuracy accumulation.
+
+        Args:
+            batch: Classification batch (see :meth:`_classification_logits`).
+
+        Returns:
+            Tuple ``(loss, accuracy, logits, labels)``; ``logits``/``labels``
+            are detached.
+        """
+        logits, labels = self._classification_logits(batch)
+        labels = labels.long()
+        loss = self._task_cross_entropy(logits.float(), labels)
+        accuracy = (logits.argmax(-1) == labels).float().mean()
+        if self.task == "audio_classification":
+            loss = self._add_audio_auxiliary_losses(loss)
+        else:
+            aux = getattr(self.model, "last_auxiliary_losses", None)
+            if aux:
+                for value in aux.values():
+                    if torch.is_tensor(value):
+                        loss = loss + value
+        return loss, accuracy, logits.detach(), labels.detach()
+
     def compute_text_classification_loss(
         self, batch: dict
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -1533,21 +1614,7 @@ class TitanTrainer:
             RuntimeError: If the model has no classification head enabled
                 (``config.classification_head`` is False).
         """
-        input_ids = batch["input_ids"]
-        labels = batch["labels"]
-        logits = self.model(input_ids)
-        if logits.dim() != 2 or logits.shape[-1] < 2:
-            raise RuntimeError(
-                "task=text_classification requires the encoder classification "
-                "head (Strategy A). Set num_labels > 0 in the model config."
-            )
-        loss = self._task_cross_entropy(logits.float(), labels.long())
-        accuracy = (logits.argmax(-1) == labels.long()).float().mean()
-        aux = getattr(self.model, "last_auxiliary_losses", None)
-        if aux:
-            for v in aux.values():
-                if torch.is_tensor(v):
-                    loss = loss + v
+        loss, accuracy, _, _ = self._classification_step(batch)
         return loss, accuracy
 
     def compute_classification_loss(self, batch: dict) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -1559,29 +1626,20 @@ class TitanTrainer:
         Returns:
             Tuple of ``(loss, accuracy)``.
         """
-        pixel_values = batch["pixel_values"]
-        labels = batch["labels"]
-        logits = self._forward_vision_logits(pixel_values, task="classification")
-        loss = self._task_cross_entropy(logits.float(), labels.long())
-        accuracy = (logits.argmax(-1) == labels).float().mean()
-        aux = getattr(self.model, "last_auxiliary_losses", None)
-        if aux:
-            for v in aux.values():
-                if torch.is_tensor(v):
-                    loss = loss + v
+        loss, accuracy, _, _ = self._classification_step(batch)
         return loss, accuracy
 
-    def compute_segmentation_loss(self, batch: dict) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Compute image segmentation loss (per-pixel head).
-
-        Uses cross-entropy + Dice loss on the per-pixel segmentation map.
+    def _segmentation_step(
+        self, batch: dict
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Compute the segmentation loss plus detached logits/targets.
 
         Args:
-            batch: Dict with ``pixel_values`` and ``segmentation_map``
-                (Long tensor of class indices, shape ``(B, H, W)``).
+            batch: Dict with ``pixel_values`` and ``segmentation_map``.
 
         Returns:
-            Tuple of ``(loss, accuracy)``.
+            Tuple ``(loss, accuracy, logits, seg_map)``; logits/targets are
+            detached and keep their ``(B, C, H, W)`` / ``(B, H, W)`` shapes.
         """
         pixel_values = batch["pixel_values"]
         seg_map = batch["segmentation_map"]  # (B, H, W) long
@@ -1613,6 +1671,21 @@ class TitanTrainer:
             for v in aux.values():
                 if torch.is_tensor(v):
                     loss = loss + v
+        return loss, accuracy, logits.detach(), seg_map.detach()
+
+    def compute_segmentation_loss(self, batch: dict) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute image segmentation loss (per-pixel head).
+
+        Uses cross-entropy + Dice loss on the per-pixel segmentation map.
+
+        Args:
+            batch: Dict with ``pixel_values`` and ``segmentation_map``
+                (Long tensor of class indices, shape ``(B, H, W)``).
+
+        Returns:
+            Tuple of ``(loss, accuracy)``.
+        """
+        loss, accuracy, _, _ = self._segmentation_step(batch)
         return loss, accuracy
 
     # ---- Audio task loss methods (frankenstein_audio) ----
@@ -1753,10 +1826,9 @@ class TitanTrainer:
         Returns:
             Tuple of ``(loss, accuracy)``.
         """
-        logits = self._forward_audio_logits(waveform, task="audio_classification")
-        loss = self._task_cross_entropy(logits.float(), labels.long())
-        accuracy = (logits.argmax(-1) == labels.long()).float().mean()
-        loss = self._add_audio_auxiliary_losses(loss)
+        loss, accuracy, _, _ = self._classification_step(
+            {"waveform": waveform, "labels": labels}
+        )
         return loss, accuracy
 
     @staticmethod
@@ -1767,6 +1839,52 @@ class TitanTrainer:
             if torch.is_tensor(value):
                 return int(value.shape[0])
         return 1
+
+    def _task_unit_count(self, batch: Dict[str, Any]) -> int:
+        """Return the number of supervised units in ``batch``.
+
+        Sample-weighted averaging is exact for classification/audio tasks (one
+        unit per example) but under/over-weights token- and pixel-level tasks.
+        This helper lets :meth:`evaluate` weight the loss and accuracy by the
+        number of masked tokens, shifted tokens, masked patches or pixels.
+
+        Args:
+            batch: Task batch moved to ``self.device``.
+
+        Returns:
+            A positive integer unit count (falls back to the batch size).
+        """
+        batch_size = self._batch_size(batch)
+        if self.task == "mlm":
+            labels = batch.get("labels")
+            input_ids = batch.get("input_ids")
+            if torch.is_tensor(labels):
+                if bool((labels == -100).any()):
+                    units = int((labels != -100).sum().item())
+                elif torch.is_tensor(input_ids):
+                    units = int((labels != input_ids).sum().item())
+                else:
+                    units = batch_size
+                return max(1, units)
+            return batch_size
+        if self.task == "causal_lm":
+            attention_mask = batch.get("attention_mask")
+            if torch.is_tensor(attention_mask) and attention_mask.dim() == 2:
+                return max(1, int(attention_mask[:, 1:].sum().item()))
+            return batch_size
+        if self.task == "patch_prediction":
+            mask = batch.get("mask_bool")
+            if mask is None:
+                mask = getattr(self.model, "_last_mask_bool", None)
+            if torch.is_tensor(mask):
+                return max(1, int(mask.sum().item()))
+            return batch_size
+        if self.task == "segmentation":
+            seg_map = batch.get("segmentation_map")
+            if torch.is_tensor(seg_map):
+                return max(1, int(seg_map.numel()))
+            return batch_size
+        return batch_size
 
     def _compute_task_loss(
         self, batch: Dict[str, Any]
@@ -1834,27 +1952,38 @@ class TitanTrainer:
 
         return _closure
 
-    def evaluate(self, dataloader: DataLoader) -> Dict[str, float]:
+    def evaluate(self, dataloader: DataLoader) -> Dict[str, Any]:
         """Evaluate the current weights over ``dataloader`` without gradients.
 
         Used by ``training.test_percentage`` for the end-of-training held-out
-        measurement. Metrics are sample-weighted; for ``asr`` the ``accuracy``
-        entry is the character error rate (lower is better), matching the
-        trainer's ``(loss, accuracy)`` convention.
+        measurement. Loss and accuracy are weighted by supervised units
+        (tokens, patches, pixels or examples), and classification tasks add
+        balanced accuracy, macro/weighted precision/recall/F1, per-class
+        metrics and the confusion matrix. Segmentation tasks add pixel-level
+        F1 and mean IoU. For ``asr`` the ``accuracy`` entry is the character
+        error rate (lower is better), matching the trainer's
+        ``(loss, accuracy)`` convention.
 
         Args:
             dataloader: Iterable of task batches (typically the held-out split).
 
         Returns:
             Dict with ``loss``, ``accuracy``, ``num_batches`` and
-            ``num_samples``.
+            ``num_samples`` plus the task-specific metrics described above.
         """
         was_training = self.model.training
         self.model.eval()
         total_loss = 0.0
         total_accuracy = 0.0
+        total_units = 0
         num_batches = 0
         num_samples = 0
+        classification: Optional[ClassificationMetrics] = (
+            ClassificationMetrics() if self.task in _CLASSIFICATION_TASKS else None
+        )
+        segmentation: Optional[ClassificationMetrics] = (
+            ClassificationMetrics() if self.task in _SEGMENTATION_TASKS else None
+        )
         try:
             with torch.no_grad():
                 for batch in dataloader:
@@ -1864,22 +1993,48 @@ class TitanTrainer:
                         else value
                         for key, value in batch.items()
                     }
-                    loss, accuracy = self._compute_task_loss(batch)
-                    batch_size = self._batch_size(batch)
-                    total_loss += float(loss.item()) * batch_size
-                    total_accuracy += float(accuracy.item()) * batch_size
+                    if classification is not None:
+                        loss, accuracy, logits, labels = self._classification_step(batch)
+                        classification.update(logits.argmax(dim=-1), labels)
+                    elif segmentation is not None:
+                        loss, accuracy, logits, seg_map = self._segmentation_step(batch)
+                        segmentation.update(
+                            logits.argmax(dim=1).reshape(-1),
+                            seg_map.reshape(-1),
+                        )
+                    else:
+                        loss, accuracy = self._compute_task_loss(batch)
+
+                    units = self._task_unit_count(batch)
+                    total_loss += float(loss.item()) * units
+                    total_accuracy += float(accuracy.item()) * units
+                    total_units += units
                     num_batches += 1
-                    num_samples += batch_size
+                    num_samples += self._batch_size(batch)
         finally:
             self.model.train(was_training)
 
-        denominator = max(num_samples, 1)
-        return {
+        denominator = max(total_units, 1)
+        result: Dict[str, Any] = {
             "loss": total_loss / denominator,
             "accuracy": total_accuracy / denominator,
             "num_batches": float(num_batches),
             "num_samples": float(num_samples),
         }
+        if classification is not None:
+            metrics = classification.compute()
+            result.update(metrics)
+            result["accuracy"] = float(metrics["accuracy"])
+        if segmentation is not None:
+            metrics = segmentation.compute()
+            result.update(metrics)
+            result["accuracy"] = float(metrics["accuracy"])
+            result["macro_iou"] = float(metrics["macro_iou"])
+        if self.task in {"mlm", "causal_lm"}:
+            # Exp of the mean CE is the standard perplexity proxy; clamp to
+            # keep the JSON finite after a pathological loss.
+            result["perplexity"] = float(math.exp(min(result["loss"], 50.0)))
+        return result
 
     def train_epoch(self, dataloader: DataLoader, epoch: int) -> Tuple[float, bool]:
         """

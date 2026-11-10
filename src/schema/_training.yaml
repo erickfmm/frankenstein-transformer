@@ -297,7 +297,12 @@ properties:
       are evaluated on the held-out part with the task objective and the result
       is written to ``test_metrics.json`` next to the CSV log (fields: ``task``,
       ``metric``, ``test_percentage``, ``num_train_samples``, ``num_test_samples``,
-      ``test_loss``, ``test_accuracy``, ``num_batches``).
+      ``test_loss``, ``test_accuracy``, ``test_macro_f1``,
+      ``test_balanced_accuracy``, ``test_weighted_f1``, ``stratified``,
+      ``primary_metric``, ``per_class``, ``confusion_matrix``,
+      ``num_batches``). Classification
+      tasks are stratified by default (see `training.test_stratify`), and the
+      exact indices are written to ``test_split.json``.
       
       Applies to ``mlm``, ``causal_lm``, ``text_classification``, the three vision
       tasks, ``asr`` and ``audio_classification``. For ``asr`` the reported value
@@ -319,7 +324,12 @@ properties:
       evalúan los pesos finales sobre la parte reservada con el objetivo de la
       tarea y el resultado se escribe en ``test_metrics.json`` junto al log CSV
       (campos: ``task``, ``metric``, ``test_percentage``, ``num_train_samples``,
-      ``num_test_samples``, ``test_loss``, ``test_accuracy``, ``num_batches``).
+      ``num_test_samples``, ``test_loss``, ``test_accuracy``, ``test_macro_f1``,
+      ``test_balanced_accuracy``, ``test_weighted_f1``, ``stratified``,
+      ``primary_metric``, ``per_class``, ``confusion_matrix``,
+      ``num_batches``). Las tareas de
+      clasificación se estratifican por defecto (ver `training.test_stratify`)
+      y los índices exactos se escriben en ``test_split.json``.
       
       Aplica a ``mlm``, ``causal_lm``, ``text_classification``, las tres tareas
       de visión, ``asr`` y ``audio_classification``. Para ``asr`` el valor
@@ -334,6 +344,47 @@ properties:
                   '
     examples:
     - 20
+  test_stratify:
+    type: boolean
+    default: true
+    title: Stratified Held-Out Split
+    title_es: Partición Reservada Estratificada
+    description: 'Stratify the held-out split by class label for the classification
+      tasks (``classification``, ``text_classification`` and
+      ``audio_classification``). Each class keeps approximately the same share in
+      the train and test partitions, and every class with at least two examples
+      receives at least one test example when the requested test size allows it.
+      This keeps rare classes from being swallowed by either side, which matters
+      for small, imbalanced datasets where plain accuracy is misleading.
+      
+      The split stays deterministic (seeded by `training.seed`) and the exact
+      indices are written to ``test_split.json``. Tasks without class labels
+      (``mlm``, ``causal_lm``, ``asr``, ``segmentation``, ``patch_prediction``)
+      and datasets that expose no label metadata (e.g. streaming sources) ignore
+      this flag and use the seeded random split.
+      
+      **Impact:** has no cost beyond reading the labels once; disable it only to
+      reproduce an older non-stratified run.'
+    description_es: 'Estratifica la partición reservada por etiqueta de clase en
+      las tareas de clasificación (``classification``, ``text_classification`` y
+      ``audio_classification``). Cada clase mantiene aproximadamente la misma
+      proporción en las particiones de entrenamiento y test, y toda clase con al
+      menos dos ejemplos recibe al menos un ejemplo de test cuando el tamaño de
+      test solicitado lo permite. Así las clases raras no desaparecen de ningún
+      lado, algo importante en datasets pequeños y desbalanceados donde la
+      exactitud simple engaña.
+      
+      La partición sigue siendo determinista (sembrada por `training.seed`) y los
+      índices exactos se escriben en ``test_split.json``. Las tareas sin etiquetas
+      de clase (``mlm``, ``causal_lm``, ``asr``, ``segmentation``,
+      ``patch_prediction``) y los datasets sin metadatos de etiqueta (p. ej.
+      fuentes en streaming) ignoran esta opción y usan la partición aleatoria
+      sembrada.
+      
+      **Impacto:** no tiene coste salvo leer las etiquetas una vez; desactívala
+      solo para reproducir una ejecución antigua no estratificada.'
+    examples:
+    - true
   dataset_batch_size:
     type: integer
     default: 25000

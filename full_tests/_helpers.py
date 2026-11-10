@@ -135,6 +135,10 @@ class RunResult:
     test_accuracy: Optional[float] = None
     #: Held-out loss paired with :attr:`test_accuracy`.
     test_loss: Optional[float] = None
+    #: Held-out macro-F1 (classification tasks; ``None`` otherwise).
+    test_macro_f1: Optional[float] = None
+    #: Held-out balanced accuracy (classification tasks; ``None`` otherwise).
+    test_balanced_accuracy: Optional[float] = None
 
     def to_dict(self) -> dict:
         return {k: v for k, v in dataclasses.asdict(self).items()}
@@ -805,6 +809,16 @@ def run_training(
             if test_metrics and test_metrics.get("test_loss") is not None
             else None
         ),
+        test_macro_f1=(
+            float(test_metrics["test_macro_f1"])
+            if test_metrics and test_metrics.get("test_macro_f1") is not None
+            else None
+        ),
+        test_balanced_accuracy=(
+            float(test_metrics["test_balanced_accuracy"])
+            if test_metrics and test_metrics.get("test_balanced_accuracy") is not None
+            else None
+        ),
     )
 
 
@@ -1192,6 +1206,10 @@ INFERENCE_CSV_COLUMNS = [
     "real",
     "metric_name",
     "metric_value",
+    "predicted_label",
+    "true_label",
+    "top5_hit",
+    "token_accuracy",
     "status",
     "notes",
 ]
@@ -1205,8 +1223,116 @@ INFERENCE_ACCURACY_COLUMNS = [
     "samples",
     "ok_samples",
     "accuracy",
+    "balanced_accuracy",
+    "macro_f1",
+    "weighted_f1",
+    "macro_precision",
+    "macro_recall",
+    "top5_accuracy",
+    "mean_token_accuracy",
+    "support",
     "status_counts",
 ]
+
+
+def effective_inference_samples(test_split: Optional[Path] = None) -> int:
+    """Choose how many inference rows to evaluate per artifact.
+
+    Uses 32 samples when the held-out split has at least that many examples,
+    otherwise 16 (or the split size when smaller). Falls back to 16 when no
+    manifest is available.
+
+    Args:
+        test_split: Optional ``test_split.json`` path.
+
+    Returns:
+        A positive sample count.
+    """
+    if test_split is not None:
+        try:
+            payload = json.loads(Path(test_split).read_text(encoding="utf-8"))
+            indices = payload.get("test_indices") if isinstance(payload, dict) else None
+            if isinstance(indices, list) and indices:
+                size = len(indices)
+                return 32 if size >= 32 else max(1, min(16, size))
+        except Exception:  # noqa: BLE001 - missing/invalid manifest
+            pass
+    return 16
+
+
+def _classification_scores(rows: List[dict]) -> Dict[str, Any]:
+    """Compute accuracy/F1 from ``predicted_label``/``true_label`` row fields.
+
+    Pure Python so this helper module stays importable without torch.
+
+    Args:
+        rows: Inference rows (only ``OK`` rows with integer labels count).
+
+    Returns:
+        Empty dict when no labelled row exists; otherwise ``accuracy``,
+        ``balanced_accuracy``, ``macro_precision``, ``macro_recall``,
+        ``macro_f1``, ``weighted_f1`` and ``support`` (class -> count).
+    """
+    pairs: List[Tuple[int, int]] = []
+    for row in rows:
+        if str(row.get("status", "")) != "OK":
+            continue
+        try:
+            predicted = int(row.get("predicted_label"))
+            truth = int(row.get("true_label"))
+        except (TypeError, ValueError):
+            continue
+        pairs.append((predicted, truth))
+    if not pairs:
+        return {}
+
+    labels = sorted({truth for _, truth in pairs})
+    index = {label: position for position, label in enumerate(labels)}
+    size = len(labels)
+    confusion = [[0] * size for _ in range(size)]
+    for predicted, truth in pairs:
+        confusion[index[truth]][index[predicted]] += 1
+
+    total = len(pairs)
+    support = [sum(confusion[row]) for row in range(size)]
+    predicted_count = [sum(confusion[row][col] for row in range(size)) for col in range(size)]
+    true_positive = [confusion[position][position] for position in range(size)]
+
+    precision: List[float] = []
+    recall: List[float] = []
+    f1: List[float] = []
+    for position in range(size):
+        p = (
+            true_positive[position] / predicted_count[position]
+            if predicted_count[position]
+            else 0.0
+        )
+        r = (
+            true_positive[position] / support[position]
+            if support[position]
+            else 0.0
+        )
+        precision.append(p)
+        recall.append(r)
+        f1.append(2 * p * r / (p + r) if (p + r) else 0.0)
+
+    present = [position for position in range(size) if support[position] > 0]
+    macro_precision = sum(precision[i] for i in present) / len(present)
+    macro_recall = sum(recall[i] for i in present) / len(present)
+    macro_f1 = sum(f1[i] for i in present) / len(present)
+    weighted_f1 = sum(f1[i] * support[i] for i in present) / total
+    return {
+        "accuracy": sum(true_positive) / total,
+        "balanced_accuracy": macro_recall,
+        "macro_precision": macro_precision,
+        "macro_recall": macro_recall,
+        "macro_f1": macro_f1,
+        "weighted_f1": weighted_f1,
+        "support": {
+            str(label): int(support[position])
+            for position, label in enumerate(labels)
+        },
+    }
 
 
 def run_inference_eval(
@@ -1219,10 +1345,11 @@ def run_inference_eval(
     model_class: str,
     task: str,
     deploy_format: str,
-    samples: int = 4,
+    samples: int = 16,
     timeout: Optional[int] = 300,
     device: str = "cpu",
     engine: str = "native",
+    test_split: Optional[Path] = None,
 ) -> Tuple["RunResult", List[dict]]:
     """Compare a deployed artifact's predictions against real sample targets.
 
@@ -1244,6 +1371,9 @@ def run_inference_eval(
         samples: Number of real samples to compare per artifact.
         timeout: Subprocess timeout in seconds (``None`` waits forever).
         device: Torch device (``cpu``/``cuda``/``mps``/``auto``).
+        engine: ``native`` (deployment ``.pt``) or ``hf`` (safetensors export).
+        test_split: Optional ``test_split.json`` written by the trainer; when
+            present, only the exact held-out indices are evaluated.
 
     Returns:
         ``(RunResult, rows)``; ``rows`` may be empty when the eval produced no
@@ -1272,6 +1402,8 @@ def run_inference_eval(
         "--device", device,
         "--out", str(out_path),
     ]
+    if test_split is not None:
+        cmd.extend(["--test-split", str(test_split)])
     start = time.time()
     try:
         proc = subprocess.run(
@@ -1362,17 +1494,20 @@ def write_results(results: List[RunResult]) -> Tuple[Path, Path]:
     lines = [
         "# Frankenstein full_tests results",
         "",
-        "| category | combo | status | dur(s) | test_acc | notes |",
-        "|----------|-------|--------|--------|----------|-------|",
+        "| category | combo | status | dur(s) | test_acc | test_f1 | notes |",
+        "|----------|-------|--------|--------|----------|---------|-------|",
     ]
     for r in results:
         notes = (r.notes or "").replace("|", "\\|")
         test_accuracy = (
             "n/a" if r.test_accuracy is None else f"{r.test_accuracy:.4f}"
         )
+        test_f1 = (
+            "n/a" if r.test_macro_f1 is None else f"{r.test_macro_f1:.4f}"
+        )
         lines.append(
             f"| {r.category} | {r.combo_id} | {r.status} | {r.duration_sec:.1f} "
-            f"| {test_accuracy} | {notes} |"
+            f"| {test_accuracy} | {test_f1} | {notes} |"
         )
 
     counts: Dict[str, int] = {}
@@ -1437,8 +1572,11 @@ def write_inference_accuracy_csv(rows: List[dict]) -> Path:
     """Aggregate inference rows into per-artifact accuracy rows.
 
     Groups by ``(combo_id, deploy_format, metric_name)`` and reports the mean
-    ``metric_value`` over ``OK`` rows, so the harness can compare the plain,
-    q8_0, q4_0 and i2_s exports (and both load runtimes) for every combo.
+    ``metric_value`` over ``OK`` rows (top-1 accuracy) plus, when the rows carry
+    integer labels, balanced accuracy and macro/weighted F1. MLM rows also
+    contribute their top-5 hit rate and causal-LM rows their mean token
+    accuracy, so the harness can compare the plain, q8_0, q4_0 and i2_s
+    exports (and both load runtimes) for every combo.
 
     Args:
         rows: Inference rows produced by ``_infer_eval.py``.
@@ -1463,17 +1601,28 @@ def write_inference_accuracy_csv(rows: List[dict]) -> Path:
                 "metric_name": key[2],
                 "samples": 0,
                 "values": [],
+                "top5": [],
+                "tokens": [],
+                "rows": [],
                 "status_counts": {},
             },
         )
         status = str(row.get("status", "UNKNOWN"))
         group["samples"] += 1
         group["status_counts"][status] = group["status_counts"].get(status, 0) + 1
-        if status == "OK" and row.get("metric_value") not in ("", None):
-            try:
-                group["values"].append(float(row["metric_value"]))
-            except (TypeError, ValueError):
-                pass
+        if status == "OK":
+            group["rows"].append(row)
+            if row.get("metric_value") not in ("", None):
+                try:
+                    group["values"].append(float(row["metric_value"]))
+                except (TypeError, ValueError):
+                    pass
+            for source, target in (("top5_hit", "top5"), ("token_accuracy", "tokens")):
+                if row.get(source) not in ("", None):
+                    try:
+                        group[target].append(float(row[source]))
+                    except (TypeError, ValueError):
+                        pass
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     with RESULTS_INFERENCE_ACCURACY_CSV_PATH.open("w", newline="", encoding="utf-8") as handle:
@@ -1481,11 +1630,43 @@ def write_inference_accuracy_csv(rows: List[dict]) -> Path:
         writer.writeheader()
         for group in sorted(groups.values(), key=lambda item: (item["combo_id"], item["deploy_format"], item["metric_name"])):
             values = group.pop("values")
+            top5 = group.pop("top5")
+            tokens = group.pop("tokens")
+            rows_ok = group.pop("rows")
+            labelled = [
+                row
+                for row in rows_ok
+                if str(row.get("task", "")).strip().lower()
+                in {"classification", "text_classification", "audio_classification"}
+            ]
+            scores = _classification_scores(labelled)
+            ok_samples = len(values)
+            if ok_samples and ok_samples < 10 and scores:
+                logging.warning(
+                    "%s/%s/%s: only %d labelled inference samples; F1 is noisy "
+                    "on tiny imbalanced splits",
+                    group["combo_id"],
+                    group["deploy_format"],
+                    group["metric_name"],
+                    ok_samples,
+                )
             writer.writerow(
                 {
                     **group,
-                    "ok_samples": len(values),
+                    "ok_samples": ok_samples,
                     "accuracy": (sum(values) / len(values)) if values else "",
+                    "balanced_accuracy": scores.get("balanced_accuracy", ""),
+                    "macro_f1": scores.get("macro_f1", ""),
+                    "weighted_f1": scores.get("weighted_f1", ""),
+                    "macro_precision": scores.get("macro_precision", ""),
+                    "macro_recall": scores.get("macro_recall", ""),
+                    "top5_accuracy": (sum(top5) / len(top5)) if top5 else "",
+                    "mean_token_accuracy": (sum(tokens) / len(tokens)) if tokens else "",
+                    "support": (
+                        json.dumps(scores["support"], sort_keys=True)
+                        if scores
+                        else ""
+                    ),
                     "status_counts": json.dumps(group["status_counts"], sort_keys=True),
                 }
             )

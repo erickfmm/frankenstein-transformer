@@ -270,6 +270,11 @@ class _MapTextDataset(torch.utils.data.Dataset):  # type: ignore[type-arg]
             return min(total, self._max_samples)
         return total
 
+    @property
+    def label_column(self) -> str:
+        """Name of the dataset column that carries the class label."""
+        return self._label_col
+
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         row = self._source[idx]
         return {self._text_col: row[self._text_col],
@@ -341,6 +346,7 @@ def build_text_dataloader_from_config(
     resolved_device: str,
     cli_batch_size: Optional[int],
     task: str,
+    shuffle: Optional[bool] = None,
 ) -> Optional[DataLoader]:
     """Build a dict-batch DataLoader from the ``text_dataset`` config block.
 
@@ -351,6 +357,10 @@ def build_text_dataloader_from_config(
         resolved_device: Resolved torch device (only for pin_memory).
         cli_batch_size: Optional CLI ``--batch-size`` override.
         task: One of ``mlm`` / ``causal_lm`` / ``text_classification``.
+        shuffle: Optional shuffle override. Defaults to the historical
+            behavior (shuffle map-style datasets, never streaming ones).
+            Evaluation callers pass ``False`` so per-row dataset indices stay
+            aligned with the held-out split manifest.
 
     Returns:
         A ``DataLoader`` yielding ``{"input_ids", "attention_mask", "labels"}``
@@ -409,15 +419,16 @@ def build_text_dataloader_from_config(
     seed = int(
         getattr(getattr(loaded, "training_config", None), "seed", 42)
     )
+    shuffle_batches = (not is_streaming) if shuffle is None else (bool(shuffle) and not is_streaming)
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
         collate_fn=collate_fn,
-        shuffle=not is_streaming,
+        shuffle=shuffle_batches,
         num_workers=0,
         pin_memory=resolved_device.startswith("cuda"),
-        drop_last=not is_streaming and len(dataset) >= batch_size * 2,
-        generator=make_generator(seed) if not is_streaming else None,
+        drop_last=shuffle_batches and len(dataset) >= batch_size * 2,
+        generator=make_generator(seed) if shuffle_batches else None,
         worker_init_fn=seed_worker,
     )
     logger.info(

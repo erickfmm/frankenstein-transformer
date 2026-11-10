@@ -110,13 +110,13 @@ uv run --extra cu118 --extra train python full_tests/run_e2e.py --save-to memory
 
 ### Evaluación con partición de test (`--test-percentage`)
 
-Por defecto se reserva el **20%** de los datos de cada combo antes de entrenar; al terminar se evalúa el modelo final sobre esa partición reservada y la precisión se escribe en `results.json` y en la columna `test_acc` de `results.md`:
+Por defecto se reserva el **20%** de los datos de cada combo antes de entrenar; al terminar se evalúa el modelo final sobre esa partición reservada y la precisión (y el F1 macro) se escriben en `results.json` y en las columnas `test_acc` / `test_f1` de `results.md`:
 
 ```bash
 uv run --extra cu118 --extra train python full_tests/run_e2e.py --test-percentage 20
 ```
 
-El valor se escribe en `training.test_percentage`; el entrenador guarda la pérdida y precisión reservadas en `test_metrics.json` junto al CSV de métricas del run. Aplica a MLM, causal LM, clasificación de texto, las tres tareas de visión, ASR (donde la precisión reportada es la tasa de error de caracteres, `metric: cer`) y clasificación de audio. SBERT gestiona su propia partición de validación (`sbert.max_eval_samples`) y reporta `n/a`. Usar `0` desactiva la partición y restaura el comportamiento sobre todos los datos:
+El valor se escribe en `training.test_percentage`; el entrenador guarda la pérdida, precisión, balanced accuracy, F1 macro/ponderado, métricas por clase y matriz de confusión en `test_metrics.json` junto al CSV de métricas del run. En las tareas de clasificación (`text_classification`, ViT `classification`, `audio_classification`) la partición es **estratificada** por defecto (`training.test_stratify: true`), de modo que cada clase mantiene su proporción y las clases raras no desaparecen de un lado. Los índices exactos se guardan en `test_split.json` y la evaluación de inferencia del harness los reutiliza, así que la accuracy de deploy/quantized/HF se mide sobre el mismo conjunto reservado. Aplica a MLM, causal LM, clasificación de texto, las tres tareas de visión, ASR (donde la precisión reportada es la tasa de error de caracteres, `metric: cer`) y clasificación de audio. SBERT gestiona su propia partición de validación (`sbert.max_eval_samples`) y reporta `n/a`. Usar `0` desactiva la partición y restaura el comportamiento sobre todos los datos:
 
 ```bash
 uv run --extra cu118 --extra train python full_tests/run_e2e.py --test-percentage 0
@@ -166,13 +166,14 @@ default del schema. Solo tienen efecto cuando `--gpu-temp-guard` está activo.
 
 Todo se escribe bajo `full_tests/tmp/results/` (git-ignorado):
 
-- **`results.json` / `results.md`** — tabla de estados por run (entrenamiento, deploy, eval, export). Cada fila de entrenamiento incluye `test_accuracy` (en JSON) y la columna `test_acc` (en Markdown) con la precisión medida sobre la partición de test reservada; `n/a` cuando no aplica (SBERT, o `--test-percentage 0`).
-- **`inference.csv`** — una fila por comparación inferencia-vs-real de cada artefacto desplegado (formato `standard` y `quantized`). Columnas: `timestamp, combo_id, model_class, task, deploy_format, sample_id, input_excerpt, predicted, real, metric_name, metric_value, status, notes`. Métricas por tarea:
-  - `mlm` → `mlm_top1` (acierto top-1; `notes` incluye `top5_hit`), enmascarando un token real del corpus.
-  - `causal_lm` → `causal_next_token` (acierto del siguiente token; `notes` incluye la accuracy por token).
-  - `text_classification` / ViT `classification` / `audio_classification` → accuracy etiqueta predicha vs real.
+- **`results.json` / `results.md`** — tabla de estados por run (entrenamiento, deploy, eval, export). Cada fila de entrenamiento incluye `test_accuracy`, `test_macro_f1` y `test_balanced_accuracy` (en JSON) y las columnas `test_acc` / `test_f1` (en Markdown) con las métricas medidas sobre la partición de test reservada; `n/a` cuando no aplica (SBERT, o `--test-percentage 0`).
+- **`inference.csv`** — una fila por comparación inferencia-vs-real de cada artefacto desplegado (formato `standard` y `quantized`, más exports HF). Columnas: `timestamp, combo_id, model_class, task, deploy_format, sample_id, input_excerpt, predicted, real, metric_name, metric_value, predicted_label, true_label, top5_hit, token_accuracy, status, notes`. Métricas por tarea:
+  - `mlm` → `mlm_top1` (acierto top-1; `top5_hit` y `notes` incluyen el acierto top-5), enmascarando un token real del corpus.
+  - `causal_lm` → `causal_next_token` (acierto del siguiente token; `token_accuracy` incluye la accuracy por token).
+  - `text_classification` / ViT `classification` / `audio_classification` → accuracy etiqueta predicha vs real, más `predicted_label`/`true_label` para calcular balanced accuracy y F1.
   - `segmentation`, `patch_prediction`, `asr` → fila `SKIPPED_NO_INFER` (no hay métrica de etiqueta equivalente).
   - `SKIPPED_NO_DATASET` cuando no hay dataset/tokenizer HF (p. ej. con `--no-realonall`).
+- **`inference_accuracy.csv`** — resumen por `(combo, formato, métrica)` con `accuracy`, `balanced_accuracy`, `macro_f1`, `weighted_f1`, `macro_precision`, `macro_recall`, `top5_accuracy`, `mean_token_accuracy`, `support` y `status_counts`. Los grupos con menos de 10 muestras etiquetadas emiten un aviso porque el F1 es ruidoso en particiones minúsculas.
 - **`param_metrics.json`** — `{modelo: {bloque: nparams, ..., "total": n}}` con las 10 categorías canónicas de `src/utils/param_categories.py` (`embeddings, pos, attention, ffn, norm, head, mhc, router, residual, other`). Se calcula con `build_model` sobre `torch.device("meta")` desde el `config.yaml` de cada run.
 - **`training_metrics/<modelo>.csv`** — copia lista para procesar del `training_metrics.csv` de cada run, renombrada con el id del modelo.
 
@@ -184,8 +185,8 @@ Todo se escribe bajo `full_tests/tmp/results/` (git-ignorado):
 
 ## Archivos
 
-- `_helpers.py` — entrenamiento del tokenizador SPM, generación del parquet sintético y del corpus real, runner de subprocesos, helpers de deploy/infer/export/gguf, persistencia de resultados y artefactos (`inference.csv`, `param_metrics.json`, `training_metrics/`), lectura de `test_metrics.json` y limpieza por combo (`--save-to delete|memory`).
-- `_infer_eval.py` — subproceso de evaluación inferencia-vs-real (texto, ViT y audio).
+- `_helpers.py` — entrenamiento del tokenizador SPM, generación del parquet sintético y del corpus real, runner de subprocesos, helpers de deploy/infer/export/gguf, persistencia de resultados y artefactos (`inference.csv`, `inference_accuracy.csv`, `param_metrics.json`, `training_metrics/`), lectura de `test_metrics.json`/`test_split.json` y limpieza por combo (`--save-to delete|memory`).
+- `_infer_eval.py` — subproceso de evaluación inferencia-vs-real (texto, ViT y audio), restringido a los índices de `test_split.json` cuando están disponibles.
 - `run_e2e.py` — bucles for que generan todas las combinaciones, aplican `--realonall` y ejecutan el pipeline completo de cada combo (train → deploy → infer → export) en un mismo worker, con `--save-to` y `--test-percentage`.
 - `tmp/` — tokenizador, datos, checkpoints por run, resultados, deploys. **Git-ignorado.** Con `--save-to memory` este árbol se ubica en `/dev/shm` (salvo `tmp/results/`).
 

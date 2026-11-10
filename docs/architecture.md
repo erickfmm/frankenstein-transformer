@@ -885,17 +885,32 @@ several CUDA kernels raise on it. Implemented in
 **Held-out test split.** `training.test_percentage` (float, 0–100, default 0)
 reserves a deterministic fraction of the task dataset before training (seeded
 permutation driven by `training.seed`, so the same config always holds out the
-same examples) and evaluates the final weights on it after the last epoch. The
-trainer's `evaluate()` reuses the training objective through `no_grad`, and
-`src/training/test_split.py` writes `test_metrics.json` next to the CSV log
-(`task`, `metric`, `test_percentage`, `num_train_samples`, `num_test_samples`,
-`test_loss`, `test_accuracy`, `num_batches`). It covers MLM, causal LM, text
-classification, the three vision tasks, ASR (the `test_accuracy` slot carries
-the CER and `metric` is `cer`) and audio classification; SBERT keeps its own
-validation split via `training.sbert.max_eval_samples`. Wired in
-`engine.py` (text/vision/audio) and `training/main.py` (CLI audio path);
-`full_tests/run_e2e.py` reports the value in `results.json` and the
-`results.md` `test_acc` column.
+same examples) and evaluates the final weights on it after the last epoch.
+Classification tasks (`classification`, `text_classification`,
+`audio_classification`) are **stratified by default** (`training.test_stratify`,
+bool, default true): each class keeps approximately the same share in both
+partitions and every class with at least two examples receives a test example
+when the budget allows it, so rare classes are not swallowed by one side. The
+exact indices are persisted as `test_split.json` next to the metrics. The
+trainer's `evaluate()` reuses the training objective through `no_grad` and
+weights loss/accuracy by supervised units (masked tokens for MLM, shifted tokens
+for causal LM, masked patches, pixels or examples), so token/pixel tasks are no
+longer sample-weighted. For classification it adds balanced accuracy,
+macro/weighted precision/recall/F1, per-class metrics and the confusion matrix;
+for segmentation it adds pixel-level macro-F1 and mean IoU; for MLM/causal LM it
+adds perplexity. `src/training/test_split.py` writes `test_metrics.json` next to
+the CSV log (`task`, `metric`, `test_percentage`, `num_train_samples`,
+`num_test_samples`, `test_loss`, `test_accuracy`, `test_macro_f1`,
+`test_balanced_accuracy`, `test_weighted_f1`, `stratified`, `primary_metric`,
+per-class metrics, confusion matrix, `num_batches`). It covers MLM, causal LM, text classification,
+the three vision tasks, ASR (the `test_accuracy` slot carries the CER and
+`metric` is `cer`) and audio classification; SBERT keeps its own validation
+split via `training.sbert.max_eval_samples`. Wired in `engine.py`
+(text/vision/audio) and `training/main.py` (CLI audio path);
+`full_tests/run_e2e.py` reports the values in `results.json` and the
+`results.md` `test_acc`/`test_f1` columns, and its inference evaluation reuses
+`test_split.json` so deploy/quantized/HF accuracy is measured on the held-out
+examples.
 
 **Per-block gradient norms.** With `enable_block_grad_norms: true` (default),
 each logged step records the L2 gradient norm of every canonical parameter
@@ -946,7 +961,7 @@ generation/cache flag defaults to `None` (no override).
 | SBERT datasets | `training.sbert` (`paired_similarity`, `triplets`, `qa`) | `sbert` |
 | Vision dataset | `src/training/vision_dataset.py` | `patch_prediction`, `classification`, `segmentation` |
 | Audio dataset | `src/training/audio_dataset.py` (HF `datasets` decode or `DummyAudioDataset`) | `asr`, `audio_classification` |
-| Held-out test split | `src/training/test_split.py` (`training.test_percentage` → `test_metrics.json`) | all tasks except `sbert` |
+| Held-out test split | `src/training/test_split.py` (`training.test_percentage` + `test_stratify` → `test_metrics.json` / `test_split.json`) | all tasks except `sbert` |
 
 ## 10. Deployment and export
 

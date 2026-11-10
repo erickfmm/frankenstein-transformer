@@ -45,16 +45,17 @@ result persistence, and (in ``--save-to delete|memory``) artifact cleanup. The
 harness writes, under ``tmp/results/``:
 
 * ``inference.csv`` — predicted vs real comparisons per deployed artifact,
-* ``inference_accuracy.csv`` — accuracy aggregated per combo/artifact (plain,
-  ``hf_q8_0_v1``, ``hf_q4_0_v2``, ``hf_i2_s_v2``, ...),
+* ``inference_accuracy.csv`` — accuracy, balanced accuracy and macro/weighted
+  F1 aggregated per combo/artifact (plain, ``hf_q8_0_v1``, ``hf_q4_0_v2``,
+  ``hf_i2_s_v2``, ...),
 * ``param_metrics.json`` — ``{model: {block: nparams, ..., "total": n}}`` using
   the canonical 10 block categories,
 * ``training_metrics/<model>.csv`` — one ready-to-process training-metrics CSV
-  per model (plus the held-out ``test_accuracy``/``test_loss`` reported by the
-  trainer in ``test_metrics.json``),
-* ``results.json`` / ``results.md`` — the run status table, including a
-  ``test_acc`` column with the held-out accuracy measured at the end of
-  training.
+  per model (plus the held-out ``test_accuracy``/``test_loss``/``test_macro_f1``
+  reported by the trainer in ``test_metrics.json``),
+* ``results.json`` / ``results.md`` — the run status table, including
+  ``test_acc``/``test_f1`` columns with the held-out accuracy and macro-F1
+  measured at the end of training.
 
 It is intentionally NOT collected by ``pytest tests/`` (it lives in ``full_tests/``
 at the repository root) and is meant to be left running for several hours.
@@ -140,8 +141,12 @@ Held-out evaluation is enabled by default:
 
 The value is written to ``training.test_percentage``; the trainer reserves that
 percentage of each combo's dataset before training and reports the held-out
-loss/accuracy in ``test_metrics.json``, which the harness copies into
-``results.json`` and the ``results.md`` ``test_acc`` column. Use
+loss/accuracy plus balanced accuracy and macro/weighted F1 in
+``test_metrics.json``, which the harness copies into ``results.json`` and the
+``results.md`` ``test_acc``/``test_f1`` columns. Classification combos are
+stratified by default and the exact indices are written to ``test_split.json``;
+the deploy/inference evaluation reuses them, so the reported inference accuracy
+and F1 are measured on the same held-out examples. Use
 ``--test-percentage 0`` to disable the split and restore the all-data
 behavior.
 
@@ -189,9 +194,10 @@ schema key, never into an ad-hoc one):
   for the SBERT combo). Note that changing it also changes the step count.
 * ``--test-percentage N`` (``0–100``, default ``20``) writes
   ``training.test_percentage``: the trainer holds out that share of each
-  combo's dataset and reports the held-out loss/accuracy in
-  ``test_metrics.json``. ``0`` disables the split. SBERT reports ``n/a`` (its
-  own evaluator uses ``sbert.max_eval_samples``).
+  combo's dataset and reports the held-out loss/accuracy/F1 in
+  ``test_metrics.json`` (stratified for classification tasks by default).
+  ``0`` disables the split. SBERT reports ``n/a`` (its own evaluator uses
+  ``sbert.max_eval_samples``).
 * ``--save-to {disk,delete,memory}`` (default ``disk``) selects artifact
   retention; see the retention examples above.
 
@@ -1981,8 +1987,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Hold out N%% of each combo's dataset from training and measure "
             "accuracy on it at the end of training (default: 20). The value is "
             "written to training.test_percentage; the trainer reports the "
-            "held-out loss/accuracy in test_metrics.json, which the harness "
-            "copies into results.json and the results.md test_acc column. "
+            "held-out loss/accuracy/F1 in test_metrics.json, which the harness "
+            "copies into results.json and the results.md test_acc/test_f1 "
+            "columns. Classification tasks are stratified by default. "
             "0 disables the split."
         ),
     )
@@ -2003,10 +2010,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--infer-samples",
         type=int,
-        default=4,
+        default=None,
         help=(
             "Real samples compared per deployed artifact when writing "
-            "results/inference.csv (default: 4)."
+            "results/inference.csv. Default: auto (32 when the held-out split "
+            "has at least 32 examples, else 16 or the split size)."
         ),
     )
     parser.add_argument(
@@ -2057,6 +2065,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error("--batch-size must be >= 1")
     if not 0 <= args.test_percentage <= 100:
         parser.error("--test-percentage must be between 0 and 100")
+    if args.infer_samples is not None and args.infer_samples < 1:
+        parser.error("--infer-samples must be >= 1")
     if args.save_to == "memory" and args.resume:
         parser.error("--resume is incompatible with --save-to memory (nothing persists)")
 
@@ -2405,6 +2415,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         checkpoint_path = Path(training_result.checkpoint_path)
         model_class, task = _combo_meta(combo_id)
         yaml_path = helpers.RUNS_DIR / combo_id / "config.yaml"
+        run_dir = helpers.RUNS_DIR / combo_id
+        test_split_path = run_dir / "test_split.json"
+        if not test_split_path.exists():
+            test_split_path = None
+        infer_samples = (
+            args.infer_samples
+            if args.infer_samples is not None
+            else helpers.effective_inference_samples(test_split_path)
+        )
         vocab_size = _combo_vocab_size(combo_id, args.vocab_size)
         is_audio = model_class == "frankenstein_audio"
         is_text = model_class in TEXT_MODEL_CLASSES
@@ -2450,9 +2469,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 model_class=model_class,
                 task=task,
                 deploy_format=fmt,
-                samples=args.infer_samples,
+                samples=infer_samples,
                 timeout=timeout_secs,
                 device=args.device,
+                test_split=test_split_path,
             )
             produced.append(eval_result)
             rows_out.extend(rows)
@@ -2551,10 +2571,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                     model_class=model_class,
                     task=task,
                     deploy_format=label,
-                    samples=args.infer_samples,
+                    samples=infer_samples,
                     timeout=timeout_secs,
                     device=args.device,
                     engine="hf",
+                    test_split=test_split_path,
                 )
                 produced.append(eval_result)
                 rows_out.extend(rows)

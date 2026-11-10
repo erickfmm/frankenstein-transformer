@@ -109,3 +109,57 @@ def test_inference_accuracy_aggregates_quantized_variants(tmp_path, monkeypatch)
     assert json.loads(by_format["hf_q4_0_v2"]["status_counts"]) == {
         "SKIPPED_NO_DATASET": 1
     }
+
+
+def test_inference_accuracy_reports_macro_f1_for_labels(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(_helpers, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(
+        _helpers, "RESULTS_INFERENCE_ACCURACY_CSV_PATH", tmp_path / "accuracy.csv"
+    )
+    def _row(predicted, truth, value):
+        return {
+            "combo_id": "c1",
+            "model_class": "frankenstein_vit",
+            "task": "classification",
+            "deploy_format": "standard",
+            "metric_name": "vit_classification_accuracy",
+            "metric_value": value,
+            "predicted_label": predicted,
+            "true_label": truth,
+            "status": "OK",
+        }
+
+    rows = [
+        _row(0, 0, 1.0),
+        _row(0, 0, 1.0),
+        _row(0, 1, 0.0),
+        _row(0, 2, 0.0),
+    ]
+    path = _helpers.write_inference_accuracy_csv(rows)
+    with path.open(newline="", encoding="utf-8") as handle:
+        record = next(csv.DictReader(handle))
+
+    assert float(record["accuracy"]) == pytest.approx(0.5)
+    assert float(record["balanced_accuracy"]) == pytest.approx(1 / 3)
+    assert float(record["macro_f1"]) == pytest.approx((2 / 3) / 3)
+    assert json.loads(record["support"]) == {"0": 2, "1": 1, "2": 1}
+
+
+def test_effective_inference_samples_reads_the_manifest(tmp_path) -> None:
+    assert _helpers.effective_inference_samples() == 16
+
+    small = tmp_path / "small.json"
+    small.write_text(json.dumps({"test_indices": [1, 2, 3]}), encoding="utf-8")
+    assert _helpers.effective_inference_samples(small) == 3
+
+    medium = tmp_path / "medium.json"
+    medium.write_text(
+        json.dumps({"test_indices": list(range(20))}), encoding="utf-8"
+    )
+    assert _helpers.effective_inference_samples(medium) == 16
+
+    large = tmp_path / "large.json"
+    large.write_text(
+        json.dumps({"test_indices": list(range(32))}), encoding="utf-8"
+    )
+    assert _helpers.effective_inference_samples(large) == 32

@@ -828,7 +828,7 @@ def _run_audio_task(loaded, resolved_device, training_config, args, training_run
     )
 
     test_split = maybe_split_dataloader(
-        dataloader, training_runtime, seed=training_config.seed
+        dataloader, training_runtime, seed=training_config.seed, task=loaded.task
     )
     dataloader = test_split.train_loader
 
