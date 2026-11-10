@@ -22,23 +22,23 @@ load.
 
 | Dimension | Count | Defined in |
 |---|---:|---|
-| `model.dims.layer_pattern` values | **47** (46 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
+| `model.dims.layer_pattern` values | **49** (48 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
 | Optimizer families | **36** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
 | FFN activations | **43** | `src/schema/_model/_ffn.yaml` |
-| Model classes | **3** | `src/schema/_model_class.yaml` |
-| Training tasks | **7** | `src/schema/_training.yaml` |
+| Model classes | **4** | `src/schema/_model_class.yaml` |
+| Training tasks | **9** | `src/schema/_training.yaml` |
 | Residual strategies | **4** | `src/schema/_model/_residuals.yaml` |
-| Optimizer parameter groups | **4** | `src/model/optimizer/base.py` |
+| Optimizer parameter groups | **10** | `src/model/optimizer/base.py` (`GROUP_NAMES`) |
 | CLI subcommands | **4** | `src/cli.py` |
 | Deployment formats | **4** | `src/cli.py` (`deploy --format`) |
 
-> The schema enums are the executable contract for code. README badges say
-> "48 mixers / 11 positional encodings": the mixer badge follows the schema
-> enum (including the `mamba` placeholder), while the PE badge excludes the
-> `none` encoding. The mathematical definitions stay in the paper; this
-> document tracks what is actually wired up.
+> The schema enums are the executable contract for code. The README census
+> reports the same numbers: 49 `layer_pattern` values (including the `mamba`
+> placeholder) and 12 positional encodings (11 active + `none`). The
+> mathematical definitions stay in the paper; this document tracks what is
+> actually wired up.
 
 ## 2. System overview
 
@@ -80,7 +80,8 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/mhc.py`, `src/model/hyperloop.py` | Manifold-constrained hyper-connections and loop-level variants |
 | `src/model/residuals/**` | Residual strategies + factory |
 | `src/model/moe/**` | MoE router scoring, load balancing, experts, shared experts, LatentMoE, hash layers |
-| `src/model/attention/**` | 46 mixers: `gated/`, `latent/`, `sparse/`, top-level modules |
+| `src/model/numerics.py` | Fixed softmax / cross-entropy swaps (arXiv:2610.31642) |
+| `src/model/attention/**` | 49 mixers (48 classes + `mamba`): `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
 | `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
@@ -91,11 +92,13 @@ The YAML file is the single source of truth for model/training settings.
 | `src/training/streaming_mlm_dataset.py` | Streaming MLM dataset |
 | `src/training/vision_dataset.py` | Vision dataset |
 | `src/training/audio_dataset.py` | Audio dataset (HF `datasets` decode + char tokenizer, `DummyAudioDataset`, SpecAugment) |
+| `src/training/rnnt.py`, `src/training/metrics.py` | RNN-T loss, greedy CTC/RNN-T decoders, CER; imbalance-aware classification metrics |
 | `src/sbert/**` | SBERT training/inference |
 | `src/deploy/**` | Quantization, deployment, HF export, GGUF export, inference |
 | `src/streamlit_gui/app.py` | Schema-driven YAML builder |
 | `configs/**` | Presets (`configs/*.yaml`) and smoke-tested examples (`configs/examples/*.yaml`) |
-| `tests/**` | 46 files; see §12 for the gates that constrain extensions |
+| `tests/**` | 80 files; see §12 for the gates that constrain extensions |
+| `full_tests/**` | End-to-end harness (`run_e2e.py`), parameter-truth checks |
 
 > `src/model/frankenstein_model.py` **does not exist**. It was split and a
 > regression test (`tests/test_naming_conventions.py::test_shim_module_removed`)
@@ -210,7 +213,7 @@ flowchart TD
 
     subgraph HYBRID["HybridLayer internals"]
       N1["norm1 = get_norm()"]
-      MX["mixer registry<br/>(45 names)"]
+      MX["mixer registry<br/>(48 classes + mamba)"]
       FF["FFN / GatedFFN / MoE"]
       N2["norm2 = get_norm()<br/>or FlashNormLinear fusion"]
       MOD["Mixture-of-Depths router"]
@@ -681,7 +684,7 @@ It is selected by `training.task: sbert` and configured under `training.sbert`.
 | `query_prefix`, `document_prefix` | `null` | Instruction prefixes |
 | `output_dir` | — | Checkpoint destination |
 | `pooling_mode` | — | `mean`, `cls`, `max` |
-| `optimizer.optimizer_class` | — | Same 26-family enum |
+| `optimizer.optimizer_class` | — | Same 36-family enum (`$ref` to `_optimizer.yaml`) |
 | `batch_size`, `num_epochs`, `learning_rate`, `warmup_steps` | — | Training schedule |
 | `evaluation_steps`, `checkpoint_save_steps`, `resume_from_checkpoint` | — | Checkpointing |
 | `use_amp`, `trust_remote_code`, `resample_balanced`, `standardize_scores` | — | Runtime options |
@@ -711,11 +714,16 @@ logical roles). Per-layer storage is typed:
 | `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
 
 **Capability registry (D5).** `src/model/cache/capabilities.py` holds one
-`CacheSpec` per `layer_pattern` enum value (48). A layer caches only when
+`CacheSpec` per `layer_pattern` enum value (49). A layer caches only when
 the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
 (incremental branch implemented + parity-tested). Everything else receives
 `cache=None` and runs the legacy path — **inference never fails because of
-the cache**; `config_loader` warns about the fallback mixers.
+the cache**; `config_loader` warns about the fallback mixers. Two special
+cases sit beside the registry: `engram` is admitted directly by
+`is_cacheable()` (the manager's `TokenTailSlot` always provides the token
+tail), and `mamba` is listed in `IMPLEMENTED_MIXERS` only as a stateless
+passthrough — there is nothing to cache, so it is excluded from the parity
+parametrization.
 
 Implemented cached branches (parity-tested in
 `tests/test_kv_cache_mixers.py`): `standard`, `gqa`,
@@ -729,10 +737,10 @@ Implemented cached branches (parity-tested in
 table, never quantized), `fastconformer` (`RingSlot`: pinned head prefix
 covers the global tokens), `fpa` (`KVSlot` + two per-token scalars, exact by
 Prop. 2.4b of arXiv:2610.22714).
-Documented fallbacks: `mamba` (stateless), `ssog` (bidirectional
-vision grid, no causal formulation), `ode` (solver re-derives all
-intermediate states each step), `falcon*` (chunk-parallel rehearsal FIFO),
-`cca`/`ccgqa` (conv tails), `engram` (token tail),
+Documented fallbacks: `mamba` (stateless placeholder — nothing to cache),
+`ssog`/`conformer` (`supported=False`, never cached), `ode` (solver
+re-derives all intermediate states each step), `falcon*` (chunk-parallel
+rehearsal FIFO), `cca`/`ccgqa` (conv tails),
 `nsa`/`msa`/`sparda`/`sparge` (chunk-level block
 statistics are not row-local), `mtla` (dynamic merge schedule),
 `sparsek` (policy in F4), plus every PaPE-configured layer (D10).
@@ -1177,6 +1185,11 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 | `tests/test_conformer_attention.py` | Conformer mixer: shapes, causality, formula parity, PE on/off, Macaron on/off, BitNet, conv norms |
 | `tests/test_frankenstein_audio.py` | Audio model class: per-task forwards, forced mode, pooling, `logmel`/`spectrogram`/`raw` frontends |
 | `tests/test_audio_dataset.py`, `test_asr_losses.py`, `test_audio_loss.py`, `test_audio_training.py`, `test_audio_param_categories.py` | Audio datasets, SpecAugment, CTC/RNN-T losses, greedy decode + CER, trainer/engine smoke, estimator categories |
+| `tests/test_moe.py` | MoE router / balancing / expert contract |
+| `tests/test_qk_norm.py` | QK-norm methods, QK-Clip, QuacK controller |
+| `tests/test_fixed_numerics.py` | `fixed_softmax` / `fixed_cross_entropy` swaps |
+| `tests/test_block_grad_norms.py`, `test_test_split.py`, `test_metrics.py` | Per-block grad norms, stratified hold-out split, imbalance-aware metrics |
+| `tests/test_gpu_temp_guard*.py`, `test_supervisor_checkpoint_resume.py`, `test_trainer_thermal_offload.py` | Thermal guard, supervisor checkpoint flush, GPU→CPU switching |
 
 ## 13. Decisions
 
@@ -1206,13 +1219,15 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 - BitNet is experimental; ternary weights may degrade quality.
 - **KV cache (v1)**: not every mixer has an incremental branch. The
   registry (`src/model/cache/capabilities.py`) marks a mixer cacheable only
-  when `supported` *and* listed in `IMPLEMENTED_MIXERS`; the rest fall back
+  when `supported` *and* listed in `IMPLEMENTED_MIXERS` (or the `engram`
+  token-tail special case); the rest fall back
   to the full-recompute path (never an error, D5). Current fallbacks:
-  `mamba` (stateless), `ssog` (no causal formulation), `ode` (the
+  `mamba` (stateless placeholder, nothing to cache), `ssog` (no causal
+  formulation), `ode` (the
   solver re-derives every token's intermediate state each step, so a
   converged-state cache is not exact), the `falcon*` family (chunk-parallel
-  rehearsal FIFO), `cca`/`ccgqa` (conv tails), `engram`
-  (token tail), `nsa`/`msa`/`sparda`/`sparge` (their
+  rehearsal FIFO), `cca`/`ccgqa` (conv tails),
+  `nsa`/`msa`/`sparda`/`sparge` (their
   block-selection statistics are chunk-level, not row-local), `mtla`
   (dynamic hyper-network merge schedule; named risk R1), `sparsek`
   (eviction-policy work, F4), `conformer` (the depthwise-convolution

@@ -12,7 +12,7 @@
   - Run: `uv run --extra cpu --extra train <cmd>`
   - All tests: `uv run --extra cpu --extra train python -m pytest tests/ --continue-on-collection-errors -v --tb=short -p no:warnings`
   - Single test: `uv run --extra cpu --extra train python -m pytest tests/test_optimizer_factory.py -v`
-- **GPU only for real training/inference** (Tesla P40): `uv sync --extra cu118 --extra train`, then `uv run --extra cu118 --extra train frankenstein-transformer train --config …`. The torch extras (`cpu`/`cu118`/`cu126`/`cu128`) are mutually exclusive; a bare `uv run` resyncs without extras and swaps torch — always pass the same extras.
+- **GPU only for real training/inference** (Tesla P40): `uv sync --extra cu118 --extra train`, then `uv run --extra cu118 --extra train frankenstein-transformer train --config …`. The torch extras (`cpu`/`cu118`/`cu126`/`cu128`) are mutually exclusive; a bare `uv run` resyncs without extras and swaps torch — always pass the same extras. The non-torch extras (`sbert`, `web`, `wandb`) do not pin torch and are all pulled in by `--extra train`.
 - **CLI**: `uv run --extra cpu --extra train frankenstein-transformer {train,deploy,infer,web-server}`. `web-server` is the Streamlit YAML builder.
 - **Style**: no linter/formatter configured. Match surrounding code; `from __future__ import annotations`; absolute `src.` imports; Google-style docstrings.
 - **CI**: Python 3.10–3.12, CPU torch 2.7.0 first, then `requirements.txt` with torch/extra-index lines stripped, then `pip install -e . --no-deps`.
@@ -33,8 +33,11 @@
 | Inference runtime config | `src/deploy/inference_config.py`, `src/schema/_inference.yaml` |
 | Activations | `src/model/activation_function/` |
 | Residuals / mHC / Hyperloop | `src/model/residuals/`, `src/model/mhc.py`, `hyperloop.py` |
+| MoE | `src/model/moe/{router,balancing,layer}.py` |
+| Fixed numerics | `src/model/numerics.py` (fixed softmax/cross-entropy, arXiv:2610.31642) |
 | Model classes | `src/model/frankenstein_{encoder,decoder,vit,audio}.py`, `src/model/__init__.py` |
 | Audio (Conformer / ASR) | `src/model/frankenstein_audio.py`, `src/training/audio_dataset.py`, `src/schema/_audio*.yaml` |
+| ASR losses / metrics | `src/training/rnnt.py` (RNN-T, CTC, CER), `src/training/metrics.py` |
 | Validation / task dispatch | `src/training/config_loader.py`, `src/training/main.py` |
 | Training loop | `src/training/trainer.py` |
 | Framework-neutral builder | `src/engine.py` (`build_model`) |
@@ -43,7 +46,8 @@
 | SBERT | `src/sbert/` |
 | Streamlit UI | `src/streamlit_gui/app.py` |
 | Presets | `configs/*.yaml`, `configs/examples/*.yaml` |
-| Tests | `tests/` (76 files; see gates below) |
+| Tests | `tests/` (80 files; see gates below) |
+| End-to-end harness | `full_tests/run_e2e.py` |
 | Theory / citations | `docs/paper*/`, `docs/bibliography/` |
 | Website mirror sync | `.opencode/command/sync-website.md` |
 
@@ -56,7 +60,7 @@
 3. **BitNet is on by default** (`bitnet.enabled: true`). `bitnet.routers: true` requires `bitnet.enabled: true`; `bitnet.conv` requires BitNet + `embedding.conv.enabled`.
 4. **Normalization**: enum `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`. `prms_norm` uses `norm.partial_ratio`; `flash_norm` composes with `norm.flashnorm_partial_ratio`.
 5. **`fasa` / `sparge` are inference-sparse** (`HybridLayer.TRAINING_FREE_LAYERS`). In `train()` mode `HybridLayer` runs standard dense attention over the mixer's own projections (`mixer.dense_forward`); the sparse heuristic activates in `eval()` only. They are valid in training presets.
-6. **Forced modes**: `frankenstein_text_decoder` → `mode: decoder`; `frankenstein_vit` → `mode: encoder`. `training.task: causal_lm` requires the decoder; vision tasks require the ViT; audio tasks (`asr`, `audio_classification`) require `frankenstein_audio`.
+6. **Forced modes**: `frankenstein_text_decoder` → `mode: decoder`; `frankenstein_vit` and `frankenstein_audio` → `mode: encoder`. `training.task: causal_lm` requires the decoder; vision tasks require the ViT; audio tasks (`asr`, `audio_classification`) require `frankenstein_audio`.
 7. **Optimizer keys are prefixed**: `<optimizer>-<group>_<param>` or `<optimizer>-<param>`. Groups: `embeddings`, `pos`, `attention`, `ffn`, `norms`, `head`, `mhc`, `router`, `residual`, `other`. A new family needs an enum value, a `by_optimizer` prefix, and a matching `if/then` rule.
 8. **`training.task` is required**, one of `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`, `asr`, `audio_classification`. No legacy top-level optimizer keys.
 9. **All presets are smoke-tested** (`configs/*.yaml` + `configs/examples/*.yaml`). A new mixer/optimizer needs an example YAML.
@@ -88,12 +92,18 @@
 - `tests/test_naming_conventions.py` — no legacy names, no `frankenstein_model.py` shim.
 - `tests/test_frankenstein_vit.py`, `test_vision_dataset.py`, `test_vision_loss.py`.
 - `tests/test_frankenstein_audio.py`, `test_audio_dataset.py`, `test_audio_loss.py`,
-  `test_audio_training.py`, `test_audio_param_categories.py`.
+  `test_asr_losses.py`, `test_audio_training.py`, `test_audio_param_categories.py`.
+- `tests/test_moe.py` — MoE router/balancing/expert contract.
+- `tests/test_qk_norm.py` — QK-norm methods, QK-Clip, QuacK controller.
+- `tests/test_fixed_numerics.py` — fixed softmax/cross-entropy swaps.
+- `tests/test_block_grad_norms.py`, `test_test_split.py`, `test_metrics.py` —
+  per-block grad norms, stratified hold-out split, imbalance-aware metrics.
 - `tests/test_kv_cache_*.py` — slot/codec/mixer-parity/fallback/mechanism/eval-only/quant suites;
   `test_inference_config.py`, `test_inference_generate.py`, `test_transformers_export.py`,
   `test_transformers_safetensors_quant.py`, `test_safetensors_quant.py`.
   `test_kv_cache_mixers.py` parametrizes every mixer in `IMPLEMENTED_MIXERS`
-  (`src/model/cache/capabilities.py`): full-forward vs prefill+decode parity.
+  (`src/model/cache/capabilities.py`) except the stateless `mamba` passthrough:
+  full-forward vs prefill+decode parity.
 
 ## Decisions
 
@@ -108,7 +118,7 @@
 | D7 | CPU-first development and testing; CUDA only for real runs |
 | D8 | Every preset/example is schema-smoke-tested |
 | D9 | Optimizer prefixes are enumerated and cross-checked with conditional rules |
-| D10 | Model classes force their modes (`decoder`, `vit`) |
+| D10 | Model classes force their modes (`decoder` for the text decoder, `encoder` for ViT and audio) |
 | D11 | Paper = theory source of truth; `docs/architecture.md` = canonical implementation spec |
 | D12 | `AGENTS.md` points to code/tests; it does not restate the spec |
 
