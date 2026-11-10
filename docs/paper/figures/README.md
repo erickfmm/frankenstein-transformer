@@ -15,6 +15,20 @@ the paper-body figures, including `audio_frontend.mmd` (audio model class).
 of each optimizer's entry in the optimizer annexes. Sources and labels are in
 English; the Spanish paper reuses the same PDF/SVG set.
 
+`optimizers/tutorial/` holds the nine charts of the optimizer tutorial
+(Annex 9.2). They are not Mermaid sources: they are rendered by
+`optimizers/tutorial/make_tutorial_figures.py` with matplotlib and seaborn, as
+PDF (LaTeX) plus SVG (web), in the same light theme as the experiment charts.
+Rebuild them with
+
+```bash
+uv run --with matplotlib --with seaborn --with numpy \
+    python figures/optimizers/tutorial/make_tutorial_figures.py [NAME ...]
+```
+
+`optimizer-tutorial-flow.mmd` is the only tutorial figure that belongs to the
+Mermaid build; everything else in that folder is Python output.
+
 `experiments/` holds the figures of the empirical-evaluation section and its
 appendices. `experiments/round2/*.pdf` and `*.svg` are matplotlib charts
 exported by `experimentos/2/report/make_paper_figures.py`, which imports the

@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":22,"rankSpacing":30,"wrappingWidth":230}}}%%
+flowchart LR
+  data["batch of data → loss L(θ)"] --> grad["backpropagation<br/>gradient g"]
+  grad --> rule["every optimizer<br/>θ ← θ − η · u(g, state)"]
+  rule --> k1["remember the past?<br/>momentum · variance reduction"]
+  rule --> k2["rescale each coordinate?<br/>adaptive · per-parameter steps"]
+  rule --> k3["use curvature or<br/>matrix structure?<br/>second-order · geometric"]
+  rule --> k4["state too large?<br/>memory-efficient · low-rank"]
+  rule --> k5["tuning the schedule painful?<br/>schedule-free · parameter-free"]
+  rule --> k6["landscape too rugged?<br/>evolutionary · population"]
