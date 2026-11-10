@@ -850,3 +850,15 @@ Deliberate deviations from the plan text:
 4. **`flat_config_view`** in `src/deploy/export_compat.py` is a read-only
    adapter that materialises the historical flat vocabulary the HF/GGUF
    exporters consume; it is not part of the runtime configuration pipeline.
+
+### Final verification (all gates)
+
+| Gate | Result |
+|---|---|
+| Full test suite | `1978 passed, 1 skipped, 343 subtests passed` (1944 pre-existing + 34 new) |
+| Parameter ground truth | `full_tests/param_count_check.py`: **168 configs counted, 0 failures** (includes the plugin preset) |
+| JS estimator | `param_estimate_check.mjs … --tol 0.01`: **ALL PASS (168 within 1.0%)** |
+| Assembled schema | `docs/schema.assembled.yaml` regenerated; every preset/example validates; mirror `schema.yaml` ships the snapshot |
+| Website sync | state script: `diff=0 missing_site=0 only_site=0`; every probe PASS (schema refs, 189 example YAMLs, CLI flags, paper figures, estimator drift) |
+| Paper | EN + ES rebuilt (`paper.pdf` 365 pp, `paper-es.pdf` 377 pp); Paper-tab HTML rebuilt; PDFs/HTML synced to the mirror |
+| Commits | main `d1f6ad0` (implementation), `80ea6f1` (paper + snapshot); mirror `fe184d5` (sync), `100881d` (pycache cleanup) |
