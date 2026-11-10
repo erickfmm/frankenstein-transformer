@@ -19,12 +19,9 @@ import yaml
 try:
     from .trainer import TrainingConfig
     from ..model.config import FrankensteinModelConfig
-    from ..utils.config_flatten import (
-        flatten_model_dict,
-        flatten_image_dict,
-        flatten_audio_dict,
+    from ..deploy.inference_config import (
+        InferenceConfig,
         flatten_inference_dict,
-        _is_nested_shape,
     )
     from ..utils.schema_loader import resolve_schema
     from ..utils.schema_warnings import (
@@ -32,16 +29,12 @@ try:
         filter_dataclass_kwargs,
         warn_extra_keys,
     )
-    from ..deploy.inference_config import InferenceConfig
 except ImportError:
     from training.trainer import TrainingConfig
     from model.config import FrankensteinModelConfig
-    from utils.config_flatten import (
-        flatten_model_dict,
-        flatten_image_dict,
-        flatten_audio_dict,
+    from deploy.inference_config import (
+        InferenceConfig,
         flatten_inference_dict,
-        _is_nested_shape,
     )
     from utils.schema_loader import resolve_schema
     from utils.schema_warnings import (
@@ -49,7 +42,28 @@ except ImportError:
         filter_dataclass_kwargs,
         warn_extra_keys,
     )
-    from deploy.inference_config import InferenceConfig
+
+
+_MODEL_NESTED_MARKERS = frozenset(
+    {
+        "dims", "norm", "embedding", "attention", "positional_encoding",
+        "positional_encoding_parameters", "moe", "bitnet",
+        "mixture_of_depths", "ssmax", "numerics", "ffn",
+        "classification_head", "mhc", "residuals",
+    }
+)
+
+
+def _is_nested_model_block(model_block: Dict[str, Any]) -> bool:
+    """Return whether the ``model:`` block uses the nested schema shape.
+
+    Args:
+        model_block: The raw ``model:`` mapping.
+
+    Returns:
+        ``True`` when any nested grouping key is present.
+    """
+    return bool(_MODEL_NESTED_MARKERS & set(model_block))
 
 
 def _field_names(cls) -> set:
@@ -155,13 +169,14 @@ def _validate_ffn_activation(model_data: Dict[str, Any]) -> None:
         ValueError: If ``ffn_activation`` is not a string or
             ``ffn_activation_config`` is present but not a mapping.
     """
-    act = model_data.get("ffn_activation")
+    ffn = model_data.get("ffn") if isinstance(model_data.get("ffn"), dict) else {}
+    act = ffn.get("activation", model_data.get("ffn_activation"))
     if act is not None and not isinstance(act, str):
         raise ValueError(
             f"model.ffn_activation must be a string, got "
             f"{type(act).__name__}: {act!r}"
         )
-    cfg = model_data.get("ffn_activation_config")
+    cfg = ffn.get("activation_config", model_data.get("ffn_activation_config"))
     if cfg is not None and not isinstance(cfg, dict):
         raise ValueError(
             f"model.ffn_activation_config must be an object/mapping, got "
@@ -179,14 +194,17 @@ def _validate_bitnet_flags(model_data: Dict[str, Any]) -> None:
         ValueError: If ``bitnet_routers`` is true while ``use_bitnet`` is
             explicitly false, or if either key has a non-boolean type.
     """
+    bitnet = model_data.get("bitnet") if isinstance(model_data.get("bitnet"), dict) else {}
     for key in _BITNET_BOOL_KEYS:
-        if key in model_data and not isinstance(model_data[key], bool):
+        legacy = key.replace("bitnet_routers", "routers").replace("use_bitnet_conv", "conv").replace("use_bitnet", "enabled")
+        value = bitnet.get(legacy, model_data.get(key))
+        if value is not None and not isinstance(value, bool):
             raise ValueError(
-                f"model.{key} must be a boolean, got "
-                f"{type(model_data[key]).__name__}: {model_data[key]!r}"
+                f"model.{legacy} must be a boolean, got "
+                f"{type(value).__name__}: {value!r}"
             )
-    use_bitnet = model_data.get("use_bitnet")
-    bitnet_routers = model_data.get("bitnet_routers")
+    use_bitnet = bitnet.get("enabled", model_data.get("use_bitnet"))
+    bitnet_routers = bitnet.get("routers", model_data.get("bitnet_routers"))
     if bitnet_routers and use_bitnet is False:
         raise ValueError(
             "model.bitnet_routers=true requires model.use_bitnet=true "
@@ -210,16 +228,19 @@ def _validate_qk_norm(model_data: Dict[str, Any]) -> None:
         ValueError: If QK stabilization is enabled and any mixer in
             ``layer_pattern`` is unsupported for the selected method.
     """
-    if not bool(model_data.get("use_qk_norm", False)):
+    norm = model_data.get("norm") if isinstance(model_data.get("norm"), dict) else {}
+    qk = norm.get("qk_norm") if isinstance(norm.get("qk_norm"), dict) else {}
+    if not bool(qk.get("enabled", model_data.get("use_qk_norm", False))):
         return
     try:
         from ..model.norm.qk import QK_CLIP_MIXERS, QK_NORM_MIXERS
     except ImportError:  # pragma: no cover - legacy package layout
         from model.norm.qk import QK_CLIP_MIXERS, QK_NORM_MIXERS
 
-    method = str(model_data.get("qk_norm_method", "rms_norm")).lower()
+    method = str(qk.get("method", model_data.get("qk_norm_method", "rms_norm"))).lower()
     supported = QK_CLIP_MIXERS if method == "qk_clip" else QK_NORM_MIXERS
-    pattern = model_data.get("layer_pattern") or []
+    dims = model_data.get("dims") if isinstance(model_data.get("dims"), dict) else {}
+    pattern = dims.get("layer_pattern", model_data.get("layer_pattern")) or []
     unsupported = sorted({str(mixer) for mixer in pattern if str(mixer) not in supported})
     if unsupported:
         raise ValueError(
@@ -322,7 +343,7 @@ def _warn_unknown_schema_keys(data: Dict[str, Any], source: str) -> bool:
     if (
         isinstance(model_block, dict)
         and model_block
-        and not _is_nested_shape(model_block)
+        and not _is_nested_model_block(model_block)
     ):
         # Legacy flat model shape: inspect everything except the model block.
         legacy_flat_model = True
@@ -333,6 +354,20 @@ def _warn_unknown_schema_keys(data: Dict[str, Any], source: str) -> bool:
     _, extra_errors = classify_schema_errors(validator.iter_errors(document))
     if extra_errors:
         warn_extra_keys(extra_errors, source=source)
+    if legacy_flat_model:
+        from ..model.config import flat_name_set
+
+        unknown = sorted(set(model_block) - set(flat_name_set()))
+        if unknown:
+            import logging
+
+            logging.getLogger("frankenstein.config").warning(
+                "[schema] %s: %s: unknown key(s) ignored (not declared in "
+                "src/schema/**): %s",
+                source,
+                "model",
+                unknown,
+            )
     return not legacy_flat_model
 
 
@@ -490,6 +525,11 @@ def load_inference_config(
     if not isinstance(data, dict):
         raise ValueError("load_inference_config expects a YAML path or a dict")
 
+    declared_plugins = data.get("plugins")
+    if declared_plugins:
+        from ..plugins.loader import load_plugins
+
+        load_plugins(declared_plugins)
     if "inference" in data:
         full_config = data
         inference_data = data.get("inference") or {}
@@ -541,6 +581,11 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     # accepts partial/legacy documents and its own validators own the hard
     # errors. Unknown keys warn instead of aborting (the schema may trail
     # the config while it evolves).
+    declared_plugins = data.get("plugins")
+    if declared_plugins:
+        from ..plugins.loader import load_plugins
+
+        load_plugins(declared_plugins)
     model_schema_checked = _warn_unknown_schema_keys(data, source=str(path))
 
     base_model = data.get("base_model")
@@ -605,18 +650,9 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     if not base_model:
         if not model_data:
             raise ValueError("model is required when base_model is not provided")
-        model_data = flatten_model_dict(model_data)
-        # Merge vision-specific config from the top-level ``image:`` block.
-        # The image block is a sibling of ``model:`` but its fields flatten
-        # into the same FrankensteinModelConfig dataclass.
-        image_flat = flatten_image_dict(image_data)
-        if image_flat:
-            model_data.update(image_flat)
-        # Merge audio-specific config from the top-level ``audio:`` block
-        # (same sibling-of-``model:`` pattern as ``image:``).
-        audio_flat = flatten_audio_dict(audio_data)
-        if audio_flat:
-            model_data.update(audio_flat)
+        raw_model = dict(model_data)
+        image_block = dict(image_data or {}) or None
+        audio_block = dict(audio_data or {}) or None
         # ``training.asr.loss`` optionally overrides ``audio.asr_loss`` so a
         # single training block selects the head the model builds.
         asr_training = training_data.get("asr")
@@ -631,20 +667,17 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
                         "training.asr.loss must be one of: ctc, transducer "
                         f"(got {asr_loss_override!r})"
                     )
-                model_data["asr_loss"] = asr_loss_override
-        _validate_bitnet_flags(model_data)
-        _validate_ffn_activation(model_data)
-        _validate_qk_norm(model_data)
-        # Legacy flat blocks and programmatic dicts can carry keys the
-        # dataclass does not know; drop them (the schema pass above already
-        # warned for modern nested configs).
-        model_data = filter_dataclass_kwargs(
-            FrankensteinModelConfig,
-            model_data,
-            source=str(path),
-            warn=not model_schema_checked,
+                audio_block = dict(audio_block or {})
+                audio_block["asr_loss"] = asr_loss_override
+        _validate_bitnet_flags(raw_model)
+        _validate_ffn_activation(raw_model)
+        _validate_qk_norm(raw_model)
+        model_config = FrankensteinModelConfig.from_dict(
+            raw_model,
+            image_block=image_block,
+            audio_block=audio_block,
+            model_class=model_class,
         )
-        model_config = FrankensteinModelConfig(**model_data)
         if not model_class:
             model_class = "frankenstein_text_encoder"
         # Record the resolved class so deployment dispatch does not have to

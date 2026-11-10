@@ -27,6 +27,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -72,20 +74,21 @@ class GTAAttention(nn.Module):
             ``gta_num_shared_groups`` not dividing ``num_heads``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "gta", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for GTAAttention")
-        num_groups = int(getattr(config, "gta_num_shared_groups", max(1, self.num_heads // 4)))
+        num_groups = int(params.value("num_shared_groups", max(1, self.num_heads // 4)))
         if self.num_heads % num_groups != 0:
             raise ValueError("gta_num_shared_groups must divide num_heads")
         self.num_groups = num_groups
         self.group_size = self.num_heads // num_groups
         self.value_latent_rank = int(
-            getattr(config, "gta_value_latent_rank", max(1, self.hidden_size // 2))
+            params.value("value_latent_rank", max(1, self.hidden_size // 2))
         )
 
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
@@ -99,7 +102,7 @@ class GTAAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "gta_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "gta", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def make_cache_slot(self, meta, cache):

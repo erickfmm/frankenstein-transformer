@@ -13,6 +13,8 @@ Reference:
 
 from __future__ import annotations
 
+from .params import mixer_params, use_pe_for
+
 import math
 from typing import Optional
 
@@ -62,10 +64,11 @@ class MultiScaleRetention(nn.Module):
         mode: ``"encoder"`` for bidirectional, ``"decoder"`` for causal.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "retnet", params)
         super().__init__()
         self.dim = config.hidden_size
-        self.heads = config.retention_heads
+        self.heads = params.heads
         self.head_dim = self.dim // self.heads
         self.scale = self.head_dim ** -0.5
 
@@ -83,7 +86,7 @@ class MultiScaleRetention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "retnet_use_pe", False))
+        self.use_pe = bool(use_pe_for(config, "retnet", False))
 
     def _build_decay_mask(self, dim, max_len=2048):
         """Build per-head gamma decay rates for the exponential decay matrix.

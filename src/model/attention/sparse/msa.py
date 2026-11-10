@@ -38,6 +38,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -81,7 +83,8 @@ class MSAAttention(nn.Module):
             ``num_heads`` not divisible by ``num_kv_heads``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "msa", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -92,10 +95,10 @@ class MSAAttention(nn.Module):
         if self.num_heads % self.num_kv_heads != 0:
             raise ValueError("num_kv_heads must divide num_heads for MSAAttention")
         self.group_size = self.num_heads // self.num_kv_heads
-        self.block_size = int(getattr(config, "msa_block_size", 128))
-        self.topk_blocks = int(getattr(config, "msa_topk_blocks", 16))
-        self.index_dim = int(getattr(config, "msa_index_dim", 64))
-        self.kl_loss_weight = float(getattr(config, "msa_kl_loss_weight", 0.0))
+        self.block_size = int(params.value("block_size", 128))
+        self.topk_blocks = int(params.value("topk_blocks", 16))
+        self.index_dim = int(params.value("index_dim", 64))
+        self.kl_loss_weight = float(params.value("kl_loss_weight", 0.0))
 
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         router_cls = BitLinear if (config.use_bitnet and getattr(config, "bitnet_routers", False)) else nn.Linear
@@ -114,7 +117,7 @@ class MSAAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "msa_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "msa", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def _block_max_scores(self, q_idx: torch.Tensor, k_idx: torch.Tensor, num_blocks: int) -> torch.Tensor:

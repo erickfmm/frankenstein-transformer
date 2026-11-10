@@ -32,7 +32,7 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(ffn_activation="silu", hidden_size=8, ffn_hidden_size=16, **acfg):
-    cfg = FrankensteinModelConfig(
+    cfg = FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=hidden_size,
         ffn_hidden_size=ffn_hidden_size,
@@ -50,7 +50,7 @@ def _cfg(ffn_activation="silu", hidden_size=8, ffn_hidden_size=16, **acfg):
         ffn_activation=ffn_activation,
     )
     if acfg:
-        cfg.ffn_activation_config = acfg
+        cfg.ffn.activation_config = acfg
     return cfg
 
 
@@ -322,7 +322,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
 
     def test_unknown_activation_rejected(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard"], ffn_activation="bogus",
@@ -334,7 +334,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
 
     def test_config_must_be_dict(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard"], ffn_activation="raf",
@@ -343,7 +343,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
 
     def test_unknown_config_key_rejected(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard"], ffn_activation="raf",
@@ -352,7 +352,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
 
     def test_bad_raf_version_rejected(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard"], ffn_activation="raf",
@@ -361,7 +361,7 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
 
     def test_bad_raf_degrees_rejected(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
                 num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
                 layer_pattern=["standard"], ffn_activation="raf",

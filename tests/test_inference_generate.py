@@ -18,7 +18,7 @@ if TORCH_AVAILABLE:
 
 
 def _model():
-    cfg = FrankensteinModelConfig(
+    cfg = FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=32,
         num_layers=2,

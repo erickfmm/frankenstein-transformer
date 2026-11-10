@@ -27,7 +27,7 @@ def main():
     
     # Step 1: Create a model (normally you'd load a trained one)
     print("\n[1/5] Creating model...")
-    config = FrankensteinModelConfig(
+    config = FrankensteinModelConfig.from_flat(
         vocab_size=10000,  # Smaller for demo
         hidden_size=768,   # Smaller for demo
         num_layers=4,      # Fewer layers for demo
@@ -55,7 +55,7 @@ def main():
         model,
         str(checkpoint_path),
         additional_data={
-            'config': config.__dict__,
+            'config': config.to_jsonable(),
             'vocab_size': config.vocab_size,
             'hidden_size': config.hidden_size,
         }

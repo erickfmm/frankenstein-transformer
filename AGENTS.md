@@ -22,6 +22,8 @@
 | Topic | Path |
 |---|---|
 | Schema entrypoint / modules | `src/schema.yaml`, `src/schema/**` |
+| Component registry + built-in specs | `src/registry/**` (`spec.py`, `registry.py`, `binding.py`, `schema_assembly.py`, `builtin/**`) |
+| Plugin API + layered loader | `src/plugins/**` (`api.py`, `loader.py`), `examples/plugins/` |
 | Flat model config | `src/model/config.py` (`FrankensteinModelConfig`) |
 | Mixer registry + `HybridLayer` | `src/model/hybrid_layer.py` |
 | Mixer implementations | `src/model/attention/{gated,latent,sparse}/`, top-level modules |
@@ -55,36 +57,52 @@
 
 ## Hard rules
 
-1. **Schema is the contract.** Every YAML key must exist in `src/schema/**` (`additionalProperties: false`). Presets are validated strictly. At runtime, a key the schema does not know **yet** is logged as `WARNING [schema] … unknown key(s) ignored` (logger `frankenstein.config`) and dropped — configs may lead the schema temporarily. Never *read* or implement behavior for an undocumented key.
+1. **Schema is the contract.** The validated document is the hand-authored `src/schema/**` plus registry-injected component enumerations/fragments (`src/registry/schema_assembly.py`); `additionalProperties: false` holds everywhere. Presets are validated strictly. At runtime, a key the assembled schema does not know is logged as `WARNING [schema] … unknown key(s) ignored` (logger `frankenstein.config`) and dropped. Never *read* or implement behavior for an undocumented key.
 2. **Invariants**: `hidden_size % num_heads == 0`; `num_kv_heads` divides `num_heads`; `len(layer_pattern) == num_layers`; `vocab_size` matches the tokenizer.
 3. **BitNet is on by default** (`bitnet.enabled: true`). `bitnet.routers: true` requires `bitnet.enabled: true`; `bitnet.conv` requires BitNet + `embedding.conv.enabled`.
 4. **Normalization**: enum `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm`. `prms_norm` uses `norm.partial_ratio`; `flash_norm` composes with `norm.flashnorm_partial_ratio`.
 5. **`fasa` / `sparge` are inference-sparse** (`HybridLayer.TRAINING_FREE_LAYERS`). In `train()` mode `HybridLayer` runs standard dense attention over the mixer's own projections (`mixer.dense_forward`); the sparse heuristic activates in `eval()` only. They are valid in training presets.
 6. **Forced modes**: `frankenstein_text_decoder` → `mode: decoder`; `frankenstein_vit` and `frankenstein_audio` → `mode: encoder`. `training.task: causal_lm` requires the decoder; vision tasks require the ViT; audio tasks (`asr`, `audio_classification`) require `frankenstein_audio`.
-7. **Optimizer keys are prefixed**: `<optimizer>-<group>_<param>` or `<optimizer>-<param>`. Groups: `embeddings`, `pos`, `attention`, `ffn`, `norms`, `head`, `mhc`, `router`, `residual`, `other`. A new family needs an enum value, a `by_optimizer` prefix, and a matching `if/then` rule.
+7. **Optimizer keys are prefixed**: `<optimizer>-<group>_<param>` or `<optimizer>-<param>`. Groups: `embeddings`, `pos`, `attention`, `ffn`, `norms`, `head`, `mhc`, `router`, `residual`, `other`. The enum, `by_optimizer` reference and `if/then` prefix rule are **generated from the optimizer's `OptimizerSpec`** by `src/registry/schema_assembly.py` — never hand-edited.
 8. **`training.task` is required**, one of `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`, `asr`, `audio_classification`. No legacy top-level optimizer keys.
-9. **All presets are smoke-tested** (`configs/*.yaml` + `configs/examples/*.yaml`). A new mixer/optimizer needs an example YAML.
-10. **The activation enum is the source of truth** (43 values). GLU variants (`swiglu`/`geglu`/`reglu`) are handled by `GatedFFN`, not `get_activation()`.
+9. **All presets are smoke-tested** (`configs/*.yaml` + `configs/examples/*.yaml`). A new mixer/optimizer needs an example YAML; its schema entry comes from its component spec.
+10. **The component registry is the source of truth** (43 activations, 49 mixers, 36 optimizers, 6 norms, 4 residuals, 11 PEs + `none`, 3 embeddings). The activation enum is registry-derived; GLU variants (`swiglu`/`geglu`/`reglu`) carry `is_glu=True` and are handled by `GatedFFN`, not `get_activation()`.
 11. **mHC and Mixture-of-Depths are mutually exclusive.** Do not enable both.
 
-## Extending: files in order
+## Extending: one declarative recipe
+
+Every pluggable component (mixer, optimizer, norm, activation, residual,
+positional encoding, token embedding) is a frozen `ComponentSpec` registered
+through `src/registry/register_spec` (built-ins: `src/registry/builtin/**`;
+plugins: `src/plugins/api.py`). The spec is the **single source of truth** for
+the name, lazy builder, parameter schema fragment, runtime defaults,
+capability flags (`training_free`, `cache`, `qk_norm_supported`, `is_glu`, …)
+and bilingual documentation rows. The schema enum/table/prefix/`if/then`
+entries, the factories, the Streamlit pickers and the e2e harness all derive
+from it.
 
 | Feature | Touch (in order) |
 |---|---|
-| **Mixer** | `src/model/attention/<family>/<name>.py` → `attention/<family>/__init__.py` + `attention/__init__.py` → `hybrid_layer.py` registry → `_dims.yaml` enum + both description tables → optional `_attention_<mixer>.yaml` + `_model.yaml` `$ref` → `config_flatten._ATTENTION_MIXER_RENAMES` → `model/config.py` fields → `configs/examples/` → tests |
-| **Optimizer** | `src/model/optimizer/<name>.py` → `optimizer/__init__.py` → `factory.py` (`OPTIMIZER_REGISTRY`, `OPTIMIZER_ALLOWED_KEYS`) → `_optimizer.yaml` enum + `by_optimizer` → `_training.yaml` prefix rule → example → `test_optimizer_factory.py` → `configs/README.md` |
-| **Norm** | `src/model/norm/<name>.py` → `norm/factory.py` → `_norm.yaml` enum/params → `config_flatten.py` + `model/config.py` → `_DEFAULT_PAIRS` → `configs/examples/norm_*.yaml` → `test_common_modules.py` |
-| **Token embedding** | `src/model/embeddings/<name>.py` → `embeddings/__init__.py` → `frankenstein_encoder.py` `emb` dispatch → `_embedding.yaml` sub-block → `config_flatten.py` → `model/config.py` → `_DEFAULT_PAIRS` → `configs/examples/` + preset → `tests/test_<name>.py` |
-| **Positional encoding** | `src/model/embeddings/<name>.py` → `embeddings/factory.py` → `_positional_encoding.yaml` → `config_flatten._flatten_pe_parameters` → `model/config.py` → `configs/examples/pe_*.yaml` → `test_positional_encodings.py` |
-| **Activation** | `src/model/activation_function/<family>.py` → `factory.py` (`ALL_ACTIVATIONS`) → `_ffn.yaml` enum/`activation_config` → `model/config.py` validation → `configs/examples/activation_*.yaml` → `test_activation_functions.py` |
-| **Residual** | `src/model/residuals/<name>.py` → `residuals/factory.py` → `_residuals.yaml` → flatten/config → example → `test_residuals.py` |
-| **Model class** | `src/model/frankenstein_<class>.py` → `model/__init__.py` → `_model_class.yaml` → `config_loader.py` rules → `engine.py` + `training/main.py` → `deploy/*` → `cli.py` choices → preset + example → `test_model_variants.py` |
-| **Config field** | schema module → `config_flatten.py` (if nested) → `model/config.py` → `_DEFAULT_PAIRS` (if default) → example YAML → `docs/architecture.md` §7 |
-| **Dataset/task** | `src/schema/_<name>.yaml` + `schema.yaml` `$ref` → `src/training/<builder>.py` → `engine.py` → `config_loader.py` + `trainer.py` loss → example → dataset tests |
+| **Any component** | implement the module → add/register a spec (built-in: `src/registry/builtin/<family>.py`; plugin: `register_*` from `src/plugins/api.py`) → example YAML if user-facing → family tests |
+| **Mixer** | `src/model/attention/<family>/<name>.py` (`builder(config, pos_encoder=None, params=None)` reading bound `params`) → `src/registry/builtin/attention.py` → optional `_attention_<mixer>.yaml` fragment referenced by the spec → example. Capabilities: `CacheSpec`, `cache_implemented`, `qk_norm_supported`, `qk_clip_supported`, `training_free`, `needs_pos_encoder`. |
+| **Optimizer** | `src/model/optimizer/<name>.py` → `src/registry/builtin/optimizer.py` (`param_bindings` + `group_policy`; `custom_build` for genuinely special constructors) → example → `test_optimizer_factory.py`. `build_optimizer` has no per-optimizer branches. |
+| **Norm / activation / residual / PE / embedding** | implementation module → builder function → spec in `src/registry/builtin/<family>.py` → example → family test. |
+| **Model class** | `src/model/frankenstein_<class>.py` → `model/__init__.py` → `_model_class.yaml` → `config_loader.py` rules → `engine.py` + `training/main.py` → `deploy/*` → `cli.py` choices → preset + example → `test_model_variants.py` (model classes stay structural; they are not plugin components). |
+| **Config field** | schema module (or the spec's `params_schema` for a component knob) → `model/config.py` block (only structural blocks are typed dataclasses) → example YAML → `docs/architecture.md` §7. |
+| **Dataset/task** | `src/schema/_<name>.yaml` + `schema.yaml` `$ref` → `src/training/<builder>.py` → `engine.py` → `config_loader.py` + `trainer.py` loss → example → dataset tests. |
+| **Plugin (external)** | `register_*` from `src/plugins/api.py` in the plugin module → declare `plugins:` in the config (`./path.py`, `pkg.module`) or advertise the `frankenstein.plugins` entry-point group. |
+
+The runtime configuration is the **nested** YAML shape (`FrankensteinModelConfig`):
+there is no nested-to-flat flattener. Per-component knobs live in
+`model.attention.<mixer>` / `model.positional_encoding_parameters.<pe>` and are
+bound through the spec. Historical flat attribute reads/writes are supported by
+`__getattr__`/`__setattr__` aliases and `FrankensteinModelConfig.from_flat` for
+legacy checkpoints, but new code should use the nested fields.
 
 ## Gates (must stay green)
 
-- `tests/test_schema_consistency.py` — presets validate, mixer enum ↔ bilingual table, optimizer prefixes ↔ `if/then`, schema defaults ↔ dataclass.
+- `tests/test_schema_consistency.py` — presets validate against the assembled schema, bilingual tables, optimizer prefixes ↔ `if/then`, schema defaults ↔ dataclass.
+- `tests/test_registry_core.py`, `test_registry_binding.py`, `test_schema_assembly.py`, `test_plugin_loader.py` — registry contract, param binding, registry-derived schema, layered plugin loading.
 - `tests/test_yaml_examples.py` — auto-globs both config directories.
 - `tests/test_schema_attention_layers.py` — mixer enum + `attention.*` sub-keys.
 - `tests/test_optimizer_factory.py`, `test_optimizer_base.py` — registry/allowed keys/step.
@@ -121,6 +139,11 @@
 | D10 | Model classes force their modes (`decoder` for the text decoder, `encoder` for ViT and audio) |
 | D11 | Paper = theory source of truth; `docs/architecture.md` = canonical implementation spec |
 | D12 | `AGENTS.md` points to code/tests; it does not restate the spec |
+| D13 | Every pluggable component is a declarative `ComponentSpec`; the registry is the single source of truth |
+| D14 | The validated schema is assembled from core YAML + registry fragments; `additionalProperties: false` holds for plugins too |
+| D15 | The runtime config is natively nested; the flattener and per-component flat fields are gone (`from_flat` remains only as a legacy-checkpoint/test migration path) |
+| D16 | Plugin loading is layered: entry-points (skip-with-warning), `plugins:` config paths (fail-hard), built-ins (same API) |
+| D17 | Test gates are registry-derived: adding a component automatically covers docs/defaults/prefix/cache coverage |
 
 ## Skills
 

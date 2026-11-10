@@ -668,66 +668,66 @@ Each phase ends with the full gate suite green; phases are ordered so the
 repo is consistent at every boundary.
 
 **P0 — Registry core (no behavior change)**
-1. [ ] N1–N5 (+ unit tests N10 core/binding parts). No existing file touched.
-2. [ ] Gates: full suite green (nothing consumes the registry yet).
+1. [X] N1–N5 (+ unit tests N10 core/binding parts). No existing file touched.
+2. [X] Gates: full suite green (nothing consumes the registry yet).
 
 **P1 — Optimizers (proves the pattern on the most painful dispatch)**
-3. [ ] M7: `SPEC` in all 36 modules + registration loop; M6 generic
+3. [X] M7: `SPEC` in all 36 modules + registration loop; M6 generic
    `build_optimizer` (+ `custom_build` for adafactor/sgd/eve/ea4llm).
-4. [ ] M22/M23 markers; M20 `run_e2e`; M19 `prefix_map` removal.
-5. [ ] Rewrite `test_optimizer_factory.py` / `test_optimizer_base.py` /
+4. [X] M22/M23 markers; M20 `run_e2e`; M19 `prefix_map` removal.
+5. [X] Rewrite `test_optimizer_factory.py` / `test_optimizer_base.py` /
    optimizer parts of `test_schema_consistency.py` per §7.
-6. [ ] Gates: `test_optimizer_factory.py test_optimizer_base.py
+6. [X] Gates: `test_optimizer_factory.py test_optimizer_base.py
    test_schema_consistency.py test_yaml_examples.py` + e2e `--category opt
    --limit 3` + full suite.
-7. [ ] Snapshot: `export-schema` produces an assembled schema diffing only in
+7. [X] Snapshot: `export-schema` produces an assembled schema diffing only in
    generated optimizer sections.
 
 **P2 — Norms + activations**
-8. [ ] M8 (+ 6 `NormSpec`s incl. fusion flag), M9 (+ 43 `ActivationSpec`s,
+8. [X] M8 (+ 6 `NormSpec`s incl. fusion flag), M9 (+ 43 `ActivationSpec`s,
    GLU flags), schema markers M26 (`_norm.yaml`, `_ffn.yaml`).
-9. [ ] `config.py`: delete activation-config validation (binding owns it).
-10. [ ] Gates: `test_common_modules.py test_activation_functions.py
+9. [X] `config.py`: delete activation-config validation (binding owns it).
+10. [X] Gates: `test_common_modules.py test_activation_functions.py
     test_qk_norm.py test_schema_consistency.py` + full suite + e2e
     `--category norm` (if present) / `--category opt --limit 3`.
 
 **P3 — Residuals + PEs + token embeddings**
-11. [ ] M10, M11 (+ 4 + 12 + 3 specs), `embedding.type` enum (M12 emb
+11. [X] M10, M11 (+ 4 + 12 + 3 specs), `embedding.type` enum (M12 emb
     dispatch), preset rewrite for the two embedding booleans (§5.5),
     `_positional_encoding.yaml` / `_residuals.yaml` / `_embedding.yaml`
     markers + `use_pe` generation.
-12. [ ] Gates: `test_residuals.py test_positional_encodings.py
+12. [X] Gates: `test_residuals.py test_positional_encodings.py
     test_schema_consistency.py test_yaml_examples.py` + full suite.
 
 **P4 — Config restructure + flattener deletion (the deep rewrite)**
-13. [ ] M2 (nested dataclasses per §2.4), delete `config_flatten.py`, M3/M4
+13. [X] M2 (nested dataclasses per §2.4), delete `config_flatten.py`, M3/M4
     loader+engine rewiring, M12/M15/M17 nested-access sweep (grep recipe in
     §5), M16 deploy/export/checkpoints + `to_jsonable`.
-14. [ ] N9 migration script (optional artifact).
-15. [ ] Rewrite affected tests (`grep -rn "FrankensteinModelConfig(" tests/
+14. [X] N9 migration script (optional artifact).
+15. [X] Rewrite affected tests (`grep -rn "FrankensteinModelConfig(" tests/
     full_tests/ src/`); update `test_legacy_flat_feature_keys_are_gone`.
-16. [ ] Gates: full suite + e2e smoke all categories + `param_count_check.py`
+16. [X] Gates: full suite + e2e smoke all categories + `param_count_check.py`
     (0 failures — architecture unchanged, param counts must match
     `param_truth.json`) + deploy round-trip (export + reload) smoke.
 
 **P5 — Mixers (biggest family; uses everything P0–P4 built)**
-17. [ ] M5 HybridLayer registry + mamba spec + training-free property; M13
+17. [X] M5 HybridLayer registry + mamba spec + training-free property; M13
     param binding sweep across 48 mixer modules (§2.4 mapping); M14
     capabilities derived; M8q qk sets derived; `_dims.yaml`/`_model.yaml`
     markers + bilingual table migration into specs.
-18. [ ] Gates: `test_schema_attention_layers.py test_kv_cache_mixers.py
+18. [X] Gates: `test_schema_attention_layers.py test_kv_cache_mixers.py
     test_hybrid_layer.py test_qk_norm.py test_attention_*.py` + full suite +
     e2e all categories + `param_count_check.py`.
 
 **P6 — Plugin loading + example + docs**
-19. [ ] N7 loader + N8 example plugin + M21 `plugins:` key; plugin docs section
+19. [X] N7 loader + N8 example plugin + M21 `plugins:` key; plugin docs section
     in `architecture.md` (§6 contract).
-20. [ ] M28–M32 docs/commands/README/AGENTS/sync-website updates; census
+20. [X] M28–M32 docs/commands/README/AGENTS/sync-website updates; census
     wording pass (counts unchanged).
-21. [ ] Gates: full suite incl. new plugin tests; e2e with the
+21. [X] Gates: full suite incl. new plugin tests; e2e with the
     `plugin_window_mixer.yaml` preset; Streamlit smoke (schema load +
     optimizer section renders a plugin optimizer spec).
-22. [ ] Website sync + commit phases (mirror the structure of the existing
+22. [X] Website sync + commit phases (mirror the structure of the existing
     plans' §6/§7: main repo `feat(registry): plugin-based extensibility`,
     then mirror sync commit).
 
@@ -792,3 +792,61 @@ repo is consistent at every boundary.
 - `override=True` for plugins replacing built-ins — deferred (hard error today).
 - Whether `FrankensteinModelConfig` keeps its name (kept — docstrings and
   papers reference it; only its internals change).
+
+---
+
+## 12. Implementation notes (done)
+
+Status: **implemented end to end; 1978 tests pass (1944 pre-existing + 34 new),
+1 skipped, 343 subtests.**
+
+What shipped:
+
+- `src/registry/` — `spec.py` (ComponentSpec + seven family specs + CacheSpec),
+  `registry.py` (global registry, duplicate detection by stable fingerprint,
+  derived capability views), `binding.py` (`bind_params` / `ComponentParams`
+  with `value()` None-as-absent semantics), `fragments.py` (YAML fragment
+  refs), `coercions.py`, `schema_assembly.py` (registry-driven enums, attention
+  fragments incl. the shared `falcon` key, optimizer `by_optimizer` +
+  `if/then` + SBERT enum sync, `use_pe` flags, `embedding.type`, `plugins:`),
+  `builtin/` (all built-in specs: 49 mixers, 36 optimizers, 6 norms,
+  43 activations, 4 residuals, 11 PEs + `none`, 3 embeddings).
+- `src/plugins/` — `api.py` (register_* helpers) and `loader.py`
+  (entry-points skip-with-warning, config paths fail-hard, built-ins).
+- Generic dispatch: `build_optimizer` has no per-optimizer branches;
+  `get_norm`, `get_activation`, `build_residual`, `build_pos_encoder` and
+  `build_token_embedding` are registry lookups; `HybridLayer` no longer
+  imports 48 mixer classes and no longer rebuilds a per-layer registry dict.
+- Nested runtime config (`src/model/config.py`): typed structural blocks,
+  per-component mappings bound through specs, `from_dict`, `to_jsonable`,
+  ported cross-field validation (`src/model/_validation.py`), read/write flat
+  aliases and `from_flat` (legacy checkpoints/tests/exporters).
+- `src/utils/config_flatten.py` **deleted**; `flatten_inference_dict` moved to
+  `src/deploy/inference_config.py`; the validators read nested blocks;
+  exporters use `src/deploy/export_compat.py` for their flat metadata view.
+- Schema: `resolve_schema()` assembles from the registry; every preset and
+  example (including the plugin example) validates strictly.
+- Examples: `examples/plugins/window_mixer.py` and
+  `configs/examples/plugin_window_mixer.yaml`.
+- Tests: registry core/binding/assembly/plugin-loader suites added; the
+  schema-consistency, optimizer, KV-parity, deploy and export suites now run
+  against the assembled schema and the nested config.
+- Docs: `AGENTS.md` (rules, locations, D13–D17), `docs/architecture.md` §4/§11,
+  the two plan-mode commands and `configs/README.md`.
+
+Deliberate deviations from the plan text:
+
+1. **Built-in specs live in `src/registry/builtin/<family>.py`** rather than
+   one `SPEC` per implementation module. This keeps the registry package
+   torch-free (lazy builder strings) and avoids a central import cycle; it is
+   still declarative registration, and plugins use the same API.
+2. **Hand-written bilingual tables were kept**; assembly only appends rows for
+   components missing from them (built-ins are already documented). This
+   avoided rewriting ~40 KB of reviewed documentation while still exposing
+   plugin components automatically.
+3. **`from_flat` remains as a migration path** (not a flattener) for legacy
+   checkpoints, the exporters and the test suite; per-component flat fields
+   and the nested-to-flat pipeline are gone.
+4. **`flat_config_view`** in `src/deploy/export_compat.py` is a read-only
+   adapter that materialises the historical flat vocabulary the HF/GGUF
+   exporters consume; it is not part of the runtime configuration pipeline.

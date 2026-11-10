@@ -30,7 +30,6 @@ if TORCH_AVAILABLE:
         StandardResidual,
         build_residual,
     )
-    from src.utils.config_flatten import flatten_model_dict
 
 
 def _base_kwargs(**overrides):
@@ -294,7 +293,7 @@ class FactoryTests(unittest.TestCase):
             ("full_attn", FullAttentionResidual),
             ("block_attn", BlockAttentionResidual),
         ]:
-            cfg = FrankensteinModelConfig(
+            cfg = FrankensteinModelConfig.from_flat(
                 **_base_kwargs(residual_type=rt, block_attn_num_blocks=2)
             )
             res = build_residual(cfg)
@@ -302,18 +301,18 @@ class FactoryTests(unittest.TestCase):
 
     def test_invalid_residual_type_raises_in_config(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(**_base_kwargs(residual_type="bogus"))
+            FrankensteinModelConfig.from_flat(**_base_kwargs(residual_type="bogus"))
 
     def test_block_attn_validation(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 **_base_kwargs(
                     residual_type="block_attn", num_layers=2, block_attn_num_blocks=8
                 )
             )
 
     def test_factory_propagates_mhc_nstreams(self):
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             **_base_kwargs(
                 residual_type="full_attn",
                 use_mhc=True,
@@ -328,7 +327,7 @@ class FactoryTests(unittest.TestCase):
 class ConfigFlattenTests(unittest.TestCase):
     """The new ``residuals`` sub-tree must flatten into flat kwargs."""
 
-    def test_full_attn_flatten(self):
+    def test_full_attn_nested_config(self):
         nested = {
             "residuals": {
                 "type": "full_attn",
@@ -340,14 +339,14 @@ class ConfigFlattenTests(unittest.TestCase):
                 "gradient_checkpoint": True,
             }
         }
-        flat = flatten_model_dict(nested)
-        self.assertEqual(flat["residual_type"], "full_attn")
-        self.assertTrue(flat["full_attn_init_query_zero"])
-        self.assertFalse(flat["full_attn_use_rmsnorm_keys"])
-        self.assertEqual(flat["attnres_mhc_stream_mode"], "joint")
-        self.assertTrue(flat["attnres_gradient_checkpoint"])
+        config = FrankensteinModelConfig.from_dict(nested)
+        self.assertEqual(config.residuals.type, "full_attn")
+        self.assertTrue(config.residuals.full_attn.init_query_zero)
+        self.assertFalse(config.residuals.full_attn.use_rmsnorm_keys)
+        self.assertEqual(config.residuals.mhc_stream_mode, "joint")
+        self.assertTrue(config.residuals.gradient_checkpoint)
 
-    def test_block_attn_flatten(self):
+    def test_block_attn_nested_config(self):
         nested = {
             "residuals": {
                 "type": "block_attn",
@@ -358,20 +357,20 @@ class ConfigFlattenTests(unittest.TestCase):
                 },
             }
         }
-        flat = flatten_model_dict(nested)
-        self.assertEqual(flat["residual_type"], "block_attn")
-        self.assertEqual(flat["block_attn_num_blocks"], 6)
-        self.assertTrue(flat["block_attn_init_query_zero"])
-        self.assertTrue(flat["block_attn_use_rmsnorm_keys"])
+        config = FrankensteinModelConfig.from_dict(nested)
+        self.assertEqual(config.residuals.type, "block_attn")
+        self.assertEqual(config.residuals.block_attn.num_blocks, 6)
+        self.assertTrue(config.residuals.block_attn.init_query_zero)
+        self.assertTrue(config.residuals.block_attn.use_rmsnorm_keys)
 
-    def test_residuals_passthrough_with_other_keys(self):
+    def test_residuals_merge_with_other_blocks(self):
         nested = {
             "use_bitnet": True,
             "residuals": {"type": "standard"},
         }
-        flat = flatten_model_dict(nested)
-        self.assertTrue(flat["use_bitnet"])
-        self.assertEqual(flat["residual_type"], "standard")
+        config = FrankensteinModelConfig.from_dict(nested)
+        self.assertTrue(config.bitnet.enabled)
+        self.assertEqual(config.residuals.type, "standard")
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -381,7 +380,7 @@ class EndToEndEncoderTests(unittest.TestCase):
     def _cfg(self, **overrides):
         kwargs = _base_kwargs(num_layers=3, num_loops=1, block_attn_num_blocks=2)
         kwargs.update(overrides)
-        return FrankensteinModelConfig(**kwargs)
+        return FrankensteinModelConfig.from_flat(**kwargs)
 
     def test_standard_residual_forward_backward(self):
         enc = FrankensteinEncoder(self._cfg(residual_type="standard")).train()
@@ -488,7 +487,7 @@ class EndToEndDecoderTests(unittest.TestCase):
             block_attn_num_blocks=2,
         )
         kwargs.update(overrides)
-        return FrankensteinModelConfig(**kwargs)
+        return FrankensteinModelConfig.from_flat(**kwargs)
 
     def test_full_attn_decoder(self):
         torch.manual_seed(0)

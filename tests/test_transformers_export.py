@@ -29,7 +29,7 @@ class TransformersExportTests(unittest.TestCase):
             train_yaml = tmp_path / "train.yaml"
             out_dir = tmp_path / "out"
 
-            model_cfg = FrankensteinModelConfig(
+            model_cfg = FrankensteinModelConfig.from_flat(
                 vocab_size=32,
                 hidden_size=16,
                 num_layers=1,
@@ -209,7 +209,7 @@ class TransformersExportCacheTests(unittest.TestCase):
         from src.model.config import FrankensteinModelConfig
         from src.model.frankenstein_decoder import FrankensteinDecoder
 
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=32, hidden_size=16, num_layers=1, num_loops=1,
             layer_pattern=["standard"], num_heads=4, retention_heads=4,
             dropout=0.0, use_bitnet=False, mode="decoder",

@@ -17,6 +17,8 @@ architecture:
 
 from __future__ import annotations
 
+from .params import mixer_params, use_pe_for
+
 import math
 from typing import List, Optional
 
@@ -237,15 +239,16 @@ class EngramLayer(nn.Module):
       - engram_seed (int, default 42): RNG seed for hash multipliers.
     """
 
-    def __init__(self, config, pos_encoder=None) -> None:
+    def __init__(self, config, pos_encoder=None, params=None) -> None:
+        params = mixer_params(config, "engram", params)
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        max_ngram = getattr(config, "engram_max_ngram_size", 3)
-        n_heads = getattr(config, "engram_n_heads_per_ngram", 4)
-        head_dim = getattr(config, "engram_embed_dim_per_head", 32)
-        kernel = getattr(config, "engram_kernel_size", 4)
-        seed = getattr(config, "engram_seed", 42)
+        max_ngram = params.value("max_ngram_size", 3)
+        n_heads = params.value("n_heads_per_ngram", 4)
+        head_dim = params.value("embed_dim_per_head", 32)
+        kernel = params.value("kernel_size", 4)
+        seed = params.value("seed", 42)
 
         n_gram_types = max_ngram - 1                    # e.g. 2 for max_ngram=3
         total_heads = n_gram_types * n_heads            # total hash heads
@@ -289,7 +292,7 @@ class EngramLayer(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "engram_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "engram", True))
 
     # ------------------------------------------------------------------
     def forward(

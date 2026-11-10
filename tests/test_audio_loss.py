@@ -45,7 +45,7 @@ def _tiny_audio_config(**overrides) -> FrankensteinModelConfig:
         num_classes=3,
     )
     params.update(overrides)
-    return FrankensteinModelConfig(**params)
+    return FrankensteinModelConfig.from_flat(**params)
 
 
 def _make_trainer(model, task, tmp_path):

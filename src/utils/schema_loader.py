@@ -30,7 +30,10 @@ def resolve_schema(schema_path: str | Path) -> Dict[str, Any]:
     with schema_path.open("r", encoding="utf-8") as handle:
         schema = yaml.safe_load(handle) or {}
 
-    return _resolve_refs(schema, schema_path.parent)
+    resolved = _resolve_refs(schema, schema_path.parent)
+    from src.registry.schema_assembly import assemble_schema
+
+    return assemble_schema(resolved)
 
 
 def _resolve_refs(node: Any, base_dir: Path) -> Any:

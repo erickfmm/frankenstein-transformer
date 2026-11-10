@@ -25,7 +25,6 @@ try:
         BitNetQuantizer,
     )
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
-    from ..utils.config_flatten import flatten_model_dict
 except ImportError:
     from model.config import FrankensteinModelConfig
     from model.frankenstein_decoder import FrankensteinDecoder
@@ -38,7 +37,6 @@ except ImportError:
         BitNetQuantizer,
     )
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
-    from utils.config_flatten import flatten_model_dict
 
 logging.basicConfig(
     level=logging.INFO,
@@ -118,14 +116,16 @@ class ModelDeployer:
         if getattr(config, "mode", "encoder") == "decoder":
             return FrankensteinDecoder(config)
         recorded = str(getattr(config, "model_class", None) or "").strip().lower()
-        if hasattr(config, "audio_feature") and recorded == "frankenstein_audio":
+        if recorded == "frankenstein_audio":
             from ..model.frankenstein_audio import FrankensteinAudio
             return FrankensteinAudio(config)
         if recorded == "frankenstein_vit":
             from ..model.frankenstein_vit import FrankensteinViT
             return FrankensteinViT(config)
         # Vision Transformer: detect via patch_size > 0 and in_channels present.
-        if hasattr(config, "patch_size") and getattr(config, "pos_embedding_type", "") in ("learned_1d", "none"):
+        if getattr(config, "image", None) is not None and getattr(
+            config, "pos_embedding_type", ""
+        ) in ("learned_1d", "none"):
             from ..model.frankenstein_vit import FrankensteinViT
             return FrankensteinViT(config)
         return FrankensteinEncoder(config)
@@ -147,13 +147,14 @@ class ModelDeployer:
         
         # Extract config if saved with checkpoint
         if 'config' in checkpoint:
+            import dataclasses
+
             saved_config = checkpoint['config']
-            # Flatten nested model dict (new schema) or pass through legacy flat
-            saved_config = flatten_model_dict(saved_config)
-            # Update config with saved values
-            for key, value in saved_config.items():
-                if hasattr(self.config, key):
-                    setattr(self.config, key, value)
+            saved = FrankensteinModelConfig.from_dict(
+                saved_config, model_class=saved_config.get("model_class")
+            )
+            for field in dataclasses.fields(saved):
+                setattr(self.config, field.name, getattr(saved, field.name))
             logger.info("Loaded config from checkpoint")
         
         # Initialize model from the recorded class / configured mode.
@@ -217,7 +218,9 @@ class ModelDeployer:
         
         # Save config
         config_path = output_path / "config.json"
-        config_dict = self.config.__dict__.copy()
+        config_dict = self.config.to_jsonable()
+        if not config_dict.get("model_class"):
+            config_dict["model_class"] = type(getattr(self, "model", None)).__name__
         # Convert non-serializable types
         if 'layer_pattern' in config_dict:
             config_dict['layer_pattern'] = list(config_dict['layer_pattern'])
@@ -377,7 +380,11 @@ class ModelDeployer:
                 config_dict = json.load(f)
             
             # Create config object
-            config = FrankensteinModelConfig(**flatten_model_dict(config_dict))
+            config = FrankensteinModelConfig.from_dict(
+                config_dict, model_class=config_dict.get("model_class")
+            )
+            if config.model_class is None:
+                config.model_class = self.config.model_class
             
             # Initialize model from the recorded class / configured mode.
             model = self._build_model(config)
@@ -484,10 +491,12 @@ def main(argv=None):
     if args.config:
         with open(args.config) as f:
             config_dict = json.load(f)
-        config = FrankensteinModelConfig(**flatten_model_dict(config_dict))
+        config = FrankensteinModelConfig.from_dict(
+                config_dict, model_class=config_dict.get("model_class")
+            )
     else:
         # Use default config
-        config = FrankensteinModelConfig()
+        config = FrankensteinModelConfig.from_flat()
     
     # Create deployer
     deployer = ModelDeployer(config, device=resolved_device, task=args.task)

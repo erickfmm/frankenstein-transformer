@@ -20,7 +20,7 @@ if TORCH_AVAILABLE:
 
 
 def _make(bitnet_routers: bool, mode: str = "encoder"):
-    return FrankensteinModelConfig(
+    return FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=64,
         num_layers=8,
@@ -167,7 +167,7 @@ class TestBitNetCoverage(unittest.TestCase):
         from src.model.embeddings.factorized_embedding import FactorizedEmbedding
 
         def make(use_bitnet_conv):
-            cfg = FrankensteinModelConfig(
+            cfg = FrankensteinModelConfig.from_flat(
                 vocab_size=64, hidden_size=64, num_layers=1, num_heads=4,
                 num_experts=2, top_k_experts=1, dropout=0.0,
                 use_bitnet=True, use_bitnet_conv=use_bitnet_conv,
@@ -188,7 +188,7 @@ class TestBitNetCoverage(unittest.TestCase):
         """use_bitnet_conv has no effect when use_bitnet is False."""
         from src.model.embeddings.factorized_embedding import FactorizedEmbedding
 
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=64, hidden_size=64, num_layers=1, num_heads=4,
             num_experts=2, top_k_experts=1, dropout=0.0,
             use_bitnet=False, use_bitnet_conv=True,

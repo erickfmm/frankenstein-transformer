@@ -36,7 +36,7 @@ def _cfg(**overrides):
         ffn_hidden_size=64,
     )
     base.update(overrides)
-    return FrankensteinModelConfig(**base)
+    return FrankensteinModelConfig.from_flat(**base)
 
 
 def _paired(**overrides):

@@ -54,6 +54,8 @@ Reference:
 
 from __future__ import annotations
 
+from .params import mixer_params, use_pe_for
+
 import math
 from typing import Optional, Tuple
 
@@ -140,7 +142,8 @@ class ContinuumAttention(nn.Module):
         ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "ca", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -161,8 +164,8 @@ class ContinuumAttention(nn.Module):
         # Score gain gamma = 1 / tau (Eq. 4). Learned: one scalar per head
         # (paper section 2.7 / 3.1, 128 log-gains for 8 layers x 16 heads);
         # fixed: no parameters beyond the projections (CA-P).
-        self.ca_learned_gain = bool(getattr(config, "ca_learned_gain", True))
-        self.gain_init = float(getattr(config, "ca_gain_init", 1.0))
+        self.ca_learned_gain = bool(params.value("learned_gain", True))
+        self.gain_init = float(params.value("gain_init", 1.0))
         if self.gain_init <= 0.0:
             raise ValueError(f"ca_gain_init must be > 0, got {self.gain_init}")
         if self.ca_learned_gain:
@@ -176,7 +179,7 @@ class ContinuumAttention(nn.Module):
         self.mode = getattr(config, "mode", "encoder")
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "ca_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "ca", True))
         attach_qk_norm(self, config, self.head_dim)
 
     # ------------------------------------------------------------------

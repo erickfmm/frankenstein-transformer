@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from .derf import Derf
 from .dynamic_tanh import DynamicTanhNorm
-from .factory import get_norm
+from .factory import get_norm, is_norm_fusable, norm_params
 from .flash import FlashNorm, FlashNormBitLinear, FlashNormLinear, fold_norm_weights
 from .qk import (
     FORWARD_METHODS,
@@ -36,6 +36,8 @@ __all__ = [
     "FlashNormBitLinear",
     "fold_norm_weights",
     "get_norm",
+    "is_norm_fusable",
+    "norm_params",
     "QKNorm",
     "QuacKController",
     "apply_qk_clip",

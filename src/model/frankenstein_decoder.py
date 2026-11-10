@@ -74,7 +74,7 @@ class FrankensteinDecoder(nn.Module):
                 "titan",
                 "mamba",
             ] * 3
-        return FrankensteinModelConfig(
+        return FrankensteinModelConfig.from_flat(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
             num_layers=num_layers,

@@ -19,7 +19,7 @@ import torch.nn.functional as F
 
 from .config import FrankensteinModelConfig
 from .attention.common import BitLinear
-from .norm import FlashNormBitLinear, FlashNormLinear, get_norm
+from .norm import FlashNormBitLinear, FlashNormLinear, get_norm, is_norm_fusable
 from .activation_function import (
     GLU_VARIANTS,
     get_activation,
@@ -27,59 +27,12 @@ from .activation_function import (
 )
 from .mhc import ManifoldHyperConnections
 from .moe import MoELayer
-from .attention.engram import EngramLayer
-from .attention.conformer import ConformerAttention
-from .attention.grouped_query_attention import GroupedQueryAttention
-from .attention.gated import (
-    DeltaNetAttention,
-    Falcon1Attention,
-    Falcon1AAttention,
-    Falcon2Attention,
-    Falcon2AAttention,
-    Falcon3Attention,
-    Falcon3AAttention,
-    ForgettingAttention,
-    FirstPassageAttention,
-    GatedDeltaNet2Attention,
-    GatedDeltaNetAttention,
-    GatedLinearAttention,
-    GatedSoftmaxAttention,
-    HGRN2Attention,
-    KDAAttention,
-)
-from .attention.ode import ODEAttentionBlock
-from .attention.retnet import MultiScaleRetention
-from .attention.sigmoid import SigmoidAttention
-from .attention.sparse import (
-    BigBirdAttention,
-    FASAAttention,
-    FastConformerAttention,
-    LongformerAttention,
-    LSAAttention,
-    MSAAttention,
-    NSAAttention,
-    SparseKAttention,
-    SparseTransformerAttention,
-    SpargeAttention,
-    SparDAAttention,
-    SlidingWindowAttention,
-)
-from .attention.standard import StandardAttention
-from .attention.ca import ContinuumAttention
-from .attention.memory import MemoryAttention
-from .attention.ssog import SSOGAttention
-from .attention.titan import TitanAttention
-from .attention.latent import (
-    CCAAttention,
-    CCGQAAttention,
-    GTAAttention,
-    GQLAAttention,
-    GaussianMixtureAttention,
-    IHAAttention,
-    MLAAttention,
-    MLRAAttention,
-    MTLAAttention,
-    TuckerAttention,
+from src.registry import (
+    ComponentFamily,
+    bind_params,
+    ensure_builtins,
+    registry,
+    resolve_builder,
 )
 
 
@@ -123,7 +76,10 @@ class HybridLayer(nn.Module):
             recent forward pass.
     """
 
-    TRAINING_FREE_LAYERS = {"fasa", "sparge"}
+    ensure_builtins()
+    TRAINING_FREE_LAYERS = frozenset(
+        registry.property_set(ComponentFamily.MIXER, "training_free")
+    )
 
     def __init__(
         self,
@@ -201,66 +157,17 @@ class HybridLayer(nn.Module):
         # injected by FrankensteinEncoder — the layer itself never touches
         # the residual sum (the encoder passes the attended ``x`` in).
 
-        mixer_registry = {
-            "ode": ODEAttentionBlock,
-            "retnet": MultiScaleRetention,
-            "titan": TitanAttention,
-            "standard": StandardAttention,
-            "ca": ContinuumAttention,
-            "sigmoid": SigmoidAttention,
-            "sparse_transformer": SparseTransformerAttention,
-            "longformer": LongformerAttention,
-            "swa": SlidingWindowAttention,
-            "bigbird": BigBirdAttention,
-            "sparsek": SparseKAttention,
-            "nsa": NSAAttention,
-            "sparge": SpargeAttention,
-            "fasa": FASAAttention,
-            "gla": GatedLinearAttention,
-            "deltanet": DeltaNetAttention,
-            "gated_deltanet": GatedDeltaNetAttention,
-            "gated_deltanet2": GatedDeltaNet2Attention,
-            "hgrn2": HGRN2Attention,
-            "fox": ForgettingAttention,
-            "gated_softmax": GatedSoftmaxAttention,
-            "kda": KDAAttention,
-            "fpa": FirstPassageAttention,
-            "falcon1": Falcon1Attention,
-            "falcon2": Falcon2Attention,
-            "falcon3": Falcon3Attention,
-            "falcon1a": Falcon1AAttention,
-            "falcon2a": Falcon2AAttention,
-            "falcon3a": Falcon3AAttention,
-            "engram": EngramLayer,
-            "gqa": GroupedQueryAttention,
-            "mla": MLAAttention,
-            "gqla": GQLAAttention,
-            "mlra": MLRAAttention,
-            "tucker": TuckerAttention,
-            "iha": IHAAttention,
-            "gta": GTAAttention,
-            "mtla": MTLAAttention,
-            "cca": CCAAttention,
-            "ccgqa": CCGQAAttention,
-            "msa": MSAAttention,
-            "sparda": SparDAAttention,
-            "gma": GaussianMixtureAttention,
-            "ssog": SSOGAttention,
-            "conformer": ConformerAttention,
-            "memory": MemoryAttention,
-            "lsa": LSAAttention,
-            "fastconformer": FastConformerAttention,
-        }
-
-        if layer_type == "mamba":
-            self.mixer = proj_cls(config.hidden_size, config.hidden_size)
-        elif layer_type in mixer_registry:
-            self.mixer = mixer_registry[layer_type](config, pos_encoder=pos_encoder)
-        else:
-            supported_layers = sorted(list(mixer_registry.keys()) + ["mamba"])
-            raise ValueError(
-                f"Unknown layer_type '{layer_type}'. Supported values: {supported_layers}"
-            )
+        ensure_builtins()
+        canonical = registry.resolve_name(ComponentFamily.MIXER, layer_type)
+        spec = registry.get(ComponentFamily.MIXER, canonical)
+        attention_block = getattr(config, "attention", None)
+        raw_params = {}
+        if isinstance(attention_block, dict):
+            raw_params = attention_block.get(canonical) or {}
+        mixer_params = bind_params(spec, raw_params)
+        self.mixer = resolve_builder(spec.builder)(
+            config, pos_encoder=pos_encoder, params=mixer_params
+        )
 
         # Transversal fixed-numerics opt-in (arXiv:2610.31642): attached here so
         # every mixer (and the KV-cache hooks that receive it) can dispatch its
@@ -277,9 +184,7 @@ class HybridLayer(nn.Module):
         # projections (gate + up) that would each need their own fusion;
         # those cases keep norm2 as a standalone FlashNorm.
         fuse_ffn_input = (
-            config.norm_type == "flash_norm"
-            and not is_glu
-            and not self.use_moe
+            is_norm_fusable(config) and not is_glu and not self.use_moe
         )
         flashnorm_partial_ratio = float(getattr(config, "flashnorm_partial_ratio", 0.0))
 

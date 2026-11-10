@@ -3,6 +3,24 @@ description: Plan only (no implementation) the addition of a new optimizer from 
 agent: plan
 subtask: false
 ---
+
+> **Registry-first recipe (current architecture).** Component additions no
+> longer edit a second list by hand. Every pluggable component is a frozen
+> `ComponentSpec` in `src/registry/builtin/<family>.py` (or a plugin calling
+> `src/plugins/api.py`): name, lazy builder, parameter-schema fragment,
+> runtime defaults, capability flags and bilingual description. The schema
+> enums, `by_optimizer` reference, `if/then` prefix rules, attention property
+> fragments, factory dispatch, Streamlit pickers and e2e listing are all
+> **generated from the spec** by `src/registry/schema_assembly.py` and the
+> family factories. `src/utils/config_flatten.py` no longer exists: the
+> runtime config is the nested YAML shape (`FrankensteinModelConfig.from_dict`),
+> and `from_flat` is only a legacy-checkpoint/test migration path.
+>
+> The file lists below are retained for the *paper/annex/census/website*
+> phases of a core research component; the implementation/schema/dispatch
+> rows are superseded by: **implement the module → add a spec → add an
+> example → run the gates.**
+
 Produce a **complete, implementation-ready plan** for adding one new optimizer family
 to frankenstein-transformer — and nothing else. This command runs in **plan mode**: it
 reads the paper, explores the repository and writes the plan to

@@ -32,7 +32,7 @@ def _build(pattern, pe="rope"):
     # Fixed construction seed: greedy parity is exact, and a few seeds produce
     # near-tied logits where full and cached paths legitimately differ.
     torch.manual_seed(4)
-    cfg = FrankensteinModelConfig(
+    cfg = FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=32,
         num_layers=1,
@@ -108,7 +108,7 @@ class MixerParityTests(unittest.TestCase):
         torch.manual_seed(42)
         pattern = ["standard", "mla", "gla", "fox"]
         m1 = FrankensteinDecoder(
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=64, hidden_size=32, num_layers=4, num_loops=1,
                 num_heads=4, retention_heads=4, num_kv_heads=2, dropout=0.0,
                 use_bitnet=False, layer_pattern=pattern, mode="decoder",
@@ -117,7 +117,7 @@ class MixerParityTests(unittest.TestCase):
             )
         ).eval()
         m2 = FrankensteinDecoder(
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=64, hidden_size=32, num_layers=4, num_loops=1,
                 num_heads=4, retention_heads=4, num_kv_heads=2, dropout=0.0,
                 use_bitnet=False, layer_pattern=pattern, mode="decoder",
@@ -137,7 +137,7 @@ class MixerParityTests(unittest.TestCase):
 
 def _build_lsa_small(pe: str = "nope"):
     """Tiny ``lsa`` decoder whose 4-token blocks complete during the test."""
-    cfg = FrankensteinModelConfig(
+    cfg = FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=32,
         num_layers=1,

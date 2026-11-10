@@ -30,6 +30,8 @@ References:
 
 from __future__ import annotations
 
+from .params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -202,7 +204,8 @@ class ConformerAttention(nn.Module):
         conv: :class:`ConformerConvModule`.
     """
 
-    def __init__(self, config, pos_encoder=None) -> None:
+    def __init__(self, config, pos_encoder=None, params=None) -> None:
+        params = mixer_params(config, "conformer", params)
         super().__init__()
         self.hidden_size = int(config.hidden_size)
         self.num_heads = int(config.num_heads)
@@ -229,15 +232,15 @@ class ConformerAttention(nn.Module):
         self.mode = getattr(config, "mode", "encoder")
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "conformer_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "conformer", True))
         attach_qk_norm(self, config, self.head_dim)
         # Set by HybridLayer (transversal fixed-numerics opt-in). Standalone
         # use keeps the classic softmax.
         self.use_fixed_softmax = False
 
-        self.macaron = bool(getattr(config, "conformer_macaron", True))
-        self.kernel_size = int(getattr(config, "conformer_kernel_size", 32))
-        self.conv_norm = str(getattr(config, "conformer_conv_norm", "batch")).lower()
+        self.macaron = bool(params.value("macaron", True))
+        self.kernel_size = int(params.value("kernel_size", 32))
+        self.conv_norm = str(params.value("conv_norm", "batch")).lower()
 
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         self.q_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)

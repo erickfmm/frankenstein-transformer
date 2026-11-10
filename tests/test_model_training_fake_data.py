@@ -61,7 +61,7 @@ def _cfg(layer_pattern, mode="encoder", use_moe=False, **kw):
         mode=mode,
     )
     defaults.update(kw)
-    return FrankensteinModelConfig(**defaults)
+    return FrankensteinModelConfig.from_flat(**defaults)
 
 
 def _fake_batch():

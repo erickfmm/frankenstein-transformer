@@ -33,16 +33,16 @@ from typing import Any, Dict, List, Tuple
 import torch
 import yaml
 
+from .export_compat import flat_config_view, model_config_from
+
 try:
     from .quantization import bake_bitnet_weights
     from ..model.attention.common import BitLinear
-    from ..utils.config_flatten import flatten_model_dict
 except ImportError:
     # transformers_export may be invoked from a flat sys.path context; the
     # helpers are optional for the compatibility-check path.
     bake_bitnet_weights = None  # type: ignore
     BitLinear = None  # type: ignore
-    from utils.config_flatten import flatten_model_dict  # type: ignore
 
 try:
     from .safetensors_quant import (
@@ -193,7 +193,7 @@ def _to_model_config(config: FrankensteinConfig) -> FrankensteinModelConfig:
     for key in _MODEL_KEYS:
         if key not in source and hasattr(config, key):
             source[key] = getattr(config, key)
-    return FrankensteinModelConfig(**source)
+    return FrankensteinModelConfig.from_flat(**source)
 
 
 def _build_core_model(config: FrankensteinConfig) -> nn.Module:
@@ -565,11 +565,11 @@ def _bake_state_dict(
         Tuple of ``(baked_state_dict, num_baked_layers)``.
     """
     from src.model.config import FrankensteinModelConfig
+    from .export_compat import flat_config_view, model_config_from
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
-    from src.utils.config_flatten import flatten_model_dict
 
-    model_cfg = FrankensteinModelConfig(**flatten_model_dict(model_config))
+    model_cfg = model_config_from(model_config)
     mc = str(model_class).lower()
     if mc == "frankenstein_text_decoder" or model_cfg.mode == "decoder":
         if model_cfg.mode != "decoder":
@@ -625,9 +625,8 @@ def _resolve_dynamic_vocab(
     Raises:
         ValueError: If no vocabulary can be resolved.
     """
-    from src.utils.config_flatten import flatten_model_dict
 
-    vocab = flatten_model_dict(model_config).get("token_vocab")
+    vocab = flat_config_view(model_config).get("token_vocab")
     if vocab:
         return list(vocab)
 
@@ -692,10 +691,9 @@ def _materialize_dynamic_embedding(
     from src.model.config import FrankensteinModelConfig
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
-    from src.utils.config_flatten import flatten_model_dict
 
-    flat = flatten_model_dict(model_config)
-    model_cfg = FrankensteinModelConfig(**flat)
+    flat = flat_config_view(model_config)
+    model_cfg = model_config_from(model_config)
     decoder = str(model_class).lower() == "frankenstein_text_decoder" or model_cfg.mode == "decoder"
     if decoder:
         model_cfg.mode = "decoder"
@@ -724,6 +722,14 @@ def _materialize_dynamic_embedding(
     export_config["dynamic_embedding_precompute"] = False
     export_config["use_factorized_embedding"] = False
     export_config["token_vocab"] = None
+    # Keep the nested block in sync: ``from_dict`` reads ``embedding.type``
+    # (the flat ``*.enabled`` flags are folded in only when type is default).
+    embedding_block = dict(export_config.get("embedding") or {})
+    embedding_block["type"] = "standard"
+    dynamic_block = dict(embedding_block.get("dynamic") or {})
+    dynamic_block["enabled"] = False
+    embedding_block["dynamic"] = dynamic_block
+    export_config["embedding"] = embedding_block
     return exported, export_config, baked
 
 
@@ -833,9 +839,9 @@ def _build_transformers_config(
     payload["model_class"] = model_class
     payload["task"] = task
     # `frankenstein_config` must be flat: the generated wrapper calls
-    # FrankensteinModelConfig(**frankenstein_config) and the schema runtime
+    # FrankensteinModelConfig.from_flat(**frankenstein_config) and the schema runtime
     # config is the flat dataclass.
-    payload["frankenstein_config"] = flatten_model_dict(model_config)
+    payload["frankenstein_config"] = flat_config_view(model_config)
     payload["auto_map"] = {
         "AutoConfig": "configuration_frankenstein.FrankensteinConfig",
         "AutoModelForMaskedLM": "modeling_frankenstein.FrankensteinForMaskedLM",
@@ -983,9 +989,8 @@ def _build_export_model(
     from src.model.config import FrankensteinModelConfig
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
-    from src.utils.config_flatten import flatten_model_dict
 
-    model_cfg = FrankensteinModelConfig(**flatten_model_dict(model_config))
+    model_cfg = model_config_from(model_config)
     if str(model_class).lower() == "frankenstein_text_decoder" or model_cfg.mode == "decoder":
         if model_cfg.mode != "decoder":
             model_cfg.mode = "decoder"
@@ -1177,8 +1182,17 @@ def export_transformers_model(
     # tokenizer/training pipeline may have changed (e.g. vocab_size). Merge it
     # over the YAML model block so the exported wrapper rebuilds a model whose
     # shapes match the saved weights.
-    checkpoint_config = flatten_model_dict(_as_plain_dict(checkpoint.get("config")))
-    model_config = {**flatten_model_dict(model_config), **checkpoint_config}
+    raw_checkpoint_config = _as_plain_dict(checkpoint.get("config"))
+    checkpoint_config = (
+        {
+            key: value
+            for key, value in flat_config_view(raw_checkpoint_config).items()
+            if value is not None
+        }
+        if raw_checkpoint_config
+        else {}
+    )
+    model_config = {**flat_config_view(model_config), **checkpoint_config}
 
     model_class = str(yaml_data.get("model_class") or "frankenstein_text_encoder").strip().lower()
     if model_class == "frankenstein_audio":

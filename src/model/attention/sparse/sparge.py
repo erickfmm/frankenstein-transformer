@@ -22,6 +22,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import math
@@ -80,7 +82,7 @@ class SpargeAttention(nn.Module):
         arXiv:2502.18137.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
         """Initialize SpargeAttention.
 
         Args:
@@ -101,6 +103,7 @@ class SpargeAttention(nn.Module):
         Raises:
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
         """
+        params = mixer_params(config, "sparge", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -123,7 +126,7 @@ class SpargeAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "sparge_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "sparge", True))
 
     def dense_forward(
         self,

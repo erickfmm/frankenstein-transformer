@@ -48,7 +48,7 @@ except ImportError:  # pragma: no cover - torch-free schema runs
 
 
 def _tiny_config() -> "FrankensteinModelConfig":
-    return FrankensteinModelConfig(
+    return FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=32,
         num_layers=2,

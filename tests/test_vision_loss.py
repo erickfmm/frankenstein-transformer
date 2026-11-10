@@ -63,8 +63,8 @@ class TestSegmentationLoss:
             hidden_size=64, num_layers=2, num_heads=4, patch_size=8,
             image_height=32, image_width=32, num_seg_classes=5,
         )
-        cfg.fixed_cross_entropy = True
-        cfg.fixed_softmax = True
+        cfg.numerics.fixed_cross_entropy = True
+        cfg.numerics.fixed_softmax = True
         model = FrankensteinViT(cfg)
         trainer = _make_trainer(model, "segmentation")
         ds = DummyImageDataset(task="segmentation", num_samples=4, image_height=32, image_width=32, num_seg_classes=5)

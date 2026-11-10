@@ -30,6 +30,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -70,14 +72,15 @@ class IHAAttention(nn.Module):
         ValueError: If ``hidden_size`` not divisible by ``num_heads``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "iha", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for IHAAttention")
-        self.num_pseudo_heads = int(getattr(config, "iha_num_pseudo_heads", self.num_heads))
+        self.num_pseudo_heads = int(params.value("num_pseudo_heads", self.num_heads))
 
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         self.q_proj = proj_cls(self.hidden_size, self.num_heads * self.head_dim, bias=False)
@@ -95,7 +98,7 @@ class IHAAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "iha_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "iha", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def forward(

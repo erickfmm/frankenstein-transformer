@@ -155,7 +155,7 @@ def _tiny_encoder(**overrides) -> "FrankensteinEncoder":
         mhc_expansion_rate=2,
     )
     defaults.update(overrides)
-    return FrankensteinEncoder(FrankensteinModelConfig(**defaults))
+    return FrankensteinEncoder(FrankensteinModelConfig.from_flat(**defaults))
 
 
 def _make_trainer(tmp_path, model, **training_overrides) -> "TitanTrainer":

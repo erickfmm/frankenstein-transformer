@@ -55,7 +55,7 @@ def _cfg(**overrides):
         mode="encoder",
     )
     base.update(overrides)
-    return FrankensteinModelConfig(**base)
+    return FrankensteinModelConfig.from_flat(**base)
 
 
 class _DispatchModule(torch.nn.Module):
@@ -314,7 +314,7 @@ class CacheParityTests(unittest.TestCase):
     """Prefill + decode must equal the full forward with fixed softmax on."""
 
     def _build(self, pattern):
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=64,
             hidden_size=32,
             num_layers=1,

@@ -84,7 +84,7 @@ class WindowSinksSlotTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class WindowSinksModelTests(unittest.TestCase):
     def test_cached_generation_with_eviction_runs(self):
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=64, hidden_size=32, num_layers=1, num_loops=1,
             num_heads=4, num_kv_heads=2, dropout=0.0, use_bitnet=False,
             layer_pattern=["standard"], mode="decoder",

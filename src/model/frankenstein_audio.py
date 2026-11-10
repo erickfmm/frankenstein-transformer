@@ -735,7 +735,7 @@ class FrankensteinAudio(nn.Module):
         # (`audio_feature="logmel"`, 16 kHz, 80 mels, 25 ms / 10 ms, n_fft=400,
         # 32 conv channels, `asr_loss="ctc"`, decoder dim 320) and can be
         # overridden through ``**kwargs``.
-        return FrankensteinModelConfig(
+        return FrankensteinModelConfig.from_flat(
             hidden_size=hidden_size,
             num_layers=num_layers,
             num_heads=num_heads,

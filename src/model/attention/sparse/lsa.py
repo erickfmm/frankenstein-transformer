@@ -29,6 +29,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 import math
 from typing import List, Optional, Tuple
 
@@ -77,7 +79,8 @@ class LSAAttention(nn.Module):
             ``num_heads`` is not divisible by ``num_kv_heads``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "lsa", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -92,15 +95,15 @@ class LSAAttention(nn.Module):
         self.group_size = self.num_heads // self.num_kv_heads
 
         # Paper Table 2 / §4.4 (N-LSA bucket column).
-        self.num_long_range = max(1, int(getattr(config, "lsa_num_long_range", 2048)))
-        self.num_buckets = max(1, int(getattr(config, "lsa_num_buckets", 512)))
-        self.num_sinks = max(0, int(getattr(config, "lsa_num_sinks", 4)))
-        self.pool_size = max(1, int(getattr(config, "lsa_pool_size", 4)))
-        self.cluster_block = max(2, int(getattr(config, "lsa_cluster_block", 512)))
-        self.keys_per_bucket = max(1, int(getattr(config, "lsa_keys_per_bucket", 8)))
+        self.num_long_range = max(1, int(params.value("num_long_range", 2048)))
+        self.num_buckets = max(1, int(params.value("num_buckets", 512)))
+        self.num_sinks = max(0, int(params.value("num_sinks", 4)))
+        self.pool_size = max(1, int(params.value("pool_size", 4)))
+        self.cluster_block = max(2, int(params.value("cluster_block", 512)))
+        self.keys_per_bucket = max(1, int(params.value("keys_per_bucket", 8)))
         self.max_keys_per_bucket = max(
             self.pool_size,
-            int(getattr(config, "lsa_max_keys_per_bucket", 16)),
+            int(params.value("max_keys_per_bucket", 16)),
         )
         self._buckets_per_block = max(
             1, self.cluster_block // self.keys_per_bucket
@@ -123,7 +126,7 @@ class LSAAttention(nn.Module):
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         # N-LSA trains without positional encoding (§3.4); the per-mixer flag
         # stays overridable for hybrid experiments.
-        self.use_pe = bool(getattr(config, "lsa_use_pe", False))
+        self.use_pe = bool(use_pe_for(config, "lsa", False))
         attach_qk_norm(self, config, self.head_dim)
 
     # ------------------------------------------------------------------ #

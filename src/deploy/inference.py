@@ -24,7 +24,6 @@ try:
     from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..model.attention.common import BitLinear
-    from ..utils.config_flatten import flatten_model_dict
     from ..utils.tokenizer_vocab import inject_token_vocab
     from ..model.numerics import module_softmax
 except ImportError:
@@ -37,7 +36,6 @@ except ImportError:
     from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from model.attention.common import BitLinear
-    from utils.config_flatten import flatten_model_dict
     from utils.tokenizer_vocab import inject_token_vocab
     from model.numerics import module_softmax
 
@@ -106,7 +104,7 @@ class FrankensteinInference:
         
         if not config_path.exists():
             logger.warning("Config file not found, using default")
-            return FrankensteinModelConfig()
+            return FrankensteinModelConfig.from_flat()
         
         with open(config_path) as f:
             config_dict = json.load(f)
@@ -115,7 +113,9 @@ class FrankensteinInference:
         # keep it aside for the generation API (§11.5) and drop it before
         # constructing the architectural config.
         self.inference_section = config_dict.pop("inference", None)
-        config = FrankensteinModelConfig(**flatten_model_dict(config_dict))
+        config = FrankensteinModelConfig.from_dict(
+                config_dict, model_class=config_dict.get("model_class")
+            )
         logger.info(f"Config loaded: {config.hidden_size}D, {config.num_layers} layers")
         return config
 

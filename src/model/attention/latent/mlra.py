@@ -24,6 +24,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -69,15 +71,16 @@ class MLRAAttention(nn.Module):
             if ``mlra_num_latent_heads`` does not divide ``latent_rank``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "mlra", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for MLRAAttention")
-        self.latent_rank = int(getattr(config, "mlra_latent_rank", max(1, self.hidden_size // 2)))
-        self.num_latent_heads = int(getattr(config, "mlra_num_latent_heads", 4))
+        self.latent_rank = int(params.value("latent_rank", max(1, self.hidden_size // 2)))
+        self.num_latent_heads = int(params.value("num_latent_heads", 4))
         if self.latent_rank % self.num_latent_heads != 0:
             raise ValueError("mlra_num_latent_heads must divide mlra_latent_rank")
         self.sub_rank = self.latent_rank // self.num_latent_heads
@@ -101,7 +104,7 @@ class MLRAAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "mlra_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "mlra", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def make_cache_slot(self, meta, cache):

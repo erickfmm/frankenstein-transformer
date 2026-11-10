@@ -55,7 +55,7 @@ def _config(**overrides):
         ffn_hidden_size=64,
     )
     base.update(overrides)
-    return FrankensteinModelConfig(**base)
+    return FrankensteinModelConfig.from_flat(**base)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

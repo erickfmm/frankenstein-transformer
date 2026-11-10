@@ -26,7 +26,7 @@ from src.model.frankenstein_encoder import FrankensteinEncoder
 
 
 def _config(use_bitnet: bool = False) -> FrankensteinModelConfig:
-    return FrankensteinModelConfig(
+    return FrankensteinModelConfig.from_flat(
         vocab_size=32,
         hidden_size=64,
         num_layers=2,
@@ -68,7 +68,7 @@ class TestQuantizedSafetensorsExport(unittest.TestCase):
         torch.save(
             {
                 "model_state_dict": self.model.state_dict(),
-                "config": self.cfg.__dict__.copy(),
+                "config": self.cfg.to_jsonable(),
             },
             self.checkpoint,
         )
@@ -77,7 +77,7 @@ class TestQuantizedSafetensorsExport(unittest.TestCase):
             yaml.safe_dump(
                 {
                     "model_class": "frankenstein_text_encoder",
-                    "model": self.cfg.__dict__.copy(),
+                    "model": self.cfg.to_jsonable(),
                     "training": {"task": "mlm"},
                 }
             ),
@@ -156,7 +156,7 @@ class TestQuantizedSafetensorsExport(unittest.TestCase):
         model = FrankensteinEncoder(cfg).eval()
         checkpoint = self.tmp / "bitnet.pt"
         torch.save(
-            {"model_state_dict": model.state_dict(), "config": cfg.__dict__.copy()},
+            {"model_state_dict": model.state_dict(), "config": cfg.to_jsonable()},
             checkpoint,
         )
         yaml_path = self.tmp / "bitnet.yaml"
@@ -164,7 +164,7 @@ class TestQuantizedSafetensorsExport(unittest.TestCase):
             yaml.safe_dump(
                 {
                     "model_class": "frankenstein_text_encoder",
-                    "model": cfg.__dict__.copy(),
+                    "model": cfg.to_jsonable(),
                     "training": {"task": "mlm"},
                 }
             ),
@@ -198,13 +198,13 @@ class TestQuantizedSafetensorsExport(unittest.TestCase):
         from src.model.frankenstein_decoder import FrankensteinDecoder
 
         cfg = _config()
-        cfg.mode = "decoder"
+        cfg.dims.mode = "decoder"
         cfg.positional_encoding = "rope"
-        cfg.use_moe = False
+        cfg.moe.enabled = False
         model = FrankensteinDecoder(cfg).eval()
         checkpoint = self.tmp / "decoder.pt"
         torch.save(
-            {"model_state_dict": model.state_dict(), "config": cfg.__dict__.copy()},
+            {"model_state_dict": model.state_dict(), "config": cfg.to_jsonable()},
             checkpoint,
         )
         yaml_path = self.tmp / "decoder.yaml"
@@ -212,7 +212,7 @@ class TestQuantizedSafetensorsExport(unittest.TestCase):
             yaml.safe_dump(
                 {
                     "model_class": "frankenstein_text_decoder",
-                    "model": cfg.__dict__.copy(),
+                    "model": cfg.to_jsonable(),
                     "training": {"task": "causal_lm"},
                 }
             ),

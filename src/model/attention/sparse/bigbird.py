@@ -16,6 +16,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -65,7 +67,7 @@ class BigBirdAttention(nn.Module):
         arXiv:2007.14062.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
         """Initialize BigBirdAttention.
 
         Args:
@@ -88,6 +90,7 @@ class BigBirdAttention(nn.Module):
         Raises:
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
         """
+        params = mixer_params(config, "bigbird", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -111,7 +114,7 @@ class BigBirdAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "bigbird_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "bigbird", True))
         attach_qk_norm(self, config, self.head_dim)
         self._bb_seed = 0
 

@@ -69,6 +69,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 import math
 from typing import Optional
 
@@ -137,7 +139,8 @@ class GaussianMixtureAttention(nn.Module):
             is non-positive.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "gma", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -149,12 +152,12 @@ class GaussianMixtureAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
 
         # GMA knobs (flattened from model.attention.gma.* by config_flatten).
-        self.num_components = int(getattr(config, "gma_num_components", 8))
+        self.num_components = int(params.value("num_components", 8))
         if self.num_components < 1:
             raise ValueError(
                 f"gma_num_components must be >= 1, got {self.num_components}"
             )
-        routing_dim = getattr(config, "gma_routing_dim", None)
+        routing_dim = params.value("routing_dim", None)
         if routing_dim is None:
             routing_dim = self.head_dim
         self.routing_dim = int(routing_dim)
@@ -162,17 +165,17 @@ class GaussianMixtureAttention(nn.Module):
             raise ValueError(
                 f"gma_routing_dim must be >= 1, got {self.routing_dim}"
             )
-        self.epsilon = float(getattr(config, "gma_epsilon", 1e-6))
+        self.epsilon = float(params.value("epsilon", 1e-6))
         if self.epsilon <= 0:
             raise ValueError(
                 f"gma_epsilon must be > 0, got {self.epsilon}"
             )
-        self.sigma_eps = float(getattr(config, "gma_sigma_eps", 1e-4))
+        self.sigma_eps = float(params.value("sigma_eps", 1e-4))
         if self.sigma_eps <= 0:
             raise ValueError(
                 f"gma_sigma_eps must be > 0, got {self.sigma_eps}"
             )
-        self.init_mean_std = float(getattr(config, "gma_init_mean_std", 1.0))
+        self.init_mean_std = float(params.value("init_mean_std", 1.0))
 
         self.mode = getattr(config, "mode", "encoder")
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
@@ -210,7 +213,7 @@ class GaussianMixtureAttention(nn.Module):
         )
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "gma_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "gma", True))
         attach_qk_norm(self, config, self.head_dim)
 
     # ------------------------------------------------------------------

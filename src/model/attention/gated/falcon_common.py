@@ -226,8 +226,11 @@ class FalconGates(nn.Module):
         lambda_proj: Per-head base-ridge projection (``ctx`` mode).
     """
 
-    def __init__(self, config, per_column: bool):
+    def __init__(self, config, per_column: bool, params=None):
         """Initialize gate projections from the config knobs."""
+        from ..params import mixer_params
+
+        params = mixer_params(config, "falcon1", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -235,10 +238,10 @@ class FalconGates(nn.Module):
         self.per_column = bool(per_column)
         out_dim = self.num_heads * self.head_dim if per_column else self.num_heads
 
-        self.beta_mode = str(getattr(config, "falcon_beta_mode", "ctx_eta")).lower()
-        self.lambda_mode = str(getattr(config, "falcon_lambda_mode", "ctx")).lower()
-        self.beta_static = float(getattr(config, "falcon_beta", 1.0))
-        self.lambda_static = float(getattr(config, "falcon_lambda", 0.0))
+        self.beta_mode = str(params.value("beta_mode", "ctx_eta")).lower()
+        self.lambda_mode = str(params.value("lambda_mode", "ctx")).lower()
+        self.beta_static = float(params.value("beta", 1.0))
+        self.lambda_static = float(params.value("lambda", 0.0))
 
         if self.beta_mode not in {"static", "ctx_beta", "ctx_eta"}:
             raise ValueError(

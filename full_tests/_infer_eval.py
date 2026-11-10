@@ -183,7 +183,7 @@ def _load_raw_model(deploy_dir: Path, model_class: str, device: str) -> torch.nn
     """
     config_dict = json.loads((deploy_dir / "config.json").read_text(encoding="utf-8"))
     config_dict.pop("inference", None)
-    config = FrankensteinModelConfig(**flatten_model_dict(config_dict))
+    config = FrankensteinModelConfig.from_flat(**flatten_model_dict(config_dict))
     model = build_model(model_class, config)
 
     model_files = sorted(deploy_dir.glob("model*.pt"))

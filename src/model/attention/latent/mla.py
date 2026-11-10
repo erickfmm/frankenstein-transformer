@@ -28,6 +28,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 import math
 from typing import Optional
 
@@ -80,14 +82,15 @@ class MLAAttention(nn.Module):
         ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "mla", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for MLAAttention")
-        self.latent_rank = int(getattr(config, "mla_latent_rank", max(1, self.hidden_size // 2)))
+        self.latent_rank = int(params.value("latent_rank", max(1, self.hidden_size // 2)))
         self.rope_base = float(getattr(config, "rope_base", 10000.0))
 
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
@@ -101,7 +104,7 @@ class MLAAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "mla_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "mla", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def make_cache_slot(self, meta, cache):

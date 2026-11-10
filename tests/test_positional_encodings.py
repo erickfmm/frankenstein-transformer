@@ -534,7 +534,7 @@ class LearnedAbsolutePETests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class BuildPosEncoderFactoryTests(unittest.TestCase):
     def _cfg(self, pe):
-        return FrankensteinModelConfig(
+        return FrankensteinModelConfig.from_flat(
             vocab_size=100, hidden_size=48, num_layers=1, num_loops=1,
             num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
             dropout=0.0, layer_pattern=["standard"], use_bitnet=False,
@@ -574,8 +574,8 @@ class BuildPosEncoderFactoryTests(unittest.TestCase):
     def test_ssmax_attached_when_use_ssmax_true(self):
         from src.model.embeddings.ssmax import SSMax
         cfg = self._cfg("rope")
-        cfg.__dict__["use_ssmax"] = True
-        cfg.__dict__["ssmax_s_init"] = 1.5
+        cfg.ssmax.enabled = True
+        cfg.ssmax.s_init = 1.5
         pe = build_pos_encoder(cfg)
         self.assertIsInstance(pe.ssmax, SSMax)
         self.assertAlmostEqual(float(pe.ssmax.s[0]), 1.5, places=5)
@@ -618,7 +618,7 @@ class BuildPosEncoderFactoryTests(unittest.TestCase):
     def test_invalid_raises(self):
         with self.assertRaises(ValueError):
             cfg = self._cfg("rope")
-            cfg.__dict__["positional_encoding"] = "invalid"
+            cfg.positional_encoding = "invalid"
             build_pos_encoder(cfg)
 
 

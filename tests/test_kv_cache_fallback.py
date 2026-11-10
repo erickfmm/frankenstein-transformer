@@ -36,7 +36,7 @@ def _build(pattern, pe="rope", **extra):
     # sequences exactly, and some seeds produce near-tied retnet/PE logits
     # where full and cached paths legitimately pick different tokens.
     torch.manual_seed(3)
-    cfg = FrankensteinModelConfig(
+    cfg = FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=32,
         num_layers=len(pattern),

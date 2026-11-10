@@ -51,7 +51,7 @@ class TestBitNetGGUFExport(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp()
 
     def _make_checkpoint(self, mode="encoder"):
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=64, hidden_size=64, num_layers=2, num_heads=4,
             use_bitnet=True, use_moe=False, ffn_hidden_size=128,
             layer_pattern=["standard"], mode=mode,

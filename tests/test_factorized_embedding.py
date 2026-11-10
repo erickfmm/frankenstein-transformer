@@ -36,7 +36,7 @@ def _cfg(**overrides):
         embedding_conv_kernel=3,
     )
     base.update(overrides)
-    return FrankensteinModelConfig(**base)
+    return FrankensteinModelConfig.from_flat(**base)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

@@ -48,7 +48,10 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 import copy
+import dataclasses
 import math
 from typing import Optional
 
@@ -117,7 +120,9 @@ def _build_latent_pos_encoder(
     if pe_type not in _ROTARY_PE_TYPES:
         return None
     proxy = copy.copy(config)
-    proxy.hidden_size = max(1, int(latent_head_dim) * int(num_heads))
+    proxy.dims = dataclasses.replace(
+        config.dims, hidden_size=max(1, int(latent_head_dim) * int(num_heads))
+    )
     proxy.use_ssmax = False
     from ...embeddings.factory import build_pos_encoder
 
@@ -227,7 +232,8 @@ class CCAAttention(nn.Module):
             if ``latent_head_dim`` is odd (RoPE requires even).
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "cca", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -235,9 +241,9 @@ class CCAAttention(nn.Module):
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for CCAAttention")
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "cca_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "cca", True))
 
-        self.latent_dim = int(getattr(config, "cca_latent_rank", max(1, self.hidden_size // 4)))
+        self.latent_dim = int(params.value("latent_rank", max(1, self.hidden_size // 4)))
         if self.latent_dim % self.num_heads != 0:
             raise ValueError(
                 "cca_latent_rank must be divisible by num_heads for CCAAttention "
@@ -252,14 +258,14 @@ class CCAAttention(nn.Module):
                 "positional_encoding, or disable it with cca_use_pe)."
             )
 
-        self.num_conv_layers = int(getattr(config, "cca_num_conv_layers", 2))
+        self.num_conv_layers = int(params.value("num_conv_layers", 2))
         if self.num_conv_layers not in (0, 1, 2):
             raise ValueError("cca_num_conv_layers must be 0, 1, or 2")
-        self.conv_kernel_seq = int(getattr(config, "cca_conv_kernel_seq", 4))
-        self.conv_kernel_ch = int(getattr(config, "cca_conv_kernel_ch", 3))
+        self.conv_kernel_seq = int(params.value("conv_kernel_seq", 4))
+        self.conv_kernel_ch = int(params.value("conv_kernel_ch", 3))
 
-        self.qk_mean = bool(getattr(config, "cca_qk_mean", True))
-        self.value_shift = bool(getattr(config, "cca_value_shift", True))
+        self.qk_mean = bool(params.value("qk_mean", True))
+        self.value_shift = bool(params.value("value_shift", True))
         if self.value_shift:
             # Value-shift halves the latent WIDTH (val_proj1/2 -> latent/2),
             # so only the latent rank must be even; the number of heads is
@@ -468,26 +474,27 @@ class CCGQAAttention(nn.Module):
             Args above for the full list).
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "ccgqa", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for CCGQAAttention")
 
-        num_kv = int(getattr(config, "ccgqa_num_kv_heads", max(1, self.num_heads // 4)))
+        num_kv = int(params.value("num_kv_heads", max(1, self.num_heads // 4)))
         if self.num_heads % num_kv != 0:
             raise ValueError("ccgqa_num_kv_heads must divide num_heads")
         self.num_kv_heads = num_kv
         self.group_size = self.num_heads // num_kv
 
         self.query_latent_dim = int(
-            getattr(config, "ccgqa_query_latent_rank", max(1, self.hidden_size // 2))
+            params.value("query_latent_rank", max(1, self.hidden_size // 2))
         )
         if self.query_latent_dim % self.num_heads != 0:
             raise ValueError("ccgqa_query_latent_rank must be divisible by num_heads")
         self.kv_latent_dim = int(
-            getattr(config, "ccgqa_kv_latent_rank", max(1, self.hidden_size // 8))
+            params.value("kv_latent_rank", max(1, self.hidden_size // 8))
         )
         if self.kv_latent_dim % self.num_kv_heads != 0:
             raise ValueError("ccgqa_kv_latent_rank must be divisible by ccgqa_num_kv_heads")
@@ -505,7 +512,7 @@ class CCGQAAttention(nn.Module):
             )
         self.latent_head_dim = q_dh
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "ccgqa_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "ccgqa", True))
         if self.use_pe and self.pe_type in _ROTARY_PE_TYPES and self.latent_head_dim % 2 != 0:
             raise ValueError(
                 "latent_head_dim must be even for rotary positional encodings "
@@ -514,14 +521,14 @@ class CCGQAAttention(nn.Module):
                 "positional_encoding, or disable it with ccgqa_use_pe)."
             )
 
-        self.num_conv_layers = int(getattr(config, "ccgqa_num_conv_layers", 2))
+        self.num_conv_layers = int(params.value("num_conv_layers", 2))
         if self.num_conv_layers not in (0, 1, 2):
             raise ValueError("ccgqa_num_conv_layers must be 0, 1, or 2")
-        self.conv_kernel_seq = int(getattr(config, "ccgqa_conv_kernel_seq", 4))
-        self.conv_kernel_ch = int(getattr(config, "ccgqa_conv_kernel_ch", 3))
+        self.conv_kernel_seq = int(params.value("conv_kernel_seq", 4))
+        self.conv_kernel_ch = int(params.value("conv_kernel_ch", 3))
 
-        self.qk_mean = bool(getattr(config, "ccgqa_qk_mean", True))
-        self.value_shift = bool(getattr(config, "ccgqa_value_shift", True))
+        self.qk_mean = bool(params.value("qk_mean", True))
+        self.value_shift = bool(params.value("value_shift", True))
         if self.value_shift:
             # Value-shift halves the KV latent WIDTH, so only the KV latent
             # rank must be even; the number of KV heads is irrelevant.

@@ -26,7 +26,7 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(norm_type="layer_norm", hidden_size=32):
-    return FrankensteinModelConfig(
+    return FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=hidden_size,
         num_layers=1,
@@ -453,7 +453,7 @@ class GetNormTests(unittest.TestCase):
 
     def test_prms_norm_custom_ratio(self):
         cfg = _cfg(norm_type="prms_norm")
-        cfg.prms_partial_ratio = 0.5
+        cfg.norm.partial_ratio = 0.5
         norm = get_norm(cfg)
         self.assertIsInstance(norm, RMSNorm)
         self.assertAlmostEqual(norm.partial_ratio, 0.5)
@@ -467,7 +467,7 @@ class GetNormTests(unittest.TestCase):
 
     def test_flash_norm_partial_ratio(self):
         cfg = _cfg(norm_type="flash_norm")
-        cfg.flashnorm_partial_ratio = 0.25
+        cfg.norm.flashnorm_partial_ratio = 0.25
         norm = get_norm(cfg)
         self.assertIsInstance(norm, FlashNorm)
         self.assertAlmostEqual(norm.partial_ratio, 0.25)

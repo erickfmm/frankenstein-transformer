@@ -231,7 +231,7 @@ class FrankensteinSentenceTransformer:
     
     def _get_default_config(self) -> FrankensteinModelConfig:
         """Get default config optimized for P40 24GB"""
-        return FrankensteinModelConfig(
+        return FrankensteinModelConfig.from_flat(
             vocab_size=50000,
             hidden_size=768,        # Reduced for SBERT training
             num_layers=12,
@@ -1844,7 +1844,7 @@ def main(argv=None):
             device=resolved_device,
         )
     else:
-        config = FrankensteinModelConfig(
+        config = FrankensteinModelConfig.from_flat(
             vocab_size=50000,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,

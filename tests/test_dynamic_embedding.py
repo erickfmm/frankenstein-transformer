@@ -16,7 +16,6 @@ if TORCH_AVAILABLE:
     from src.model.embeddings import DynamicEmbedding
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
-    from src.utils.config_flatten import flatten_model_dict
     from src.utils.tokenizer_vocab import inject_token_vocab, token_strings
 
 
@@ -51,7 +50,7 @@ def _cfg(**overrides):
         token_vocab=VOCAB,
     )
     base.update(overrides)
-    return FrankensteinModelConfig(**base)
+    return FrankensteinModelConfig.from_flat(**base)
 
 
 class _HFTokenizerStub:
@@ -168,8 +167,8 @@ class DynamicEmbeddingTests(unittest.TestCase):
         logits = model(torch.randint(0, len(VOCAB), (1, 5)))
         self.assertEqual(tuple(logits.shape), (1, 5, len(VOCAB)))
 
-    def test_flatten_dynamic_block(self):
-        flat = flatten_model_dict(
+    def test_nested_dynamic_block(self):
+        config = FrankensteinModelConfig.from_dict(
             {
                 "dims": {"hidden_size": 32},
                 "embedding": {
@@ -183,11 +182,11 @@ class DynamicEmbeddingTests(unittest.TestCase):
                 },
             }
         )
-        self.assertTrue(flat["use_dynamic_embedding"])
-        self.assertEqual(flat["dynamic_embedding_ngram_max"], 2)
-        self.assertEqual(flat["dynamic_embedding_bucket"], 1000000007)
-        self.assertEqual(flat["dynamic_embedding_seed"], 7)
-        self.assertFalse(flat["dynamic_embedding_precompute"])
+        self.assertEqual(config.embedding.type, "dynamic")
+        self.assertEqual(config.embedding.dynamic.ngram_max, 2)
+        self.assertEqual(config.embedding.dynamic.bucket, 1000000007)
+        self.assertEqual(config.embedding.dynamic.seed, 7)
+        self.assertFalse(config.embedding.dynamic.precompute)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -208,7 +207,7 @@ class TokenizerVocabTests(unittest.TestCase):
 
     def test_inject_attaches_vocab(self):
         cfg = _cfg(use_dynamic_embedding=False, token_vocab=None)
-        cfg.use_dynamic_embedding = True
+        cfg.embedding.dynamic.enabled = True
         inject_token_vocab(cfg, _HFTokenizerStub())
         self.assertEqual(cfg.token_vocab, ["[PAD]", "hello", "world"])
 

@@ -145,7 +145,7 @@ from deploy.v2 import ModelDeployer
 from model.config import FrankensteinModelConfig
 
 # Initialize deployer
-config = FrankensteinModelConfig(
+config = FrankensteinModelConfig.from_flat(
     hidden_size=2048,
     num_layers=12,
     vocab_size=50000

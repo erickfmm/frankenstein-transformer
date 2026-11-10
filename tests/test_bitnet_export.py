@@ -41,7 +41,7 @@ def _yaml_text(model_overrides: str) -> str:
 
 
 def _cfg(mode="encoder", bitnet_routers=False):
-    return FrankensteinModelConfig(
+    return FrankensteinModelConfig.from_flat(
         vocab_size=64, hidden_size=64, num_layers=2, num_heads=4,
         num_experts=4, top_k_experts=2, dropout=0.0,
         use_bitnet=True, bitnet_routers=bitnet_routers,
@@ -98,7 +98,7 @@ class TestBitNetHFExport(unittest.TestCase):
 
     def test_no_quantization_config_without_bitnet(self):
         cfg = _cfg()
-        cfg.use_bitnet = False
+        cfg.bitnet.enabled = False
         m = FrankensteinEncoder(cfg)
         ckpt = self._save_ckpt(m)
         overrides = "  use_bitnet: false\n  bitnet_routers: false"

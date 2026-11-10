@@ -21,7 +21,7 @@ from src.model.frankenstein_vit import FrankensteinViT
 
 
 def _text_config():
-    return FrankensteinModelConfig(
+    return FrankensteinModelConfig.from_flat(
         vocab_size=100,
         hidden_size=64,
         num_layers=1,
@@ -45,7 +45,7 @@ def _text_config():
 
 
 def _vit_config(task):
-    return FrankensteinModelConfig(
+    return FrankensteinModelConfig.from_flat(
         vocab_size=100,
         hidden_size=64,
         num_layers=1,
@@ -80,7 +80,7 @@ def _vit_config(task):
 
 
 def _audio_config(feature="raw", asr_loss="ctc"):
-    return FrankensteinModelConfig(
+    return FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=32,
         num_layers=1,
@@ -123,9 +123,9 @@ def test_validation_input_text_encoder_is_token_ids():
 def test_validation_input_ssog_uses_the_configured_grid():
     """SSOG requires seq_len == grid_h * grid_w; the default 64 would crash."""
     config = _text_config()
-    config.layer_pattern = ["ssog"]
-    config.ssog_grid_h = 1
-    config.ssog_grid_w = 32
+    config.dims.layer_pattern = ["ssog"]
+    config.attention.setdefault("ssog", {})["grid_h"] = 1
+    config.attention.setdefault("ssog", {})["grid_w"] = 32
     deployer = ModelDeployer(config)
     test_input, kwargs = deployer._build_validation_input()
     assert test_input.shape == (2, 32)
@@ -213,7 +213,7 @@ def test_validate_deployment_reads_training_task_from_checkpoint(tmp_path):
     torch.save(
         {
             "model_state_dict": model.state_dict(),
-            "config": config.__dict__.copy(),
+            "config": config.to_jsonable(),
             "model_class": "FrankensteinViT",
             "training_task": "segmentation",
         },

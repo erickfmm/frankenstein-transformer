@@ -68,6 +68,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params
+
 from typing import List, Optional, Tuple
 
 import torch
@@ -104,7 +106,10 @@ class _FalconBase(nn.Module):
     per_column: bool = False
     windowed: bool = False
 
-    def __init__(self, config, pos_encoder=None):
+    MIXER_NAME = "falcon1"
+
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, type(self).MIXER_NAME, params)
         """Initialize projections, convolutions, gates and knobs.
 
         Args:
@@ -136,25 +141,25 @@ class _FalconBase(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
 
-        chunk_size = getattr(config, "falcon_chunk_size", 64)
+        chunk_size = params.value("chunk_size", 64)
         self.chunk_size = int(chunk_size) if chunk_size is not None else None
         if self.chunk_size is not None and self.chunk_size < 1:
             raise ValueError("falcon_chunk_size must be >= 1 or null")
-        self.qk_norm = str(getattr(config, "falcon_qk_norm", "rms_norm")).lower()
-        self.eps = float(getattr(config, "falcon_eps", 1e-6))
-        self.eps_gamma = float(getattr(config, "falcon_eps_gamma", 1e-4))
-        self.window = int(getattr(config, "falcon_window", 4))
+        self.qk_norm = str(params.value("qk_norm", "rms_norm")).lower()
+        self.eps = float(params.value("eps", 1e-6))
+        self.eps_gamma = float(params.value("eps_gamma", 1e-4))
+        self.window = int(params.value("window", 4))
         if self.window < 1:
             raise ValueError("falcon_window must be >= 1")
 
-        if bool(getattr(config, "falcon_short_conv", True)):
+        if bool(params.value("short_conv", True)):
             self.short_conv = FalconShortConv(
-                self.total_dim, int(getattr(config, "falcon_conv_kernel", 4))
+                self.total_dim, int(params.value("conv_kernel", 4))
             )
         else:
             self.short_conv = None
 
-        self.gates = FalconGates(config, per_column=self.per_column)
+        self.gates = FalconGates(config, per_column=self.per_column, params=params)
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
@@ -342,6 +347,8 @@ def gamma_of(alpha: torch.Tensor) -> torch.Tensor:
 
 
 class Falcon1Attention(_FalconBase):
+    MIXER_NAME = "falcon1"
+
     """Falcon-1: scalar NLMS regression (delta-rule) fast-weight update.
 
     State update (read-after-write, ``r_t = v_t - S_{t-1}^T x_t``)::
@@ -442,6 +449,8 @@ class Falcon1Attention(_FalconBase):
 
 
 class Falcon2Attention(_FalconBase):
+    MIXER_NAME = "falcon2"
+
     """Falcon-2: per-column (per-value-channel) NLMS regression update.
 
     The ridge loss decomposes across value coordinates, so each value
@@ -541,6 +550,8 @@ class Falcon2Attention(_FalconBase):
 
 
 class Falcon3Attention(_FalconBase):
+    MIXER_NAME = "falcon3"
+
     """Falcon-3: sliding-window minibatch regression update.
 
     Each step regresses the fast memory on the last ``B_t <= B``
@@ -722,6 +733,8 @@ class Falcon3Attention(_FalconBase):
 
 
 class Falcon1AAttention(_FalconBase):
+    MIXER_NAME = "falcon1a"
+
     """Falcon-1A: scalar inner-product (additive) fast-weight update.
 
     One gradient step on ``l_t(S) = -<S^T x_t, v_t> + lambda/2 ||S||^2``
@@ -803,6 +816,8 @@ class Falcon1AAttention(_FalconBase):
 
 
 class Falcon2AAttention(_FalconBase):
+    MIXER_NAME = "falcon2a"
+
     """Falcon-2A: per-column inner-product fast-weight update.
 
     The additive analogue of Falcon-2 -- each value channel ``j``
@@ -885,6 +900,8 @@ class Falcon2AAttention(_FalconBase):
 
 
 class Falcon3AAttention(_FalconBase):
+    MIXER_NAME = "falcon3a"
+
     """Falcon-3A: sliding-window inner-product fast-weight update.
 
     The additive windowed variant -- best length extrapolation of the

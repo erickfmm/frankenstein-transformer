@@ -49,7 +49,7 @@ def _cfg(**overrides):
         mode="encoder",
     )
     base.update(overrides)
-    return FrankensteinModelConfig(**base)
+    return FrankensteinModelConfig.from_flat(**base)
 
 
 BSZ, SEQ, DIM = 2, 8, 48

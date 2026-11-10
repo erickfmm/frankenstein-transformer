@@ -15,6 +15,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import math
@@ -64,7 +66,7 @@ class SparseTransformerAttention(nn.Module):
         arXiv:1904.10509.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
         """Initialize SparseTransformerAttention.
 
         Args:
@@ -85,6 +87,7 @@ class SparseTransformerAttention(nn.Module):
         Raises:
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
         """
+        params = mixer_params(config, "sparse_transformer", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -107,7 +110,7 @@ class SparseTransformerAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "sparse_transformer_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "sparse_transformer", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def _resolved_stride(self, seq_len: int) -> int:

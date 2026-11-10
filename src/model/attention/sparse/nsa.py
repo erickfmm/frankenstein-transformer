@@ -17,6 +17,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import math
@@ -77,7 +79,7 @@ class NSAAttention(nn.Module):
         arXiv:2502.11089.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
         """Initialize NSAAttention.
 
         Args:
@@ -104,6 +106,7 @@ class NSAAttention(nn.Module):
         Raises:
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
         """
+        params = mixer_params(config, "nsa", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -134,7 +137,7 @@ class NSAAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "nsa_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "nsa", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def _compress(self, k: torch.Tensor, v: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

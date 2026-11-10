@@ -52,6 +52,8 @@ Reference:
 
 from __future__ import annotations
 
+from .params import mixer_params
+
 import math
 from typing import Optional
 
@@ -151,7 +153,8 @@ class SSOGAttention(nn.Module):
             formulation exists), or if the grid dimensions are invalid.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "ssog", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -168,12 +171,12 @@ class SSOGAttention(nn.Module):
                 "remove ssog from layer_pattern for decoder models."
             )
 
-        self.num_atoms = int(getattr(config, "ssog_num_atoms", 4))
-        self.grid_h = int(getattr(config, "ssog_grid_h", 8))
-        self.grid_w = int(getattr(config, "ssog_grid_w", 8))
-        self.lookat = bool(getattr(config, "ssog_lookat", True))
-        self.max_offset = float(getattr(config, "ssog_max_offset", 4.0))
-        self.sigma_floor = float(getattr(config, "ssog_sigma_floor", 0.25))
+        self.num_atoms = int(params.value("num_atoms", 4))
+        self.grid_h = int(params.value("grid_h", 8))
+        self.grid_w = int(params.value("grid_w", 8))
+        self.lookat = bool(params.value("lookat", True))
+        self.max_offset = float(params.value("max_offset", 4.0))
+        self.sigma_floor = float(params.value("sigma_floor", 0.25))
         self.pos_encoder = pos_encoder
 
         if self.num_atoms < 1:
@@ -209,7 +212,7 @@ class SSOGAttention(nn.Module):
 
         if self.lookat:
             h, r = self.num_heads, self.num_atoms
-            gate0 = -8.0 if bool(getattr(config, "ssog_cold_init", True)) else -2.0
+            gate0 = -8.0 if bool(params.value("cold_init", True)) else -2.0
             # Plain nn.Linear (never BitLinear): the probes must stay
             # exactly zero-initialized for the cold start, and their
             # bounded residuals are too small to benefit from ternary

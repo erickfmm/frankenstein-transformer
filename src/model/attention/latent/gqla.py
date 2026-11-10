@@ -29,6 +29,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -85,7 +87,8 @@ class GQLAAttention(nn.Module):
             if ``gqla_num_groups`` does not divide ``num_heads``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "gqla", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -93,14 +96,14 @@ class GQLAAttention(nn.Module):
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for GQLAAttention")
         self.latent_rank = int(
-            getattr(config, "gqla_latent_rank", max(1, self.hidden_size // 2))
+            params.value("latent_rank", max(1, self.hidden_size // 2))
         )
-        num_groups = int(getattr(config, "gqla_num_groups", max(1, self.num_heads // 4)))
+        num_groups = int(params.value("num_groups", max(1, self.num_heads // 4)))
         if self.num_heads % num_groups != 0:
             raise ValueError("gqla_num_groups must divide num_heads")
         self.num_groups = num_groups
         self.group_size = self.num_heads // num_groups
-        self.decode_path = str(getattr(config, "gqla_decode_path", "gqa")).lower()
+        self.decode_path = str(params.value("decode_path", "gqa")).lower()
         if self.decode_path not in {"mqa_absorb", "gqa"}:
             raise ValueError("gqla_decode_path must be 'mqa_absorb' or 'gqa'")
 
@@ -115,7 +118,7 @@ class GQLAAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "gqla_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "gqla", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def make_cache_slot(self, meta, cache):

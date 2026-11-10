@@ -12,6 +12,8 @@ Reference:
 
 from __future__ import annotations
 
+from .params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -37,7 +39,8 @@ class GroupedQueryAttention(nn.Module):
         ValueError: If ``num_heads`` is not divisible by ``num_kv_heads``.
     """
 
-    def __init__(self, config, pos_encoder=None) -> None:
+    def __init__(self, config, pos_encoder=None, params=None) -> None:
+        params = mixer_params(config, "gqa", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -68,7 +71,7 @@ class GroupedQueryAttention(nn.Module):
         self.mode = getattr(config, "mode", "encoder")
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "gqa_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "gqa", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def forward(

@@ -34,6 +34,14 @@ _CONFIG_FILES = sorted((_REPO_ROOT / "configs").glob("*.yaml")) + sorted(
 
 @pytest.fixture(scope="module")
 def schema():
+    # Load config-declared plugins before assembling the schema so their
+    # components (and parameter fragments) validate exactly like built-ins.
+    from src.plugins.loader import load_plugins
+
+    for path in _CONFIG_FILES:
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if document.get("plugins"):
+            load_plugins(document["plugins"])
     return resolve_schema(str(_REPO_ROOT / "src" / "schema.yaml"))
 
 
@@ -217,7 +225,7 @@ _DEFAULT_PAIRS = {
     "properties.model.properties.numerics.properties.fixed_softmax": "fixed_softmax",
     "properties.model.properties.numerics.properties.fixed_cross_entropy": "fixed_cross_entropy",
     "properties.model.properties.ffn.properties.activation": "ffn_activation",
-    "properties.model.properties.classification_head.properties.enabled": "classification_head",
+    "properties.model.properties.classification_head.properties.enabled": "classification_head.enabled",
     "properties.model.properties.classification_head.properties.pooling_mode": "encoder_pooling_mode",
     "properties.model.properties.attention.properties.ode.properties.solver": "ode_solver",
     "properties.model.properties.attention.properties.ode.properties.steps": "ode_steps",
@@ -268,12 +276,14 @@ _DEFAULT_PAIRS = {
 
 
 def test_schema_defaults_match_dataclass(schema):
-    config = FrankensteinModelConfig()
+    config = FrankensteinModelConfig.from_flat()
     mismatches = []
     for schema_path, attribute in _DEFAULT_PAIRS.items():
         field_schema = _at(schema, schema_path)
         assert "default" in field_schema, f"{schema_path} has no declared default"
-        expected = getattr(config, attribute)
+        expected = config
+        for part in attribute.split("."):
+            expected = getattr(expected, part)
         if field_schema["default"] != expected:
             mismatches.append((schema_path, field_schema["default"], expected))
     assert not mismatches, mismatches

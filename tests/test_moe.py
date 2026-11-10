@@ -43,7 +43,7 @@ def _config(**overrides) -> FrankensteinModelConfig:
         top_k_experts=2,
     )
     values.update(overrides)
-    return FrankensteinModelConfig(**values)
+    return FrankensteinModelConfig.from_flat(**values)
 
 
 def _expert_factory(intermediate_size, in_out_size, clamp):

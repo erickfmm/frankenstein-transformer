@@ -26,6 +26,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -72,18 +74,19 @@ class MTLAAttention(nn.Module):
             if ``mtla_merge_factor`` < 1.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "mtla", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for MTLAAttention")
-        self.latent_rank = int(getattr(config, "mtla_latent_rank", max(1, self.hidden_size // 2)))
-        self.merge_factor = int(getattr(config, "mtla_merge_factor", 2))
+        self.latent_rank = int(params.value("latent_rank", max(1, self.hidden_size // 2)))
+        self.merge_factor = int(params.value("merge_factor", 2))
         if self.merge_factor < 1:
             raise ValueError("mtla_merge_factor must be >= 1")
-        self.stride = int(getattr(config, "mtla_stride", self.merge_factor))
+        self.stride = int(params.value("stride", self.merge_factor))
 
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         self.dkv_proj = proj_cls(self.hidden_size, self.latent_rank, bias=False)
@@ -97,7 +100,7 @@ class MTLAAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "mtla_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "mtla", True))
         attach_qk_norm(self, config, self.head_dim)
 
     def _merge_temporal(self, latents: torch.Tensor) -> torch.Tensor:

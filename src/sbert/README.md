@@ -350,7 +350,7 @@ Create custom FrankensteinModelConfig:
 ```python
 from model.config import FrankensteinModelConfig
 
-config = FrankensteinModelConfig(
+config = FrankensteinModelConfig.from_flat(
     vocab_size=50000,
     hidden_size=1024,
     num_layers=16,

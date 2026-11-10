@@ -64,7 +64,7 @@ class TestFrankensteinViT:
         assert out.shape[-1] == 512
 
     def test_segmentation_forward(self, tiny_vit_config, dummy_image):
-        tiny_vit_config.num_seg_classes = 5
+        tiny_vit_config.image.num_seg_classes = 5
         model = FrankensteinViT(tiny_vit_config)
         out = model(dummy_image, task="segmentation")
         assert out.shape == (2, 5, 32, 32)
@@ -131,7 +131,7 @@ class TestFrankensteinViT:
 
     def test_mode_forced_to_encoder(self):
         cfg = FrankensteinViT.build_vit_config()
-        cfg.mode = "decoder"
+        cfg.dims.mode = "decoder"
         model = FrankensteinViT(cfg)
         assert model.config.mode == "encoder"
 

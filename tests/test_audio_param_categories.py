@@ -64,7 +64,7 @@ def _audio_config(**overrides) -> "FrankensteinModelConfig":
         asr_decoder_layers=1,
     )
     params.update(overrides)
-    return FrankensteinModelConfig(**params)
+    return FrankensteinModelConfig.from_flat(**params)
 
 
 def _category_counts(model) -> dict:

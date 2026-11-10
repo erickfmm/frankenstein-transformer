@@ -1,151 +1,223 @@
-"""Positional encoding factory.
+"""Positional-encoding and token-embedding factories.
 
-Dispatches construction of positional encoding modules based on the
-``positional_encoding`` field of a model configuration object. The factory
-returns an ``nn.Module`` (or ``None`` for the ``none``/``nope`` aliases, which
-resolve to :class:`NoPE`) compatible with the ``pos_encoder(x,
-logical_layer_idx=0)`` call signature used throughout the attention blocks.
+Both dispatch through the component registry: the twelve
+``model.positional_encoding`` values are
+:class:`~src.registry.spec.PESpec` entries and the three
+``model.embedding.type`` values are
+:class:`~src.registry.spec.EmbeddingSpec` entries. Params live in the nested
+``positional_encoding_parameters`` / ``embedding`` blocks.
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import torch.nn as nn
 
+from src.registry import (
+    ComponentFamily,
+    ensure_builtins,
+    registry,
+    resolve_builder,
+)
 
-def build_pos_encoder(config) -> Optional[nn.Module]:
-    """Build a positional encoding module from a model configuration.
+__all__ = ["build_pos_encoder", "build_token_embedding"]
 
-    Dispatches on ``config.positional_encoding`` (case-insensitive). Unknown
-    values raise ``ValueError``. The returned module exposes the
-    ``forward(self, x, logical_layer_idx=0)`` interface; ALiBi, PaPE and
-    learned/sinusoidal absolute encodings additionally expose ``add`` or
-    ``encode_qk``/``bias`` methods for use by attention blocks that need
-    additive or augmented positional information.
+
+def _pe_params(config: Any, key: str) -> Mapping[str, Any]:
+    """Return one encoding's parameter mapping."""
+    parameters = getattr(config, "positional_encoding_parameters", None) or {}
+    block = parameters.get(key) if isinstance(parameters, Mapping) else None
+    return block if isinstance(block, Mapping) else {}
+
+
+def _build_nope(config: Any, params) -> nn.Module:
+    """Build the no-positional-encoding identity module."""
+    from .nope import NoPE
+
+    return NoPE()
+
+
+def _build_rope(config: Any, params) -> nn.Module:
+    """Build RoPE."""
+    from .rope import RoPE
+
+    return RoPE(
+        int(config.head_dim),
+        base=float(params.get("base", 10_000.0)),
+        scaling=float(params.get("scaling", 1.0)),
+    )
+
+
+def _build_hope(config: Any, params) -> nn.Module:
+    """Build HoPE."""
+    from .hope import HoPE
+
+    return HoPE(
+        int(config.head_dim),
+        base=float(params.get("base", 10_000.0)),
+        damping=float(params.get("damping", 0.01)),
+    )
+
+
+def _build_alibi(config: Any, params) -> nn.Module:
+    """Build ALiBi."""
+    from .alibi import ALiBi
+
+    return ALiBi(int(params.get("num_heads", config.num_heads)))
+
+
+def _build_bam(config: Any, params) -> nn.Module:
+    """Build BAM."""
+    from .bam import BAM
+
+    return BAM(
+        int(config.num_heads),
+        learn_mu=bool(params.get("learn_mu", False)),
+        theta_init=float(params.get("theta_init", 0.0)),
+        mu_init=float(params.get("mu_init", 0.0)),
+        eps=float(params.get("eps", 1e-5)),
+    )
+
+
+def _build_pape(config: Any, params) -> nn.Module:
+    """Build PaPE."""
+    from .pape import PaPE
+
+    return PaPE(
+        int(config.hidden_size),
+        int(config.num_heads),
+        int(config.head_dim),
+        num_parabolas=int(params.get("num_parabolas", 4)),
+        num_positions=int(params.get("num_positions", 1)),
+    )
+
+
+def _build_pape_efficient(config: Any, params) -> nn.Module:
+    """Build efficient PaPE."""
+    from .pape_efficient import PaPEEfficient
+
+    return PaPEEfficient(
+        int(config.hidden_size),
+        int(config.num_heads),
+        int(config.head_dim),
+        num_parabolas=int(params.get("num_parabolas", 4)),
+        num_positions=int(params.get("num_positions", 1)),
+    )
+
+
+def _build_pape_ri(config: Any, params) -> nn.Module:
+    """Build rotation-invariant PaPE."""
+    from .pape_ri import PaPERI
+
+    return PaPERI(
+        int(config.hidden_size),
+        int(config.num_heads),
+        int(config.head_dim),
+        num_positions=int(params.get("num_positions", 2)),
+    )
+
+
+def _build_sinusoidal_absolute(config: Any, params) -> nn.Module:
+    """Build the fixed sinusoidal absolute encoding."""
+    from .sinusoidal import SinusoidalAbsolute
+
+    return SinusoidalAbsolute(
+        int(config.hidden_size),
+        max_len=int(params.get("max_len", 512)),
+        base=float(params.get("base", 10_000.0)),
+        scale=float(params.get("scale", 1.0)),
+    )
+
+
+def _build_sinusoidal_rotary(config: Any, params) -> nn.Module:
+    """Build the sinusoidal rotary encoding."""
+    from .sinusoidal import SinusoidalRotary
+
+    return SinusoidalRotary(
+        int(config.head_dim),
+        max_len=int(params.get("max_len", 512)),
+        base=float(params.get("base", 10_000.0)),
+        scale=float(params.get("scale", 1.0)),
+    )
+
+
+def _build_learned_absolute(config: Any, params) -> nn.Module:
+    """Build the learnable absolute encoding."""
+    from .learned_absolute import LearnedAbsolutePE
+
+    return LearnedAbsolutePE(
+        int(config.hidden_size),
+        max_len=int(params.get("max_len", 512)),
+        init_std=float(params.get("init_std", 0.02)),
+    )
+
+
+def build_pos_encoder(config: Any) -> Optional[nn.Module]:
+    """Build the positional-encoding module selected by the config.
 
     Args:
-        config: Configuration object exposing at least ``hidden_size``,
-            ``num_heads`` and ``positional_encoding`` attributes. Additional
-            optional attributes (``rope_base``, ``rope_scaling``,
-            ``hope_base``, ``hope_damping``, ``alibi_num_heads``,
-            ``pape_num_parabolas``, ``pape_num_positions``,
-            ``sinusoidal_max_len``, ``sinusoidal_base``,
-            ``sinusoidal_scale``, ``learned_max_len``, ``learned_init_std``)
-            are read with sensible defaults via ``getattr``.
+        config: Nested model configuration.
 
     Returns:
-        A positional encoding ``nn.Module``, or ``None``-style identity module
-        for the ``none``/``nope`` aliases.
+        A positional-encoding ``nn.Module`` (the ``none``/``nope`` aliases
+        resolve to the identity module).
 
     Raises:
-        ValueError: If ``config.positional_encoding`` is not a recognized
-            value.
+        UnknownComponentError: If ``positional_encoding`` is not registered.
     """
-    pe = str(getattr(config, "positional_encoding", "rope")).lower()
-    head_dim = config.hidden_size // config.num_heads
-    module: Optional[nn.Module]
-    if pe == "none" or pe == "nope":
-        from .nope import NoPE
+    ensure_builtins()
+    spec = registry.get(
+        ComponentFamily.POSITIONAL_ENCODING,
+        registry.resolve_name(ComponentFamily.POSITIONAL_ENCODING, config.positional_encoding),
+    )
+    params_key = str(getattr(spec, "params_key", "") or "")
+    params = _pe_params(config, params_key) if params_key else {}
+    module = resolve_builder(spec.builder)(config, params)
 
-        module = NoPE()
-    elif pe == "rope":
-        from .rope import RoPE
-
-        module = RoPE(
-            head_dim,
-            base=getattr(config, "rope_base", 10_000.0),
-            scaling=getattr(config, "rope_scaling", 1.0),
-        )
-    elif pe == "hope":
-        from .hope import HoPE
-
-        module = HoPE(
-            head_dim,
-            base=getattr(config, "hope_base", 10_000.0),
-            damping=getattr(config, "hope_damping", 0.01),
-        )
-    elif pe == "alibi":
-        from .alibi import ALiBi
-
-        module = ALiBi(getattr(config, "alibi_num_heads", config.num_heads))
-    elif pe == "bam":
-        from .bam import BAM
-
-        module = BAM(
-            config.num_heads,
-            learn_mu=getattr(config, "bam_learn_mu", False),
-            theta_init=getattr(config, "bam_theta_init", 0.0),
-            mu_init=getattr(config, "bam_mu_init", 0.0),
-            eps=getattr(config, "bam_eps", 1e-5),
-        )
-    elif pe == "pape":
-        from .pape import PaPE
-
-        module = PaPE(
-            config.hidden_size,
-            config.num_heads,
-            head_dim,
-            num_parabolas=getattr(config, "pape_num_parabolas", 4),
-            num_positions=getattr(config, "pape_num_positions", 1),
-        )
-    elif pe == "pape_efficient":
-        from .pape_efficient import PaPEEfficient
-
-        module = PaPEEfficient(
-            config.hidden_size,
-            config.num_heads,
-            head_dim,
-            num_parabolas=getattr(config, "pape_num_parabolas", 4),
-            num_positions=getattr(config, "pape_num_positions", 1),
-        )
-    elif pe == "pape_ri":
-        from .pape_ri import PaPERI
-
-        module = PaPERI(
-            config.hidden_size,
-            config.num_heads,
-            head_dim,
-            num_positions=getattr(config, "pape_num_positions", 2),
-        )
-    elif pe == "sinusoidal_absolute":
-        from .sinusoidal import SinusoidalAbsolute
-
-        module = SinusoidalAbsolute(
-            config.hidden_size,
-            max_len=getattr(config, "sinusoidal_max_len", 512),
-            base=getattr(config, "sinusoidal_base", 10_000.0),
-            scale=getattr(config, "sinusoidal_scale", 1.0),
-        )
-    elif pe == "sinusoidal_rotary":
-        from .sinusoidal import SinusoidalRotary
-
-        module = SinusoidalRotary(
-            head_dim,
-            max_len=getattr(config, "sinusoidal_max_len", 512),
-            base=getattr(config, "sinusoidal_base", 10_000.0),
-            scale=getattr(config, "sinusoidal_scale", 1.0),
-        )
-    elif pe == "learned_absolute":
-        from .learned_absolute import LearnedAbsolutePE
-
-        module = LearnedAbsolutePE(
-            config.hidden_size,
-            max_len=getattr(config, "learned_max_len", 512),
-            init_std=getattr(config, "learned_init_std", 0.02),
-        )
-    else:
-        raise ValueError(f"Unknown positional_encoding: {pe}")
-
-    # Attach Scalable Softmax (SSMax) as a child submodule when enabled.
-    # ``apply_pe_to_scores`` in ``src/model/attention/common.py`` reads
-    # ``pos_encoder.ssmax`` and rescales the logits by ``s * ln(seq_len)``
-    # before softmax. This is transversal: works with every PE in the enum.
+    # Scalable Softmax is transversal: attach it to every encoding.
     if getattr(config, "use_ssmax", False):
         from .ssmax import SSMax
 
-        module.ssmax = SSMax(config.num_heads, s_init=getattr(config, "ssmax_s_init", 1.0))
+        module.ssmax = SSMax(
+            int(config.num_heads), s_init=float(getattr(config, "ssmax_s_init", 1.0))
+        )
     else:
         module.ssmax = None
-
     return module
+
+
+def _build_embedding_standard(config: Any, params) -> nn.Module:
+    """Build a standard token embedding table."""
+    return nn.Embedding(int(config.vocab_size), int(config.hidden_size))
+
+
+def _build_embedding_factorized(config: Any, params) -> nn.Module:
+    """Build a factorized (low-rank) token embedding."""
+    from .factorized_embedding import FactorizedEmbedding
+
+    return FactorizedEmbedding(config)
+
+
+def _build_embedding_dynamic(config: Any, params) -> nn.Module:
+    """Build a dynamic (hash) token embedding."""
+    from .dynamic_embedding import DynamicEmbedding
+
+    return DynamicEmbedding(config)
+
+
+def build_token_embedding(config: Any) -> nn.Module:
+    """Build the token embedding selected by ``config.embedding.type``.
+
+    Args:
+        config: Nested model configuration.
+
+    Returns:
+        The token-embedding module.
+
+    Raises:
+        UnknownComponentError: If ``embedding.type`` is not registered.
+    """
+    ensure_builtins()
+    spec = registry.get(ComponentFamily.EMBEDDING, str(config.embedding.type))
+    return resolve_builder(spec.builder)(config, {})

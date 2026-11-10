@@ -1,0 +1,63 @@
+# Example preset exercising the plugin-based extensibility layer.
+#
+# ``plugins:`` lists local plugin modules imported before schema validation.
+# The plugin registers its component spec (name, builder, parameter fragment,
+# capability flags), so ``local_window`` validates, renders in the Streamlit
+# builder, and trains like a built-in mixer. Installed plugins can instead
+# advertise the ``frankenstein.plugins`` entry-point group.
+plugins:
+  - ./examples/plugins/window_mixer.py
+
+model_class: frankenstein_text_encoder
+
+model:
+  dims:
+    vocab_size: 50000
+    hidden_size: 768
+    num_layers: 12
+    num_loops: 1
+    num_heads: 12
+    layer_pattern:
+      - local_window
+      - local_window
+      - standard
+      - standard
+      - local_window
+      - local_window
+      - standard
+      - standard
+      - local_window
+      - standard
+      - local_window
+      - standard
+  norm:
+    type: layer_norm
+  attention:
+    local_window:
+      window_size: 128
+  embedding:
+    conv:
+      enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+    activation: gelu
+
+training:
+  task: mlm
+  seed: 42
+  num_epochs: 1
+  batch_size: 2
+  dataloader_workers: 0
+  max_length: 256
+  max_samples: 1000
+  dataset_batch_size: 1000
+  gradient_accumulation_steps: 1
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_attention: 3e-4
+      adamw-lr_ffn: 3e-4
+      adamw-lr_embeddings: 1e-4
+  scheduler_total_steps: 100

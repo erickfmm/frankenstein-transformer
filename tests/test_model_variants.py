@@ -33,7 +33,7 @@ class FrankensteinDecoderTests(unittest.TestCase):
 
     def test_mode_forced_to_decoder(self):
         cfg = FrankensteinDecoder.build_decoder_config(vocab_size=200)
-        cfg.mode = "encoder"  # override to test that the decoder enforces mode
+        cfg.dims.mode = "encoder"  # override to test that the decoder enforces mode
         model = FrankensteinDecoder(cfg)
         self.assertEqual(model.config.mode, "decoder")
 
@@ -86,7 +86,7 @@ class FrankensteinDecoderTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class FrankensteinEncoderTests(unittest.TestCase):
     def _model(self, layer_pattern=None, **kw):
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=100,
             hidden_size=48,
             num_layers=len(layer_pattern or ["standard"]),
@@ -124,8 +124,8 @@ class FrankensteinEncoderTests(unittest.TestCase):
 
     def test_mhc_decoder_forward(self):
         cfg = FrankensteinDecoder.build_decoder_config(vocab_size=100, hidden_size=48, num_layers=1, num_loops=1)
-        cfg.use_mhc = True
-        cfg.mhc_expansion_rate = 2
+        cfg.mhc.enabled = True
+        cfg.mhc.expansion_rate = 2
         model = FrankensteinDecoder(cfg)
         x = torch.randint(0, 100, (2, 8))
         y = model(x)
@@ -142,7 +142,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
         self.assertEqual(y.shape, (2, 8, 100))
 
     def test_multi_loop(self):
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=100,
             hidden_size=48,
             num_layers=2,
@@ -197,7 +197,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
         self.assertEqual(y.shape, (1, 4, 100))
 
     def test_flash_norm_default_partial_ratio(self):
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=100,
             hidden_size=48,
             num_layers=1,
@@ -221,7 +221,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
 
     def test_flashnorm_partial_ratio_validation(self):
         # 0.0 is valid (full RMS).
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=100,
             hidden_size=48,
             num_layers=1,
@@ -243,7 +243,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
         )
         self.assertAlmostEqual(cfg.flashnorm_partial_ratio, 0.0)
         # 1.0 is valid (upper bound).
-        FrankensteinModelConfig(
+        FrankensteinModelConfig.from_flat(
             vocab_size=100,
             hidden_size=48,
             num_layers=1,
@@ -265,7 +265,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
         )
         # Negative is invalid.
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=100,
                 hidden_size=48,
                 num_layers=1,
@@ -287,7 +287,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
             )
         # > 1.0 is invalid.
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=100,
                 hidden_size=48,
                 num_layers=1,
@@ -309,7 +309,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
             )
 
     def test_prms_norm_default_ratio(self):
-        cfg = FrankensteinModelConfig(
+        cfg = FrankensteinModelConfig.from_flat(
             vocab_size=100,
             hidden_size=48,
             num_layers=1,
@@ -332,7 +332,7 @@ class FrankensteinEncoderTests(unittest.TestCase):
 
     def test_prms_partial_ratio_validation(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(
+            FrankensteinModelConfig.from_flat(
                 vocab_size=100,
                 hidden_size=48,
                 num_layers=1,
@@ -384,7 +384,7 @@ class FrankensteinAudioTests(unittest.TestCase):
             audio_n_mels=32,
             audio_conv_channels=8,
         )
-        cfg.mode = "decoder"  # override to test that the audio model enforces mode
+        cfg.dims.mode = "decoder"  # override to test that the audio model enforces mode
         model = FrankensteinAudio(cfg)
         self.assertEqual(model.config.mode, "encoder")
 

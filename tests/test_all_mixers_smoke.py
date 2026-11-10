@@ -78,7 +78,7 @@ def _build_config(layer_pattern, positional_encoding="rope", seq_len=64):
     if "ssog" in layer_pattern:
         kwargs["ssog_grid_h"] = 1
         kwargs["ssog_grid_w"] = seq_len
-    return FrankensteinModelConfig(**kwargs)
+    return FrankensteinModelConfig.from_flat(**kwargs)
 
 
 @pytest.mark.parametrize("mixer", _schema_mixers())
@@ -155,13 +155,13 @@ def test_msa_short_sequence_clamps_topk():
 def test_cca_ccgqa_defaults_are_always_buildable(hidden, heads):
     """Resolved defaults give divisible ranks and even per-head latent dims."""
     config = _build_config(["cca", "ccgqa"])
-    # Re-resolve from scratch at the new geometry.
-    config.hidden_size = hidden
-    config.num_heads = heads
-    config.cca_latent_rank = None
-    config.ccgqa_query_latent_rank = None
-    config.ccgqa_kv_latent_rank = None
-    config.ccgqa_num_kv_heads = None
+    # Re-resolve from scratch at the new geometry (nested shape).
+    config.dims.hidden_size = hidden
+    config.dims.num_heads = heads
+    config.attention.setdefault("cca", {}).pop("latent_rank", None)
+    ccgqa = config.attention.setdefault("ccgqa", {})
+    for key in ("query_latent_rank", "kv_latent_rank", "num_kv_heads"):
+        ccgqa.pop(key, None)
     config.__post_init__()
 
     assert config.cca_latent_rank % heads == 0

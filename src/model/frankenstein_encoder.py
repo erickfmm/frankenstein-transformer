@@ -143,7 +143,7 @@ class FrankensteinEncoder(nn.Module):
         # Full-precision (NOT BitNet-quantized) so downstream fine-tuning is
         # stable regardless of the backbone's quantization flags. Disabled by
         # default; when active, ``forward`` returns ``(B, num_labels)``.
-        self.classification_head = bool(getattr(config, "classification_head", False))
+        self.classification_head = bool(config.classification_head.enabled)
         self.cls_num_labels = getattr(config, "num_labels", None)
         self.encoder_pooling_mode = str(getattr(config, "encoder_pooling_mode", "cls"))
         self.cls_head = None

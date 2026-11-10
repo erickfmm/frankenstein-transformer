@@ -17,6 +17,8 @@ Reference:
 
 from __future__ import annotations
 
+from .params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -75,7 +77,7 @@ class ODEFunc(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "ode_use_pe", False))
+        self.use_pe = bool(use_pe_for(config, "ode", False))
 
     def forward(self, t, x, logical_layer_idx: Optional[int] = None, pos_encoder=None):
         """Evaluate the derivative function at time ``t``.
@@ -142,15 +144,16 @@ class ODEAttentionBlock(nn.Module):
         steps: Number of integration steps from ``t=0`` to ``t=1``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "ode", params)
         super().__init__()
         self.ode_func = ODEFunc(config, pos_encoder=pos_encoder)
-        self.solver = config.ode_solver
-        self.steps = config.ode_steps
+        self.solver = params.solver
+        self.steps = params.steps
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "ode_use_pe", False))
+        self.use_pe = bool(use_pe_for(config, "ode", False))
 
     def forward(self, x, logical_layer_idx: Optional[int] = None, pos_encoder=None):
         """Integrate the ODE from ``t=0`` to ``t=1``.

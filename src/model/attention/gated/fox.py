@@ -22,6 +22,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -81,7 +83,7 @@ class ForgettingAttention(nn.Module):
         arXiv:2503.02130. ICLR 2025.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
         """Initialize ForgettingAttention.
 
         Args:
@@ -92,6 +94,7 @@ class ForgettingAttention(nn.Module):
         Raises:
             ValueError: If hidden_size is not divisible by num_heads.
         """
+        params = mixer_params(config, "fox", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -113,7 +116,7 @@ class ForgettingAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "fox_use_pe", False))
+        self.use_pe = bool(use_pe_for(config, "fox", False))
         attach_qk_norm(self, config, self.head_dim)
 
     def forward(

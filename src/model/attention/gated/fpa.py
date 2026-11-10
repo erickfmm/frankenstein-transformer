@@ -50,6 +50,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -102,7 +104,7 @@ class FirstPassageAttention(nn.Module):
         Liu, Y. (2026). First Passage Attention. arXiv:2610.22714.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
         """Initialize FirstPassageAttention.
 
         Args:
@@ -113,6 +115,7 @@ class FirstPassageAttention(nn.Module):
         Raises:
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
         """
+        params = mixer_params(config, "fpa", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -136,17 +139,17 @@ class FirstPassageAttention(nn.Module):
         self.out_proj = proj_cls(self.total_dim, self.hidden_size, bias=False)
 
         # Learned positive strength per head (paper §2 / Table 16: beta = 1).
-        beta_init = float(getattr(config, "fpa_beta_init", 1.0))
+        beta_init = float(params.value("beta_init", 1.0))
         self.beta = nn.Parameter(torch.full((self.num_heads,), beta_init))
         # Temperature of the straight-through soft minimum (paper §2: tau = 1).
-        self.tau = float(getattr(config, "fpa_tau", 1.0))
+        self.tau = float(params.value("tau", 1.0))
 
         self.dropout = nn.Dropout(config.dropout)
         self.mode = getattr(config, "mode", "encoder")
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "fpa_use_pe", False))
+        self.use_pe = bool(use_pe_for(config, "fpa", False))
         attach_qk_norm(self, config, self.head_dim)
 
     # ------------------------------------------------------------------

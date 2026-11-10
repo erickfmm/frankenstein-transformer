@@ -1,5 +1,13 @@
 # Training Configurations (YAML)
 
+> **Component schema entries are generated.** Optimizer enum entries, the
+> `by_optimizer` suffix reference and the `^<optimizer>-` schema rules come
+> from each optimizer's `OptimizerSpec` (`src/registry/builtin/optimizer.py`);
+> mixer/norm/activation/residual/PE/embedding enumerations are likewise
+> registry-derived. Adding a component never means editing the schema enum
+> or the flattener (there is no flattener: the runtime config is nested).
+
+
 This directory contains YAML presets. Each file describes the model (`model`) and training/dataset parameters (`training`).
 
 Keys that are absent from `src/schema/**` (for example a field added to a config before the schema is updated) are logged as `WARNING [schema] … unknown key(s) ignored` and dropped at load time. The presets shipped here are still validated strictly by `tests/test_schema_consistency.py`; never rely on an undocumented key being honoured.

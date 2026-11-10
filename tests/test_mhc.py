@@ -113,7 +113,7 @@ class MhcModelTests(unittest.TestCase):
             mhc_full_prec_under_bitnet=True,
         )
         base.update(overrides)
-        return FrankensteinModelConfig(**base)
+        return FrankensteinModelConfig.from_flat(**base)
 
     def test_model_output_shape(self):
         cfg = self._cfg()
@@ -163,7 +163,7 @@ class MhcModelTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class MhcHybridLayerTests(unittest.TestCase):
     def _cfg(self):
-        return FrankensteinModelConfig(
+        return FrankensteinModelConfig.from_flat(
             vocab_size=64,
             hidden_size=48,
             num_layers=1,
@@ -323,7 +323,7 @@ class HyperloopModelTests(unittest.TestCase):
             mhc_hyperloop_end_layers=2,
         )
         base.update(overrides)
-        return FrankensteinModelConfig(**base)
+        return FrankensteinModelConfig.from_flat(**base)
 
     def test_encoder_output_shape(self):
         model = FrankensteinEncoder(self._cfg())

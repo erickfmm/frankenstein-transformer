@@ -301,7 +301,7 @@ class FrankensteinViT(nn.Module):
             "norm_type", "pos_embedding_type", "mode",
         }
         filtered_kwargs = {k: v for k, v in kwargs.items() if k not in explicit_keys}
-        return FrankensteinModelConfig(
+        return FrankensteinModelConfig.from_flat(
             hidden_size=hidden_size,
             num_layers=num_layers,
             num_heads=num_heads,

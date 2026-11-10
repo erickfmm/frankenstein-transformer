@@ -1,56 +1,114 @@
 """Normalization factory.
 
-Selects the appropriate normalization module from the model configuration,
-mirroring the optimizer factory pattern in ``src/model/optimizer/factory.py``.
+Dispatches through the component registry: every ``model.norm.type`` value is
+a :class:`~src.registry.spec.NormSpec` whose builder receives the config and
+its bound parameters. Adding a normalization only adds a spec.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch.nn as nn
+
+from src.registry import (
+    ComponentFamily,
+    bind_params,
+    ensure_builtins,
+    registry,
+    resolve_builder,
+)
 
 from .derf import Derf
 from .dynamic_tanh import DynamicTanhNorm
 from .flash import FlashNorm
 from .rms import RMSNorm
 
+__all__ = ["get_norm", "norm_params", "is_norm_fusable"]
 
-def get_norm(config):
-    """Factory function that returns a normalization module based on config.
 
-    Selects among ``LayerNorm``, ``DynamicTanhNorm``, ``Derf``, ``RMSNorm``,
-    ``pRMSNorm`` (partial RMSNorm), and ``FlashNorm`` (weightless RMSNorm
-    with optional partial-RMS composition) based on the ``norm_type`` field
-    in the configuration.
+def norm_params(config: Any) -> dict:
+    """Return the ``norm`` block parameters for binding.
 
     Args:
-        config: Model configuration object with attributes ``norm_type``
-            (one of ``"layer_norm"``, ``"dynamic_tanh"``, ``"derf"``,
-            ``"rms_norm"``, ``"prms_norm"``, ``"flash_norm"``) and
-            ``hidden_size``. When ``norm_type == "prms_norm"``, the optional
-            ``prms_partial_ratio`` attribute (default ``0.0625``) controls
-            the fraction of dimensions used for RMS estimation. When
-            ``norm_type == "flash_norm"``, the optional
-            ``flashnorm_partial_ratio`` attribute (default ``0.0``)
-            activates the partial-RMS variant of FlashNorm.
+        config: Model configuration (nested shape).
 
     Returns:
-        A normalization ``nn.Module`` instance appropriate for the requested
-        ``norm_type``.
+        Mapping with ``partial_ratio`` and ``flashnorm_partial_ratio``.
+    """
+    block = getattr(config, "norm", None)
+    return {
+        "partial_ratio": getattr(block, "partial_ratio", 0.0625),
+        "flashnorm_partial_ratio": getattr(block, "flashnorm_partial_ratio", 0.0),
+    }
+
+
+def is_norm_fusable(config: Any) -> bool:
+    """Return whether the configured norm supports FFN fusion.
+
+    Args:
+        config: Model configuration (nested shape).
+
+    Returns:
+        ``True`` when the norm's spec declares ``supports_ffn_fusion``.
+    """
+    ensure_builtins()
+    spec = registry.get(ComponentFamily.NORM, str(config.norm.type))
+    return bool(getattr(spec, "supports_ffn_fusion", False))
+
+
+def _build_layer_norm(config: Any, params) -> nn.Module:
+    """Build a standard :class:`nn.LayerNorm`."""
+    return nn.LayerNorm(config.hidden_size)
+
+
+def _build_dynamic_tanh(config: Any, params) -> nn.Module:
+    """Build a DynamicTanhNorm."""
+    return DynamicTanhNorm(config.hidden_size)
+
+
+def _build_derf(config: Any, params) -> nn.Module:
+    """Build a Derf normalization."""
+    return Derf(config.hidden_size)
+
+
+def _build_rms_norm(config: Any, params) -> nn.Module:
+    """Build a full RMSNorm."""
+    return RMSNorm(config.hidden_size)
+
+
+def _build_prms_norm(config: Any, params) -> nn.Module:
+    """Build a partial RMSNorm."""
+    return RMSNorm(config.hidden_size, partial_ratio=float(params.partial_ratio))
+
+
+def _build_flash_norm(config: Any, params) -> nn.Module:
+    """Build a (possibly partial) FlashNorm."""
+    return FlashNorm(
+        config.hidden_size, partial_ratio=float(params.flashnorm_partial_ratio)
+    )
+
+
+def get_norm(config: Any) -> nn.Module:
+    """Return the normalization module selected by ``config.norm.type``.
+
+    Args:
+        config: Model configuration (nested shape).
+
+    Returns:
+        A normalization ``nn.Module``.
 
     Raises:
-        AttributeError: If ``config`` does not have ``norm_type`` or
-            ``hidden_size`` attributes.
+        UnknownComponentError: If ``norm.type`` is not registered.
     """
-    if config.norm_type == "dynamic_tanh":
-        return DynamicTanhNorm(config.hidden_size)
-    if config.norm_type == "derf":
-        return Derf(config.hidden_size)
-    if config.norm_type == "rms_norm":
-        return RMSNorm(config.hidden_size)
-    if config.norm_type == "prms_norm":
-        partial_ratio = float(getattr(config, "prms_partial_ratio", 0.0625))
-        return RMSNorm(config.hidden_size, partial_ratio=partial_ratio)
-    if config.norm_type == "flash_norm":
-        partial_ratio = float(getattr(config, "flashnorm_partial_ratio", 0.0))
-        return FlashNorm(config.hidden_size, partial_ratio=partial_ratio)
-    return nn.LayerNorm(config.hidden_size)
+    ensure_builtins()
+    spec = registry.maybe_get(ComponentFamily.NORM, str(config.norm.type))
+    if spec is None:
+        import logging
+
+        logging.getLogger("frankenstein.config").warning(
+            "Unknown norm type %r; falling back to layer_norm.", config.norm.type
+        )
+        return nn.LayerNorm(config.hidden_size)
+    params = bind_params(spec, norm_params(config))
+    return resolve_builder(spec.builder)(config, params)

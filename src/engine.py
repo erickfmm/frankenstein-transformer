@@ -223,7 +223,7 @@ def build_model(
     if num_labels is not None:
         config.num_labels = int(num_labels)
         if int(num_labels) >= 1:
-            config.classification_head = True
+            config.classification_head.enabled = True
 
     # The pre-rename values are rejected loudly: silently falling back to the
     # encoder for a legacy decoder checkpoint would change model semantics.
@@ -256,7 +256,7 @@ def build_model(
     logging.info(
         "  - BitNet: %s (bitnet_routers: %s)", config.use_bitnet, getattr(config, "bitnet_routers", False)
     )
-    logging.info("  - ODE Solver: %s (%s steps)", config.ode_solver, config.ode_steps)
+    logging.info("  - ODE Solver: %s (%s steps)", config.attention_params("ode").get("solver", "rk4"), config.attention_params("ode").get("steps", 2))
     logging.info("  - Norm Type: %s", config.norm_type)
     if getattr(config, "use_moe", False):
         logging.info(
@@ -1572,8 +1572,8 @@ def load_checkpoint(path: str) -> Tuple[torch.nn.Module, LoadedTrainingConfig, A
     extra = meta.get("extra") or {}
     num_labels = extra.get("num_labels")
     if loaded.model_config is not None and num_labels is not None:
-        loaded.model_config.num_labels = int(num_labels)
-        loaded.model_config.classification_head = bool(int(num_labels) >= 1)
+        loaded.model_config.classification_head.num_labels = int(num_labels)
+        loaded.model_config.classification_head.enabled = bool(int(num_labels) >= 1)
 
     if loaded.model_config is not None:
         model = build_model(loaded.model_class, loaded.model_config)

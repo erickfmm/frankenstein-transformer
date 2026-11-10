@@ -1,50 +1,68 @@
 #!/usr/bin/env python3
-"""Frankenstein Transformer: model configuration dataclass.
+"""Nested, schema-aligned model configuration for all Frankenstein variants.
 
-This module hosts :class:`FrankensteinModelConfig`, the single-source-of-truth
-dataclass for all model hyperparameters, along with the helper validator
-:func:`_validate_ffn_activation_config`.
+The runtime shape mirrors the YAML ``model:`` block one-to-one — there is no
+nested-to-flat flattening step. Structural blocks are typed dataclasses;
+per-component knobs live in per-family mappings (``attention``,
+``positional_encoding_parameters``) and are bound through the component
+registry (:mod:`src.registry`) by the family factories.
 
-The configuration is validated in ``FrankensteinModelConfig.__post_init__`` and
-enforced by ``src/schema.yaml`` for YAML-based training configs.
+Historical flat attribute names remain readable through ``__getattr__``
+aliases (``config.hidden_size`` → ``config.dims.hidden_size``) because the
+model, training, deployment and export code reads them in thousands of
+places; per-component knobs are deliberately *not* re-exposed — components
+read their bound parameters.
 """
 
 from __future__ import annotations
 
-import warnings
-
+import dataclasses
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from .activation_function import ALL_ACTIVATIONS
+__all__ = [
+    "FrankensteinModelConfig",
+    "DimsConfig",
+    "NormConfig",
+    "QKNormConfig",
+    "EmbeddingConfig",
+    "MoEConfig",
+    "BitnetConfig",
+    "MixtureOfDepthsConfig",
+    "SsmaxConfig",
+    "NumericsConfig",
+    "FfnConfig",
+    "ClassificationHeadConfig",
+    "MhcConfig",
+    "ResidualsConfig",
+    "ImageConfig",
+    "AudioConfig",
+]
 
-# Allowed keys for the nested ``ffn_activation_config`` mapping. Each entry
-# maps to the validation rule applied by ``_validate_ffn_activation_config``.
-_FFN_ACTIVATION_CONFIG_KEYS = {
-    "raf_degrees", "raf_version", "raf_approx_func", "raf_trainable",
-    "raf_input_scaling", "prelu_init", "elu_alpha", "celu_alpha",
-    "swish_beta", "leaky_relu_slope", "pelu_alpha", "mpelu_alpha",
-    "mpelu_beta", "felu_alpha", "eelu_alpha", "eelu_beta", "pdelu_alpha",
-    "preu_alpha", "preu_beta", "softexp_alpha", "maxout_pieces",
-}
 _RAF_VERSIONS = {"A", "B", "C", "D", "N"}
 _RAF_APPROX_FUNCS = {
     "gelu", "relu", "leaky_relu", "leaky_relu_0.1", "sigmoid", "tanh",
     "swish", "silu", "identity",
 }
+_FFN_ACTIVATION_CONFIG_KEYS = {
+    "prelu_init", "elu_alpha", "celu_alpha", "swish_beta", "leaky_relu_slope",
+    "pelu_alpha", "mpelu_alpha", "mpelu_beta", "felu_alpha", "eelu_alpha",
+    "eelu_beta", "pdelu_alpha", "preu_alpha", "preu_beta", "softexp_alpha",
+    "raf_degrees", "raf_version", "raf_approx_func", "raf_trainable",
+    "raf_input_scaling", "maxout_pieces",
+}
 
 
 def _validate_ffn_activation_config(activation: str, cfg: Dict[str, Any]) -> None:
-    """Validate the nested ``ffn_activation_config`` mapping.
+    """Validate the nested ``ffn.activation_config`` mapping.
 
     Args:
-        activation: The lower-cased ``ffn_activation`` name.
+        activation: The lower-cased ``ffn.activation`` name.
         cfg: The nested config mapping.
 
     Raises:
         ValueError: If an unknown key is present, a value has the wrong type,
-            or a RAF-specific constraint (degrees, version, approx_func) is
-            violated.
+            or a RAF-specific constraint is violated.
     """
     unknown = set(cfg) - _FFN_ACTIVATION_CONFIG_KEYS
     if unknown:
@@ -52,11 +70,9 @@ def _validate_ffn_activation_config(activation: str, cfg: Dict[str, Any]) -> Non
             f"Unknown ffn_activation_config keys: {sorted(unknown)}. "
             f"Allowed: {sorted(_FFN_ACTIVATION_CONFIG_KEYS)}"
         )
-    # Type checks for the boolean keys.
     for bk in ("raf_trainable", "raf_input_scaling"):
         if bk in cfg and not isinstance(cfg[bk], bool):
             raise ValueError(f"ffn_activation_config.{bk} must be a boolean")
-    # Float keys.
     for fk in (
         "prelu_init", "elu_alpha", "celu_alpha", "swish_beta", "leaky_relu_slope",
         "pelu_alpha", "mpelu_alpha", "mpelu_beta", "felu_alpha", "eelu_alpha",
@@ -67,13 +83,12 @@ def _validate_ffn_activation_config(activation: str, cfg: Dict[str, Any]) -> Non
     if "maxout_pieces" in cfg:
         if not isinstance(cfg["maxout_pieces"], int) or cfg["maxout_pieces"] < 1:
             raise ValueError("ffn_activation_config.maxout_pieces must be an int >= 1")
-    # RAF degrees.
     if "raf_degrees" in cfg:
-        d = cfg["raf_degrees"]
+        degrees = cfg["raf_degrees"]
         if (
-            not isinstance(d, (list, tuple))
-            or len(d) != 2
-            or not all(isinstance(v, int) and v >= 1 for v in d)
+            not isinstance(degrees, (list, tuple))
+            or len(degrees) != 2
+            or not all(isinstance(v, int) and v >= 1 for v in degrees)
         ):
             raise ValueError(
                 "ffn_activation_config.raf_degrees must be a [m, n] pair of ints >= 1"
@@ -90,1824 +105,1365 @@ def _validate_ffn_activation_config(activation: str, cfg: Dict[str, Any]) -> Non
         )
 
 
+# ---------------------------------------------------------------------------
+# structural blocks
+# ---------------------------------------------------------------------------
+
+
 @dataclass
-class FrankensteinModelConfig:
-    """Single-source-of-truth configuration for all Frankenstein model variants.
-
-    Every hyperparameter lives here. The schema is validated in
-    ``__post_init__`` and enforced by ``configs/schema.yaml`` for YAML-based
-    training configs.
-
-    Attributes:
-        vocab_size: Vocabulary size for token embeddings. Default: 50000.
-        hidden_size: Dimensionality of hidden states throughout the model.
-            Must be divisible by ``num_heads``. Default: 2048.
-        num_layers: Number of physical :class:`HybridLayer` blocks in the
-            stack. Default: 12.
-        num_loops: Number of times the layer stack is repeated (looped depth).
-            Logical depth = ``num_layers * num_loops``. Default: 2.
-        layer_pattern: Ordered list of mixer types assigned to each physical
-            layer. The pattern is cycled modulo its length when
-            ``num_layers`` exceeds the pattern length. Supported values:
-            ``"ode"``, ``"retnet"``, ``"titan"``,
-            ``"standard"``, ``"sigmoid"``, ``"mamba"``,
-            ``"sparse_transformer"``, ``"longformer"``,
-            ``"bigbird"``, ``"sparsek"``, ``"nsa"``,
-            ``"sparge"``, ``"fasa"``, ``"gla"``,
-            ``"deltanet"``, ``"gated_deltanet"``,
-            ``"gated_deltanet2"``,
-            ``"hgrn2"``, ``"fox"``, ``"gated_softmax"``,
-            ``"kda"``,
-            ``"falcon1"``, ``"falcon2"``, ``"falcon3"``,
-            ``"falcon1a"``, ``"falcon2a"``, ``"falcon3a"``,
-            ``"engram"``, ``"gqa"``,
-            ``"mla"``, ``"gqla"``, ``"mlra"``,
-            ``"tucker"``, ``"iha"``, ``"gta"``,
-            ``"mtla"``, ``"cca"``, ``"ccgqa"``,
-            ``"msa"``, ``"sparda"``, ``"lsa"``.
-            Default: ``["retnet", "ode", "mamba", "titan"] * 3``.
-        ode_solver: ODE solver for ``ode`` mixer layers. One of ``"rk4"``
-            (Runge-Kutta 4th order) or ``"euler"``. Default: ``"rk4"``.
-        ode_steps: Number of ODE integration steps per ``ode`` layer.
-            Default: 2.
-        retention_heads: Number of retention heads for ``retnet``
-            layers. Default: 8.
-        num_heads: Number of attention heads for standard / sparse / gated
-            attention mixers. Default: 16.
-        num_experts: Total number of FFN experts when ``use_moe`` is True.
-            Default: 8.
-        top_k_experts: Number of experts activated per token in MoE routing.
-            Default: 2.
-        dropout: Dropout probability applied after embeddings and within
-            attention layers. Default: 0.1.
-        use_bitnet: If True, replace all primary and gate ``nn.Linear``
-            layers with :class:`BitLinear` (ternary weight quantization,
-            BitNet b1.58). Routing/scoring projections are governed
-            separately by ``bitnet_routers``. Default: True.
-        bitnet_routers: If True (and ``use_bitnet`` is True), also quantize
-            routing/scoring projections (MoE router, Mixture-of-Depths
-            router, sparse block-index/forecast, top-k score nets) to
-            :class:`BitLinear`. Default ``False`` keeps them full-precision
-            for routing stability. Default: False.
-        use_bitnet_conv: If True (and ``use_bitnet`` is True), replace the
-            factorized-embedding Conv1d pre-projection with
-            :class:`BitConv1d` (ternary weights). Default ``False`` keeps
-            the Conv1d full-precision; the convolution operates over the
-            reduced embedding stream where ternary quantization can be noisy.
-            No effect when ``use_bitnet`` is False or the embedding conv is
-            disabled. Default: False.
-        norm_type: Normalization layer type. One of ``"layer_norm"``,
-            ``"dynamic_tanh"`` (DyT), ``"derf"`` (Dynamic Erf),
-            ``"rms_norm"`` (RMSNorm), ``"prms_norm"`` (partial RMSNorm),
-            or ``"flash_norm"`` (FlashNorm — weightless RMSNorm; the
-            per-dim scale ``g`` is dropped per Prop. 1 of arXiv:2407.09577
-            and is meant to be absorbed by the subsequent linear layer).
-            Default: ``"dynamic_tanh"``.
-        prms_partial_ratio: Fraction of hidden dimensions used for RMS
-            estimation when ``norm_type="prms_norm"``. The paper default is
-            6.25%. Must be in ``(0, 1]``. Ignored for other ``norm_type``
-            values. Default: ``0.0625``.
-        flashnorm_partial_ratio: Fraction of hidden dimensions used for
-            RMS estimation when ``norm_type="flash_norm"``. ``0.0``
-            (default) uses the full RMS — standard FlashNorm. Values in
-            ``(0, 1]`` activate the partial-RMS variant (composing the
-            pRMSNorm trick with Prop. 1 of FlashNorm). Must be in
-            ``[0, 1]``. Ignored for other ``norm_type`` values.
-            Default: ``0.0``.
-        use_qk_norm: Enable query–key attention-logit stabilization
-            (``model.norm.qk_norm.enabled``). Default: False.
-        qk_norm_method: QK stabilization mechanism, one of ``"rms_norm"``,
-            ``"layer_norm"``, ``"l2_norm"`` (forward-time per-head QK
-            normalization; arXiv:2010.04245, arXiv:2606.16310), ``"qk_clip"``
-            (per-head post-step weight rescaling; arXiv:2507.20534) or
-            ``"quack"`` (query/key learning-rate modulation;
-            arXiv:2511.21377). Default: ``"rms_norm"``.
-        qk_clip_tau: Per-head maximum pre-softmax logit threshold for
-            ``qk_norm_method="qk_clip"``. Must be ``> 0``.
-            Default: ``100.0`` (Kimi K2).
-        qk_clip_alpha: Balancing exponent splitting the QK-Clip rescaling
-            between queries (``γ^α``) and keys (``γ^(1−α)``). Must be in
-            ``[0, 1]``. Default: ``0.5``.
-        quack_tau: Initial relative learning rate for query/key weights when
-            ``qk_norm_method="quack"``. Must be ``> 0``. Default: ``1.0``.
-        qk_norm_eps: Numerical stabilizer for the forward-time QK
-            normalization methods. Must be ``> 0``. Default: ``1e-6``.
-        use_factorized_embedding: If True, use :class:`FactorizedEmbedding`
-            with reduced embedding dimension + projection. Default: False.
-        factorized_embedding_dim: Embedding dimension when factorization is
-            enabled. Default: 128.
-        use_embedding_conv: If True, apply a Conv1d over the factorized
-            embedding stream before projection. Default: True.
-        use_dynamic_embedding: If True, replace the embedding lookup table with
-            EELBERT-style dynamic n-gram hash embeddings (arXiv:2310.20144).
-            Requires ``token_vocab`` (injected from the tokenizer) and is
-            mutually exclusive with ``use_factorized_embedding``. Default: False.
-        dynamic_embedding_ngram_max: Maximum n-gram size hashed per token
-            string. Default: 3.
-        dynamic_embedding_bucket: Hash bucket size used by the rolling hash and
-            the ``[-1, 1]`` fold. Default: ``1_000_000_007``.
-        dynamic_embedding_seed: Random state for the hash seeds; the same seed
-            reproduces identical embeddings. Default: 42.
-        dynamic_embedding_precompute: Memoise the full dynamic table once in a
-            non-persistent buffer (never saved nor exported). Default: True.
-        token_vocab: Runtime-only id-ordered token strings injected from the
-            tokenizer; required when ``use_dynamic_embedding`` is True. Not part
-            of the YAML schema. Default: None.
-        hope_base: Base frequency for HoPE (Hybrid Positional Encoding).
-            Default: 10000.0.
-        hope_damping: Damping factor for HoPE high-frequency components.
-            Default: 0.01.
-        rope_base: Base frequency for RoPE (Rotary Position Embedding).
-            Default: 10000.0.
-        rope_scaling: Scaling factor applied to RoPE frequencies.
-            Default: 1.0.
-        positional_encoding: Explicit positional encoding scheme. One of
-            ``"rope"`` (Rotary Position Embedding), ``"hope"`` (Hybrid
-            Positional Encoding), ``"nope"`` (No Position Embedding),
-            ``"alibi"`` (Attention with Linear Biases), ``"bam"`` (Bayesian
-            Attention Mechanism, Generalized-Gaussian bias), ``"pape"``
-            (Parabola Attention Positional Encoding), ``"pape_efficient"``
-            (efficient PaPE variant), ``"pape_ri"`` (rotation-invariant
-            PaPE), ``"sinusoidal_absolute"`` (absolute sinusoidal), 
-            ``"sinusoidal_rotary"`` (rotary sinusoidal),
-            ``"learned_absolute"`` (learned absolute position embedding), or
-            ``"none"`` (explicitly disabled). If None, resolved to
-            ``"rope"``. Default: None.
-        alibi_num_heads: Number of heads used by ALiBi biases. Defaults to
-            ``num_heads`` in ``__post_init__`` when None. Default: None.
-        use_ssmax: Enable Scalable Softmax (SSMax, arXiv:2505.22842), a
-            transversal logit rescale ``s · ln(n)`` applicable to every
-            positional encoding. Adds ``num_heads`` learnable scalars.
-            Default: False.
-        ssmax_s_init: Initial value for the per-head SSMax scalar ``s``.
-            Only used when ``use_ssmax=True``. Default: 1.0.
-        fixed_softmax: Replace every explicit softmax/log-softmax in the model
-            with the cancellation-free formulation of arXiv:2610.31642
-            (exclude the argmax logit from the log-sum-exp; combine the margin
-            with ``softplus``). Forward values are mathematically identical;
-            the softmax Jacobian keeps its true magnitude past the precision
-            cliff (Softmax Collapse). Default: False.
-        fixed_cross_entropy: Replace the task cross-entropy losses (mlm,
-            causal_lm, classification, segmentation, text_classification,
-            patch_prediction) with the hard-target formulation of
-            arXiv:2610.31642 §2, whose gradient sums to zero by construction at
-            any logit margin. Default: False.
-        bam_learn_mu: If True, the BAM location parameter ``theta_mu`` is
-            learnable. Default False (mu=0) per the paper's ablation H.1.
-        bam_theta_init: Initial value for BAM ``theta_alpha``/``theta_beta``.
-            ``0.0`` = Uniform prior (paper's best); ``1.0`` = Laplace/ALiBi.
-        bam_eps: Numerical stability floor for BAM ``|·|^β`` when ``β < 0``.
-            Default: 1e-5.
-        bam_mu_init: Initial value for BAM ``theta_mu``. Only used when
-            ``bam_learn_mu=True``. Default: 0.0.
-        pape_num_parabolas: Number of parabola segments used by PaPE and
-            its variants (``pape``, ``pape_efficient``, ``pape_ri``). Must
-            be >= 1. Default: 4.
-        pape_num_positions: Number of positional dimensions for PaPE. Use
-            ``1`` for 1-D language sequences and ``2`` for 2-D vision
-            (row/column). Must be >= 1. Default: 1.
-        pape_rotation_invariant: If True, use the rotation-invariant PaPE
-            variant regardless of the ``positional_encoding`` value.
-            Default: False.
-        sinusoidal_max_len: Maximum sequence length for precomputed
-            sinusoidal positional encodings. Default: 512.
-        sinusoidal_base: Base wavelength of the sinusoidal encoding
-            (``10000`` in the original Transformer paper). Default: 10000.0.
-        sinusoidal_scale: Global scaling factor applied to sinusoidal
-            frequencies. Default: 1.0.
-        learned_max_len: Maximum sequence length for the learned absolute
-            positional embedding table. Default: 512.
-        learned_init_std: Initialisation standard deviation for the
-            learned absolute positional embedding. Default: 0.02.
-        standard_use_pe: Whether ``standard`` layers consume the
-            model-wide positional encoding. Default: True.
-        titan_use_pe: Whether ``titan`` layers consume the
-            model-wide positional encoding. Default: True.
-        sigmoid_use_pe: Whether ``sigmoid`` layers consume the
-            model-wide positional encoding. Default: True.
-        ca_use_pe: Whether ``ca`` (Continuum Attention) layers consume the
-            model-wide positional encoding. Default: True.
-        memory_use_pe: Whether ``memory`` layers consume the
-            model-wide positional encoding (RoPE on the scoring pair only;
-            values are built from the unrotated keys). Default: True.
-        gated_softmax_use_pe: Whether ``gated_softmax`` layers
-            consume the model-wide positional encoding. Default: True.
-        gqa_use_pe: Whether ``gqa`` layers consume the
-            model-wide positional encoding. Default: True.
-        mla_use_pe: Whether ``mla`` layers consume the
-            model-wide positional encoding. Default: True.
-        gqla_use_pe: Whether ``gqla`` layers consume the
-            model-wide positional encoding. Default: True.
-        mlra_use_pe: Whether ``mlra`` layers consume the
-            model-wide positional encoding. Default: True.
-        tucker_use_pe: Whether ``tucker`` layers consume the
-            model-wide positional encoding. Default: True.
-        iha_use_pe: Whether ``iha`` layers consume the
-            model-wide positional encoding. Default: True.
-        gta_use_pe: Whether ``gta`` layers consume the
-            model-wide positional encoding. Default: True.
-        mtla_use_pe: Whether ``mtla`` layers consume the
-            model-wide positional encoding. Disabled by default because
-            MTLA is a recurrent/decay mixer. Default: False.
-        cca_use_pe: Whether ``cca`` layers consume the
-            model-wide positional encoding. Default: True.
-        ccgqa_use_pe: Whether ``ccgqa`` layers consume the
-            model-wide positional encoding. Default: True.
-        msa_use_pe: Whether ``msa`` layers consume the
-            model-wide positional encoding. Default: True.
-        sparda_use_pe: Whether ``sparda`` layers consume the
-            model-wide positional encoding. Default: True.
-        lsa_use_pe: Whether ``lsa`` layers consume the model-wide
-            positional encoding. Native LSA trains without PE. Default: False.
-        gma_use_pe: Whether ``gma`` layers consume the
-            model-wide positional encoding. Default: True.
-        longformer_use_pe: Whether ``longformer`` layers consume
-            the model-wide positional encoding. Default: True.
-        swa_use_pe: Whether ``swa`` layers consume the model-wide
-            positional encoding. Default: True.
-        fastconformer_use_pe: Whether ``fastconformer`` layers
-            consume the model-wide positional encoding (windowed softmax
-            attention). Default: True.
-        bigbird_use_pe: Whether ``bigbird`` layers consume the
-            model-wide positional encoding. Default: True.
-        sparse_transformer_use_pe: Whether ``sparse_transformer``
-            layers consume the model-wide positional encoding.
-            Default: True.
-        sparsek_use_pe: Whether ``sparsek`` layers consume the
-            model-wide positional encoding. Default: True.
-        nsa_use_pe: Whether ``nsa`` layers consume the
-            model-wide positional encoding. Default: True.
-        fasa_use_pe: Whether ``fasa`` layers consume the
-            model-wide positional encoding. Default: True.
-        sparge_use_pe: Whether ``sparge`` layers consume the
-            model-wide positional encoding. Default: True.
-        engram_use_pe: Whether ``engram`` layers consume the
-            model-wide positional encoding. Default: True.
-        retnet_use_pe: Whether ``retnet`` layers consume the model-wide
-            positional encoding. Disabled by default because RetNet uses
-            decay-based positional information. Default: False.
-        mamba_use_pe: Whether ``mamba`` layers consume the model-wide
-            positional encoding. Disabled by default because Mamba is a
-            state-space mixer with implicit positional information.
-            Default: False.
-        ode_use_pe: Whether ``ode`` layers consume the model-wide
-            positional encoding. Disabled by default because ODE layers
-            integrate over the hidden state directly. Default: False.
-        gla_use_pe: Whether ``gla`` layers consume the
-            model-wide positional encoding. Disabled by default because
-            GLA is a gated linear attention mixer. Default: False.
-        deltanet_use_pe: Whether ``deltanet`` layers consume
-            the model-wide positional encoding. Disabled by default
-            because DeltaNet is a gated linear attention mixer.
-            Default: False.
-        gated_deltanet_use_pe: Whether ``gated_deltanet``
-            layers consume the model-wide positional encoding. Disabled
-            by default because gated DeltaNet is a gated linear attention
-            mixer. Default: False.
-        gated_deltanet2_use_pe: Whether ``gated_deltanet2``
-            layers consume the model-wide positional encoding. Disabled
-            by default because gated DeltaNet-2 is a gated linear
-            attention mixer. Default: False.
-        hgrn2_use_pe: Whether ``hgrn2`` layers consume the
-            model-wide positional encoding. Disabled by default because
-            HGRN-2 is a gated linear attention mixer. Default: False.
-        fox_use_pe: Whether ``fox`` layers consume the
-            model-wide positional encoding. Disabled by default because
-            Fox is a gated linear attention mixer. Default: False.
-        kda_use_pe: Whether ``kda`` layers consume the
-            model-wide positional encoding. Disabled by default because
-            KDA is a gated linear attention mixer. Default: False.
-        falcon{1,2,3,1a,2a,3a}_use_pe: Whether the corresponding
-            Falcon fast-weight attention layer consumes the model-wide
-            positional encoding. Disabled by default because the Falcon
-            family is a recurrent fast-weight mixer whose one-step-shifted
-            write stream already encodes relative order.
-            Default: False.
-        falcon_chunk_size: Chunk size of the SSD-style chunk-parallel
-            kernels for all Falcon mixers. ``None`` forces the recurrent
-            reference scan. Default: 64.
-        falcon_qk_norm: Query/key normalization: ``"rms_norm"`` (paper
-            default, QK-RMSNorm computed in fp32) or ``"l2_norm"``
-            (DeltaNet-style ablation). Default: ``"rms_norm"``.
-        falcon_beta_mode: Plasticity (step-size numerator) gate
-            parameterization: ``"static"`` (fixed ``falcon_beta``),
-            ``"ctx_beta"`` (bounded gain ``beta = 2*sigmoid(proj)`` in
-            the descent-safe interval (0, 2)) or ``"ctx_eta"``
-            (unbounded ``softplus`` numerator, allows the sign-flip
-            regime; paper default). Default: ``"ctx_eta"``.
-        falcon_lambda_mode: Forgetting (ridge) gate: ``"static"``
-            (fixed ``falcon_lambda``) or ``"ctx"`` (per-head base ridge
-            ``lam_bar = softplus(proj)``, scale-coupled with the
-            detached curvature statistic). Default: ``"ctx"``.
-        falcon_beta: Static NLMS gain used when ``falcon_beta_mode =
-            "static"``. Must be in (0, 2). Default: 1.0.
-        falcon_lambda: Static ridge used when ``falcon_lambda_mode =
-            "static"``. Must be >= 0. Default: 0.0.
-        falcon_window: Sliding window ``B`` for ``falcon3`` /
-            ``falcon3a`` (bounded rehearsal). Must be >= 1.
-            Default: 4.
-        falcon_short_conv: If True, apply causal depth-wise short
-            convolutions (kernel ``falcon_conv_kernel``) on the q/k/v
-            projections (paper default). Default: True.
-        falcon_conv_kernel: Kernel size of the Falcon short convs.
-            Default: 4.
-        falcon_eps: Numerical stabilizer in the normalized step-size
-            denominator. Must be > 0. Default: 1e-6.
-        falcon_eps_gamma: Positive-decay clamp floor: the per-step
-            shrinkage obeys ``alpha = min(eta*lambda, 1 - eps_gamma)``
-            so the carry stays >= eps_gamma. Must be in (0, 1).
-            Default: 1e-4.
-        use_moe: If True, replace the dense FFN with a Mixture-of-Experts
-            FFN block. Default: True.
-        moe_expert_hidden_size: Intermediate width of each routed expert.
-            ``None`` falls back to ``ffn_hidden_size``. Default: None.
-        moe_router_scoring: Gating function applied to router logits:
-            ``"softmax"`` (default), ``"sigmoid"`` or ``"softplus_sqrt"``.
-        moe_router_pre_softmax: Normalise with the softmax over all experts
-            before selecting the top-k (disables top-k renormalisation).
-            Default: False.
-        moe_router_renormalize: Rescale the selected weights so they sum to
-            one. Default: True.
-        moe_routed_scaling_factor: Constant multiplied onto the combined
-            routed output. Default: 1.0.
-        moe_router_dtype: Precision of the router logits/selection:
-            ``"float32"`` (default) or ``"bfloat16"``.
-        moe_router_jitter_eps: Switch-style uniform multiplicative jitter on
-            the router input. Default: 0.0.
-        moe_router_z_loss_coeff: Weight of the ST-MoE z-loss on the router
-            logits' logsumexp. Default: 0.0.
-        moe_routing_type: ``"token_choice"`` (default) or ``"expert_choice"``.
-        moe_capacity_factor: Maximum assignments per expert as a multiple of
-            the balanced load; tokens past the cap are dropped. Default: 0.0
-            (dropless).
-        moe_hash_layers: Number of leading MoE layers that select experts from
-            a fixed token-id table. Default: 0.
-        moe_hash_table: ``"random"`` (default) or ``"round_robin"``.
-        moe_hash_seed: RNG seed for the random hash table. Default: 42.
-        moe_aux_loss_type: Load-balancing loss scope: ``"none"``, ``"batch"``
-            (default) or ``"sequence"``.
-        moe_aux_loss_coeff: Load-balancing loss weight. Default: 0.01.
-        moe_bias_update: Auxiliary-loss-free expert-bias update rule:
-            ``"none"`` (default), ``"sign"`` or ``"centered_sign"``.
-        moe_bias_update_rate: Fixed bias step ``γ``. Default: 0.001.
-        moe_shared_experts_count: Always-on shared experts. Default: 0.
-        moe_shared_expert_hidden_size: Width of each shared expert; ``None``
-            uses the routed expert width. Default: None.
-        moe_shared_expert_gate: ``"none"`` (default) or ``"sigmoid"`` gate on
-            the shared-expert output.
-        moe_latent_enabled: Run the experts in a smaller latent space
-            (LatentMoE). Default: False.
-        moe_latent_dim: Latent width ``ℓ`` (required when latent is enabled).
-        moe_latent_norm_before_up_proj: RMSNorm before the latent
-            up-projection (Kimi K3 stability fix). Default: False.
-        moe_dense_layers: Number of leading layers that keep the dense FFN.
-            Default: 0.
-        moe_layer_frequency: Place an MoE layer every N layers after the dense
-            prefix (2 = alternate, Llama-4 style). Default: 1.
-        moe_activation_clamp: Upper bound on each expert's gated intermediate;
-            0 disables it. Default: 0.0.
-        use_mixture_of_depths: If True, apply per-layer token routing where
-            only the top-capacity tokens are updated; remaining tokens are
-            passed through unchanged. Default: False.
-        mixture_of_depths_capacity_ratio: Fraction of tokens selected per
-            layer when Mixture-of-Depths is active. Must be in (0, 1].
-            Default: 0.5.
-        mixture_of_depths_router_aux_loss_weight: Weight for the auxiliary
-            load-balancing loss in Mixture-of-Depths routing. Must be >= 0.
-            Default: 0.0.
-        ffn_hidden_size: Hidden size of the FFN intermediate layer. If None,
-            defaults to ``hidden_size * 2``. Default: None.
-        ffn_activation: FFN activation function. One of the elementwise
-            activations (e.g. ``"silu"`` (default, SiLU / Swish), ``"gelu"``,
-            ``"relu"``, ``"mish"``, ``"prelu"``, ``"raf"`` (Rational Activation
-            Function, learnable), ...) or a gated FFN variant
-            (``"swiglu"``, ``"geglu"``, ``"reglu"``). See
-            ``src/model/activation_function/factory.py`` for the full enum.
-        ffn_activation_config: Optional nested mapping of learnable-activation
-            parameters (e.g. ``raf_degrees``, ``raf_version``,
-            ``raf_approx_func``, ``raf_trainable``, ``raf_input_scaling``,
-            ``prelu_init``, ``elu_alpha``, ``swish_beta``). Ignored for
-            stateless activations. Default: ``None``.
-        embedding_conv_kernel: Kernel size for the embedding Conv1d when
-            ``use_embedding_conv`` is True. Default: 3.
-        mode: Model mode. ``"encoder"`` for bidirectional (MLM) or
-            ``"decoder"`` for autoregressive causal generation. The
-            ``model_class=frankenstein_text_decoder`` preset forces ``mode=decoder``
-            at runtime. Default: ``"encoder"``.
-        engram_max_ngram_size: Highest N-gram order for Engram memory layers
-            (range 2..max). Default: 3.
-        engram_n_heads_per_ngram: Number of hash heads per N-gram order in
-            Engram layers. Default: 4.
-        engram_embed_dim_per_head: Embedding dimension per Engram hash head.
-            Default: 32.
-        engram_kernel_size: ShortConv kernel width for Engram layers.
-            Default: 4.
-        engram_seed: RNG seed for Engram hash multipliers. Default: 42.
-        audio_feature: Input feature frontend for ``frankenstein_audio``:
-            ``"logmel"`` (log-mel filterbanks), ``"spectrogram"`` (log-power
-            STFT) or ``"raw"`` (generic multichannel 1-D signals such as EEG,
-            EMG or accelerometer traces). Default: ``"logmel"``.
-        audio_sample_rate: Frontend sample rate in Hz. Default: 16000.
-        audio_n_mels: Number of mel filterbank channels. Default: 80.
-        audio_window_ms: Analysis window length in milliseconds. Default: 25.
-        audio_stride_ms: Frame stride in milliseconds. Default: 10.
-        audio_n_fft: FFT size. Must be >= the window length in samples.
-            Default: 400.
-        audio_in_channels: Input channels for ``feature: raw``. Default: 1.
-        audio_conv_channels: Channels of the convolutional subsampling stack.
-            Default: 32.
-        asr_loss: ASR output head: ``"ctc"`` or ``"transducer"``.
-            Default: ``"ctc"``.
-        asr_decoder_dim: RNN-Transducer prediction-network hidden size.
-            Default: 320.
-        asr_decoder_layers: RNN-Transducer prediction-network LSTM layers.
-            Default: 1.
-        asr_decoder_dropout: RNN-Transducer prediction-network dropout.
-            Default: 0.1.
-        audio_spec_augment_enabled: Enable SpecAugment (arXiv:1904.08779)
-            time/frequency masking inside the frontend while training.
-            Default: False.
-        audio_spec_augment_freq_mask_width: Maximum width ``F`` of each
-            frequency mask (paper: 27). Default: 27.
-        audio_spec_augment_time_masks: Number ``m_T`` of time masks (paper:
-            10). Default: 10.
-        audio_spec_augment_time_mask_ratio: Maximum time-mask width as a
-            fraction ``p_S`` of the frame count (paper: 0.05). Default: 0.05.
-        model_class: Model class recorded for deployment dispatch
-            (``frankenstein_audio``, ``frankenstein_vit`` or a text class).
-            ``None`` keeps the legacy mode/field heuristics. Default: None.
-
-    Raises:
-        ValueError: If ``positional_encoding`` is not one of
-            ``"rope"``, ``"hope"``, ``"nope"``, ``"alibi"``, ``"pape"``,
-            ``"pape_efficient"``, ``"pape_ri"``, ``"sinusoidal_absolute"``,
-            ``"sinusoidal_rotary"``, ``"learned_absolute"``, or ``"none"``.
-        ValueError: If ``pape_num_parabolas`` or ``pape_num_positions`` is
-            less than 1.
-        ValueError: If ``mode`` is not ``"encoder"`` or ``"decoder"``.
-        ValueError: If ``mixture_of_depths_capacity_ratio`` is not in (0, 1].
-        ValueError: If ``mixture_of_depths_router_aux_loss_weight`` is < 0.
-        ValueError: If ``pos_embedding_type`` is not one of the legacy
-            values (``"learned_1d"``, ``"none"``) or the unified positional
-            encoding enum values.
-    """
+class DimsConfig:
+    """Core dimensions, dropout and the per-layer mixer pattern."""
 
     vocab_size: int = 50000
     hidden_size: int = 2048
     num_layers: int = 12
     num_loops: int = 2
-
-    layer_pattern: List[str] = field(default_factory=lambda: ["retnet", "ode", "mamba", "titan"] * 3)
-
-    ode_solver: str = "rk4"
-    ode_steps: int = 2
-
-    retention_heads: int = 8
-
     num_heads: int = 16
-    num_experts: int = 8
-    top_k_experts: int = 2
-
-    # ---- MoE anatomy (arXiv:2407.06204, 2412.19437, 2601.18089) ----
-    # See ``src/schema/_model/_moe.yaml`` (the executable contract).
-    moe_expert_hidden_size: Optional[int] = None
-    moe_router_scoring: str = "softmax"
-    moe_router_pre_softmax: bool = False
-    moe_router_renormalize: bool = True
-    moe_routed_scaling_factor: float = 1.0
-    moe_router_dtype: str = "float32"
-    moe_router_jitter_eps: float = 0.0
-    moe_router_z_loss_coeff: float = 0.0
-    moe_routing_type: str = "token_choice"
-    moe_capacity_factor: float = 0.0
-    moe_hash_layers: int = 0
-    moe_hash_table: str = "random"
-    moe_hash_seed: int = 42
-    moe_aux_loss_type: str = "batch"
-    moe_aux_loss_coeff: float = 0.01
-    moe_bias_update: str = "none"
-    moe_bias_update_rate: float = 0.001
-    moe_shared_experts_count: int = 0
-    moe_shared_expert_hidden_size: Optional[int] = None
-    moe_shared_expert_gate: str = "none"
-    moe_latent_enabled: bool = False
-    moe_latent_dim: Optional[int] = None
-    moe_latent_norm_before_up_proj: bool = False
-    moe_dense_layers: int = 0
-    moe_layer_frequency: int = 1
-    moe_activation_clamp: float = 0.0
+    num_kv_heads: int = 1
     dropout: float = 0.1
+    layer_pattern: List[str] = field(
+        default_factory=lambda: ["retnet", "ode", "mamba", "titan"] * 3
+    )
+    mode: str = "encoder"
 
-    use_bitnet: bool = True
-    bitnet_routers: bool = False
-    use_bitnet_conv: bool = False
-    norm_type: str = "dynamic_tanh"
-    prms_partial_ratio: float = 0.0625
-    flashnorm_partial_ratio: float = 0.0
-    use_qk_norm: bool = False
-    qk_norm_method: str = "rms_norm"
-    qk_clip_tau: float = 100.0
-    qk_clip_alpha: float = 0.5
+    @property
+    def head_dim(self) -> int:
+        """Per-head dimension (``hidden_size // num_heads``)."""
+        return self.hidden_size // self.num_heads
+
+
+@dataclass
+class QKNormConfig:
+    """Query–key normalization / logit-control block (``norm.qk_norm``)."""
+
+    enabled: bool = False
+    method: str = "rms_norm"
+    clip_tau: float = 100.0
+    clip_alpha: float = 0.5
     quack_tau: float = 1.0
-    qk_norm_eps: float = 1e-6
-    use_factorized_embedding: bool = False
-    factorized_embedding_dim: int = 128
-    use_embedding_conv: bool = True
+    eps: float = 1e-6
 
-    # ---- Dynamic (EELBERT) token embeddings (arXiv:2310.20144) ----
-    use_dynamic_embedding: bool = False
-    dynamic_embedding_ngram_max: int = 3
-    dynamic_embedding_bucket: int = 1_000_000_007
-    dynamic_embedding_seed: int = 42
-    dynamic_embedding_precompute: bool = True
-    # Runtime-only: id-ordered token strings injected by the engine / deploy /
-    # inference paths from the tokenizer (never read from YAML). Required when
-    # ``use_dynamic_embedding`` is True; validated by DynamicEmbedding itself
-    # because the dataclass is built before the tokenizer exists.
-    token_vocab: Optional[List[str]] = None
 
-    hope_base: float = 10_000.0
-    hope_damping: float = 0.01
-    rope_base: float = 10_000.0
-    rope_scaling: float = 1.0
+@dataclass
+class NormConfig:
+    """Normalization block (``model.norm``)."""
 
-    positional_encoding: Optional[str] = None  # defaults to "rope" in __post_init__
+    type: str = "dynamic_tanh"
+    partial_ratio: float = 0.0625
+    flashnorm_partial_ratio: float = 0.0
+    qk_norm: QKNormConfig = field(default_factory=QKNormConfig)
 
-    alibi_num_heads: Optional[int] = None
 
-    pape_num_parabolas: int = 4
-    pape_num_positions: int = 1
-    pape_rotation_invariant: bool = False
+@dataclass
+class FactorizedEmbeddingConfig:
+    """Factorized (low-rank) embedding knobs."""
 
-    sinusoidal_max_len: int = 512
-    sinusoidal_base: float = 10000.0
-    sinusoidal_scale: float = 1.0
+    enabled: bool = False
+    dim: int = 128
 
-    learned_max_len: int = 512
-    learned_init_std: float = 0.02
 
-    # ---- Scalable Softmax (SSMax, arXiv:2505.22842 §Scalable Softmax) ----
-    # Transversal logit rescale `s · ln(n)` applicable to every positional
-    # encoding. When ``use_ssmax=True`` the pos-encoder module carries an
-    # ``ssmax`` submodule whose per-head learnable scalar ``s`` (init
-    # ``ssmax_s_init``) rescales the attention logits before softmax.
-    use_ssmax: bool = False
-    ssmax_s_init: float = 1.0
+@dataclass
+class DynamicEmbeddingConfig:
+    """Dynamic (hash) embedding knobs."""
 
-    # ---- Fixed numerics (arXiv:2610.31642) ----
-    # Barron, Gnanapragasam & Tschannen, "A Fix for Softmax and Cross-Entropy".
-    # ``fixed_softmax`` swaps every explicit softmax/log-softmax for the
-    # cancellation-free formulation (argmax excluded from the log-sum-exp,
-    # margin combined with ``softplus``); ``fixed_cross_entropy`` swaps the
-    # hard-target task losses for the zero-sum-gradient CE. See
-    # ``src/model/numerics.py``.
+    enabled: bool = False
+    ngram_max: int = 3
+    bucket: int = 1_000_000_007
+    seed: int = 42
+    precompute: bool = True
+
+
+@dataclass
+class EmbeddingConvConfig:
+    """Causal depth-wise conv frontend on the embedding stream."""
+
+    enabled: bool = True
+    kernel: int = 3
+
+
+@dataclass
+class EmbeddingConfig:
+    """Token-embedding block (``model.embedding``)."""
+
+    type: str = "standard"
+    factorized: FactorizedEmbeddingConfig = field(default_factory=FactorizedEmbeddingConfig)
+    dynamic: DynamicEmbeddingConfig = field(default_factory=DynamicEmbeddingConfig)
+    conv: EmbeddingConvConfig = field(default_factory=EmbeddingConvConfig)
+
+
+@dataclass
+class MoERouterConfig:
+    """MoE router block (``moe.router``)."""
+
+    scoring: str = "softmax"
+    pre_softmax: bool = False
+    renormalize: bool = True
+    routed_scaling_factor: float = 1.0
+    dtype: str = "float32"
+    jitter_eps: float = 0.0
+    z_loss_coeff: float = 0.0
+
+
+@dataclass
+class MoERoutingConfig:
+    """MoE routing block (``moe.routing``)."""
+
+    type: str = "token_choice"
+    capacity_factor: float = 0.0
+    hash_layers: int = 0
+    hash_table: str = "random"
+    hash_seed: int = 42
+
+
+@dataclass
+class MoEBalancingConfig:
+    """MoE balancing block (``moe.balancing``)."""
+
+    aux_loss: str = "batch"
+    aux_loss_coeff: float = 0.01
+    bias_update: str = "none"
+    bias_update_rate: float = 0.001
+
+
+@dataclass
+class MoESharedConfig:
+    """Shared-expert block (``moe.shared``)."""
+
+    count: int = 0
+    hidden_size: Optional[int] = None
+    gate: str = "none"
+
+
+@dataclass
+class MoELatentConfig:
+    """Latent MoE block (``moe.latent``)."""
+
+    enabled: bool = False
+    dim: Optional[int] = None
+    norm_before_up_proj: bool = False
+
+
+@dataclass
+class MoELayoutConfig:
+    """Per-layer MoE layout (``moe.layout``)."""
+
+    dense_layers: int = 0
+    every_n_layers: int = 1
+
+
+@dataclass
+class MoEExpertsConfig:
+    """Expert block (``moe.experts``)."""
+
+    activation_clamp: float = 0.0
+
+
+@dataclass
+class MoEConfig:
+    """Mixture-of-Experts block (``model.moe``)."""
+
+    enabled: bool = True
+    num_experts: int = 8
+    top_k: int = 2
+    expert_hidden_size: Optional[int] = None
+    router: MoERouterConfig = field(default_factory=MoERouterConfig)
+    routing: MoERoutingConfig = field(default_factory=MoERoutingConfig)
+    balancing: MoEBalancingConfig = field(default_factory=MoEBalancingConfig)
+    shared: MoESharedConfig = field(default_factory=MoESharedConfig)
+    latent: MoELatentConfig = field(default_factory=MoELatentConfig)
+    layout: MoELayoutConfig = field(default_factory=MoELayoutConfig)
+    experts: MoEExpertsConfig = field(default_factory=MoEExpertsConfig)
+
+
+@dataclass
+class BitnetConfig:
+    """BitNet 1.58-bit quantization block (``model.bitnet``)."""
+
+    enabled: bool = True
+    routers: bool = False
+    conv: bool = False
+
+
+@dataclass
+class MixtureOfDepthsConfig:
+    """Mixture-of-Depths token routing (``model.mixture_of_depths``)."""
+
+    enabled: bool = False
+    capacity_ratio: float = 0.5
+    router_aux_loss_weight: float = 0.0
+
+
+@dataclass
+class SsmaxConfig:
+    """Scalable softmax (``model.ssmax``)."""
+
+    enabled: bool = False
+    s_init: float = 1.0
+
+
+@dataclass
+class NumericsConfig:
+    """Fixed-numerics opt-ins (``model.numerics``)."""
+
     fixed_softmax: bool = False
     fixed_cross_entropy: bool = False
 
-    # ---- BAM: Bayesian Attention Mechanism (arXiv:2505.22842) ----
-    # Generalized-Gaussian relative-position bias added to attention scores
-    # (ALiBi-family). Per-head learnable ``theta_alpha``/``theta_beta`` (init
-    # ``bam_theta_init``); ``theta_mu`` fixed to 0 unless ``bam_learn_mu=True``.
-    # ``bam_eps`` guards the ``|·|^β`` exponentiation when β < 0.
-    bam_learn_mu: bool = False
-    bam_theta_init: float = 0.0
-    bam_eps: float = 1e-5
-    bam_mu_init: float = 0.0
 
-    standard_use_pe: bool = True
-    titan_use_pe: bool = True
-    sigmoid_use_pe: bool = True
-    ca_use_pe: bool = True
-    memory_use_pe: bool = True
-    gated_softmax_use_pe: bool = True
-    gqa_use_pe: bool = True
-    mla_use_pe: bool = True
-    gqla_use_pe: bool = True
-    mlra_use_pe: bool = True
-    tucker_use_pe: bool = True
-    iha_use_pe: bool = True
-    gta_use_pe: bool = True
-    mtla_use_pe: bool = False
-    cca_use_pe: bool = True
-    ccgqa_use_pe: bool = True
-    msa_use_pe: bool = True
-    sparda_use_pe: bool = True
-    lsa_use_pe: bool = False
-    gma_use_pe: bool = True
-    longformer_use_pe: bool = True
-    swa_use_pe: bool = True
-    fastconformer_use_pe: bool = True
-    bigbird_use_pe: bool = True
-    sparse_transformer_use_pe: bool = True
-    sparsek_use_pe: bool = True
-    nsa_use_pe: bool = True
-    fasa_use_pe: bool = True
-    sparge_use_pe: bool = True
-    engram_use_pe: bool = True
-    retnet_use_pe: bool = False
-    mamba_use_pe: bool = False
-    ode_use_pe: bool = False
-    gla_use_pe: bool = False
-    deltanet_use_pe: bool = False
-    gated_deltanet_use_pe: bool = False
-    gated_deltanet2_use_pe: bool = False
-    hgrn2_use_pe: bool = False
-    fox_use_pe: bool = False
-    fpa_use_pe: bool = False
-    kda_use_pe: bool = False
-    falcon1_use_pe: bool = False
-    falcon2_use_pe: bool = False
-    falcon3_use_pe: bool = False
-    falcon1a_use_pe: bool = False
-    falcon2a_use_pe: bool = False
-    falcon3a_use_pe: bool = False
-    ssog_use_pe: bool = True
-    conformer_use_pe: bool = True
+@dataclass
+class FfnConfig:
+    """Feed-forward block (``model.ffn``)."""
 
-    use_moe: bool = True
-    use_mixture_of_depths: bool = False
-    mixture_of_depths_capacity_ratio: float = 0.5
-    mixture_of_depths_router_aux_loss_weight: float = 0.0
-    ffn_hidden_size: Optional[int] = None
-    ffn_activation: str = "silu"
-    ffn_activation_config: Optional[Dict[str, Any]] = None
-    embedding_conv_kernel: int = 3
-    mode: str = "encoder"
+    hidden_size: Optional[int] = None
+    activation: str = "silu"
+    activation_config: Optional[Dict[str, Any]] = None
 
-    engram_max_ngram_size: int = 3
-    engram_n_heads_per_ngram: int = 4
-    engram_embed_dim_per_head: int = 32
-    engram_kernel_size: int = 4
-    engram_seed: int = 42
 
-    # ---- mHC: Manifold-Constrained Hyper-Connections (arXiv:2512.24880) ----
-    # Expands the residual stream to width ``n * hidden_size`` and constrains
-    # the stream-mixing matrix ``H[res]`` to the Birkhoff polytope (doubly
-    # stochastic) via Sinkhorn-Knopp, restoring the identity-mapping property.
-    use_mhc: bool = False
-    mhc_expansion_rate: int = 4
-    mhc_sinkhorn_iters: int = 20
-    mhc_gating_init: float = 0.01
-    mhc_checkpoint: bool = False
-    # Keep ``φ_l`` full-precision under BitNet (avoids ternary-quantisation
-    # noise on the small mHC coefficients). Defaults to True.
-    mhc_full_prec_under_bitnet: bool = True
+@dataclass
+class ClassificationHeadConfig:
+    """Sequence-level classification head (``model.classification_head``)."""
 
-    # ---- Hyperloop Transformers (arXiv:2604.21254) ----
-    # Loop-level hyper-connections over a middle-cycle looped middle block
-    # (begin → middle × num_loops → end). Requires ``mhc_hyperloop_mhc_enabled``
-    # semantics: only meaningful when ``use_mhc`` is True — it *replaces* the
-    # per-sublayer mHC wiring with loop-level hyper-connections. The stream is
-    # created by copying ``mhc_expansion_rate`` times and collapsed by average;
-    # per-loop parameters {W/b/α/e} relax strict weight sharing across loops.
-    mhc_hyperloop: bool = False
-    # Layers at the start of the stack that run exactly once (begin block).
-    # 0 = loop the whole stack (no begin block).
-    mhc_hyperloop_begin_layers: int = 0
-    # Layers at the end of the stack that run exactly once (end block).
-    mhc_hyperloop_end_layers: int = 0
-    # Parameterization of the transition matrix H[res]:
-    #   - "diagonal": sigmoid-gated diagonal (paper default & best ablation).
-    #   - "sinkhorn": full doubly-stochastic mHC-style matrix.
-    #   - "identity": stateless pass-through of the stream (ablation).
-    mhc_hyperloop_res_parameterization: str = "diagonal"
+    enabled: bool = False
+    num_labels: Optional[int] = None
+    pooling_mode: str = "cls"
 
-    # ---- Attention Residuals (AttnRes, arXiv:2603.15031) ----
-    # Depth-wise softmax attention replaces the fixed residual coefficient of 1.
-    # ``residual_type`` selects the strategy:
-    #   - "standard": h_l = h_{l-1} + f_l(h_{l-1})  [default, backwards-compatible]
-    #   - "none": h_l = f_l(h_{l-1})                 [experimental ablation]
-    #   - "full_attn": softmax attention over all previous layer outputs.
-    #   - "block_attn": softmax attention over N block representations + partial sum.
-    # AttnRes variants add O(num_layers * hidden_size) parameters (one query
-    # vector per layer) and may be combined with mHC via ``attnres_mhc_stream_mode``.
-    residual_type: str = "standard"
-    # Full AttnRes: zero-init query vectors so initial attention is uniform.
-    full_attn_init_query_zero: bool = True
-    # Full AttnRes: RMSNorm on keys prevents large-magnitude layers dominating.
-    full_attn_use_rmsnorm_keys: bool = True
-    # Block AttnRes: zero-init query vectors (paper §3.2 recommendation).
-    block_attn_init_query_zero: bool = True
-    # Block AttnRes: RMSNorm on keys (paper §3.2 recommendation).
-    block_attn_use_rmsnorm_keys: bool = True
-    # Block AttnRes: number of block representations N (paper sweet spot ≈ 8).
-    block_attn_num_blocks: int = 8
-    # AttnRes: how to combine with mHC's n-stream residual:
-    #   - "independent": per-stream depth-wise attention (n parallel attentions).
-    #   - "joint":       single attention over the flattened nC projection.
-    attnres_mhc_stream_mode: str = "independent"
-    # AttnRes: wrap the attention computation in gradient checkpointing to save
-    # memory at the cost of one extra forward pass during backprop.
-    attnres_gradient_checkpoint: bool = False
 
-    num_kv_heads: int = 1
+@dataclass
+class MhcConfig:
+    """Manifold-constrained hyper-connections (``model.mhc``)."""
 
-    # ---- MLA (arXiv:2506.09342) ----
-    mla_latent_rank: Optional[int] = None
+    enabled: bool = False
+    expansion_rate: int = 4
+    sinkhorn_iters: int = 20
+    gating_init: float = 0.01
+    checkpoint: bool = False
+    full_prec_under_bitnet: bool = True
+    hyperloop: bool = False
+    hyperloop_begin_layers: int = 0
+    hyperloop_end_layers: int = 0
+    hyperloop_res_parameterization: str = "diagonal"
 
-    # ---- GQLA (arXiv:2605.15250) ----
-    gqla_latent_rank: Optional[int] = None
-    gqla_num_groups: Optional[int] = None
-    gqla_decode_path: str = "gqa"
 
-    # ---- MLRA (arXiv:2603.02188) ----
-    mlra_latent_rank: Optional[int] = None
-    mlra_num_latent_heads: int = 4
+@dataclass
+class FullAttnResConfig:
+    """Full AttnRes knobs (``residuals.full_attn``)."""
 
-    # ---- Tucker Attention (arXiv:2603.30033) ----
-    tucker_query_rank: Optional[int] = None
-    tucker_key_rank: Optional[int] = None
-    tucker_value_rank: Optional[int] = None
+    init_query_zero: bool = True
+    use_rmsnorm_keys: bool = True
 
-    # ---- IHA (arXiv:2602.21371) ----
-    iha_num_pseudo_heads: Optional[int] = None
 
-    # ---- GTA (arXiv:2506.17286) ----
-    gta_num_shared_groups: Optional[int] = None
-    gta_value_latent_rank: Optional[int] = None
+@dataclass
+class BlockAttnResConfig:
+    """Block AttnRes knobs (``residuals.block_attn``)."""
 
-    # ---- MTLA (arXiv:2505.13544) ----
-    mtla_latent_rank: Optional[int] = None
-    mtla_merge_factor: int = 2
-    mtla_stride: Optional[int] = None
+    num_blocks: int = 8
+    init_query_zero: bool = True
+    use_rmsnorm_keys: bool = True
 
-    # ---- GMA / Gaussian Mixture Attention (arXiv:2606.18283) ----
-    # Number K of learned Gaussian mixture components per head. Each
-    # component routes values into one latent memory slot.
-    gma_num_components: int = 8
-    # Routing dimension d_r used to compute Gaussian responsibilities.
-    # None -> head_dim (hidden_size // num_heads). Decoupled from d_v.
-    gma_routing_dim: Optional[int] = None
-    # Numerical-stability constant for the read-step normaliser
-    # Gamma^Q Z + epsilon. Must be > 0.
-    gma_epsilon: float = 1e-6
-    # Lower bound for the diagonal variances: sigma^2 = softplus(omega)
-    # + sigma_eps. Guarantees strict positive-definiteness. Must be > 0.
-    gma_sigma_eps: float = 1e-4
-    # Initialisation std for the component means mu ~ N(0, init_mean_std^2).
-    gma_init_mean_std: float = 1.0
 
-    # ---- SSOG / Separable Sum of Gaussians (Pisoni 2026,
-    # ---- https://www.pisoni.ai/posts/ssog/) ----
-    # Number R of Gaussian atoms per head. Each atom is five numbers
-    # (mu_y, mu_x, sigma_y, sigma_x, lambda) over relative position.
-    ssog_num_atoms: int = 4
-    # Content-conditioned steering: zero-init probes predict bounded
-    # residuals on mu/sigma/lambda behind cold-started gates.
-    ssog_lookat: bool = True
-    # Bound on per-token mu travel, in grid cells (tanh-bounded).
-    ssog_max_offset: float = 4.0
-    # Cold-start the steering gates at softplus(-8) ~= 3e-4 (frozen
-    # geometry at init). Warm-start uses softplus(-2) ~= 0.13.
-    ssog_cold_init: bool = True
-    # Minimum atom width in grid cells. sigma = softplus(raw) + eps
-    # + sigma_floor guarantees strictly positive widths.
-    ssog_sigma_floor: float = 0.25
-    # Token grid the field is defined over (row-major raster). None ->
-    # derived from image_height // patch_size and image_width //
-    # patch_size (ViT). Non-vision grids must set them explicitly;
-    # grid_h=1 degenerates to a 1D positional field.
-    ssog_grid_h: Optional[int] = None
-    ssog_grid_w: Optional[int] = None
+@dataclass
+class ResidualsConfig:
+    """Residual-connection block (``model.residuals``)."""
 
-    # ---- SWA / Sliding Window Attention with sinks (arXiv:2608.28444) ----
-    # Total attended tokens w: the ``num_sinks`` leading sink tokens plus the
-    # ``w - num_sinks`` most recent tokens. Paper: w in {64, 128, 256, 512}.
-    swa_window_size: int = 256
-    # Leading sink tokens s every query always attends to. Paper: s = 4.
-    swa_num_sinks: int = 4
+    type: str = "standard"
+    full_attn: FullAttnResConfig = field(default_factory=FullAttnResConfig)
+    block_attn: BlockAttnResConfig = field(default_factory=BlockAttnResConfig)
+    mhc_stream_mode: str = "independent"
+    gradient_checkpoint: bool = False
 
-    # ---- Fast Conformer limited-context attention (arXiv:2305.05084) ----
-    # Total local span w; the per-side context is ``w // 2``. Paper §3.4:
-    # 128 steps on each side of a token (``w = 256``).
-    fastconformer_window_size: int = 256
-    # Leading global attention tokens g: they attend to all positions and are
-    # attended by all positions. Paper: "a single global attention token".
-    fastconformer_global_tokens: int = 1
-    # Stride s between global positions {0, s, ..., (g-1)s}. Paper/NeMo: 1.
-    fastconformer_global_tokens_spacing: int = 1
-    # Separate global q/k/v projections (§2.2, Longformer-style, +3 H^2) vs
-    # the shared projections of the evaluated §3.4 long-form model.
-    fastconformer_global_attn_separate: bool = False
 
-    # ---- Continuum Attention (arXiv:2610.20586) ----
-    # Learn the per-head positive score gain gamma = exp(rho). The paper's
-    # 101M byte-level decoder learns all head gains, initialised at gamma=1;
-    # False keeps the fixed-gain CA-P configuration (no extra parameters).
-    ca_learned_gain: bool = True
-    # Initial (learned) or fixed (unlearned) score gain gamma = 1/tau. The
-    # paper uses gamma = 1 for the 101M model and gamma = 1/0.30 for the
-    # fixed CA-P variant (and the CA-H small-model initialisation).
-    ca_gain_init: float = 1.0
+@dataclass
+class ImageConfig:
+    """Vision-Transformer block (top-level ``image:``)."""
 
-    # ---- First Passage Attention (arXiv:2610.22714) ----
-    # Initial value of the learned per-head strength beta (paper Table 16:
-    # beta = 1). beta stays learnable; the paper excludes strengths from
-    # weight decay (a training-schedule detail this repo does not enforce).
-    fpa_beta_init: float = 1.0
-    # Temperature tau of the soft-minimum straight-through gradient (paper §2
-    # "Training": tau = 1). Forward/eval always use the hard range minimum.
-    fpa_tau: float = 1.0
-
-    # ---- Conformer (arXiv:2005.08100) ----
-    # Depth-wise convolution kernel size k of the convolution module (paper
-    # best: 32). Decoder mode always pads causally (left-only).
-    conformer_kernel_size: int = 32
-    # Enable the macaron half-step FFN₁ branch (arXiv:1906.02762).
-    conformer_macaron: bool = True
-    # Normalization after the depth-wise convolution: "batch" (paper
-    # default, BatchNorm1d), "group" (GroupNorm) or "layer" (LayerNorm).
-    conformer_conv_norm: str = "batch"
-
-    # ---- CCA / CCGQA (arXiv:2510.04476) ----
-    cca_latent_rank: Optional[int] = None
-    cca_num_conv_layers: int = 2
-    cca_conv_kernel_seq: int = 4
-    cca_conv_kernel_ch: int = 3
-    cca_qk_mean: bool = True
-    cca_value_shift: bool = True
-
-    ccgqa_query_latent_rank: Optional[int] = None
-    ccgqa_kv_latent_rank: Optional[int] = None
-    ccgqa_num_kv_heads: Optional[int] = None
-    ccgqa_num_conv_layers: int = 2
-    ccgqa_conv_kernel_seq: int = 4
-    ccgqa_conv_kernel_ch: int = 3
-    ccgqa_qk_mean: bool = True
-    ccgqa_value_shift: bool = True
-
-    # ---- Falcon: Fast Weight Attention for Continual Learning
-    # (arXiv:2608.27763) ----
-    # Shared knobs of the six falcon{1,2,3,1a,2a,3a} mixers: read-
-    # after-write prefix-aligned fast-weight updates with normalized
-    # first-order step sizes and positive-decay renormalization.
-    # ``None`` chunk_size forces the recurrent reference scan.
-    falcon_chunk_size: Optional[int] = 64
-    # QK normalization: "rms_norm" (paper default, QK-RMSNorm) or
-    # "l2_norm" (DeltaNet-style QK-l2-norm ablation).
-    falcon_qk_norm: str = "rms_norm"
-    # Plasticity gate: "static" (fixed falcon_beta), "ctx_beta"
-    # (bounded gain beta = 2*sigmoid(proj) in (0, 2)) or "ctx_eta"
-    # (unbounded softplus numerator; paper default).
-    falcon_beta_mode: str = "ctx_eta"
-    # Forgetting gate: "static" (fixed falcon_lambda ridge) or "ctx"
-    # (per-head base ridge lam_bar = softplus(proj), scale-coupled with
-    # the detached curvature statistic; paper default).
-    falcon_lambda_mode: str = "ctx"
-    falcon_beta: float = 1.0
-    falcon_lambda: float = 0.0
-    # Sliding window B for falcon3 / falcon3a (paper: 4).
-    falcon_window: int = 4
-    # Causal depth-wise short convolutions on the attention projections
-    # (paper default: enabled; H3/SLConv-style inductive bias, orthogonal
-    # to the fast-memory update).
-    falcon_short_conv: bool = True
-    falcon_conv_kernel: int = 4
-    # Numerical stabilizers: eps in the NLMS denominator; eps_gamma is
-    # the positive-decay clamp floor (alpha <= 1 - eps_gamma).
-    falcon_eps: float = 1e-6
-    falcon_eps_gamma: float = 1e-4
-
-    # ---- MSA / MiniMax Sparse Attention (arXiv:2606.13392) ----
-    msa_block_size: int = 128
-    msa_topk_blocks: int = 16
-    msa_index_dim: int = 64
-    msa_kl_loss_weight: float = 0.0
-
-    # ---- SparDA (arXiv:2606.04511) ----
-    sparda_block_size: int = 128
-    sparda_topk_blocks: int = 16
-    sparda_forecast_dim: int = 64
-
-    # ---- LSA / Latent Sparse Attention (arXiv:2610.42147) ----
-    # Paper Table 2 bucket column + §4.4 (N-LSA):
-    # k=2048 long-range keys, p=512 buckets, 4 sinks, n_pool=4,
-    # n_cluster=512 (= window), n̄_b=8 keys/bucket, n_max_b=16.
-    lsa_num_long_range: int = 2048
-    lsa_num_buckets: int = 512
-    lsa_num_sinks: int = 4
-    lsa_pool_size: int = 4
-    lsa_cluster_block: int = 512
-    lsa_keys_per_bucket: int = 8
-    lsa_max_keys_per_bucket: int = 16
-
-    # ---- Vision Transformer (frankenstein_vit, arXiv:2010.11929) ----
-    # Image dimensions and patch config for the Vision Transformer model class.
-    # When ``model_class == "frankenstein_vit"``, the model splits an image
-    # into non-overlapping ``patch_size``×``patch_size`` patches, linearly
-    # projects each patch to ``hidden_size`` dimensions, and processes the
-    # resulting sequence through the standard HybridLayer stack.
-    image_height: int = 224
-    image_width: int = 224
+    height: int = 224
+    width: int = 224
     patch_size: int = 16
     in_channels: int = 3
     to_grayscale: bool = False
-    # Positional encoding for ViT: ``"learned_1d"`` adds a learnable
-    # ``nn.Parameter`` of shape ``(1, N+cls, D)`` after patch embedding
-    # (faithful to the ViT paper). ``"none"`` relies on the existing
-    # RoPE/HoPE inside attention mixers (treats patches as a sequence).
     pos_embedding_type: str = "learned_1d"
-    # Whether to prepend a learnable [CLS] token (ViT paper default).
     cls_token: bool = True
-    # Pooling mode for classification: ``"cls"`` reads the [CLS] token
-    # output at position 0; ``"gap"`` averages over all patch tokens.
     pooling_mode: str = "cls"
-    # Masked patch prediction (autosupervised): fraction of patches to
-    # corrupt during ``task == "patch_prediction"``. Paper default: 0.5.
     mask_ratio: float = 0.5
-    # Masking strategy: ``"bert"`` = 80% mask-token / 10% random / 10%
-    # keep (paper recipe); ``"mask_only"`` = 100% mask-token;
-    # ``"random_only"`` = 100% random patch.
     mask_token_strategy: str = "bert"
-    # Reconstruction target for patch prediction: ``"mean_color_3bit"``
-    # (512-way CE, paper best), ``"downsampled_3bit"`` (16×512 CE),
-    # ``"full_patch_l2"`` (MSE on raw patch pixels, MAE-style).
     prediction_target: str = "mean_color_3bit"
-    # Segmentation head type: ``"pixel"`` = per-pixel linear head
-    # (supports 1D grayscale + multicolor); ``"eomt"`` = Encoder-only
-    # Mask Transformer (arXiv:2503.19108, query-based with Hungarian
-    # matching and mask annealing).
     seg_head_type: str = "pixel"
-    # Number of classes for image classification.
     num_classes: int = 1000
-    # Number of segmentation classes (including background).
     num_seg_classes: int = 21
-    # EoMT: number of learnable object queries.
     seg_num_queries: int = 100
-    # EoMT: number of L₂ blocks that process patches + queries jointly.
     seg_l2_blocks: int = 3
-    # EoMT: mask annealing (polynomial decay of P_mask to 0 at inference).
     seg_mask_annealing: bool = True
-    # Optional sequence-level classification head on the NLP encoder (DashAI
-    # integration, Strategy A). When ``classification_head=True`` and
-    # ``num_labels`` is set, ``FrankensteinEncoder.forward`` returns
-    # ``(B, num_labels)`` class logits instead of ``(B, S, vocab_size)`` MLM
-    # logits. The head is a full-precision ``nn.Linear`` (NOT BitNet-quantized)
-    # over a pooled representation. Disabled by default so the MLM CLI path is
-    # unchanged.
-    classification_head: bool = False
-    # Number of target classes for the encoder classification head. Ignored
-    # unless ``classification_head=True``.
-    num_labels: Optional[int] = None
-    # Pooling for the encoder classification head: ``"cls"`` reads the first
-    # token output; ``"gap"`` averages over all tokens. Ignored unless
-    # ``classification_head=True``. Mirrors the ViT ``pooling_mode``.
-    encoder_pooling_mode: str = "cls"
 
-    # ---- Audio (frankenstein_audio, arXiv:2005.08100) ----
-    # Input feature frontend: ``"logmel"`` (80-channel log-mel filterbanks,
-    # Conformer recipe), ``"spectrogram"`` (log-power STFT) or ``"raw"``
-    # (generic multichannel 1-D signals: EEG, EMG, accelerometer, ...).
-    audio_feature: str = "logmel"
-    # Sample rate in Hz used by the mel/STFT frontend.
-    audio_sample_rate: int = 16000
-    # Number of mel filterbank channels (logmel path).
-    audio_n_mels: int = 80
-    # Analysis window length in milliseconds (25 ms in the Conformer paper).
-    audio_window_ms: float = 25.0
-    # Frame stride in milliseconds (10 ms in the Conformer paper).
-    audio_stride_ms: float = 10.0
-    # FFT size for the STFT / mel filterbank.
-    audio_n_fft: int = 400
-    # Number of input channels for ``feature: raw`` (1 = mono waveform).
-    audio_in_channels: int = 1
-    # Channels of the conv-subsampling stack (10 ms → 40 ms frames).
-    audio_conv_channels: int = 32
-    # ASR output head: ``"ctc"`` (CTC projection over frames) or
-    # ``"transducer"`` (RNN-Transducer with a prediction + joint network).
+
+@dataclass
+class SpecAugmentConfig:
+    """SpecAugment time/frequency masking (``audio.spec_augment``)."""
+
+    enabled: bool = False
+    freq_mask_width: int = 27
+    time_masks: int = 10
+    time_mask_ratio: float = 0.05
+
+
+@dataclass
+class AudioConfig:
+    """Audio frontend + ASR head block (top-level ``audio:``)."""
+
+    sample_rate: int = 16000
+    n_mels: int = 80
+    window_ms: float = 25.0
+    stride_ms: float = 10.0
+    n_fft: int = 400
+    feature: str = "logmel"
+    in_channels: int = 1
+    conv_channels: int = 32
+    num_classes: int = 2
+    pooling_mode: str = "gap"
     asr_loss: str = "ctc"
-    # RNN-Transducer prediction-network hidden size (paper: 320/640/640).
     asr_decoder_dim: int = 320
-    # RNN-Transducer prediction-network LSTM layers.
     asr_decoder_layers: int = 1
-    # RNN-Transducer prediction-network dropout (only used when >1 layer).
     asr_decoder_dropout: float = 0.1
-    # SpecAugment (arXiv:1904.08779) time/frequency masking, applied inside the
-    # audio frontend after the log-mel/spectrogram computation and only while
-    # ``model.training``. Paper recipe: F=27, m_T=10, p_S=0.05.
-    audio_spec_augment_enabled: bool = False
-    audio_spec_augment_freq_mask_width: int = 27
-    audio_spec_augment_time_masks: int = 10
-    audio_spec_augment_time_mask_ratio: float = 0.05
+    spec_augment: SpecAugmentConfig = field(default_factory=SpecAugmentConfig)
 
-    # ---- Recorded model class (deployment dispatch) ----
-    # ``frankenstein_audio`` / ``frankenstein_vit`` / ``frankenstein_text_*``
-    # as resolved from the YAML ``model_class``. Every dataclass instance
-    # carries the modality-specific fields (``audio_feature``,
-    # ``patch_size``, ...), so deployment dispatch uses this recorded value
-    # instead of guessing from field presence. ``None`` (e.g. a bare
-    # ``FrankensteinModelConfig()``) keeps the legacy mode/field heuristics.
+
+def _build(cls, raw: Optional[Mapping[str, Any]]):
+    """Instantiate a dataclass block from a YAML mapping, ignoring unknown keys.
+
+    Args:
+        cls: Block dataclass type.
+        raw: Raw YAML mapping (``None`` when absent).
+
+    Returns:
+        The populated dataclass instance.
+    """
+    if isinstance(raw, cls):
+        return raw
+    if not isinstance(raw, Mapping):
+        return cls()
+    names = {f.name for f in dataclasses.fields(cls)}
+    return cls(**{key: value for key, value in raw.items() if key in names})
+
+
+def _build_with_nested(cls, raw, nested: Mapping[str, Any]) -> Any:
+    """Build a block whose attribute ``name`` holds a nested dataclass.
+
+    Args:
+        cls: Block dataclass type.
+        raw: Raw YAML mapping.
+        nested: Mapping of attribute name -> nested dataclass type.
+
+    Returns:
+        The populated dataclass instance.
+    """
+    if not isinstance(raw, Mapping):
+        return cls()
+    names = {f.name for f in dataclasses.fields(cls)}
+    kwargs: Dict[str, Any] = {}
+    for key, value in raw.items():
+        if key not in names:
+            continue
+        if key in nested:
+            kwargs[key] = _build(nested[key], value)
+        else:
+            kwargs[key] = value
+    return cls(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# top-level configuration
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FrankensteinModelConfig:
+    """Nested configuration shared by every Frankenstein model variant.
+
+    Attributes:
+        dims: Core dimensions, dropout, ``layer_pattern`` and ``mode``.
+        norm: Normalization type/parameters and the ``qk_norm`` sub-block.
+        embedding: Token-embedding variant (``type``) and its knobs.
+        attention: Per-mixer knobs, keyed by registry mixer name.
+        positional_encoding: Model-wide positional encoding name.
+        positional_encoding_parameters: Per-encoding knobs plus the per-mixer
+            ``use_pe`` flags.
+        moe: Mixture-of-Experts block.
+        bitnet: BitNet 1.58-bit quantization block.
+        mixture_of_depths: Mixture-of-Depths block.
+        ssmax: Scalable-softmax block.
+        numerics: Fixed-numerics opt-ins.
+        ffn: Feed-forward width/activation block.
+        classification_head: Sequence-level classification head.
+        mhc: Manifold-constrained hyper-connections.
+        residuals: Residual-connection strategy and knobs.
+        image: Vision-Transformer block (``image:`` YAML key).
+        audio: Audio frontend + ASR block (``audio:`` YAML key).
+        model_class: Recorded model class for deployment dispatch.
+        token_vocab: Id-ordered token strings for dynamic embeddings.
+        num_classes: Task class count (image or audio, resolved at load).
+        pooling_mode: Task pooling mode (image or audio, resolved at load).
+    """
+
+    dims: DimsConfig = field(default_factory=DimsConfig)
+    norm: NormConfig = field(default_factory=NormConfig)
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    attention: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    positional_encoding: str = "rope"
+    positional_encoding_parameters: Dict[str, Any] = field(default_factory=dict)
+    moe: MoEConfig = field(default_factory=MoEConfig)
+    bitnet: BitnetConfig = field(default_factory=BitnetConfig)
+    mixture_of_depths: MixtureOfDepthsConfig = field(
+        default_factory=MixtureOfDepthsConfig
+    )
+    ssmax: SsmaxConfig = field(default_factory=SsmaxConfig)
+    numerics: NumericsConfig = field(default_factory=NumericsConfig)
+    ffn: FfnConfig = field(default_factory=FfnConfig)
+    classification_head: ClassificationHeadConfig = field(
+        default_factory=ClassificationHeadConfig
+    )
+    mhc: MhcConfig = field(default_factory=MhcConfig)
+    residuals: ResidualsConfig = field(default_factory=ResidualsConfig)
+    image: Optional[ImageConfig] = None
+    audio: Optional[AudioConfig] = None
     model_class: Optional[str] = None
+    token_vocab: Optional[List[str]] = None
+    num_classes: int = 1000
+    pooling_mode: str = "cls"
 
-    def __post_init__(self):
-        """Validate and derive dependent configuration fields after dataclass init.
+    # ------------------------------------------------------------------
+    # construction
+    # ------------------------------------------------------------------
+    @classmethod
+    def from_dict(
+        cls,
+        model_block: Optional[Mapping[str, Any]] = None,
+        *,
+        image_block: Optional[Mapping[str, Any]] = None,
+        audio_block: Optional[Mapping[str, Any]] = None,
+        model_class: Optional[str] = None,
+    ) -> "FrankensteinModelConfig":
+        """Build the configuration from the nested YAML blocks.
 
-        Derives ``ffn_hidden_size`` and validates ``positional_encoding``,
-        ``mode``, and Mixture-of-Depths parameter ranges.
+        Args:
+            model_block: The ``model:`` mapping (already schema-validated).
+            image_block: The top-level ``image:`` mapping, when present.
+            audio_block: The top-level ``audio:`` mapping, when present.
+            model_class: The resolved ``model_class`` value.
+
+        Returns:
+            A fully populated :class:`FrankensteinModelConfig`.
+        """
+        raw = dict(model_block or {})
+        if image_block is None and isinstance(raw.get("image"), Mapping):
+            image_block = dict(raw.pop("image"))
+        if audio_block is None and isinstance(raw.get("audio"), Mapping):
+            audio_block = dict(raw.pop("audio"))
+        if model_class is None and raw.get("model_class") is not None:
+            model_class = str(raw.pop("model_class"))
+        else:
+            raw.pop("model_class", None)
+        nested_markers = {
+            "dims", "norm", "embedding", "attention", "positional_encoding",
+            "positional_encoding_parameters", "moe", "bitnet",
+            "mixture_of_depths", "ssmax", "numerics", "ffn",
+            "classification_head", "mhc", "residuals",
+        }
+        if raw and not (nested_markers & set(raw)):
+            config = cls.from_flat(**raw)
+            if image_block is not None:
+                config.image = _build(ImageConfig, image_block)
+            if audio_block is not None:
+                config.audio = _build_with_nested(
+                    AudioConfig, audio_block, {"spec_augment": SpecAugmentConfig}
+                )
+            if config.image is not None:
+                config.num_classes = int(config.image.num_classes)
+                config.pooling_mode = str(config.image.pooling_mode)
+            elif config.audio is not None:
+                config.num_classes = int(config.audio.num_classes)
+                config.pooling_mode = str(config.audio.pooling_mode)
+            config.model_class = model_class
+            return config
+        embedding_raw = raw.get("embedding") or {}
+        embedding = _build_with_nested(
+            EmbeddingConfig,
+            embedding_raw,
+            {
+                "factorized": FactorizedEmbeddingConfig,
+                "dynamic": DynamicEmbeddingConfig,
+                "conv": EmbeddingConvConfig,
+            },
+        )
+        # ``embedding.type`` is authoritative; the legacy ``*.enabled`` flags
+        # are folded in when ``type`` is left at its default.
+        if embedding.type == "standard":
+            if embedding.dynamic.enabled:
+                embedding.type = "dynamic"
+            elif embedding.factorized.enabled:
+                embedding.type = "factorized"
+
+        norm = _build_with_nested(NormConfig, raw.get("norm") or {}, {"qk_norm": QKNormConfig})
+        moe = _build_with_nested(
+            MoEConfig,
+            raw.get("moe") or {},
+            {
+                "router": MoERouterConfig,
+                "routing": MoERoutingConfig,
+                "balancing": MoEBalancingConfig,
+                "shared": MoESharedConfig,
+                "latent": MoELatentConfig,
+                "layout": MoELayoutConfig,
+                "experts": MoEExpertsConfig,
+            },
+        )
+        residuals = _build_with_nested(
+            ResidualsConfig,
+            raw.get("residuals") or {},
+            {"full_attn": FullAttnResConfig, "block_attn": BlockAttnResConfig},
+        )
+        image = None
+        if image_block is not None:
+            image_raw = dict(image_block)
+            size = image_raw.pop("image_size", None)
+            if isinstance(size, Mapping):
+                image_raw.setdefault("height", size.get("height"))
+                image_raw.setdefault("width", size.get("width"))
+            image_raw.pop("height", None) if image_raw.get("height") is None else None
+            image_raw.pop("width", None) if image_raw.get("width") is None else None
+            image = _build(ImageConfig, image_raw)
+        audio = None
+        if audio_block is not None:
+            audio = _build_with_nested(
+                AudioConfig, audio_block, {"spec_augment": SpecAugmentConfig}
+            )
+
+        explicit_num_classes = raw.get("num_classes")
+        explicit_pooling_mode = raw.get("pooling_mode")
+        attention = {
+            str(name): dict(values or {})
+            for name, values in (raw.get("attention") or {}).items()
+        }
+        config = cls(
+            dims=_build(DimsConfig, raw.get("dims")),
+            norm=norm,
+            embedding=embedding,
+            attention=attention,
+            positional_encoding=str(raw.get("positional_encoding") or "rope"),
+            positional_encoding_parameters=dict(
+                raw.get("positional_encoding_parameters") or {}
+            ),
+            moe=moe,
+            bitnet=_build(BitnetConfig, raw.get("bitnet")),
+            mixture_of_depths=_build(MixtureOfDepthsConfig, raw.get("mixture_of_depths")),
+            ssmax=_build(SsmaxConfig, raw.get("ssmax")),
+            numerics=_build(NumericsConfig, raw.get("numerics")),
+            ffn=_build(FfnConfig, raw.get("ffn")),
+            classification_head=_build(ClassificationHeadConfig, raw.get("classification_head")),
+            mhc=_build(MhcConfig, raw.get("mhc")),
+            residuals=residuals,
+            image=image,
+            audio=audio,
+            model_class=model_class,
+            token_vocab=raw.get("token_vocab"),
+        )
+        if explicit_num_classes is not None:
+            config.num_classes = int(explicit_num_classes)
+        elif image is not None:
+            config.num_classes = int(image.num_classes)
+        elif audio is not None:
+            config.num_classes = int(audio.num_classes)
+        if explicit_pooling_mode is not None:
+            config.pooling_mode = str(explicit_pooling_mode)
+        elif image is not None:
+            config.pooling_mode = str(image.pooling_mode)
+        elif audio is not None:
+            config.pooling_mode = str(audio.pooling_mode)
+        return config
+
+    @classmethod
+    def from_flat(cls, **kwargs: Any) -> "FrankensteinModelConfig":
+        """Build from the historical flat keyword arguments.
+
+        This is the migration path for legacy checkpoints and for the test
+        suite; production code builds the nested shape directly. Flat
+        structural names are routed through :data:`_FLAT_ALIASES` and
+        per-mixer names (``mla_latent_rank``, ``falcon_beta``, …) are routed
+        into ``model.attention.<mixer>``.
+
+        Args:
+            **kwargs: Historical flat configuration fields, or nested blocks
+                (``dims=…``, ``attention={…}``).
+
+        Returns:
+            A fully populated nested configuration.
 
         Raises:
-            ValueError: If any field fails validation constraints.
+            TypeError: If a keyword is neither a nested field nor a known
+                flat alias.
         """
-        if self.ffn_hidden_size is None:
-            self.ffn_hidden_size = self.hidden_size * 2
+        from src.registry import ensure_builtins
 
-        # ---- Validate MoE anatomy (schema: ``_model/_moe.yaml``) ----
-        if self.num_experts < 1:
-            raise ValueError(f"num_experts must be >= 1, got {self.num_experts}")
-        if self.top_k_experts < 1:
+        ensure_builtins()
+        nested_names = {f.name for f in dataclasses.fields(cls)}
+        component_alias = _component_flat_aliases()
+        model: Dict[str, Any] = {}
+        attention: Dict[str, Dict[str, Any]] = dict(kwargs.pop("attention", {}) or {})
+        image_block = dict(kwargs.pop("image", None) or {}) or None
+        audio_block = dict(kwargs.pop("audio", None) or {}) or None
+        model_class = kwargs.pop("model_class", None)
+        positional = kwargs.pop("positional_encoding_parameters", None)
+        if positional:
+            model["positional_encoding_parameters"] = dict(positional)
+
+        def put(path: Tuple[str, ...], value: Any) -> None:
+            node = model
+            for part in path[:-1]:
+                child = node.get(part)
+                if dataclasses.is_dataclass(child):
+                    child = dataclasses.asdict(child)
+                    node[part] = child
+                elif not isinstance(child, dict):
+                    child = {}
+                    node[part] = child
+                node = child
+            node[path[-1]] = value
+
+        for key, value in kwargs.items():
+            if key in _FLAT_ALIASES and not dataclasses.is_dataclass(value) and not (
+                key in nested_names and isinstance(value, Mapping)
+            ):
+                path = _FLAT_ALIASES[key]
+                if path[0] == "image":
+                    image_block = dict(image_block or {})
+                    image_block[path[-1]] = value
+                elif path[0] == "audio":
+                    audio_block = dict(audio_block or {})
+                    node = audio_block
+                    for part in path[1:-1]:
+                        node = node.setdefault(part, {})
+                    node[path[-1]] = value
+                else:
+                    put(path, value)
+                continue
+            if key in nested_names or key == "positional_encoding":
+                if key in {"dims", "norm", "embedding", "moe", "bitnet",
+                           "mixture_of_depths", "ssmax", "numerics", "ffn",
+                           "classification_head", "mhc", "residuals"} and dataclasses.is_dataclass(value):
+                    model[key] = value
+                elif key == "positional_encoding":
+                    model[key] = value
+                elif key == "token_vocab":
+                    model[key] = value
+                elif key in {"num_classes", "pooling_mode"}:
+                    put(("__top__", key), value)
+                else:
+                    model[key] = value
+                continue
+            if key.endswith("_use_pe"):
+                mixer = key[: -len("_use_pe")]
+                put(("positional_encoding_parameters", "use_pe", key), value)
+                continue
+            if key in _FFN_ACTIVATION_CONFIG_KEYS:
+                put(("ffn", "activation_config", key), value)
+                continue
+            if key in component_alias:
+                for mixer, leaf in component_alias[key]:
+                    attention.setdefault(mixer, {})[leaf] = value
+                continue
+            # Unknown flat keys are warned about and dropped by the loader
+            # (the strict whole-document gate lives in the schema consistency
+            # test); programmatic callers get the same tolerant behavior.
+            continue
+        if attention:
+            model["attention"] = attention
+        top = model.pop("__top__", {})
+        config = cls.from_dict(
+            model,
+            image_block=image_block,
+            audio_block=audio_block,
+            model_class=model_class,
+        )
+        for key, value in top.items():
+            setattr(config, key, value)
+        return config
+
+    def to_jsonable(self) -> Dict[str, Any]:
+        """Return a JSON-serializable nested mapping (checkpoints / export)."""
+        return dataclasses.asdict(self)
+
+    # ------------------------------------------------------------------
+    # validation
+    # ------------------------------------------------------------------
+    def __post_init__(self) -> None:
+        """Derive dependent values and validate cross-field invariants.
+
+        Raises:
+            ValueError: If a cross-field invariant is violated.
+        """
+        dims = self.dims
+        if self.ffn.hidden_size is None:
+            self.ffn.hidden_size = dims.hidden_size * 2
+
+        self.ffn.activation = str(self.ffn.activation).lower()
+
+
+        # ---- MoE anatomy ----
+        moe = self.moe
+        if moe.num_experts < 1:
+            raise ValueError(f"num_experts must be >= 1, got {moe.num_experts}")
+        if moe.top_k < 1:
+            raise ValueError(f"top_k_experts must be >= 1, got {moe.top_k}")
+        if moe.top_k > moe.num_experts:
             raise ValueError(
-                f"top_k_experts must be >= 1, got {self.top_k_experts}"
+                f"top_k_experts must be <= num_experts, got top_k_experts={moe.top_k}, "
+                f"num_experts={moe.num_experts}"
             )
-        if self.top_k_experts > self.num_experts:
-            raise ValueError(
-                "top_k_experts must be <= num_experts, got "
-                f"top_k_experts={self.top_k_experts}, "
-                f"num_experts={self.num_experts}"
-            )
-        if self.moe_router_scoring not in {"softmax", "sigmoid", "softplus_sqrt"}:
+        if moe.router.scoring not in {"softmax", "sigmoid", "softplus_sqrt"}:
             raise ValueError(
                 "moe_router_scoring must be 'softmax', 'sigmoid' or "
-                f"'softplus_sqrt', got {self.moe_router_scoring!r}"
+                f"'softplus_sqrt', got {moe.router.scoring!r}"
             )
-        if self.moe_router_dtype not in {"float32", "bfloat16"}:
+        if moe.router.dtype not in {"float32", "bfloat16"}:
             raise ValueError(
-                "moe_router_dtype must be 'float32' or 'bfloat16', got "
-                f"{self.moe_router_dtype!r}"
+                f"moe_router_dtype must be 'float32' or 'bfloat16', got {moe.router.dtype!r}"
             )
-        if self.moe_routing_type not in {"token_choice", "expert_choice"}:
+        if moe.routing.type not in {"token_choice", "expert_choice"}:
             raise ValueError(
-                "moe_routing_type must be 'token_choice' or 'expert_choice', "
-                f"got {self.moe_routing_type!r}"
+                "moe_routing_type must be 'token_choice' or 'expert_choice', got "
+                f"{moe.routing.type!r}"
             )
-        if self.moe_hash_table not in {"random", "round_robin"}:
+        if moe.routing.hash_table not in {"random", "round_robin"}:
             raise ValueError(
-                "moe_hash_table must be 'random' or 'round_robin', got "
-                f"{self.moe_hash_table!r}"
+                f"moe_hash_table must be 'random' or 'round_robin', got {moe.routing.hash_table!r}"
             )
-        if self.moe_aux_loss_type not in {"none", "batch", "sequence"}:
+        if moe.balancing.aux_loss not in {"none", "batch", "sequence"}:
             raise ValueError(
                 "moe_aux_loss_type must be 'none', 'batch' or 'sequence', got "
-                f"{self.moe_aux_loss_type!r}"
+                f"{moe.balancing.aux_loss!r}"
             )
-        if self.moe_bias_update not in {"none", "sign", "centered_sign"}:
+        if moe.balancing.bias_update not in {"none", "sign", "centered_sign"}:
             raise ValueError(
-                "moe_bias_update must be 'none', 'sign' or 'centered_sign', "
-                f"got {self.moe_bias_update!r}"
+                "moe_bias_update must be 'none', 'sign' or 'centered_sign', got "
+                f"{moe.balancing.bias_update!r}"
             )
-        if self.moe_shared_expert_gate not in {"none", "sigmoid"}:
+        if moe.shared.gate not in {"none", "sigmoid"}:
             raise ValueError(
-                "moe_shared_expert_gate must be 'none' or 'sigmoid', got "
-                f"{self.moe_shared_expert_gate!r}"
+                f"moe_shared_expert_gate must be 'none' or 'sigmoid', got {moe.shared.gate!r}"
             )
-        if (
-            self.use_moe
-            and self.moe_router_scoring == "softmax"
-            and self.top_k_experts == 1
-            and not self.moe_router_pre_softmax
-        ):
-            # Softmax at top-1 over a single logit is always 1, so the router
-            # would receive no gradient. The pre-softmax form (softmax over all
-            # experts) is the historical behaviour of this codebase and keeps
-            # the router trainable, so enable it instead of rejecting legacy
-            # configs that omit it.
-            self.moe_router_pre_softmax = True
-            warnings.warn(
-                "moe.router.scoring='softmax' with top_k=1: enabling "
-                "moe.router.pre_softmax automatically (a top-1 post-softmax "
-                "weight is always 1 and gives the router no gradient).",
-                UserWarning,
-                stacklevel=2,
-            )
-        if (
-            self.use_moe
-            and self.moe_bias_update != "none"
-            and self.moe_router_scoring == "softmax"
-        ):
+        if moe.balancing.bias_update != "none" and moe.router.scoring not in {
+            "sigmoid",
+            "softplus_sqrt",
+        }:
             raise ValueError(
                 "moe.balancing.bias_update requires router scoring 'sigmoid' or "
-                "'softplus_sqrt': the expert bias is added to the scores before "
-                "top-k and is not tunable under softmax normalisation "
-                "(Wang et al., arXiv:2408.15664)."
+                "'softplus_sqrt'"
             )
-        if (
-            self.use_moe
-            and self.moe_bias_update != "none"
-            and self.moe_routing_type == "expert_choice"
-        ):
+        if moe.routing.type == "expert_choice" and moe.balancing.bias_update != "none":
             raise ValueError(
                 "moe.routing.type='expert_choice' is self-balancing: it cannot "
                 "be combined with moe.balancing.bias_update."
             )
-        if (
-            self.use_moe
-            and self.moe_aux_loss_type != "none"
-            and self.moe_routing_type == "expert_choice"
-        ):
+        if moe.routing.type == "expert_choice" and moe.balancing.aux_loss != "none":
             raise ValueError(
                 "moe.routing.type='expert_choice' is self-balancing: it cannot "
                 "be combined with moe.balancing.aux_loss."
             )
-        if (
-            self.use_moe
-            and self.moe_hash_layers > 0
-            and self.moe_routing_type != "token_choice"
-        ):
-            raise ValueError(
-                "moe.routing.hash_layers requires routing.type='token_choice'."
-            )
-        if (
-            self.use_moe
-            and self.moe_hash_layers > 0
-            and self.moe_bias_update != "none"
-        ):
+        if moe.routing.hash_layers and moe.routing.type != "token_choice":
+            raise ValueError("moe.routing.hash_layers requires routing.type='token_choice'.")
+        if moe.routing.hash_layers and moe.balancing.bias_update != "none":
             raise ValueError(
                 "moe.routing.hash_layers selects experts from a fixed table: the "
                 "expert bias cannot rebalance it, so bias_update must stay 'none'."
             )
-        if self.moe_hash_layers < 0:
-            raise ValueError(
-                f"moe_hash_layers must be >= 0, got {self.moe_hash_layers}"
-            )
-        if self.moe_dense_layers < 0:
-            raise ValueError(
-                f"moe_dense_layers must be >= 0, got {self.moe_dense_layers}"
-            )
-        if self.moe_dense_layers >= self.num_layers:
+        if moe.routing.hash_layers < 0:
+            raise ValueError(f"moe_hash_layers must be >= 0, got {moe.routing.hash_layers}")
+        if moe.layout.dense_layers < 0:
+            raise ValueError(f"moe_dense_layers must be >= 0, got {moe.layout.dense_layers}")
+        if moe.layout.dense_layers >= dims.num_layers:
             raise ValueError(
                 "moe_dense_layers must be < num_layers, got "
-                f"dense_layers={self.moe_dense_layers}, "
-                f"num_layers={self.num_layers}"
+                f"dense_layers={moe.layout.dense_layers}, num_layers={dims.num_layers}"
             )
-        if self.moe_layer_frequency < 1:
+        if moe.layout.every_n_layers < 1:
             raise ValueError(
-                "moe_layer_frequency must be >= 1, got "
-                f"{self.moe_layer_frequency}"
+                f"moe_layer_frequency must be >= 1, got {moe.layout.every_n_layers}"
             )
-        if self.use_moe and self.moe_hash_layers > self.moe_layer_count():
+        if moe.routing.hash_layers > self.moe_layer_count():
             raise ValueError(
                 "moe_hash_layers cannot exceed the number of MoE layers "
-                f"(moe_hash_layers={self.moe_hash_layers}, "
+                f"(moe_hash_layers={moe.routing.hash_layers}, "
                 f"moe_layers={self.moe_layer_count()})."
             )
-        if self.moe_capacity_factor < 0.0:
+        if moe.routing.capacity_factor < 0.0:
             raise ValueError(
-                "moe_capacity_factor must be >= 0, got "
-                f"{self.moe_capacity_factor}"
+                f"moe_capacity_factor must be >= 0, got {moe.routing.capacity_factor}"
             )
-        if self.moe_router_jitter_eps < 0.0:
+        if moe.router.jitter_eps < 0.0:
             raise ValueError(
-                "moe_router_jitter_eps must be >= 0, got "
-                f"{self.moe_router_jitter_eps}"
+                f"moe_router_jitter_eps must be >= 0, got {moe.router.jitter_eps}"
             )
-        if self.moe_router_z_loss_coeff < 0.0:
+        if moe.router.z_loss_coeff < 0.0:
             raise ValueError(
-                "moe_router_z_loss_coeff must be >= 0, got "
-                f"{self.moe_router_z_loss_coeff}"
+                f"moe_router_z_loss_coeff must be >= 0, got {moe.router.z_loss_coeff}"
             )
-        if self.moe_bias_update_rate < 0.0:
+        if moe.balancing.bias_update_rate < 0.0:
             raise ValueError(
-                "moe_bias_update_rate must be >= 0, got "
-                f"{self.moe_bias_update_rate}"
+                f"moe_bias_update_rate must be >= 0, got {moe.balancing.bias_update_rate}"
             )
-        if self.moe_shared_experts_count < 0:
+        if moe.shared.count < 0:
             raise ValueError(
-                "moe_shared_experts_count must be >= 0, got "
-                f"{self.moe_shared_experts_count}"
+                f"moe_shared_experts_count must be >= 0, got {moe.shared.count}"
             )
-        if self.moe_activation_clamp < 0.0:
+        if moe.experts.activation_clamp < 0.0:
             raise ValueError(
-                "moe_activation_clamp must be >= 0, got "
-                f"{self.moe_activation_clamp}"
+                f"moe_activation_clamp must be >= 0, got {moe.experts.activation_clamp}"
             )
-        if self.moe_expert_hidden_size is not None and int(
-            self.moe_expert_hidden_size
-        ) < 1:
+        if moe.expert_hidden_size is not None and int(moe.expert_hidden_size) < 1:
             raise ValueError(
-                "moe_expert_hidden_size must be >= 1 when set, got "
-                f"{self.moe_expert_hidden_size}"
+                f"moe_expert_hidden_size must be >= 1 when set, got {moe.expert_hidden_size}"
             )
-        if self.moe_shared_expert_hidden_size is not None and int(
-            self.moe_shared_expert_hidden_size
-        ) < 1:
+        if moe.shared.hidden_size is not None and int(moe.shared.hidden_size) < 1:
             raise ValueError(
                 "moe_shared_expert_hidden_size must be >= 1 when set, got "
-                f"{self.moe_shared_expert_hidden_size}"
+                f"{moe.shared.hidden_size}"
             )
-        if self.moe_latent_enabled:
-            if self.moe_latent_dim is None:
-                raise ValueError(
-                    "moe.latent.enabled=true requires moe.latent.dim to be set."
-                )
-            if not 0 < int(self.moe_latent_dim) < int(self.hidden_size):
+        if moe.latent.enabled:
+            if moe.latent.dim is None:
+                raise ValueError("moe.latent.enabled=true requires moe.latent.dim to be set.")
+            if not 0 < int(moe.latent.dim) < int(dims.hidden_size):
                 raise ValueError(
                     "moe_latent_dim must be in (0, hidden_size) when latent MoE "
-                    f"is enabled, got latent_dim={self.moe_latent_dim}, "
-                    f"hidden_size={self.hidden_size}"
+                    f"is enabled, got latent_dim={moe.latent.dim}, "
+                    f"hidden_size={dims.hidden_size}"
                 )
-
-        # ---- Resolve latent-family ranks that default to hidden_size // 2 ----
-        half = max(1, self.hidden_size // 2)
-        if self.mla_latent_rank is None:
-            self.mla_latent_rank = half
-        if self.gqla_latent_rank is None:
-            self.gqla_latent_rank = half
-        if self.gqla_num_groups is None:
-            self.gqla_num_groups = max(1, self.num_heads // 4)
-        if self.mlra_latent_rank is None:
-            self.mlra_latent_rank = half
-        if self.tucker_query_rank is None:
-            self.tucker_query_rank = self.hidden_size
-        if self.tucker_key_rank is None:
-            self.tucker_key_rank = half
-        if self.tucker_value_rank is None:
-            self.tucker_value_rank = half
-        if self.iha_num_pseudo_heads is None:
-            self.iha_num_pseudo_heads = self.num_heads
-        if self.gta_num_shared_groups is None:
-            self.gta_num_shared_groups = max(1, self.num_heads // 4)
-        if self.gta_value_latent_rank is None:
-            self.gta_value_latent_rank = half
-        if self.mtla_latent_rank is None:
-            self.mtla_latent_rank = half
-        if self.mtla_stride is None:
-            self.mtla_stride = self.mtla_merge_factor
-
-        # ---- Resolve CCA / CCGQA defaults ----
-        # Rotary PEs are applied directly inside the compressed latent
-        # (arXiv:2510.04476), so the per-head latent dim must be even and the
-        # latent rank a multiple of num_heads. Round the paper defaults up so
-        # every default combination is buildable (e.g. hidden_size=96 with
-        # num_heads=8 gives latent 24 -> 3 per head, which RoPE cannot pair;
-        # it resolves to 32 -> 4 per head).
-        def _round_up_to(value: int, unit: int) -> int:
-            return max(unit, ((value + unit - 1) // unit) * unit)
-
-        heads = max(1, self.num_heads)
-        if self.cca_latent_rank is None:
-            self.cca_latent_rank = _round_up_to(
-                max(1, self.hidden_size // 4), 2 * heads
-            )
-        if self.ccgqa_num_kv_heads is None:
-            kv_heads = max(1, heads // 4)
-            while heads % kv_heads != 0:
-                kv_heads -= 1
-            self.ccgqa_num_kv_heads = kv_heads
-        kv_heads = max(1, int(self.ccgqa_num_kv_heads))
-        if self.ccgqa_query_latent_rank is None and self.ccgqa_kv_latent_rank is None:
-            # Both default: keep q_dh == kv_dh (GQA constraint) and q_dh even
-            # (RoPE constraint). Default compression C1 = 2 -> E // 2.
-            q_dh = _round_up_to(max(2, self.hidden_size // (2 * heads)), 2)
-            self.ccgqa_query_latent_rank = q_dh * heads
-            self.ccgqa_kv_latent_rank = q_dh * kv_heads
-        elif self.ccgqa_query_latent_rank is None:
-            # Derive from the explicit KV rank so q_dh == kv_dh holds.
-            kv_dh = max(1, int(self.ccgqa_kv_latent_rank) // kv_heads)
-            self.ccgqa_query_latent_rank = kv_dh * heads
-        elif self.ccgqa_kv_latent_rank is None:
-            q_dh = max(1, int(self.ccgqa_query_latent_rank) // heads)
-            self.ccgqa_kv_latent_rank = q_dh * kv_heads
-
-        # ---- Resolve GMA / Gaussian Mixture Attention defaults ----
-        # routing_dim d_r defaults to the per-head dimension.
-        if self.gma_routing_dim is None:
-            self.gma_routing_dim = max(1, self.hidden_size // self.num_heads)
-        else:
-            self.gma_routing_dim = int(self.gma_routing_dim)
-            if self.gma_routing_dim < 1:
-                raise ValueError(
-                    f"gma_routing_dim must be >= 1, got {self.gma_routing_dim}"
-                )
-        if self.gma_num_components < 1:
+        if dims.mode not in {"encoder", "decoder"}:
             raise ValueError(
-                f"gma_num_components must be >= 1, got {self.gma_num_components}"
+                f"mode must be 'encoder' or 'decoder', got {dims.mode!r}"
             )
-        if self.gma_epsilon <= 0:
+        if self.mixture_of_depths.capacity_ratio <= 0 or self.mixture_of_depths.capacity_ratio > 1:
             raise ValueError(
-                f"gma_epsilon must be > 0, got {self.gma_epsilon}"
+                "mixture_of_depths_capacity_ratio (mixture_of_depths.capacity_ratio) must be in (0, 1], got "
+                f"{self.mixture_of_depths.capacity_ratio}"
             )
-        if self.gma_sigma_eps <= 0:
+        if self.mixture_of_depths.router_aux_loss_weight < 0:
             raise ValueError(
-                f"gma_sigma_eps must be > 0, got {self.gma_sigma_eps}"
+                "mixture_of_depths_router_aux_loss_weight (mixture_of_depths.router_aux_loss_weight) must be >= 0, got "
+                f"{self.mixture_of_depths.router_aux_loss_weight}"
             )
 
-        # ---- Resolve SSOG / Separable Sum of Gaussians defaults ----
-        # Grid defaults to the ViT patch grid; non-vision configs must
-        # set ssog_grid_h/ssog_grid_w explicitly (grid_h=1 degenerates
-        # to a 1D positional field over the sequence).
-        patch = max(1, int(self.patch_size))
-        if self.ssog_grid_h is None:
-            self.ssog_grid_h = max(1, int(self.image_height) // patch)
-        if self.ssog_grid_w is None:
-            self.ssog_grid_w = max(1, int(self.image_width) // patch)
-        self.ssog_grid_h = int(self.ssog_grid_h)
-        self.ssog_grid_w = int(self.ssog_grid_w)
-        if self.ssog_grid_h < 1 or self.ssog_grid_w < 1:
-            raise ValueError(
-                f"ssog_grid_h/ssog_grid_w must be >= 1, got "
-                f"{self.ssog_grid_h}x{self.ssog_grid_w}"
-            )
-        if self.ssog_num_atoms < 1:
-            raise ValueError(
-                f"ssog_num_atoms must be >= 1, got {self.ssog_num_atoms}"
-            )
-        if float(self.ssog_sigma_floor) < 0.0:
-            raise ValueError(
-                f"ssog_sigma_floor must be >= 0, got {self.ssog_sigma_floor}"
-            )
-        if float(self.ssog_max_offset) <= 0.0:
-            raise ValueError(
-                f"ssog_max_offset must be > 0, got {self.ssog_max_offset}"
-            )
-        if "ssog" in (self.layer_pattern or []) and self.mode == "decoder":
-            raise ValueError(
-                "ssog is encoder-only: the separable Gaussian field has "
-                "no causal formulation. Remove ssog from layer_pattern "
-                "for decoder models."
-            )
+        from ._validation import validate_config
 
-        # ---- Validate SWA / Sliding Window Attention with sinks ----
-        if self.swa_window_size < 2:
-            raise ValueError(
-                f"swa_window_size must be >= 2, got {self.swa_window_size}"
-            )
-        if self.swa_num_sinks < 1:
-            raise ValueError(
-                f"swa_num_sinks must be >= 1, got {self.swa_num_sinks}"
-            )
-        if self.swa_num_sinks >= self.swa_window_size:
-            raise ValueError(
-                "swa_num_sinks must be smaller than swa_window_size, got "
-                f"num_sinks={self.swa_num_sinks}, "
-                f"window_size={self.swa_window_size}"
-            )
+        validate_config(self)
 
-        # ---- Validate Continuum Attention (arXiv:2610.20586) ----
-        if self.ca_gain_init <= 0.0:
-            raise ValueError(
-                f"ca_gain_init must be > 0, got {self.ca_gain_init}"
-            )
-
-        # ---- Validate First Passage Attention (arXiv:2610.22714) ----
-        if self.fpa_beta_init <= 0.0:
-            raise ValueError(
-                f"fpa_beta_init must be > 0, got {self.fpa_beta_init}"
-            )
-        if self.fpa_tau <= 0.0:
-            raise ValueError(
-                f"fpa_tau must be > 0, got {self.fpa_tau}"
-            )
-
-        # ---- Validate Fast Conformer limited-context attention ----
-        if self.fastconformer_window_size < 2:
-            raise ValueError(
-                "fastconformer_window_size must be >= 2, got "
-                f"{self.fastconformer_window_size}"
-            )
-        if self.fastconformer_global_tokens < 0:
-            raise ValueError(
-                "fastconformer_global_tokens must be >= 0, got "
-                f"{self.fastconformer_global_tokens}"
-            )
-        if self.fastconformer_global_tokens_spacing < 1:
-            raise ValueError(
-                "fastconformer_global_tokens_spacing must be >= 1, got "
-                f"{self.fastconformer_global_tokens_spacing}"
-            )
-
-        # ---- Validate LSA / Latent Sparse Attention (arXiv:2610.42147) ----
-        if self.lsa_num_long_range < 1:
-            raise ValueError(
-                f"lsa_num_long_range must be >= 1, got {self.lsa_num_long_range}"
-            )
-        if self.lsa_num_buckets < 1:
-            raise ValueError(
-                f"lsa_num_buckets must be >= 1, got {self.lsa_num_buckets}"
-            )
-        if self.lsa_num_sinks < 1:
-            raise ValueError(
-                f"lsa_num_sinks must be >= 1, got {self.lsa_num_sinks}"
-            )
-        if self.lsa_pool_size < 1:
-            raise ValueError(
-                f"lsa_pool_size must be >= 1, got {self.lsa_pool_size}"
-            )
-        if self.lsa_cluster_block < 2:
-            raise ValueError(
-                f"lsa_cluster_block must be >= 2, got {self.lsa_cluster_block}"
-            )
-        if self.lsa_num_sinks >= self.lsa_cluster_block:
-            raise ValueError(
-                "lsa_num_sinks must be smaller than lsa_cluster_block, got "
-                f"num_sinks={self.lsa_num_sinks}, "
-                f"cluster_block={self.lsa_cluster_block}"
-            )
-        if self.lsa_keys_per_bucket < 1:
-            raise ValueError(
-                f"lsa_keys_per_bucket must be >= 1, got {self.lsa_keys_per_bucket}"
-            )
-        if self.lsa_cluster_block % self.lsa_keys_per_bucket:
-            raise ValueError(
-                "lsa_cluster_block must be divisible by lsa_keys_per_bucket, got "
-                f"cluster_block={self.lsa_cluster_block}, "
-                f"keys_per_bucket={self.lsa_keys_per_bucket}"
-            )
-        if self.lsa_max_keys_per_bucket < self.lsa_keys_per_bucket:
-            raise ValueError(
-                "lsa_max_keys_per_bucket must be >= lsa_keys_per_bucket, got "
-                f"max_keys_per_bucket={self.lsa_max_keys_per_bucket}, "
-                f"keys_per_bucket={self.lsa_keys_per_bucket}"
-            )
-
-        # ---- Validate Conformer convolution module (arXiv:2005.08100) ----
-        if int(self.conformer_kernel_size) < 1:
-            raise ValueError(
-                f"conformer_kernel_size must be >= 1, got {self.conformer_kernel_size}"
-            )
-        _VALID_CONFORMER_CONV_NORMS = {"batch", "group", "layer"}
-        if str(self.conformer_conv_norm).lower() not in _VALID_CONFORMER_CONV_NORMS:
-            raise ValueError(
-                "conformer_conv_norm must be one of "
-                f"{sorted(_VALID_CONFORMER_CONV_NORMS)}, got "
-                f"{self.conformer_conv_norm!r}"
-            )
-
-        _VALID_POSITIONAL_ENCODINGS = {
-            "rope", "hope", "nope", "alibi", "bam", "pape", "pape_efficient", "pape_ri",
-            "sinusoidal_absolute", "sinusoidal_rotary", "learned_absolute", "none",
-        }
-        if self.positional_encoding is None:
-            self.positional_encoding = "rope"
-        else:
-            self.positional_encoding = str(self.positional_encoding).lower()
-            if self.positional_encoding not in _VALID_POSITIONAL_ENCODINGS:
-                raise ValueError(
-                    f"positional_encoding must be one of {sorted(_VALID_POSITIONAL_ENCODINGS)}, "
-                    f"got {self.positional_encoding!r}"
-                )
-
-        if self.alibi_num_heads is None:
-            self.alibi_num_heads = self.num_heads
-
-        if self.pape_num_parabolas < 1:
-            raise ValueError(f"pape_num_parabolas must be >= 1, got {self.pape_num_parabolas}")
-        if self.pape_num_positions < 1:
-            raise ValueError(f"pape_num_positions must be >= 1, got {self.pape_num_positions}")
-
-        # ---- Validate BAM / SSMax (arXiv:2505.22842) ----
-        if float(self.bam_eps) <= 0.0:
-            raise ValueError(f"bam_eps must be > 0, got {self.bam_eps}")
-        if self.use_ssmax and float(self.ssmax_s_init) <= 0.0:
-            raise ValueError(f"ssmax_s_init must be > 0 when use_ssmax=True, got {self.ssmax_s_init}")
-
-        if self.mode not in {"encoder", "decoder"}:
-            raise ValueError("mode must be one of {'encoder', 'decoder'}")
-
-        if not 0.0 < float(self.mixture_of_depths_capacity_ratio) <= 1.0:
-            raise ValueError("mixture_of_depths_capacity_ratio must be in the range (0, 1]")
-
-        if float(self.mixture_of_depths_router_aux_loss_weight) < 0.0:
-            raise ValueError("mixture_of_depths_router_aux_loss_weight must be >= 0")
-
-        if not 0.0 < float(self.prms_partial_ratio) <= 1.0:
-            raise ValueError("prms_partial_ratio must be in the range (0, 1]")
-
-        if not 0.0 <= float(self.flashnorm_partial_ratio) <= 1.0:
-            raise ValueError("flashnorm_partial_ratio must be in the range [0, 1]")
-
-        # ---- Validate QK normalization / logit control (QK-Norm, QK-Clip, QuacK) ----
-        self.qk_norm_method = str(self.qk_norm_method).lower()
-        if self.qk_norm_method not in {
-            "rms_norm",
-            "layer_norm",
-            "l2_norm",
-            "qk_clip",
-            "quack",
-        }:
-            raise ValueError(
-                "qk_norm_method must be one of {'rms_norm', 'layer_norm', 'l2_norm', "
-                f"'qk_clip', 'quack'}}, got {self.qk_norm_method!r}"
-            )
-        if float(self.qk_clip_tau) <= 0.0:
-            raise ValueError("qk_clip_tau must be > 0")
-        if not 0.0 <= float(self.qk_clip_alpha) <= 1.0:
-            raise ValueError("qk_clip_alpha must be in the range [0, 1]")
-        if float(self.quack_tau) <= 0.0:
-            raise ValueError("quack_tau must be > 0")
-        if float(self.qk_norm_eps) <= 0.0:
-            raise ValueError("qk_norm_eps must be > 0")
-
-        # ---- Validate dynamic (EELBERT) token embeddings ----
-        if self.use_dynamic_embedding and self.use_factorized_embedding:
-            raise ValueError(
-                "use_dynamic_embedding and use_factorized_embedding are mutually "
-                "exclusive: dynamic embeddings replace the factorized lookup table "
-                "(embedding.dynamic.enabled vs embedding.factorized.enabled)"
-            )
-        if int(self.dynamic_embedding_ngram_max) < 1:
-            raise ValueError("dynamic_embedding_ngram_max must be >= 1")
-        if int(self.dynamic_embedding_bucket) < 2:
-            raise ValueError("dynamic_embedding_bucket must be >= 2")
-        if self.use_dynamic_embedding and int(self.dynamic_embedding_ngram_max) > int(
-            self.hidden_size
-        ):
-            raise ValueError(
-                f"dynamic_embedding_ngram_max ({self.dynamic_embedding_ngram_max}) "
-                f"must be <= hidden_size ({self.hidden_size}): the n-gram partition "
-                "needs at least one embedding dimension per gram size"
-            )
-
-        # ---- Validate mHC (Manifold-Constrained Hyper-Connections) ----
-        if int(self.mhc_expansion_rate) < 1:
-            raise ValueError("mhc_expansion_rate must be >= 1")
-        if int(self.mhc_sinkhorn_iters) < 1:
-            raise ValueError("mhc_sinkhorn_iters must be >= 1")
-        if float(self.mhc_gating_init) <= 0.0:
-            raise ValueError("mhc_gating_init must be > 0")
-
-        # ---- Validate Hyperloop (arXiv:2604.21254) ----
-        if self.mhc_hyperloop:
-            if not bool(self.use_mhc):
-                raise ValueError(
-                    "mhc_hyperloop=True requires use_mhc=True: the Hyperloop "
-                    "transformer replaces the per-sublayer mHC wiring with "
-                    "loop-level hyper-connections (arXiv:2604.21254)"
-                )
-            if int(self.num_loops) < 2:
-                raise ValueError(
-                    f"mhc_hyperloop=True requires num_loops >= 2 (the paper uses "
-                    f"3), got num_loops={int(self.num_loops)}"
-                )
-            if int(self.mhc_hyperloop_begin_layers) < 0:
-                raise ValueError("mhc_hyperloop_begin_layers must be >= 0")
-            if int(self.mhc_hyperloop_end_layers) < 0:
-                raise ValueError("mhc_hyperloop_end_layers must be >= 0")
-            if int(self.mhc_hyperloop_begin_layers) + int(
-                self.mhc_hyperloop_end_layers
-            ) >= int(self.num_layers):
-                raise ValueError(
-                    "mhc_hyperloop_begin_layers + mhc_hyperloop_end_layers "
-                    f"({int(self.mhc_hyperloop_begin_layers)} + "
-                    f"{int(self.mhc_hyperloop_end_layers)}) must be strictly less "
-                    f"than num_layers ({int(self.num_layers)}): the looped middle "
-                    "block must contain at least one layer"
-                )
-            rp = str(self.mhc_hyperloop_res_parameterization).lower()
-            valid_res_params = {"diagonal", "sinkhorn", "identity"}
-            if rp not in valid_res_params:
-                raise ValueError(
-                    f"mhc_hyperloop_res_parameterization must be one of "
-                    f"{sorted(valid_res_params)}, got {rp!r}"
-                )
-            self.mhc_hyperloop_res_parameterization = rp
-            if str(self.residual_type).lower() in {"full_attn", "block_attn"}:
-                raise ValueError(
-                    "mhc_hyperloop is incompatible with AttnRes residuals "
-                    "(residual_type='full_attn'/'block_attn'): AttnRes applies "
-                    "depth-wise attention per logical layer on the n-stream "
-                    "residual, while Hyperloop applies hyper-connections only "
-                    "at the loop level"
-                )
-
-        # ---- Validate Attention Residuals (arXiv:2603.15031) ----
-        valid_residual_types = {"standard", "none", "full_attn", "block_attn"}
-        rt = str(self.residual_type).lower()
-        if rt not in valid_residual_types:
-            raise ValueError(
-                f"residual_type must be one of {sorted(valid_residual_types)}, "
-                f"got {self.residual_type!r}"
-            )
-        self.residual_type = rt
-        if int(self.block_attn_num_blocks) < 1:
-            raise ValueError("block_attn_num_blocks must be >= 1")
-        max_blocks = int(self.num_layers) * int(self.num_loops)
-        if rt == "block_attn" and int(self.block_attn_num_blocks) > max_blocks:
-            raise ValueError(
-                f"block_attn_num_blocks ({self.block_attn_num_blocks}) cannot "
-                f"exceed total logical depth ({max_blocks})"
-            )
-        if self.attnres_mhc_stream_mode not in {"independent", "joint"}:
-            raise ValueError(
-                "attnres_mhc_stream_mode must be 'independent' or 'joint', "
-                f"got {self.attnres_mhc_stream_mode!r}"
-            )
-
-        # ---- Validate Falcon (arXiv:2608.27763) ----
-        if self.falcon_chunk_size is not None and int(self.falcon_chunk_size) < 1:
-            raise ValueError("falcon_chunk_size must be >= 1 or null")
-        self.falcon_qk_norm = str(self.falcon_qk_norm).lower()
-        if self.falcon_qk_norm not in {"rms_norm", "l2_norm"}:
-            raise ValueError(
-                f"falcon_qk_norm must be 'rms_norm' or 'l2_norm', "
-                f"got {self.falcon_qk_norm!r}"
-            )
-        self.falcon_beta_mode = str(self.falcon_beta_mode).lower()
-        if self.falcon_beta_mode not in {"static", "ctx_beta", "ctx_eta"}:
-            raise ValueError(
-                f"falcon_beta_mode must be 'static', 'ctx_beta' or 'ctx_eta', "
-                f"got {self.falcon_beta_mode!r}"
-            )
-        self.falcon_lambda_mode = str(self.falcon_lambda_mode).lower()
-        if self.falcon_lambda_mode not in {"static", "ctx"}:
-            raise ValueError(
-                f"falcon_lambda_mode must be 'static' or 'ctx', "
-                f"got {self.falcon_lambda_mode!r}"
-            )
-        if not 0.0 < float(self.falcon_beta) < 2.0:
-            raise ValueError("falcon_beta must be in (0, 2)")
-        if float(self.falcon_lambda) < 0.0:
-            raise ValueError("falcon_lambda must be >= 0")
-        if int(self.falcon_window) < 1:
-            raise ValueError("falcon_window must be >= 1")
-        if int(self.falcon_conv_kernel) < 1:
-            raise ValueError("falcon_conv_kernel must be >= 1")
-        if float(self.falcon_eps) <= 0.0:
-            raise ValueError("falcon_eps must be > 0")
-        if not 0.0 < float(self.falcon_eps_gamma) < 1.0:
-            raise ValueError("falcon_eps_gamma must be in (0, 1)")
-
-        # ---- Validate FFN activation ----
-        ffn_act = str(self.ffn_activation).lower()
-        if ffn_act not in ALL_ACTIVATIONS:
-            raise ValueError(
-                f"ffn_activation must be one of {sorted(ALL_ACTIVATIONS)}, "
-                f"got {self.ffn_activation!r}"
-            )
-        self.ffn_activation = ffn_act
-        if self.ffn_activation_config is not None:
-            if not isinstance(self.ffn_activation_config, dict):
-                raise ValueError(
-                    "ffn_activation_config must be a mapping (dict) when provided"
-                )
-            _validate_ffn_activation_config(self.ffn_activation, self.ffn_activation_config)
-
-        # ---- Validate Vision Transformer fields ----
-        _VALID_VIT_PE = {
-            "learned_1d", "none",
-            "learned_absolute", "sinusoidal_absolute", "sinusoidal_rotary",
-            "rope", "hope", "nope", "alibi", "bam", "pape", "pape_efficient", "pape_ri",
-        }
-        if self.pos_embedding_type not in _VALID_VIT_PE:
-            raise ValueError(
-                f"pos_embedding_type must be one of {sorted(_VALID_VIT_PE)}, "
-                f"got {self.pos_embedding_type!r}"
-            )
-        if self.pos_embedding_type == "learned_1d":
-            self.pos_embedding_type = "learned_absolute"
-        if self.pooling_mode not in {"cls", "gap"}:
-            raise ValueError(
-                f"pooling_mode must be 'cls' or 'gap', got {self.pooling_mode!r}"
-            )
-        if self.mask_token_strategy not in {"bert", "mask_only", "random_only"}:
-            raise ValueError(
-                "mask_token_strategy must be 'bert', 'mask_only', or 'random_only', "
-                f"got {self.mask_token_strategy!r}"
-            )
-        if self.prediction_target not in {
-            "mean_color_3bit", "downsampled_3bit", "full_patch_l2"
-        }:
-            raise ValueError(
-                "prediction_target must be 'mean_color_3bit', 'downsampled_3bit', "
-                f"or 'full_patch_l2', got {self.prediction_target!r}"
-            )
-        if self.seg_head_type not in {"pixel", "eomt"}:
-            raise ValueError(
-                f"seg_head_type must be 'pixel' or 'eomt', got {self.seg_head_type!r}"
-            )
-        if int(self.patch_size) < 1:
-            raise ValueError(f"patch_size must be >= 1, got {self.patch_size}")
-        if int(self.image_height) % int(self.patch_size) != 0:
-            raise ValueError(
-                f"image_height ({self.image_height}) must be divisible by "
-                f"patch_size ({self.patch_size})"
-            )
-        if int(self.image_width) % int(self.patch_size) != 0:
-            raise ValueError(
-                f"image_width ({self.image_width}) must be divisible by "
-                f"patch_size ({self.patch_size})"
-            )
-        if not 0.0 < float(self.mask_ratio) < 1.0:
-            raise ValueError(
-                f"mask_ratio must be in the range (0, 1), got {self.mask_ratio}"
-            )
-        if int(self.num_classes) < 1:
-            raise ValueError(f"num_classes must be >= 1, got {self.num_classes}")
-        if int(self.num_seg_classes) < 1:
-            raise ValueError(f"num_seg_classes must be >= 1, got {self.num_seg_classes}")
-        if int(self.seg_num_queries) < 1:
-            raise ValueError(f"seg_num_queries must be >= 1, got {self.seg_num_queries}")
-        if int(self.seg_l2_blocks) < 1:
-            raise ValueError(f"seg_l2_blocks must be >= 1, got {self.seg_l2_blocks}")
-
-        # Classification-head validation (NLP encoder, DashAI Strategy A).
-        if bool(self.classification_head) and self.num_labels is None:
-            raise ValueError(
-                "num_labels is required when classification_head=True"
-            )
-        if self.num_labels is not None and int(self.num_labels) < 1:
-            raise ValueError(
-                f"num_labels must be >= 1, got {self.num_labels}"
-            )
-        if str(self.encoder_pooling_mode) not in ("cls", "gap"):
-            raise ValueError(
-                f"encoder_pooling_mode must be 'cls' or 'gap', "
-                f"got {self.encoder_pooling_mode}"
-            )
-
-        # ---- Validate audio frontend + ASR head fields ----
-        _VALID_AUDIO_FEATURES = {"logmel", "spectrogram", "raw"}
-        self.audio_feature = str(self.audio_feature).lower()
-        if self.audio_feature not in _VALID_AUDIO_FEATURES:
-            raise ValueError(
-                f"audio_feature must be one of {sorted(_VALID_AUDIO_FEATURES)}, "
-                f"got {self.audio_feature!r}"
-            )
-        for name in (
-            "audio_sample_rate",
-            "audio_n_mels",
-            "audio_n_fft",
-            "audio_in_channels",
-            "audio_conv_channels",
-        ):
-            value = int(getattr(self, name))
-            if value < 1:
-                raise ValueError(f"{name} must be >= 1, got {value}")
-        for name in ("audio_window_ms", "audio_stride_ms"):
-            value = float(getattr(self, name))
-            if value <= 0.0:
-                raise ValueError(f"{name} must be > 0, got {value}")
-        window_samples = int(
-            round(float(self.audio_window_ms) * int(self.audio_sample_rate) / 1000.0)
-        )
-        if int(self.audio_n_fft) < max(1, window_samples):
-            raise ValueError(
-                f"audio_n_fft ({self.audio_n_fft}) must be >= the window length "
-                f"in samples ({max(1, window_samples)} samples for "
-                f"{self.audio_window_ms} ms at {self.audio_sample_rate} Hz)"
-            )
-        _VALID_ASR_LOSSES = {"ctc", "transducer"}
-        self.asr_loss = str(self.asr_loss).lower()
-        if self.asr_loss not in _VALID_ASR_LOSSES:
-            raise ValueError(
-                f"asr_loss must be one of {sorted(_VALID_ASR_LOSSES)}, "
-                f"got {self.asr_loss!r}"
-            )
-        if int(self.asr_decoder_dim) < 1:
-            raise ValueError(
-                f"asr_decoder_dim must be >= 1, got {self.asr_decoder_dim}"
-            )
-        if int(self.asr_decoder_layers) < 1:
-            raise ValueError(
-                f"asr_decoder_layers must be >= 1, got {self.asr_decoder_layers}"
-            )
-        if not 0.0 <= float(self.asr_decoder_dropout) < 1.0:
-            raise ValueError(
-                "asr_decoder_dropout must be in the range [0, 1), got "
-                f"{self.asr_decoder_dropout}"
-            )
-        # ---- Validate SpecAugment frontend masking (arXiv:1904.08779) ----
-        if int(self.audio_spec_augment_freq_mask_width) < 1:
-            raise ValueError(
-                "audio_spec_augment_freq_mask_width must be >= 1, got "
-                f"{self.audio_spec_augment_freq_mask_width}"
-            )
-        if int(self.audio_spec_augment_time_masks) < 1:
-            raise ValueError(
-                "audio_spec_augment_time_masks must be >= 1, got "
-                f"{self.audio_spec_augment_time_masks}"
-            )
-        if not 0.0 < float(self.audio_spec_augment_time_mask_ratio) <= 1.0:
-            raise ValueError(
-                "audio_spec_augment_time_mask_ratio must be in (0, 1], got "
-                f"{self.audio_spec_augment_time_mask_ratio}"
-            )
-
+    # ------------------------------------------------------------------
+    # MoE layout helpers
+    # ------------------------------------------------------------------
     def is_moe_layer(self, layer_idx: int) -> bool:
-        """Return whether a physical layer index runs the MoE FFN.
-
-        The layout follows ``moe.layout``: the first ``moe_dense_layers``
-        layers always use the dense FFN, then an MoE layer is placed every
-        ``moe_layer_frequency`` layers (1 = every layer). Dense layers use
-        ``ffn_hidden_size``; MoE layers use ``moe_expert_hidden_size`` or fall
-        back to ``ffn_hidden_size``.
+        """Return whether physical layer ``layer_idx`` runs the MoE FFN.
 
         Args:
             layer_idx: Zero-based physical layer index.
 
         Returns:
-            ``True`` when the layer should build a routed MoE FFN.
+            ``True`` when the layer uses the MoE FFN.
         """
-        if not bool(self.use_moe):
-            return False
-        dense = int(self.moe_dense_layers)
-        if layer_idx < dense:
-            return False
-        freq = max(1, int(self.moe_layer_frequency))
-        return (int(layer_idx) - dense) % freq == 0
+        return self.moe_layer_mask()[layer_idx]
 
     def moe_layer_mask(self) -> List[bool]:
-        """Return the per-layer MoE mask for ``num_layers`` physical layers."""
-        return [self.is_moe_layer(i) for i in range(int(self.num_layers))]
+        """Return the per-physical-layer MoE mask.
+
+        Returns:
+            A list of booleans with one entry per physical layer.
+        """
+        mask = [False] * int(self.dims.num_layers)
+        if not self.moe.enabled:
+            return mask
+        dense = int(self.moe.layout.dense_layers)
+        frequency = max(int(self.moe.layout.every_n_layers), 1)
+        for idx in range(dense, len(mask)):
+            mask[idx] = (idx - dense) % frequency == 0
+        return mask
 
     def moe_layer_count(self) -> int:
-        """Return how many physical layers run the MoE FFN."""
+        """Return the number of physical layers that run the MoE FFN."""
         return sum(self.moe_layer_mask())
+
+    # ------------------------------------------------------------------
+    # historical flat-name accessors (structural scalars only)
+    # ------------------------------------------------------------------
+    def use_pe_for(self, mixer: str, default: bool = True) -> bool:
+        """Return whether ``mixer`` consumes the model-wide positional encoding.
+
+        Args:
+            mixer: Mixer registry name.
+            default: Fallback when neither the config nor the spec decides.
+
+        Returns:
+            ``True`` when the mixer should apply the positional encoding.
+        """
+        from src.model.attention.params import use_pe_for
+
+        return use_pe_for(self, mixer, default)
+
+    def attention_params(self, mixer: str) -> Dict[str, Any]:
+        """Return the raw ``model.attention.<mixer>`` mapping.
+
+        Args:
+            mixer: Mixer registry name (or alias).
+
+        Returns:
+            The raw parameter mapping (empty when absent).
+        """
+        return dict(self.attention.get(mixer, {}) or {})
+
+    @property
+    def head_dim(self) -> int:
+        """Per-head dimension (``dims.hidden_size // dims.num_heads``)."""
+        return self.dims.head_dim
+
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Route historical flat-name assignments into the nested blocks.
+
+        Args:
+            name: Attribute name.
+            value: Assigned value.
+        """
+        if name.startswith("_") or name in _FIELD_NAMES:
+            if name == "classification_head" and isinstance(value, bool):
+                object.__setattr__(
+                    self, name, ClassificationHeadConfig(enabled=bool(value))
+                )
+                self.__dict__.get("_alias_cache", {}).pop(name, None)
+                return
+            object.__setattr__(self, name, value)
+            self.__dict__.get("_alias_cache", {}).pop(name, None)
+            return
+        alias = _FLAT_ALIASES.get(name)
+        if alias is not None:
+            node: Any = self
+            for part in alias[:-1]:
+                child = getattr(node, part)
+                if child is None:
+                    child = _default_block_for(part)
+                    object.__setattr__(node, part, child)
+                node = child
+            setattr(node, alias[-1], value)
+            self.__dict__.get("_alias_cache", {}).pop(name, None)
+            return
+        component = _COMPONENT_ALIASES.get(name)
+        if component is not None:
+            mixer, leaf = component
+            self.attention.setdefault(mixer, {})[leaf] = value
+            self.__dict__.get("_alias_cache", {}).pop(name, None)
+            return
+        object.__setattr__(self, name, value)
+        self.__dict__.get("_alias_cache", {}).pop(name, None)
+
+    def __getattr__(self, name: str) -> Any:
+        """Resolve historical flat attribute names (structural blocks only).
+
+        Args:
+            name: Attribute name requested by legacy code.
+
+        Returns:
+            The corresponding nested value.
+
+        Raises:
+            AttributeError: If ``name`` has no nested mapping.
+        """
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in {
+            "dims", "norm", "embedding", "attention", "moe", "bitnet",
+            "mixture_of_depths", "ssmax", "numerics", "ffn",
+            "classification_head", "mhc", "residuals", "image", "audio",
+            "positional_encoding_parameters",
+        }:
+            raise AttributeError(name)
+        alias = _FLAT_ALIASES.get(name)
+        if alias is not None:
+            cache = self.__dict__.setdefault("_alias_cache", {})
+            if name in cache:
+                return cache[name]
+            node: Any = self
+            parts = list(alias)
+            # Modality blocks are optional; fall back to their defaults so
+            # legacy scalar reads never explode on a text-only config.
+            image = self.__dict__.get("image")
+            audio = self.__dict__.get("audio")
+            if parts[0] == "image" and image is None:
+                node = ImageConfig()
+                parts = parts[1:]
+            elif parts[0] == "audio" and audio is None:
+                node = AudioConfig()
+                parts = parts[1:]
+            for part in parts:
+                if isinstance(node, Mapping):
+                    node = node.get(part)
+                else:
+                    node = getattr(node, part)
+            cache[name] = node
+            return node
+        component = _COMPONENT_ALIASES.get(name)
+        if component is not None:
+            cache = self.__dict__.setdefault("_alias_cache", {})
+            if name in cache:
+                return cache[name]
+            mixer, leaf = component
+            raw = (self.__dict__.get("attention") or {}).get(mixer) or {}
+            value = raw.get(leaf)
+            if value is None:
+                from src.registry import ComponentFamily, ensure_builtins, registry
+
+                ensure_builtins()
+                value = dict(
+                    registry.get(ComponentFamily.MIXER, mixer).defaults
+                ).get(leaf)
+            cache[name] = value
+            return value
+        if name.endswith("_use_pe"):
+            mixer = name[: -len("_use_pe")]
+            try:
+                return self.use_pe_for(mixer, True)
+            except Exception as exc:  # noqa: BLE001 - unknown mixers fall back
+                raise AttributeError(name) from exc
+        raise AttributeError(
+            f"{type(self).__name__!r} object has no attribute {name!r}"
+        )
+
+
+    # ------------------------------------------------------------------
+    # positional-encoding parameters (nested ``positional_encoding_parameters``)
+    # ------------------------------------------------------------------
+    def _pe_param(self, key: str, leaf: str, default: Any) -> Any:
+        """Read one positional-encoding knob with a fallback default."""
+        block = self.positional_encoding_parameters.get(key) or {}
+        value = block.get(leaf) if isinstance(block, Mapping) else None
+        return default if value is None else value
+
+    @property
+    def rope_base(self) -> float:
+        """RoPE base frequency (``positional_encoding_parameters.rope.base``)."""
+        return float(self._pe_param("rope", "base", 10_000.0))
+
+    @property
+    def rope_scaling(self) -> float:
+        """RoPE scaling factor (``positional_encoding_parameters.rope.scaling``)."""
+        return float(self._pe_param("rope", "scaling", 1.0))
+
+    @property
+    def hope_base(self) -> float:
+        """HoPE base frequency."""
+        return float(self._pe_param("hope", "base", 10_000.0))
+
+    @property
+    def hope_damping(self) -> float:
+        """HoPE exponential damping coefficient."""
+        return float(self._pe_param("hope", "damping", 0.01))
+
+    @property
+    def alibi_num_heads(self) -> int:
+        """ALiBi head count (defaults to ``dims.num_heads``)."""
+        return int(self._pe_param("alibi", "num_heads", self.dims.num_heads))
+
+    @property
+    def bam_learn_mu(self) -> bool:
+        """BAM: learn the location parameter."""
+        return bool(self._pe_param("bam", "learn_mu", False))
+
+    @property
+    def bam_theta_init(self) -> float:
+        """BAM: initial shape parameter."""
+        return float(self._pe_param("bam", "theta_init", 0.0))
+
+    @property
+    def bam_mu_init(self) -> float:
+        """BAM: initial location parameter."""
+        return float(self._pe_param("bam", "mu_init", 0.0))
+
+    @property
+    def bam_eps(self) -> float:
+        """BAM: numerical epsilon."""
+        return float(self._pe_param("bam", "eps", 1e-5))
+
+    @property
+    def pape_num_parabolas(self) -> int:
+        """PaPE: number of learnable parabola terms."""
+        return int(self._pe_param("pape", "num_parabolas", 4))
+
+    @property
+    def pape_num_positions(self) -> int:
+        """PaPE: positions per token."""
+        return int(self._pe_param("pape", "num_positions", 1))
+
+    @property
+    def pape_rotation_invariant(self) -> bool:
+        """PaPE: rotation-invariant variant flag."""
+        return bool(self._pe_param("pape", "rotation_invariant", False))
+
+    @property
+    def sinusoidal_max_len(self) -> int:
+        """Sinusoidal PE: maximum sequence length."""
+        return int(self._pe_param("sinusoidal", "max_len", 512))
+
+    @property
+    def sinusoidal_base(self) -> float:
+        """Sinusoidal PE: base frequency."""
+        return float(self._pe_param("sinusoidal", "base", 10_000.0))
+
+    @property
+    def sinusoidal_scale(self) -> float:
+        """Sinusoidal PE: output scale."""
+        return float(self._pe_param("sinusoidal", "scale", 1.0))
+
+    @property
+    def learned_max_len(self) -> int:
+        """Learned absolute PE: maximum sequence length."""
+        return int(self._pe_param("learned", "max_len", 512))
+
+    @property
+    def learned_init_std(self) -> float:
+        """Learned absolute PE: initialization std."""
+        return float(self._pe_param("learned", "init_std", 0.02))
+
+def _component_flat_aliases() -> Dict[str, Tuple[Tuple[str, str], ...]]:
+    """Map historical flat mixer fields to ``(mixer, param)`` pairs.
+
+    Returns:
+        A mapping such as ``"mla_latent_rank" -> (("mla", "latent_rank"),)``
+        and ``"falcon_beta" -> ((six falcon variants…), …)``.
+    """
+    from src.registry import ComponentFamily, ensure_builtins, registry
+
+    ensure_builtins()
+    aliases: Dict[str, Tuple[Tuple[str, str], ...]] = {}
+    for spec in registry.specs(ComponentFamily.MIXER):
+        prefix = "falcon" if spec.name.startswith("falcon") else spec.name
+        for leaf in spec.defaults:
+            if spec.name == "retnet" and leaf == "heads":
+                flat = "retention_heads"
+            elif spec.name == "ode":
+                flat = f"ode_{leaf}"
+            else:
+                flat = f"{prefix}_{leaf}"
+            aliases.setdefault(flat, [])
+            entry = (spec.name, leaf)
+            if entry not in aliases[flat]:
+                aliases[flat].append(entry)
+    return {key: tuple(value) for key, value in aliases.items()}
+
+
+_FLAT_ALIASES: Dict[str, Tuple[str, ...]] = {
+    'alibi_num_heads': ('positional_encoding_parameters', 'alibi', 'num_heads'),
+    'asr_decoder_dim': ('audio', 'asr_decoder_dim'),
+    'asr_decoder_dropout': ('audio', 'asr_decoder_dropout'),
+    'asr_decoder_layers': ('audio', 'asr_decoder_layers'),
+    'asr_loss': ('audio', 'asr_loss'),
+    'attnres_gradient_checkpoint': ('residuals', 'gradient_checkpoint'),
+    'attnres_mhc_stream_mode': ('residuals', 'mhc_stream_mode'),
+    'audio_conv_channels': ('audio', 'conv_channels'),
+    'audio_feature': ('audio', 'feature'),
+    'audio_in_channels': ('audio', 'in_channels'),
+    'audio_n_fft': ('audio', 'n_fft'),
+    'audio_n_mels': ('audio', 'n_mels'),
+    'audio_sample_rate': ('audio', 'sample_rate'),
+    'audio_spec_augment_enabled': ('audio', 'spec_augment', 'enabled'),
+    'audio_spec_augment_freq_mask_width': ('audio', 'spec_augment', 'freq_mask_width'),
+    'audio_spec_augment_time_mask_ratio': ('audio', 'spec_augment', 'time_mask_ratio'),
+    'audio_spec_augment_time_masks': ('audio', 'spec_augment', 'time_masks'),
+    'audio_stride_ms': ('audio', 'stride_ms'),
+    'audio_window_ms': ('audio', 'window_ms'),
+    'bam_eps': ('positional_encoding_parameters', 'bam', 'eps'),
+    'bam_learn_mu': ('positional_encoding_parameters', 'bam', 'learn_mu'),
+    'bam_mu_init': ('positional_encoding_parameters', 'bam', 'mu_init'),
+    'bam_theta_init': ('positional_encoding_parameters', 'bam', 'theta_init'),
+    'bitnet_routers': ('bitnet', 'routers'),
+    'block_attn_init_query_zero': ('residuals', 'block_attn', 'init_query_zero'),
+    'block_attn_num_blocks': ('residuals', 'block_attn', 'num_blocks'),
+    'block_attn_use_rmsnorm_keys': ('residuals', 'block_attn', 'use_rmsnorm_keys'),
+    'classification_head': ('classification_head', 'enabled'),
+    'cls_token': ('image', 'cls_token'),
+    'dropout': ('dims', 'dropout'),
+    'dynamic_embedding_bucket': ('embedding', 'dynamic', 'bucket'),
+    'dynamic_embedding_ngram_max': ('embedding', 'dynamic', 'ngram_max'),
+    'dynamic_embedding_precompute': ('embedding', 'dynamic', 'precompute'),
+    'dynamic_embedding_seed': ('embedding', 'dynamic', 'seed'),
+    'embedding_conv_kernel': ('embedding', 'conv', 'kernel'),
+    'encoder_pooling_mode': ('classification_head', 'pooling_mode'),
+    'factorized_embedding_dim': ('embedding', 'factorized', 'dim'),
+    'ffn_activation': ('ffn', 'activation'),
+    'ffn_activation_config': ('ffn', 'activation_config'),
+    'ffn_hidden_size': ('ffn', 'hidden_size'),
+    'fixed_cross_entropy': ('numerics', 'fixed_cross_entropy'),
+    'fixed_softmax': ('numerics', 'fixed_softmax'),
+    'flashnorm_partial_ratio': ('norm', 'flashnorm_partial_ratio'),
+    'full_attn_init_query_zero': ('residuals', 'full_attn', 'init_query_zero'),
+    'full_attn_use_rmsnorm_keys': ('residuals', 'full_attn', 'use_rmsnorm_keys'),
+    'hidden_size': ('dims', 'hidden_size'),
+    'hope_base': ('positional_encoding_parameters', 'hope', 'base'),
+    'hope_damping': ('positional_encoding_parameters', 'hope', 'damping'),
+    'image_height': ('image', 'height'),
+    'image_width': ('image', 'width'),
+    'in_channels': ('image', 'in_channels'),
+    'layer_pattern': ('dims', 'layer_pattern'),
+    'learned_init_std': ('positional_encoding_parameters', 'learned', 'init_std'),
+    'learned_max_len': ('positional_encoding_parameters', 'learned', 'max_len'),
+    'mask_ratio': ('image', 'mask_ratio'),
+    'mask_token_strategy': ('image', 'mask_token_strategy'),
+    'mhc_checkpoint': ('mhc', 'checkpoint'),
+    'mhc_expansion_rate': ('mhc', 'expansion_rate'),
+    'mhc_full_prec_under_bitnet': ('mhc', 'full_prec_under_bitnet'),
+    'mhc_gating_init': ('mhc', 'gating_init'),
+    'mhc_hyperloop': ('mhc', 'hyperloop'),
+    'mhc_hyperloop_begin_layers': ('mhc', 'hyperloop_begin_layers'),
+    'mhc_hyperloop_end_layers': ('mhc', 'hyperloop_end_layers'),
+    'mhc_hyperloop_res_parameterization': ('mhc', 'hyperloop_res_parameterization'),
+    'mhc_sinkhorn_iters': ('mhc', 'sinkhorn_iters'),
+    'mixture_of_depths_capacity_ratio': ('mixture_of_depths', 'capacity_ratio'),
+    'mixture_of_depths_router_aux_loss_weight': ('mixture_of_depths', 'router_aux_loss_weight'),
+    'mode': ('dims', 'mode'),
+    'moe_activation_clamp': ('moe', 'experts', 'activation_clamp'),
+    'moe_aux_loss_coeff': ('moe', 'balancing', 'aux_loss_coeff'),
+    'moe_aux_loss_type': ('moe', 'balancing', 'aux_loss'),
+    'moe_bias_update': ('moe', 'balancing', 'bias_update'),
+    'moe_bias_update_rate': ('moe', 'balancing', 'bias_update_rate'),
+    'moe_capacity_factor': ('moe', 'routing', 'capacity_factor'),
+    'moe_dense_layers': ('moe', 'layout', 'dense_layers'),
+    'moe_expert_hidden_size': ('moe', 'expert_hidden_size'),
+    'moe_hash_layers': ('moe', 'routing', 'hash_layers'),
+    'moe_hash_seed': ('moe', 'routing', 'hash_seed'),
+    'moe_hash_table': ('moe', 'routing', 'hash_table'),
+    'moe_latent_dim': ('moe', 'latent', 'dim'),
+    'moe_latent_enabled': ('moe', 'latent', 'enabled'),
+    'moe_latent_norm_before_up_proj': ('moe', 'latent', 'norm_before_up_proj'),
+    'moe_layer_frequency': ('moe', 'layout', 'every_n_layers'),
+    'moe_routed_scaling_factor': ('moe', 'router', 'routed_scaling_factor'),
+    'moe_router_dtype': ('moe', 'router', 'dtype'),
+    'moe_router_jitter_eps': ('moe', 'router', 'jitter_eps'),
+    'moe_router_pre_softmax': ('moe', 'router', 'pre_softmax'),
+    'moe_router_renormalize': ('moe', 'router', 'renormalize'),
+    'moe_router_scoring': ('moe', 'router', 'scoring'),
+    'moe_router_z_loss_coeff': ('moe', 'router', 'z_loss_coeff'),
+    'moe_routing_type': ('moe', 'routing', 'type'),
+    'moe_shared_expert_gate': ('moe', 'shared', 'gate'),
+    'moe_shared_expert_hidden_size': ('moe', 'shared', 'hidden_size'),
+    'moe_shared_experts_count': ('moe', 'shared', 'count'),
+    'norm_type': ('norm', 'type'),
+    'num_experts': ('moe', 'num_experts'),
+    'num_heads': ('dims', 'num_heads'),
+    'num_kv_heads': ('dims', 'num_kv_heads'),
+    'num_labels': ('classification_head', 'num_labels'),
+    'num_layers': ('dims', 'num_layers'),
+    'num_loops': ('dims', 'num_loops'),
+    'num_seg_classes': ('image', 'num_seg_classes'),
+    'pape_num_parabolas': ('positional_encoding_parameters', 'pape', 'num_parabolas'),
+    'pape_num_positions': ('positional_encoding_parameters', 'pape', 'num_positions'),
+    'pape_rotation_invariant': ('positional_encoding_parameters', 'pape', 'rotation_invariant'),
+    'patch_size': ('image', 'patch_size'),
+    'pos_embedding_type': ('image', 'pos_embedding_type'),
+    'prediction_target': ('image', 'prediction_target'),
+    'prms_partial_ratio': ('norm', 'partial_ratio'),
+    'qk_clip_alpha': ('norm', 'qk_norm', 'clip_alpha'),
+    'qk_clip_tau': ('norm', 'qk_norm', 'clip_tau'),
+    'qk_norm_eps': ('norm', 'qk_norm', 'eps'),
+    'qk_norm_method': ('norm', 'qk_norm', 'method'),
+    'quack_tau': ('norm', 'qk_norm', 'quack_tau'),
+    'residual_type': ('residuals', 'type'),
+    'rope_base': ('positional_encoding_parameters', 'rope', 'base'),
+    'rope_scaling': ('positional_encoding_parameters', 'rope', 'scaling'),
+    'seg_head_type': ('image', 'seg_head_type'),
+    'seg_l2_blocks': ('image', 'seg_l2_blocks'),
+    'seg_mask_annealing': ('image', 'seg_mask_annealing'),
+    'seg_num_queries': ('image', 'seg_num_queries'),
+    'sinusoidal_base': ('positional_encoding_parameters', 'sinusoidal', 'base'),
+    'sinusoidal_max_len': ('positional_encoding_parameters', 'sinusoidal', 'max_len'),
+    'sinusoidal_scale': ('positional_encoding_parameters', 'sinusoidal', 'scale'),
+    'ssmax_s_init': ('ssmax', 's_init'),
+    'to_grayscale': ('image', 'to_grayscale'),
+    'top_k_experts': ('moe', 'top_k'),
+    'use_bitnet': ('bitnet', 'enabled'),
+    'use_bitnet_conv': ('bitnet', 'conv'),
+    'use_dynamic_embedding': ('embedding', 'dynamic', 'enabled'),
+    'use_embedding_conv': ('embedding', 'conv', 'enabled'),
+    'use_factorized_embedding': ('embedding', 'factorized', 'enabled'),
+    'use_mhc': ('mhc', 'enabled'),
+    'use_mixture_of_depths': ('mixture_of_depths', 'enabled'),
+    'use_moe': ('moe', 'enabled'),
+    'use_qk_norm': ('norm', 'qk_norm', 'enabled'),
+    'use_ssmax': ('ssmax', 'enabled'),
+    'vocab_size': ('dims', 'vocab_size'),
+}
+
+
+_COMPONENT_ALIASES_CACHE: Optional[Dict[str, Tuple[str, str]]] = None
+
+
+def _component_alias_map() -> Dict[str, Tuple[str, str]]:
+    """Return the legacy flat mixer-name -> ``(mixer, param)`` map.
+
+    Returns:
+        A mapping resolved once from the mixer specs.
+    """
+    global _COMPONENT_ALIASES_CACHE
+    if _COMPONENT_ALIASES_CACHE is None:
+        _COMPONENT_ALIASES_CACHE = {
+            key: value[0] for key, value in _component_flat_aliases().items()
+        }
+    return _COMPONENT_ALIASES_CACHE
+
+
+class _LazyComponentAliases(dict):
+    """Dict view that materialises the component alias map on first access."""
+
+    def _ensure(self) -> None:
+        if not super().__len__():
+            super().update(_component_alias_map())
+
+    def __getitem__(self, key):
+        self._ensure()
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        self._ensure()
+        return super().get(key, default)
+
+    def __contains__(self, key):
+        self._ensure()
+        return super().__contains__(key)
+
+
+_COMPONENT_ALIASES: Dict[str, Tuple[str, str]] = _LazyComponentAliases()
+
+_FIELD_NAMES = {f.name for f in dataclasses.fields(FrankensteinModelConfig)}
+
+
+def _default_classification_head() -> "ClassificationHeadConfig":
+    """Return a fresh default classification-head block."""
+    return ClassificationHeadConfig()
+
+
+def _default_block_for(name: str) -> Any:
+    """Return a fresh default block for an optional modality attribute.
+
+    Args:
+        name: Attribute name on the config (``image`` / ``audio``).
+
+    Returns:
+        A default block instance.
+    """
+    return ImageConfig() if name == "image" else AudioConfig()
+
+
+def flat_name_set() -> frozenset:
+    """Return every accepted historical flat configuration name.
+
+    Returns:
+        A frozenset of flat names that :meth:`FrankensteinModelConfig.from_flat`
+        accepts (structural aliases, nested fields and per-component knobs).
+    """
+    return frozenset(
+        set(_FLAT_ALIASES)
+        | set(_component_flat_aliases())
+        | set(_FIELD_NAMES)
+        | {"num_classes", "pooling_mode", "model_class", "token_vocab"}
+        | {f"{name}_use_pe" for name in ()}
+    )

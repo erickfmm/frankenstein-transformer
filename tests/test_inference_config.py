@@ -22,7 +22,7 @@ from src.deploy.inference_config import (
     inference_config_to_dict,
 )
 from src.training.config_loader import load_inference_config
-from src.utils.config_flatten import flatten_inference_dict
+from src.deploy.inference_config import flatten_inference_dict
 
 #: Schema default <-> dataclass default parity (plan §11.3).
 INFERENCE_DEFAULT_PAIRS = [

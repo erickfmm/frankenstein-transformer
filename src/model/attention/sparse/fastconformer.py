@@ -31,6 +31,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -88,7 +90,7 @@ class FastConformerAttention(nn.Module):
         Transformer." arXiv:2004.05150.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
         """Initialize FastConformerAttention.
 
         Args:
@@ -117,6 +119,7 @@ class FastConformerAttention(nn.Module):
             ValueError: If ``hidden_size`` is not divisible by ``num_heads``,
                 or if a knob is out of range.
         """
+        params = mixer_params(config, "fastconformer", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -128,13 +131,13 @@ class FastConformerAttention(nn.Module):
                 "hidden_size must be divisible by num_heads for FastConformerAttention"
             )
 
-        self.window_size = int(getattr(config, "fastconformer_window_size", 256))
-        self.global_tokens = int(getattr(config, "fastconformer_global_tokens", 1))
+        self.window_size = int(params.value("window_size", 256))
+        self.global_tokens = int(params.value("global_tokens", 1))
         self.global_tokens_spacing = int(
-            getattr(config, "fastconformer_global_tokens_spacing", 1)
+            params.value("global_tokens_spacing", 1)
         )
         self.global_attn_separate = bool(
-            getattr(config, "fastconformer_global_attn_separate", False)
+            params.value("global_attn_separate", False)
         )
         if self.window_size < 2:
             raise ValueError(
@@ -175,7 +178,7 @@ class FastConformerAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "fastconformer_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "fastconformer", True))
         attach_qk_norm(self, config, self.head_dim)
 
     # ------------------------------------------------------------------

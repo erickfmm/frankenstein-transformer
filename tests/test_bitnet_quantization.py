@@ -26,7 +26,7 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(bitnet_routers=False):
-    return FrankensteinModelConfig(
+    return FrankensteinModelConfig.from_flat(
         vocab_size=64,
         hidden_size=64,
         num_layers=4,
@@ -93,7 +93,7 @@ class TestBitNetQuantization(unittest.TestCase):
     def test_fp32_model_not_ternarized(self):
         """A model with use_bitnet=False has zero ternary tensors."""
         cfg = _cfg()
-        cfg.use_bitnet = False
+        cfg.bitnet.enabled = False
         m = FrankensteinEncoder(cfg)
         q = BitNetQuantizer()
         st = q.quantize_model_weights(m)

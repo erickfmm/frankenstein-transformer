@@ -40,7 +40,7 @@ def _cfg(**overrides):
         mode="encoder",
     )
     base.update(overrides)
-    return FrankensteinModelConfig(**base)
+    return FrankensteinModelConfig.from_flat(**base)
 
 
 BSZ, SEQ, DIM = 2, 8, 48
@@ -378,7 +378,7 @@ class TitanAttentionTests(unittest.TestCase):
 
     def test_invalid_positional_encoding_raises(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig(**{**_cfg().__dict__, "positional_encoding": "absolute"})
+            FrankensteinModelConfig.from_flat(**{**_cfg().__dict__, "positional_encoding": "absolute"})
 
     def test_invalid_hidden_size_raises(self):
         with self.assertRaises(ValueError):

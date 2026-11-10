@@ -20,6 +20,8 @@ Reference:
 
 from __future__ import annotations
 
+from ..params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -78,7 +80,7 @@ class GatedDeltaNetAttention(nn.Module):
         Gating. arXiv:2412.06464. ICLR 2025.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
         """Initialize GatedDeltaNetAttention.
 
         Args:
@@ -89,6 +91,7 @@ class GatedDeltaNetAttention(nn.Module):
         Raises:
             ValueError: If hidden_size is not divisible by num_heads.
         """
+        params = mixer_params(config, "gated_deltanet", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -112,7 +115,7 @@ class GatedDeltaNetAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        self.use_pe = bool(getattr(config, "gated_deltanet_use_pe", False))
+        self.use_pe = bool(use_pe_for(config, "gated_deltanet", False))
 
     def forward(
         self,

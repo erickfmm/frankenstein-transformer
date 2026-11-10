@@ -13,6 +13,8 @@ Reference:
 
 from __future__ import annotations
 
+from .params import mixer_params, use_pe_for
+
 from typing import Optional
 
 import torch
@@ -68,7 +70,8 @@ class TitanAttention(nn.Module):
         ValueError: If ``hidden_size`` is not divisible by ``num_heads``.
     """
 
-    def __init__(self, config, pos_encoder=None):
+    def __init__(self, config, pos_encoder=None, params=None):
+        params = mixer_params(config, "titan", params)
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
@@ -89,7 +92,7 @@ class TitanAttention(nn.Module):
 
         self.pos_encoder = pos_encoder
         self.pe_type = positional_encoding
-        self.use_pe = bool(getattr(config, "titan_use_pe", True))
+        self.use_pe = bool(use_pe_for(config, "titan", True))
         attach_qk_norm(self, config, self.head_dim)
 
         self.dropout = nn.Dropout(config.dropout)

@@ -58,7 +58,7 @@ def _mini_cfg(**overrides):
         ffn_activation="gelu",
     )
     base.update(overrides)
-    return FrankensteinModelConfig(**base)
+    return FrankensteinModelConfig.from_flat(**base)
 
 
 def _ids():
