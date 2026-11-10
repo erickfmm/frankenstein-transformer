@@ -986,6 +986,16 @@ blocks into fp32 parameters at load time; `quantized_linear` (v2) keeps
 `PackedLinear` buffers packed and dequantizes in `forward`. No
 `pytorch_model.bin` or bitsandbytes runtime is involved.
 
+The generated `configuration_frankenstein.py` keeps the flat model config under
+`frankenstein_config` (the authoritative copy) and mirrors it at the top level
+for HF interop. Two rules keep transformers 5.x happy: model keys are never
+forwarded to `PretrainedConfig.__init__`, and a `null` `num_labels` is omitted
+from `config.json`. Both `num_labels` and `rope_scaling` are reserved HF
+properties whose setters validate (`range(None)` for the former, a dict check
+for the latter, which the flat config stores as a float factor); values rejected
+on `setattr` stay available through `frankenstein_config`, so the core model
+still builds from them.
+
 ## 11. Extending the software
 
 ```mermaid

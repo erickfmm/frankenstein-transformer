@@ -103,8 +103,21 @@ class FrankensteinConfig(PretrainedConfig):
         model_cfg = dict(frankenstein_config or {})
         passthrough: Dict[str, Any] = {}
         for key, value in kwargs.items():
-            if key in _MODEL_KEYS and key not in model_cfg:
-                model_cfg[key] = value
+            if key == "num_labels" and value is None:
+                # `num_labels` is a reserved HF property. transformers 5.x
+                # keeps an explicit ``None`` (its ``__post_init__`` resolves
+                # ``kwargs.get("num_labels", ...)`` to None and then calls
+                # ``range(None)``), unlike 4.x which coerces None to 2. Treat
+                # it as unset so artifacts exported before this guard still
+                # load; the model-side value lives in ``frankenstein_config``.
+                continue
+            if key in _MODEL_KEYS:
+                # Model keys never reach ``PretrainedConfig.__init__``: flat
+                # names can collide with reserved HF config properties whose
+                # kwargs are validated (``rope_scaling`` must be a dict in
+                # transformers >= 5, while the Frankenstein config stores a
+                # float factor). ``frankenstein_config`` stays authoritative.
+                model_cfg.setdefault(key, value)
             else:
                 passthrough[key] = value
 
@@ -121,7 +134,14 @@ class FrankensteinConfig(PretrainedConfig):
                 # `num_labels` is a reserved HF property; a None value breaks
                 # its id2label/label2id map creation.
                 continue
-            setattr(self, key, value)
+            try:
+                setattr(self, key, value)
+            except (AttributeError, TypeError, ValueError):
+                # Some HF-reserved names reject the Frankenstein shape on set
+                # (``rope_scaling`` in transformers >= 5); the value remains
+                # available through ``frankenstein_config`` so the model still
+                # builds from it.
+                continue
 
     def to_dict(self) -> Dict[str, Any]:
         payload = super().to_dict()
@@ -802,6 +822,12 @@ def _build_transformers_config(
     quantization_config: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = dict(model_config)
+    if payload.get("num_labels") is None:
+        # `num_labels` is a reserved HF property. transformers 5.x takes an
+        # explicit ``None`` literally and calls ``range(None)`` while building
+        # the id2label map, so omit the key and let the default apply. The
+        # model-side value stays in ``frankenstein_config`` below.
+        payload.pop("num_labels", None)
     payload["model_type"] = "frankenstein"
     payload["architectures"] = [modeling_class]
     payload["model_class"] = model_class

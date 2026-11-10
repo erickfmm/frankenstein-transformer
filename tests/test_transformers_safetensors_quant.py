@@ -104,6 +104,12 @@ class TestQuantizedSafetensorsExport(unittest.TestCase):
         self.assertTrue((out / "model.safetensors").is_file())
         self.assertFalse((out / "pytorch_model.bin").exists())
         config = json.loads((out / "config.json").read_text(encoding="utf-8"))
+        self.assertNotIn(
+            "num_labels",
+            config,
+            "an explicit null num_labels makes transformers 5.x build id2label "
+            "with range(None) in PretrainedConfig.__post_init__",
+        )
         quant = config["frankenstein_quantization"]
         self.assertEqual(quant["format"], "q8_0")
         self.assertEqual(quant["runtime"], "dequantize_on_load")
@@ -224,6 +230,22 @@ class TestQuantizedSafetensorsExport(unittest.TestCase):
             reference = model(ids)
             logits = wrapper.model(ids)
         self.assertEqual(logits.shape, reference.shape)
+        self.assertTrue(torch.isfinite(logits).all())
+
+    def test_legacy_export_with_null_num_labels_still_loads(self):
+        """Artifacts exported before the null-stripping guard must still load."""
+        out = self._export("q8_0", "dequantize_on_load")
+        config_path = out / "config.json"
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+        # Older exports mirrored the whole flat model config at the top level,
+        # so `num_labels: None` leaked in next to `frankenstein_config`.
+        payload["num_labels"] = None
+        config_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+        wrapper = _load_export(out)
+        with torch.inference_mode():
+            logits = wrapper.model(self.ids)
+        self.assertEqual(logits.shape, self.reference.shape)
         self.assertTrue(torch.isfinite(logits).all())
 
     def test_invalid_quant_and_runtime_rejected(self):
