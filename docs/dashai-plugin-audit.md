@@ -312,7 +312,7 @@ These are the **required** modifications in this repository. Each is scoped to b
 - **Why:** DashAI's classification tasks require sequence/image-level probabilities (see §5.4, Strategy A).
 
 ### 7.6 Publish to PyPI
-- **Status:** complete. `frankenstein-transformer` 1.6.0 is on PyPI (<https://pypi.org/project/frankenstein-transformer/>) with `src/engine.py`, the classification head and the SBERT engine routing (landed in `b4c1437` + `5e23630`). The plugin depends on `>=1.6.0`; the next repo release is `1.7.0`.
+- **Status:** complete. `frankenstein-transformer` 1.7.0 is on PyPI (<https://pypi.org/project/frankenstein-transformer/>) with `src/engine.py`, the classification head and the SBERT engine routing (landed in `b4c1437` + `5e23630`). The plugin depends on `>=1.6.0`; the next repo release is `2.0.0` (component registry + plugin architecture).
 - **Change:** bump `version` in `pyproject.toml` from `1.0.0` → `1.1.0`, tag `v1.1.0`, and publish (`uv build && uv publish`, or `python -m build && twine upload`). The plugin's `dependencies` entry is already `frankenstein-transformer>=1.1.0` (see `dashai-frankenstein/pyproject.toml`). DashAI requires Python `>=3.10`; the `>=3.9` floor is compatible.
 - **Why:** locked decision (PyPI dependency). The package name is already correct — no rename needed. The `1.1.0` release is the **only** remaining Phase-0 item before the plugin can install against a real DashAI instance.
 
@@ -410,7 +410,7 @@ This is the procedure to make the five Frankenstein components appear and run in
 
 ### 12.1 Prerequisite — Frankenstein engine API on PyPI
 
-`frankenstein-transformer` **1.6.0** on PyPI already ships `src/engine.py`; the plugin depends on `>=1.6.0`. The next repo release is **1.7.0** (hatch-vcs derives the version from the tag — no manual `pyproject.toml` bump):
+`frankenstein-transformer` **1.7.0** on PyPI already ships `src/engine.py`; the plugin depends on `>=1.6.0`. The next repo release is **2.0.0** (component registry + plugin architecture; hatch-vcs derives the version from the tag — no manual `pyproject.toml` bump):
 
 ```bash
 uv build                        # dist/frankenstein_transformer-1.7.0-*.whl + .tar.gz

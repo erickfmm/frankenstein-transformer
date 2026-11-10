@@ -22,12 +22,12 @@
 | Topic | Path |
 |---|---|
 | Schema entrypoint / modules | `src/schema.yaml`, `src/schema/**` |
-| Component registry + built-in specs | `src/registry/**` (`spec.py`, `registry.py`, `binding.py`, `schema_assembly.py`, `builtin/**`) |
+| Component registry + built-in specs | `src/registry/**` (`spec.py`, `registry.py`, `binding.py`, `schema_assembly.py`, `builtin/**`, `snapshot.py`) |
 | Plugin API + layered loader | `src/plugins/**` (`api.py`, `loader.py`), `examples/plugins/` |
-| Flat model config | `src/model/config.py` (`FrankensteinModelConfig`) |
+| Runtime model config (nested) | `src/model/config.py` (`FrankensteinModelConfig.from_dict`) |
 | Mixer registry + `HybridLayer` | `src/model/hybrid_layer.py` |
 | Mixer implementations | `src/model/attention/{gated,latent,sparse}/`, top-level modules |
-| Nested → flat config | `src/utils/config_flatten.py` |
+| Assembled schema snapshot | `docs/schema.assembled.yaml` (`python -m src.registry.snapshot`) |
 | Optimizers + factory | `src/model/optimizer/{factory.py,<family>.py}` |
 | Norms + factory | `src/model/norm/{factory.py,<impl>.py}` |
 | Positional encodings | `src/model/embeddings/` |
@@ -48,6 +48,8 @@
 | SBERT | `src/sbert/` |
 | Streamlit UI | `src/streamlit_gui/app.py` |
 | Presets | `configs/*.yaml`, `configs/examples/*.yaml` |
+| Installation guide | `INSTALL.md` |
+| Plugin authoring guide | `HOWTO_MAKE_PLUGIN.md`, `examples/plugins/` |
 | Tests | `tests/` (80 files; see gates below) |
 | End-to-end harness | `full_tests/run_e2e.py` |
 | Theory / citations | `docs/paper*/`, `docs/bibliography/` |
@@ -68,6 +70,7 @@
 9. **All presets are smoke-tested** (`configs/*.yaml` + `configs/examples/*.yaml`). A new mixer/optimizer needs an example YAML; its schema entry comes from its component spec.
 10. **The component registry is the source of truth** (43 activations, 49 mixers, 36 optimizers, 6 norms, 4 residuals, 11 PEs + `none`, 3 embeddings). The activation enum is registry-derived; GLU variants (`swiglu`/`geglu`/`reglu`) carry `is_glu=True` and are handled by `GatedFFN`, not `get_activation()`.
 11. **mHC and Mixture-of-Depths are mutually exclusive.** Do not enable both.
+12. **Docs stay in sync with the install/dispatch surface.** Any change to extras, CLI subcommands/flags, the plugin API, the registry contract or the assembled schema must update `INSTALL.md`, `HOWTO_MAKE_PLUGIN.md`, `README.md` and `docs/architecture.md` in the same change; regenerate `docs/schema.assembled.yaml`.
 
 ## Extending: one declarative recipe
 
@@ -165,7 +168,10 @@ Environment-provided skills (`hf-cli`, `opencode`, `report`, `understand*`, `off
 
 ## Docs
 
+- Installation (uv/pip, CPU/CUDA extras, plugins, troubleshooting): [`INSTALL.md`](INSTALL.md).
+- Plugin authoring (specs, all seven families, packaging, testing): [`HOWTO_MAKE_PLUGIN.md`](HOWTO_MAKE_PLUGIN.md).
 - Implementation spec + extension recipes: [`docs/architecture.md`](docs/architecture.md).
+- Assembled schema snapshot: [`docs/schema.assembled.yaml`](docs/schema.assembled.yaml) (regenerate with `python -m src.registry.snapshot --out docs/schema.assembled.yaml`).
 - Presets/optimizer parameters: [`configs/README.md`](configs/README.md).
 - Theory, formulations, citations: `docs/paper/`, `docs/paper-es/`, `docs/bibliography/`.
 - Implementation plans (all of them, single directory): `.opencode/plan/`.

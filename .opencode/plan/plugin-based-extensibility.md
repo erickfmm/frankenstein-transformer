@@ -832,7 +832,10 @@ What shipped:
   schema-consistency, optimizer, KV-parity, deploy and export suites now run
   against the assembled schema and the nested config.
 - Docs: `AGENTS.md` (rules, locations, D13–D17), `docs/architecture.md` §4/§11,
-  the two plan-mode commands and `configs/README.md`.
+  the two plan-mode commands and `configs/README.md`; plus the end-user guides
+  `INSTALL.md` (install matrix, extras, plugins, build, troubleshooting) and
+  `HOWTO_MAKE_PLUGIN.md` (authoring contract for all seven families,
+  packaging, testing, pitfalls), linked from `README.md` and `docs/README.md`.
 
 Deliberate deviations from the plan text:
 

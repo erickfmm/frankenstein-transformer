@@ -23,9 +23,9 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Activations | Norms | Model Classes | Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-----------:|:-----:|:-------------:|:-----:|:-------:|:------------:|
-| **48** | **36** | **12** | **43** | **6** | **4** | **9** | **177** | **4** |
+| **49** | **36** | **12** | **43** | **6** | **4** | **9** | **189** | **4** |
 
-> **49 mixer architectures** — the schema exposes 49 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
+> **49 mixer architectures** — 48 mixer classes plus the `mamba` linear passthrough; the schema exposes all 49 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
 
 ## How It Works
 
@@ -59,20 +59,70 @@ Python **>= 3.10** required.
 |--------|---------|
 | **uv** (recommended, CUDA 11.8) | `git clone https://github.com/erickfmm/frankenstein-transformer.git && cd frankenstein-transformer && uv sync --extra cu118 --extra train` |
 | **uv** (CPU only) | `uv sync --extra cpu --extra train` |
-| **pip** | `python -m venv .venv && source .venv/bin/activate && pip install -e ".[train]"` |
+| **pip** (CPU) | `python -m venv .venv && source .venv/bin/activate && pip install -e ".[cpu,train]"` |
+| **pip** (CUDA 11.8) | `pip install -e ".[cu118,train]"` |
 | **PyPI** | `pip install frankenstein-transformer` |
 
-Run uv-installed commands through `uv run --extra cu118 --extra train <cmd>` (e.g. `uv run --extra cu118 --extra train frankenstein-transformer --help`). Other torch extras: `cu126` (driver ≥ 560), `cu128` (driver ≥ 570).
+Run uv-installed commands through `uv run --extra cu118 --extra train <cmd>` (e.g. `uv run --extra cu118 --extra train frankenstein-transformer --help`). Other torch extras: `cu126` (driver ≥ 560), `cu128` (driver ≥ 570). Always repeat the same extras, or uv will re-sync and swap the torch wheel.
+
+**Full installation reference** (extras, CUDA selection, plugins, build, troubleshooting): [`INSTALL.md`](INSTALL.md).
 
 Verify: `frankenstein-transformer --help`
 
 List available named presets: `frankenstein-transformer train --list-configs`
 
+## Plugins and the Component Registry
+
+Every pluggable component (mixer, optimizer, norm, activation, residual,
+positional encoding, token embedding) is a declarative `ComponentSpec`
+registered through `src/registry/`. The schema enums, per-mixer parameter
+blocks, optimizer `by_optimizer` reference and `if/then` prefix rules are
+**generated from the registry** before validation, so a component is declared
+once and cannot drift across parallel lists.
+
+Plugins use the same API. A local file needs no installation — reference it
+from the config:
+
+```yaml
+plugins:
+  - ./examples/plugins/window_mixer.py
+
+model:
+  attention:
+    local_window: {window_size: 128}
+  dims:
+    layer_pattern: [local_window, standard]
+```
+
+```python
+from src.plugins.api import register_mixer
+
+register_mixer(
+    name="local_window",
+    builder="my_plugin.window:LocalWindowAttention",   # or a callable
+    description="Local windowed self-attention.",
+    description_es="Autoatención local por ventana.",
+    params_schema={
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"window_size": {"type": "integer", "minimum": 1, "default": 128}},
+    },
+    defaults={"window_size": 128},
+)
+```
+
+Distributable plugins advertise the `frankenstein.plugins` entry-point group
+and are installed as separate packages. See
+[`HOWTO_MAKE_PLUGIN.md`](HOWTO_MAKE_PLUGIN.md) for every family, the parameter
+contract, packaging, testing and pitfalls. A registered component validates
+strictly, renders in the Streamlit builder and is dispatched by the same core
+code as the built-ins.
+
 ## Feature Matrix
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | **48** across 10 families: Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
+| Sequence mixer architectures | **49** across 10 families: Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
 | Optimizer families | 36 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
 | FFN activations | 43 (40 elementwise + `swiglu`, `geglu`, `reglu`) |
@@ -81,7 +131,7 @@ List available named presets: `frankenstein-transformer train --list-configs`
 | Model classes | `frankenstein_text_encoder`, `frankenstein_text_decoder`, `frankenstein_vit`, `frankenstein_audio` + reusable in-process engine API |
 | Training tasks | `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`, `asr`, `audio_classification` |
 | Normalization types | `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm` |
-| Config presets | 52 named presets + 123 example configs (schema smoke-tested in CI) |
+| Config presets | 54 named presets + 135 example configs (schema smoke-tested in CI) |
 | CLI subcommands | 4 (`train`, `deploy`, `infer`, `web-server`) |
 | Web configuration UI | Streamlit schema-driven YAML builder |
 | Quantized deployment | BitNet + checkpoint export pipeline (HF safetensors `q8_0`/`q4_0`/`i2_s` / GGUF) |
@@ -227,8 +277,11 @@ This engine powers the **`dashai-frankenstein` plugin**, which registers Franken
 
 | Resource | Content |
 |----------|---------|
+| [INSTALL.md](INSTALL.md) | Installation matrix: uv/pip, CPU/CUDA extras, plugins, verification, troubleshooting |
+| [HOWTO_MAKE_PLUGIN.md](HOWTO_MAKE_PLUGIN.md) | Plugin authoring guide: specs, all seven families, packaging, testing, pitfalls |
 | [configs/README.md](configs/README.md) | Schema walkthrough, preset details, optimizer parameter reference |
-| [src/schema.yaml](src/schema.yaml) | Authoritative training config schema (source of truth) |
+| [src/schema.yaml](src/schema.yaml) | Hand-authored training schema; component enums/fragments are injected by `src/registry/schema_assembly.py` |
+| [docs/schema.assembled.yaml](docs/schema.assembled.yaml) | Fully assembled schema snapshot (what validation and the website consume) |
 | [docs/README.md](docs/README.md) | Documentation index and build instructions |
 | [docs/paper/paper.pdf](docs/paper/paper.pdf) | Technical report (English) |
 | [docs/paper-es/paper-es.pdf](docs/paper-es/paper-es.pdf) | Technical report (Spanish) |
@@ -236,7 +289,7 @@ This engine powers the **`dashai-frankenstein` plugin**, which registers Franken
 | [docs/figures/readme-command-flow.mmd](docs/figures/readme-command-flow.mmd) | Source for the README command/pipeline figure |
 | [docs/architecture.md](docs/architecture.md) | Canonical implementation spec: architecture, state, extension guide |
 | [docs/architecture.md](docs/architecture.md#711-vision-transformer-image-vision_dataset) | Vision Transformer (frankenstein_vit) — patch prediction, classification, segmentation |
-| [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) | Mixer registry (47 architectures / 10 families) and selection guide |
+| [docs/architecture.md](docs/architecture.md#component-registry-and-plugin-schema-assembly) | Component registry, plugin schema assembly, and mixer selection guide (49 architectures / 10 families) |
 | [docs/dashai-plugin-audit.md](docs/dashai-plugin-audit.md) | DashAI plugin integration design and status |
 | [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specification, API, papers, bibliography) |
 | [docs/transformers_compatibility.md](docs/transformers_compatibility.md) | HuggingFace export compatibility guide |

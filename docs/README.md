@@ -10,8 +10,11 @@ architecture guide.
 
 | Document | Contents |
 |---|---|
-| [`../README.md`](../README.md) | Quickstart, feature overview, web UI link |
+| [`../README.md`](../README.md) | Quickstart, feature overview, plugins overview, web UI link |
+| [`../INSTALL.md`](../INSTALL.md) | Installation matrix (uv/pip, CPU/CUDA extras, plugins, build, troubleshooting) |
+| [`../HOWTO_MAKE_PLUGIN.md`](../HOWTO_MAKE_PLUGIN.md) | Plugin authoring: component specs, all seven families, packaging, testing |
 | [`architecture.md`](architecture.md) | **Canonical implementation spec** and extension guide (Mermaid diagrams, component tables, recipes) |
+| [`schema.assembled.yaml`](schema.assembled.yaml) | Fully assembled (registry-injected) schema snapshot consumed by the website and CI |
 | [`../configs/README.md`](../configs/README.md) | Presets and the full optimizer-parameter reference |
 | [`paper/`](paper/), [`paper-es/`](paper-es/) | **Source of truth for theory**, formulations and citations |
 | [`bibliography/`](bibliography/) | BibTeX databases (`.bib`) used by the papers |
