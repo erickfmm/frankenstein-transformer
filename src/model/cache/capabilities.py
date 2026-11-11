@@ -1,10 +1,11 @@
 """Declarative per-mixer cache capability registry.
 
-``CACHE_SPECS`` is the single declarative source consumed by
-:class:`~src.model.hybrid_layer.HybridLayer` at runtime and by
-``config_loader`` for static validation. One entry per schema
-``layer_pattern`` enum value (49 total: 48 mixer classes + the ``mamba``
-linear placeholder).
+``CACHE_SPECS`` is a **derived view** over the mixer registry: every
+:class:`~src.registry.spec.MixerSpec` declares its ``cache`` capability
+(a :class:`~src.registry.spec.CacheSpec`), and this module re-exports it
+for the runtime (:class:`~src.model.hybrid_layer.HybridLayer`), the
+``config_loader`` validation and the KV-cache test suites. The registry is
+the single source of truth for the per-mixer capability (D13).
 
 Rules (see the KV-cache integration plan, §5.4):
 
@@ -31,33 +32,11 @@ Compatibility classes (plan §6.1):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, Tuple
+from typing import Dict
+
+from src.registry.spec import CacheSpec
 
 __all__ = ["CacheSpec", "CACHE_SPECS", "IMPLEMENTED_MIXERS", "is_cacheable", "spec_for"]
-
-
-@dataclass(frozen=True)
-class CacheSpec:
-    """Static cache capability description for one mixer key.
-
-    Attributes:
-        supported: Whether the mixer's source formulation admits a cache
-            at all. ``False`` ⇒ always runs uncached (with a warning from
-            ``config_loader`` when the cache is enabled).
-        slot_type: Primary slot kind (``""`` when not supported).
-        slot_types: Additional slot kinds (e.g. ``("state", "conv_tail")``
-            for falcon-style mixers with a causal short conv).
-        extras: Per-token metadata the mixer will store (documentation).
-        notes: Paper-based rationale, surfaced in ``config_loader``
-            warnings and docs.
-    """
-
-    supported: bool
-    slot_type: str = ""
-    slot_types: Tuple[str, ...] = ()
-    extras: Tuple[str, ...] = ()
-    notes: str = ""
 
 
 #: Mixers whose incremental (cached) branches are implemented and covered
@@ -107,369 +86,26 @@ IMPLEMENTED_MIXERS = frozenset(
 )
 
 
-#: mixer_key -> CacheSpec. One entry per schema enum value (48).
-CACHE_SPECS: Dict[str, CacheSpec] = {
-    # ---- Dense / softmax family (plan §6.2) ----
-    "standard": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="MHA (arXiv:1706.03762); the 2017 paper never describes the "
-        "cache (later folklore), but the recipe is the canonical KV append.",
-    ),
-    "gqa": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="GQA (arXiv:2305.13245) — the paper IS the quality-vs-cache-size "
-        "tradeoff; most cache-ready mixer, smallest KV per token.",
-    ),
-    "sigmoid": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="Sigmoid attention (arXiv:2409.04431); not shift-invariant — the "
-        "L1 normalizer must be re-summed over the full cache each step.",
-    ),
-    "ca": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="Continuum Attention (arXiv:2610.20586); class (i) — the "
-        "effective weights are a closed-form (exponential-moment) function of "
-        "the endpoint score row, so decode recomputes the segment integrals "
-        "over the whole cached prefix each step; row-local like sigmoid's "
-        "re-summed L1 normalizer, hence exact.",
-    ),
-    "gated_softmax": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="Gated attention (arXiv:2505.06708); the gate depends only on "
-        "the current token — nothing extra to cache.",
-    ),
-    "titan": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="Titans (arXiv:2501.00663); this repo implements only the "
-        "attention window (the neural-memory module is not implemented).",
-    ),
-    "fox": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        extras=("cumulative_log_forget",),
-        notes="FoX (arXiv:2503.02130); caches (K, V, c_j) with c_j the "
-        "cumulative log-forget per token/head; D_ij = c_i - c_j is "
-        "pairwise-relative.",
-    ),
-    "fpa": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        extras=("field_phi", "key_level_psi"),
-        notes="First Passage Attention (arXiv:2610.22714); class (i) with "
-        "per-token extras: the logit bias is beta*min(0, min_{s<u<=t} phi_u "
-        "- psi_s), a range minimum over the cached field, so decode stores "
-        "two scalars per key/head (phi_u, psi_s) and updates "
-        "phi_bar_{t,s} = min(phi_bar_{t-1,s}, phi_t) in O(t) (Prop. 2.4b) "
-        "- exact. Dead keys (bias < -theta) are evictable in principle "
-        "(paper §4.3: theta=10 keeps ~26-34% of keys); eviction policy is a "
-        "D14 follow-up.",
-    ),
-    "ode": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="ODE Transformer (arXiv:2203.09176); KV taken from the "
-        "converged z(1) state; K/V of the new token recomputed at every "
-        "solver iteration with shared weights.",
-    ),
-    # ---- Latent family (plan §6.3) ----
-    "mla": CacheSpec(
-        supported=True,
-        slot_type="latent_kv",
-        extras=("k_rope",),
-        notes="Latent MHA (arXiv:2506.09342; origin MLA/DeepSeek-V2 "
-        "arXiv:2405.04434) — 'only the latent is cached'. This repo's "
-        "variant applies RoPE to the decompressed q,k, so DeepSeek's "
-        "absorb trick is unavailable; expand + RoPE every step.",
-    ),
-    "gqla": CacheSpec(
-        supported=True,
-        slot_type="latent_kv",
-        notes="GQLA (arXiv:2605.15250); two algebraically equivalent decode "
-        "paths over one weight set; slot layout follows gqla_decode_path.",
-    ),
-    "mlra": CacheSpec(
-        supported=True,
-        slot_type="latent_kv",
-        extras=("k_rope",),
-        notes="MLRA (arXiv:2603.02188); RoPE key decoupled; total cache is "
-        "MLA-sized.",
-    ),
-    "tucker": CacheSpec(
-        supported=True,
-        slot_type="latent_kv",
-        notes="Tucker attention (arXiv:2603.30033); factorized K/V cached "
-        "when ranks < hidden.",
-    ),
-    "iha": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="IHA (arXiv:2602.21371); pseudo-K/V are static learned mixings "
-        "computed on the fly — only the real per-token K/V is cached.",
-    ),
-    "gta": CacheSpec(
-        supported=True,
-        slot_type="latent_kv",
-        extras=("grouped_keys", "latent_values"),
-        notes="GTA (arXiv:2506.17286); one K per head-group (shared map) + "
-        "per-head latent values — heterogeneous slot.",
-    ),
-    "mtla": CacheSpec(
-        supported=True,
-        slot_type="latent_kv",
-        extras=("position_ranges",),
-        notes="MTLA (arXiv:2505.13544); the only method compressing the "
-        "cache along time via a hyper-network merge at stride boundaries. "
-        "Compression policies never run on MTLA slots (D13).",
-    ),
-    "cca": CacheSpec(
-        supported=True,
-        slot_type="latent_kv",
-        slot_types=("latent_kv", "conv_tail"),
-        notes="CCA (arXiv:2510.04476); attention inside the compressed "
-        "latent + causal-conv tail and previous shifted value.",
-    ),
-    "ccgqa": CacheSpec(
-        supported=True,
-        slot_type="latent_kv",
-        slot_types=("latent_kv", "conv_tail"),
-        notes="CCGQA (arXiv:2510.04476); CCA recipe + GQA head sharing "
-        "inside the latent.",
-    ),
-    "gma": CacheSpec(
-        supported=True,
-        slot_type="state",
-        extras=("value_accumulator", "normalizer_accumulator"),
-        notes="Gaussian Mixture Attention (arXiv:2606.18283); state-only — "
-        "causal variant defined by prefix-restricted cumulative sums; not "
-        "QK^T, only rotation PEs apply.",
-    ),
-    # ---- Sparse family (plan §6.4) ----
-    "longformer": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        extras=("global_tokens",),
-        notes="Longformer (arXiv:2004.05150); window+globals pattern evaluated "
-        "over positions; unbounded KV slot since global tokens may sit "
-        "anywhere (no safe eviction).",
-    ),
-    "swa": CacheSpec(
-        supported=True,
-        slot_type="ring",
-        notes="Sliding window + attention sinks (arXiv:2608.28444, built on "
-        "StreamingLLM arXiv:2309.17453) — the paper IS a cache-eviction "
-        "recipe; removing sinks collapses performance. Ring retention "
-        "policy equals the attention pattern.",
-    ),
-    "fastconformer": CacheSpec(
-        supported=True,
-        slot_type="ring",
-        extras=("global_tokens",),
-        notes="Fast Conformer limited-context attention (arXiv:2305.05084); "
-        "local window + global attention tokens pinned at the head of the "
-        "sequence (Longformer-inspired, optional separate global projections). "
-        "Global positions live in a bounded head region, so a ring slot whose "
-        "pinned prefix covers G retains exactly the attention pattern (swa "
-        "precedent); the exact pattern is masked over cached positions.",
-    ),
-    "bigbird": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        extras=("random_links",),
-        notes="BigBird (arXiv:2007.14062); random links are seeded per "
-        "(logical_layer_idx, absolute query position) or parity fails (R2).",
-    ),
-    "sparse_transformer": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="Sparse Transformers (arXiv:1904.10509); strided/fixed patterns "
-        "evaluated position-based (B5); stride from the TOTAL length.",
-    ),
-    "sparsek": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="SparseK (arXiv:2406.16747) — implemented as a CachePolicy "
-        "over a KVSlot (D14): learned scorer + top-k retention with "
-        "permanent within-generation eviction.",
-    ),
-    "nsa": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        extras=("block_statistics",),
-        notes="NSA (arXiv:2502.11089); v1 runs UNCACHED (falls back, D5): the "
-        "compress-branch block statistics are chunk-level means, not "
-        "row-local, so exact incremental decode needs the full three-branch "
-        "design (F2).",
-    ),
-    "msa": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="MiniMax Sparse Attention (arXiv:2606.13392); v1 runs UNCACHED "
-        "(falls back, D5): per-GQA block selection consumes chunk-level "
-        "block statistics; exact decode needs query-local selection (F2).",
-    ),
-    "sparda": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="SparDA (arXiv:2606.04511); v1 runs UNCACHED (falls back, D5): "
-        "block selection uses chunk-level statistics; the cross-layer "
-        "Forecast prefetch is F4-grade work.",
-    ),
-    "sparge": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="SpargeAttn (arXiv:2502.18137); inference method by definition "
-        "— the cache stays full (it skips compute, not memory). v1 runs "
-        "UNCACHED (falls back, D5): stage-1 block means depend on query "
-        "block padding, so exact decode needs block-aligned caching (F2). "
-        "Eval-only.",
-    ),
-    "fasa": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="FASA (arXiv:2602.03152); decode-time selection over cached "
-        "RoPE'd keys via dominant frequency-chunk proxies. Eval-only.",
-    ),
-    "lsa": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        extras=("bucket_centroids", "bucket_index_table"),
-        notes="LSA/N-LSA (arXiv:2610.42147); keeps the full KV cache and "
-        "selects keys per query: keys are L2-normalized, pooled (n_pool) and "
-        "Ward-clustered per complete n_cluster block into m = n_cluster/n̄_b "
-        "immutable buckets — centroids + index table live in a BucketKVSlot "
-        "built by the mixer's make_cache_slot hook. Buckets never change once "
-        "a block completes, so incremental decode is exact (unlike "
-        "nsa/msa/sparda); flat search scores ~T/n̄_b centroids per decode "
-        "step. Bucket tables are never quantized.",
-    ),
-    # ---- Recurrent / linear family (plan §6.5) ----
-    "retnet": CacheSpec(
-        supported=True,
-        slot_type="state",
-        notes="RetNet (arXiv:2307.08621); S_n = gamma S_{n-1} + K_n^T V_n "
-        "per head with multi-scale decay; call shape S2 (mixer replaces x).",
-    ),
-    "gla": CacheSpec(
-        supported=True,
-        slot_type="state",
-        notes="GLA (arXiv:2312.06635); data-dependent diagonal gate — decode "
-        "is strictly token-recurrent.",
-    ),
-    "deltanet": CacheSpec(
-        supported=True,
-        slot_type="state",
-        notes="DeltaNet (arXiv:2406.06484); the delta rule overwrites in "
-        "place (exact retrieval).",
-    ),
-    "gated_deltanet": CacheSpec(
-        supported=True,
-        slot_type="state",
-        notes="Gated DeltaNet (arXiv:2412.06464); add a ConvTailSlot when a "
-        "causal short conv is configured.",
-    ),
-    "gated_deltanet2": CacheSpec(
-        supported=True,
-        slot_type="state",
-        notes="Gated DeltaNet-2 (arXiv:2605.22791); 'replaces the unbounded "
-        "cache... fixed-size recurrent state... constant memory'.",
-    ),
-    "hgrn2": CacheSpec(
-        supported=True,
-        slot_type="state",
-        notes="HGRN2 (arXiv:2404.07904); linear RNN, O(1)/step; the gate "
-        "lower bound prevents full erasure.",
-    ),
-    "kda": CacheSpec(
-        supported=True,
-        slot_type="state",
-        notes="KDA / Kimi Linear (arXiv:2510.26692); channel-wise decay; "
-        "repo uses the plain recurrence (no DPLR kernel).",
-    ),
-    "memory": CacheSpec(
-        supported=True,
-        slot_type="kv",
-        notes="Memory Attention (arXiv:2609.28399); conventional KV cache "
-        "(class i): prefill computes V = K + RMSNorm(E[s]) once and appends "
-        "(K_R, V); decode looks up only the new token's memory row. The "
-        "paper's MA-Recall (store K + token IDs, reconstruct V, ~50% smaller "
-        "cache) is analyzed but unmeasured — not implemented.",
-    ),
-    "falcon1": CacheSpec(
-        supported=True,
-        slot_type="state",
-        slot_types=("state", "conv_tail"),
-        extras=("rehearsal_fifo",),
-        notes="Falcon-1 (arXiv:2608.27763); read-after-write prefix shift; "
-        "causal short conv => ConvTailSlot; boundary sentinels at step 0.",
-    ),
-    "falcon2": CacheSpec(
-        supported=True,
-        slot_type="state",
-        slot_types=("state", "conv_tail"),
-        extras=("rehearsal_fifo",),
-        notes="Falcon-2 (arXiv:2608.27763).",
-    ),
-    "falcon3": CacheSpec(
-        supported=True,
-        slot_type="state",
-        slot_types=("state", "conv_tail"),
-        extras=("rehearsal_fifo",),
-        notes="Falcon-3 (arXiv:2608.27763); the sliding window bounds the "
-        "rehearsal batch — exact continuation needs a FIFO of the last "
-        "B-1 pairs.",
-    ),
-    "falcon1a": CacheSpec(
-        supported=True,
-        slot_type="state",
-        slot_types=("state", "conv_tail"),
-        notes="Falcon-1A additive variant (arXiv:2608.27763).",
-    ),
-    "falcon2a": CacheSpec(
-        supported=True,
-        slot_type="state",
-        slot_types=("state", "conv_tail"),
-        notes="Falcon-2A additive variant (arXiv:2608.27763).",
-    ),
-    "falcon3a": CacheSpec(
-        supported=True,
-        slot_type="state",
-        slot_types=("state", "conv_tail"),
-        extras=("rehearsal_fifo",),
-        notes="Falcon-3A additive variant (arXiv:2608.27763).",
-    ),
-    # ---- Other (plan §6.6) ----
-    "engram": CacheSpec(
-        supported=True,
-        slot_type="token_tail",
-        notes="Engram (arXiv:2601.07372); O(1) n-gram-suffix lookup — only "
-        "the last max_ngram-1 token ids are required (TokenTailSlot).",
-    ),
-    "mamba": CacheSpec(
-        supported=False,
-        notes="Stateless per-token linear placeholder — inherently "
-        "incremental; nothing to cache. Verified to run unchanged in the "
-        "cached loop.",
-    ),
-    "ssog": CacheSpec(
-        supported=False,
-        notes="SSOG (pisoni.ai blog + GitHub; no arXiv): bidirectional "
-        "vision-grid mixer with no causal formulation in the source — no "
-        "cache can be defined. Never cached; runs uncached.",
-    ),
-    "conformer": CacheSpec(
-        supported=False,
-        notes="Conformer (arXiv:2005.08100); the depth-wise convolution "
-        "module and the macaron FFN₁ need a causal-conv tail and an "
-        "activation-state snapshot that this repo does not model. Never "
-        "cached; runs uncached (legacy path, D5).",
-    ),
-}
+def _derive_cache_specs() -> Dict[str, CacheSpec]:
+    """Build the ``mixer_key -> CacheSpec`` map from the component registry.
+
+    Returns:
+        One :class:`CacheSpec` per built-in mixer that declares one (every
+        built-in mixer does; plugins opt in by declaring ``cache=`` on their
+        own spec at import time).
+    """
+    from src.registry import ComponentFamily, ensure_builtins, registry
+
+    ensure_builtins()
+    return {
+        spec.name: spec.cache
+        for spec in registry.specs(ComponentFamily.MIXER)
+        if spec.cache is not None
+    }
+
+
+#: ``mixer_key -> CacheSpec``, derived from the registry (single source of truth).
+CACHE_SPECS: Dict[str, CacheSpec] = _derive_cache_specs()
 
 
 def spec_for(mixer_key: str) -> CacheSpec:

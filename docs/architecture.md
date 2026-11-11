@@ -751,8 +751,9 @@ logical roles). Per-layer storage is typed:
 | `ConvTailSlot` | `conv_tail` | last `kernel-1` pre-conv rows | falcon/CCA (future) |
 | `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
 
-**Capability registry (D5).** `src/model/cache/capabilities.py` holds one
-`CacheSpec` per `layer_pattern` enum value (49). A layer caches only when
+**Capability registry (D5).** `src/model/cache/capabilities.py` re-exports the
+per-mixer `CacheSpec` declared on each registry `MixerSpec` (49 built-ins) and
+derives its `CACHE_SPECS` map from the registry. A layer caches only when
 the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
 (incremental branch implemented + parity-tested). Everything else receives
 `cache=None` and runs the legacy path — **inference never fails because of
