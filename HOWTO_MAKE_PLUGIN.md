@@ -68,8 +68,8 @@ except ImportError:
 class LocalWindowAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         super().__init__()
-        self.hidden_size = int(config.hidden_size)
-        self.num_heads = int(config.num_heads)
+        self.hidden_size = int(config.dims.hidden_size)
+        self.num_heads = int(config.dims.num_heads)
         self.head_dim = self.hidden_size // self.num_heads
         self.window = int(params.window_size if params is not None else 128)
         self.causal = str(getattr(config, "mode", "encoder")) == "decoder"
@@ -230,7 +230,7 @@ class ScaledLayerNorm(nn.LayerNorm):
     pass
 
 def build_scaled(config, params):
-    return ScaledLayerNorm(int(config.hidden_size))
+    return ScaledLayerNorm(int(config.dims.hidden_size))
 
 register_norm(
     name="scaled_layer_norm",
@@ -312,7 +312,7 @@ class MeanResidual(ResidualBase):
 
 register_residual(
     name="mean",
-    builder=lambda config, params: MeanResidual(int(config.hidden_size)),
+    builder=lambda config, params: MeanResidual(int(config.dims.hidden_size)),
     description="Mean-of-layer-outputs residual example plugin.",
     description_es="Plugin de ejemplo de residual con media de salidas de capa.",
 )
@@ -351,7 +351,7 @@ from src.plugins.api import register_embedding
 
 register_embedding(
     name="tiny",
-    builder=lambda config, params: nn.Embedding(int(config.vocab_size), int(config.hidden_size)),
+    builder=lambda config, params: nn.Embedding(int(config.dims.vocab_size), int(config.dims.hidden_size)),
     description="Standard-table embedding example plugin.",
     description_es="Plugin de ejemplo de embedding con tabla estándar.",
 )

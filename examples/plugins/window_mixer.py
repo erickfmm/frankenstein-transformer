@@ -76,19 +76,19 @@ class LocalWindowAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         """Initialize the QKV/out projections."""
         super().__init__()
-        self.hidden_size = int(config.hidden_size)
-        self.num_heads = int(config.num_heads)
+        self.hidden_size = int(config.dims.hidden_size)
+        self.num_heads = int(config.dims.num_heads)
         self.head_dim = self.hidden_size // self.num_heads
         self.window = int(params.window_size if params is not None else 128)
         causal = params.causal if params is not None else None
         self.causal = (
-            str(getattr(config, "mode", "encoder")) == "decoder"
+            str(config.dims.mode) == "decoder"
             if causal is None
             else bool(causal)
         )
         self.qkv = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=False)
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.dropout = nn.Dropout(float(getattr(config, "dropout", 0.0) or 0.0))
+        self.dropout = nn.Dropout(float(config.dims.dropout or 0.0))
 
     def forward(self, x: torch.Tensor, logical_layer_idx=None, pos_encoder=None) -> torch.Tensor:
         """Run windowed attention.

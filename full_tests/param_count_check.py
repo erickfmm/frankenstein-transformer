@@ -73,11 +73,12 @@ def main() -> int:
             loaded = load_training_config(path)
             if loaded.model_config is None:
                 continue  # base-model configs: nothing to build
-            if getattr(loaded.model_config, "use_dynamic_embedding", False):
+            if bool(loaded.model_config.embedding.dynamic.enabled):
                 # Offline ground truth: hash embeddings need one string per id;
                 # the content does not change the parameter count.
                 loaded.model_config.token_vocab = [
-                    f"tok{i}" for i in range(int(loaded.model_config.vocab_size))
+                    f"tok{i}"
+                    for i in range(int(loaded.model_config.dims.vocab_size))
                 ]
             # Meta device: builds the full module tree with shape-only
             # tensors (no RAM/VRAM), so 70B-param presets count instantly.

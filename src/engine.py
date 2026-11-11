@@ -613,7 +613,7 @@ def _train_from_config_path(
         # constraint): inject the tokenizer vocab size BEFORE building the
         # model.
         if loaded.model_config is not None:
-            loaded.model_config.vocab_size = len(tokenizer)
+            loaded.model_config.dims.vocab_size = len(tokenizer)
             inject_token_vocab(loaded.model_config, tokenizer)
         model = build_model(loaded.model_class, loaded.model_config)
         runtime_config = loaded.model_config

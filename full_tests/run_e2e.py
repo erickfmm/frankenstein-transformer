@@ -1627,11 +1627,11 @@ def _count_param_categories(combo_id: str) -> Optional[Dict[str, Any]]:
         loaded = load_training_config(str(yaml_path))
         if loaded.model_config is None:
             return None
-        if getattr(loaded.model_config, "use_dynamic_embedding", False):
+        if bool(loaded.model_config.embedding.dynamic.enabled):
             # No tokenizer on the meta-device counting path: hash embeddings
             # only need one string per id (content does not affect shapes).
             loaded.model_config.token_vocab = helpers.dynamic_embedding_vocab(
-                loaded.model_config.vocab_size
+                loaded.model_config.dims.vocab_size
             )
         with torch.device("meta"):
             model = build_model(loaded.model_class, loaded.model_config)
