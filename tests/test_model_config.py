@@ -175,6 +175,18 @@ class FrankensteinModelConfigDefaultsTests(unittest.TestCase):
         self.assertFalse(use_pe_for(cfg, "gla"))
         self.assertTrue(use_pe_for(cfg, "gated_softmax"))
 
+    def test_per_mixer_use_pe_override_is_honoured(self):
+        cfg = FrankensteinModelConfig.from_dict(
+            _minimal_block(
+                positional_encoding="rope",
+                positional_encoding_parameters={
+                    "use_pe": {"standard_use_pe": False, "retnet_use_pe": True}
+                },
+            )
+        )
+        self.assertFalse(use_pe_for(cfg, "standard"))
+        self.assertTrue(use_pe_for(cfg, "retnet"))
+
     def test_encoder_mode_accepted(self):
         cfg = FrankensteinModelConfig.from_dict(_minimal_block(dims={"mode": "encoder"}))
         self.assertEqual(cfg.dims.mode, "encoder")

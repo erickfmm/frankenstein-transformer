@@ -17,10 +17,10 @@ model:
       base: 10000.0
       scaling: 1.0
     use_pe:
-      standard: true
-      retnet: false
-      titan: true
-      mamba: false
+      standard_use_pe: true
+      retnet_use_pe: false
+      titan_use_pe: true
+      mamba_use_pe: false
   moe:
     enabled: false
   bitnet:

@@ -356,7 +356,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - `positional_encoding_parameters.pape`: `num_parabolas`, `num_positions`, `rotation_invariant`.
 - `positional_encoding_parameters.sinusoidal`: `max_len`, `base`, `scale`.
 - `positional_encoding_parameters.learned`: `max_len`, `init_std`.
-- `positional_encoding_parameters.use_pe.<mixer>`: per-mixer opt-out.
+- `positional_encoding_parameters.use_pe.<mixer>_use_pe`: per-mixer opt-out.
 
 #### model.attention.<mixer>
 
@@ -423,7 +423,7 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
   `standard` (the paper's CA-P configuration).
 - `model.attention.ca.gain_init`: initial (learned) or fixed score gain
   `γ = 1/τ` (default `1.0`; CA-P uses `3.3333` ≈ 1/0.30).
-- `positional_encoding_parameters.use_pe.ca`: per-mixer PE opt-out (default
+- `positional_encoding_parameters.use_pe.ca_use_pe`: per-mixer PE opt-out (default
   `true`; the paper uses RoPE / learned absolute positions).
 - Exact segment integration over piecewise-linear key/value trajectories
   (arXiv:2610.20586); classic KV cache. Examples:
@@ -440,7 +440,7 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
   **straight-through gradient** (default `1.0`). The forward pass and
   evaluation always use the hard range minimum; `τ` only scales the
   differentiable surrogate.
-- `positional_encoding_parameters.use_pe.fpa`: per-mixer PE opt-out (default
+- `positional_encoding_parameters.use_pe.fpa_use_pe`: per-mixer PE opt-out (default
   `false`; FPA trains without positional encoding — the learned walk is
   positional).
 - Softmax attention with a range-minimum (path-extremum) forget bias
@@ -540,7 +540,7 @@ MLM preset), `configs/examples/mixer_conformer.yaml` (minimal smoke preset),
 - `model.attention.conformer.kernel_size`: depth-wise conv kernel `k` for `conformer` (default 32; paper best of {3, 7, 17, 32, 65}).
 - `model.attention.conformer.macaron`: enable the macaron FFN₁ branch (default true).
 - `model.attention.conformer.conv_norm`: normalization after the depth-wise conv — `batch` (BatchNorm1d, paper default), `group` (GroupNorm) or `layer` (LayerNorm).
-- `positional_encoding_parameters.use_pe.conformer`: per-mixer PE opt-out (default true).
+- `positional_encoding_parameters.use_pe.conformer_use_pe`: per-mixer PE opt-out (default true).
 - Decoder mode pads the depth-wise conv causally; encoder mode uses symmetric padding.
 - `conformer` is not KV-cacheable (depth-wise conv + macaron state); it always runs the legacy full-recompute path.
 

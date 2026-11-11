@@ -217,11 +217,10 @@ def _inject_optimizers(schema: Dict[str, Any]) -> None:
             }
         )
     training = _at(schema, "properties", "training")
-    if "allOf" in training:
-        training["allOf"] = rules
-    else:
-        # The allOf list lives at the schema root in some revisions.
-        schema.setdefault("allOf", []).extend(rules)
+    # The generated rules are relative to the ``training`` node; always place
+    # them there. The hand-authored raw blocks are gone, so there is no root
+    # fallback anymore.
+    training["allOf"] = rules
 
 
 def _inject_simple_enum(

@@ -86,18 +86,25 @@ class DerivedViewTests(unittest.TestCase):
     """Capability sets are derived from specs."""
 
     def test_builtin_counts(self):
-        from src.registry import ensure_builtins
+        """Built-in spec tuples are plugin-independent (the global registry may
+        also hold plugin components loaded by other tests)."""
+        from src.registry.builtin.activation import ACTIVATION_SPECS
+        from src.registry.builtin.attention import ATTENTION_SPECS
+        from src.registry.builtin.embedding import EMBEDDING_SPECS
+        from src.registry.builtin.norm import NORM_SPECS
+        from src.registry.builtin.optimizer import OPTIMIZER_SPECS
+        from src.registry.builtin.residual import RESIDUAL_SPECS
 
-        ensure_builtins()
-        self.assertEqual(len(registry.names(ComponentFamily.MIXER)), 49)
-        self.assertEqual(len(registry.names(ComponentFamily.OPTIMIZER)), 36)
-        self.assertEqual(len(registry.names(ComponentFamily.ACTIVATION)), 43)
-        self.assertEqual(len(registry.names(ComponentFamily.NORM)), 6)
-        self.assertEqual(len(registry.names(ComponentFamily.RESIDUAL)), 4)
-        self.assertEqual(len(registry.names(ComponentFamily.EMBEDDING)), 3)
+        self.assertEqual(len(ATTENTION_SPECS), 49)
+        self.assertEqual(len(OPTIMIZER_SPECS), 36)
+        self.assertEqual(len(ACTIVATION_SPECS), 43)
+        self.assertEqual(len(NORM_SPECS), 6)
+        self.assertEqual(len(RESIDUAL_SPECS), 4)
+        self.assertEqual(len(EMBEDDING_SPECS), 3)
 
     def test_training_free_and_cache_sets(self):
         from src.registry import ensure_builtins
+        from src.registry.builtin.attention import ATTENTION_SPECS
 
         ensure_builtins()
         self.assertEqual(
@@ -105,6 +112,10 @@ class DerivedViewTests(unittest.TestCase):
             frozenset({"fasa", "sparge"}),
         )
         self.assertIn("standard", registry.property_set(ComponentFamily.MIXER, "cache_implemented"))
+        # The cache registry is derived from these specs, so every built-in
+        # mixer must declare a CacheSpec (the derivation silently skips None).
+        for spec in ATTENTION_SPECS:
+            self.assertIsNotNone(spec.cache, f"{spec.name} declares no CacheSpec")
 
     def test_alias_resolution(self):
         from src.registry import ensure_builtins

@@ -4,8 +4,11 @@ These tests lock in the invariants introduced by the schema audit:
 
 * every preset in ``configs/`` and ``configs/examples/`` validates against the
   resolved JSON Schema;
-* the ``layer_pattern`` enum matches its bilingual documentation tables;
-* optimizer parameter prefixes have exactly one ``if/then`` block;
+* the ``layer_pattern`` enum (registry-derived at assembly) matches its
+  bilingual documentation tables;
+* the generated optimizer prefix map and ``if/then`` rules agree with the
+  registry;
+* ``use_pe`` exposes exactly the ``<mixer>_use_pe`` keys the runtime reads;
 * the SBERT optimizer enum resolves to the canonical one (no duplication);
 * schema defaults mirror ``FrankensteinModelConfig`` defaults for the fields
   where both are declared;
@@ -16,7 +19,6 @@ These tests lock in the invariants introduced by the schema audit:
 from __future__ import annotations
 
 import pathlib
-import re
 
 import pytest
 import yaml
@@ -71,9 +73,9 @@ def test_schema_examples_validate(schema):
         assert not errors, f"examples[{index}]: {errors[0].message}"
 
 
-def test_layer_pattern_enum_matches_documentation():
-    dims = yaml.safe_load((_SCHEMA_ROOT / "_model" / "_dims.yaml").read_text(encoding="utf-8"))
-    layer_pattern = dims["properties"]["layer_pattern"]
+def test_layer_pattern_enum_matches_documentation(schema):
+    """The assembled enum (registry-derived) is documented in both tables."""
+    layer_pattern = _at(schema, "properties.model.properties.dims.properties.layer_pattern")
     enum = set(layer_pattern["items"]["enum"])
     for language in ("description", "description_es"):
         table = layer_pattern[language]
@@ -81,21 +83,52 @@ def test_layer_pattern_enum_matches_documentation():
         assert not missing, f"{language} table is missing {missing}"
 
 
-def test_optimizer_prefixes_match_conditional_rules():
-    optimizer = yaml.safe_load((_SCHEMA_ROOT / "_optimizer.yaml").read_text(encoding="utf-8"))
-    prefixes = {
-        entry["prefix"]
-        for entry in optimizer["properties"]["parameters"]["x_parameter_reference"]["by_optimizer"].values()
-    }
-    raw_training = (_SCHEMA_ROOT / "_training.yaml").read_text(encoding="utf-8")
-    enforced = {
-        f"{match}-"
-        for match in re.findall(r"^\s+\^([a-z0-9_]+)-:\s*\{", raw_training, flags=re.MULTILINE)
-    }
-    assert prefixes == enforced, {
-        "missing_rule": sorted(prefixes - enforced),
-        "stale_rule": sorted(enforced - prefixes),
-    }
+def test_optimizer_prefixes_match_conditional_rules(schema):
+    """The generated ``by_optimizer`` map and ``if/then`` rules agree with the registry."""
+    from src.registry import ComponentFamily, ensure_builtins, registry
+
+    ensure_builtins()
+    names = {spec.name for spec in registry.specs(ComponentFamily.OPTIMIZER)}
+
+    optimizer = _at(schema, "properties.training.properties.optimizer")
+    by_optimizer = optimizer["properties"]["parameters"]["x_parameter_reference"][
+        "by_optimizer"
+    ]
+    assert set(by_optimizer) == names
+    for name, entry in by_optimizer.items():
+        assert entry["prefix"] == name
+        assert entry["specific_global_suffixes"] == sorted(
+            registry.get(ComponentFamily.OPTIMIZER, name).param_bindings
+        )
+
+    rules = _at(schema, "properties.training")["allOf"]
+    enforced = set()
+    for rule in rules:
+        const = rule["if"]["properties"]["optimizer"]["properties"][
+            "optimizer_class"
+        ]["const"]
+        patterns = rule["then"]["properties"]["optimizer"]["properties"][
+            "parameters"
+        ]["patternProperties"]
+        assert list(patterns) == [f"^{const}-"]
+        enforced.add(const)
+    assert enforced == names, {"missing_rule": sorted(names - enforced)}
+
+
+def test_use_pe_keys_are_registry_derived(schema):
+    """``use_pe`` exposes exactly the ``<mixer>_use_pe`` keys the runtime reads."""
+    from src.registry import ComponentFamily, ensure_builtins, registry
+
+    ensure_builtins()
+    specs = list(registry.specs(ComponentFamily.MIXER))
+    use_pe = _at(
+        schema,
+        "properties.model.properties.positional_encoding_parameters.properties.use_pe",
+    )
+    assert set(use_pe["properties"]) == {f"{spec.name}_use_pe" for spec in specs}
+    for spec in specs:
+        entry = use_pe["properties"][f"{spec.name}_use_pe"]
+        assert entry["default"] == bool(spec.needs_pos_encoder)
 
 
 def test_sbert_optimizer_enum_resolves_to_canonical(schema):
@@ -388,5 +421,7 @@ def test_titan_pe_subtree_and_placeholders_are_removed():
     alibi = pe["properties"]["positional_encoding_parameters"]["properties"]["alibi"]
     assert alibi["properties"], "alibi placeholder must expose at least num_heads"
 
-    use_pe = pe["properties"]["positional_encoding_parameters"]["properties"]["use_pe"]["properties"]
-    assert "ssog" in use_pe
+    use_pe = pe["properties"]["positional_encoding_parameters"]["properties"]["use_pe"]
+    assert use_pe["properties"] == {}, (
+        "per-mixer use_pe keys are registry-injected at assembly time"
+    )

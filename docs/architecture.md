@@ -165,7 +165,7 @@ nested-to-flat flattening step. `FrankensteinModelConfig`
 | `model.dims.*` | `config.dims.*` |
 | `model.norm.*` | `config.norm.*` (`type`, `partial_ratio`, `flashnorm_partial_ratio`, `qk_norm.*`) |
 | `model.attention.<mixer>.*` | bound through the mixer's `ComponentSpec` → `params.<leaf>` |
-| `model.positional_encoding_parameters.<pe>.*` | read by the encoding builder; `use_pe.<mixer>` toggles |
+| `model.positional_encoding_parameters.<pe>.*` | read by the encoding builder; `use_pe.<mixer>_use_pe` toggles |
 | `model.embedding.type` | `config.embedding.type` (`standard`/`factorized`/`dynamic`) |
 | `model.moe/bitnet/mixture_of_depths/ssmax/numerics/ffn/…` | `config.<block>.*` |
 | `model.mhc` / `model.residuals` | `config.mhc.*` / `config.residuals.*` |
@@ -526,7 +526,7 @@ names to classes; `mamba` is handled as a linear projection special case.
 
 One shared module is built by the backbone and injected into every
 `HybridLayer`. Per-mixer opt-out lives under
-`model.positional_encoding_parameters.use_pe.<mixer>: false`.
+`model.positional_encoding_parameters.use_pe.<mixer>_use_pe: false`.
 
 | Encoding | Style | Key parameters |
 |---|---|---|
@@ -1072,7 +1072,10 @@ flowchart LR
    list the module under the top-level `plugins:` key (or install it with the
    `frankenstein.plugins` entry point).
 4. Run the gates in §12. No schema enum, `by_optimizer`, `if/then` or
-   `config.py` field edit is needed.
+   `config.py` field edit is needed. The raw YAML under `src/schema/**` no longer
+   carries component enumerations at all: the assembly step injects every
+   component name (mixers, optimizers, norms, activations, residuals, PEs,
+   embeddings) and the per-mixer `use_pe.<name>_use_pe` keys from the registry.
 
 ### 11.2 Add a model class, task or dataset
 
@@ -1103,7 +1106,7 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 |---|---|
 | `tests/test_schema_consistency.py::test_all_presets_validate` | Every `configs/*.yaml` and `configs/examples/*.yaml` validates |
 | `::test_layer_pattern_enum_matches_documentation` | `layer_pattern` enum ↔ bilingual table |
-| `::test_optimizer_prefixes_match_conditional_rules` | `by_optimizer` prefixes ↔ `_training.yaml` `if/then` blocks |
+| `::test_optimizer_prefixes_match_conditional_rules` | Generated `by_optimizer` map ↔ generated `if/then` rules ↔ registry optimizer names |
 | `::test_schema_defaults_match_dataclass` | Declared schema defaults ↔ `FrankensteinModelConfig` |
 | `::test_legacy_flat_feature_keys_are_gone` | No flat feature keys in `_model.yaml` |
 | `tests/test_yaml_examples.py` | Loads every config in both directories (auto-globbed) |

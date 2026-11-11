@@ -1,4 +1,4 @@
-"""Cache fallback tests over all 45 layer types (plan §13, T4 + T12).
+"""Cache fallback tests over all 49 layer types (plan §13, T4 + T12).
 
 With ``kv_cache.enabled=true``: no exception for any enum value; mixers
 without an implemented incremental branch produce identical logits with
@@ -8,8 +8,6 @@ per-layer while other layers cache.
 
 import unittest
 from importlib.util import find_spec
-
-import yaml
 
 TORCH_AVAILABLE = find_spec("torch") is not None
 
@@ -25,10 +23,15 @@ EVAL_ONLY = {"fasa", "sparge"}
 
 
 def _schema_enum():
-    """Read the layer_pattern enum straight from the schema (46 values)."""
-    with open("src/schema/_model/_dims.yaml") as handle:
-        dims = yaml.safe_load(handle)
-    return list(dims["properties"]["layer_pattern"]["items"]["enum"])
+    """Read the assembled layer_pattern enum (registry-injected; 49 built-ins)."""
+    from src.utils.schema_loader import resolve_schema
+
+    schema = resolve_schema("src/schema.yaml")
+    return list(
+        schema["properties"]["model"]["properties"]["dims"]["properties"][
+            "layer_pattern"
+        ]["items"]["enum"]
+    )
 
 
 def _build(pattern, pe="rope", **extra):
@@ -47,8 +50,10 @@ def _build(pattern, pe="rope", **extra):
 class RegistryConsistencyTests(unittest.TestCase):
     def test_capacity_spec_covers_every_enum_value(self):
         enum = _schema_enum()
-        self.assertEqual(len(enum), 49)
-        self.assertEqual(set(CACHE_SPECS), set(enum))
+        # CACHE_SPECS is derived from the built-in specs (49); the assembled
+        # enum may also contain config-declared plugin mixers.
+        self.assertEqual(len(CACHE_SPECS), 49)
+        self.assertTrue(set(CACHE_SPECS).issubset(set(enum)))
         # All implemented mixers must exist in the schema enum.
         self.assertTrue(IMPLEMENTED_MIXERS.issubset(set(enum)))
 
