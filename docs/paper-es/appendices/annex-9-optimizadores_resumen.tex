@@ -4,7 +4,7 @@
 \textbf{Grupo} & \textbf{Métodos} & \textbf{Objetivo Principal} & \textbf{Interpretación desde el Estudio} \\
 \midrule
 \endhead
-Línea base clásica & SGD, AdamW, RAdam & estabilidad y referencias base & Definen el piso de comparación para las afirmaciones de optimizadores más nuevos. \\
+Línea base clásica & SGD, SGD con momentum, RMSProp, AdamW, RAdam & estabilidad y referencias base & Definen el piso de comparación para las afirmaciones de optimizadores más nuevos. \\
 Rediseño de momento & Adan, AdEMAMix, MARS, Cautious AdamW & adaptación de primer orden más rápida o segura & Mejor cuando la velocidad de convergencia o la estabilidad ante gradiente ruidoso es la preocupación principal. \\
 Simplificación de lotes grandes y programación & LAMB, Schedule-Free AdamW & robustez operacional a escala & Reducen la fragilidad debida al crecimiento del tamaño de lote o la ingeniería de programación. \\
 Eficiencia de memoria & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & reducción del estado del optimizador & Más útil cuando la VRAM está dominada por el estado del optimizador en lugar de las activaciones; los métodos de la familia APOLLO reemplazan los momentos densos de AdamW con escalado estructurado proyectado o cuantizado. \\

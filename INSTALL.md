@@ -200,7 +200,7 @@ for family in ('MIXER', 'OPTIMIZER', 'ACTIVATION', 'NORM', 'RESIDUAL',
 "
 ```
 
-Expected census: **50 mixers, 36 optimizers, 44 activations, 6 norms,
+Expected census: **50 mixers, 38 optimizers, 44 activations, 6 norms,
 4 residuals, 11 positional encodings (+ the `none` alias), 3 embedding
 variants.**
 

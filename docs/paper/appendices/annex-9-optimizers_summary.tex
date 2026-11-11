@@ -4,7 +4,7 @@
 \textbf{Group} & \textbf{Methods} & \textbf{Primary Goal} & \textbf{Interpretation from the Survey} \\
 \midrule
 \endhead
-Classical baseline & SGD, AdamW, RAdam & stability and reference baselines & These define the comparison floor for newer optimizer claims. \\
+Classical baseline & SGD, SGD with momentum, RMSProp, AdamW, RAdam & stability and reference baselines & These define the comparison floor for newer optimizer claims. \\
 Momentum redesign & Adan, AdEMAMix, MARS, Cautious AdamW & faster or safer first-order adaptation & Best when convergence speed or noisy-gradient stability is the main concern. \\
 Large-batch and schedule simplification & LAMB, Schedule-Free AdamW & operational robustness at scale & Reduce brittleness from batch-size growth or schedule engineering. \\
 Memory-efficient & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & optimizer-state reduction & Most useful when VRAM is dominated by optimizer state rather than activations; APOLLO-family methods replace dense AdamW moments with projected or quantized structured scaling. \\

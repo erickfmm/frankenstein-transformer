@@ -28,7 +28,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "adam_pm", "sgd_momentum", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon", "conda", "tuon", "namo", "namo_d"}
+        required = {"adamw", "adam_pm", "sgd", "sgd_momentum", "rmsprop", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon", "conda", "tuon", "namo", "namo_d"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -90,6 +90,80 @@ class BuildOptimizerSGDTests(unittest.TestCase):
         groups = _param_groups()
         opt = build_optimizer("sgd_momentum", groups, {"sgd_momentum-momentum": 0.8})
         self.assertAlmostEqual(opt.defaults.get("momentum", opt.param_groups[0].get("momentum")), 0.8)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerPlainSGDTests(unittest.TestCase):
+    def test_builds_without_error(self):
+        opt = build_optimizer("sgd", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer("sgd", groups, {})
+        loss = p.sum()
+        loss.backward()
+        opt.step()
+
+    def test_zero_state_buffers(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer("sgd", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertEqual(len(opt.state), 0)
+
+    def test_momentum_is_off(self):
+        opt = build_optimizer("sgd", _param_groups(), {})
+        self.assertEqual(opt.param_groups[0]["momentum"], 0.0)
+
+    def test_momentum_suffix_rejected(self):
+        with self.assertRaises(ValueError):
+            build_optimizer("sgd", _param_groups(), {"sgd-momentum": 0.9})
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerRMSPropTests(unittest.TestCase):
+    def test_builds_without_error(self):
+        opt = build_optimizer("rmsprop", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer("rmsprop", groups, {})
+        loss = p.sum()
+        loss.backward()
+        opt.step()
+
+    def test_alpha_default_is_slides_value(self):
+        opt = build_optimizer("rmsprop", _param_groups(), {})
+        self.assertAlmostEqual(opt.param_groups[0]["alpha"], 0.9)
+
+    def test_custom_alpha(self):
+        opt = build_optimizer("rmsprop", _param_groups(), {"rmsprop-alpha": 0.99})
+        self.assertAlmostEqual(opt.param_groups[0]["alpha"], 0.99)
+
+    def test_per_group_eps_override(self):
+        opt = build_optimizer("rmsprop", _param_groups(), {"rmsprop-eps_other": 1e-6})
+        self.assertAlmostEqual(opt.param_groups[0]["eps"], 1e-6)
+
+    def test_momentum_is_off(self):
+        opt = build_optimizer("rmsprop", _param_groups(), {})
+        self.assertEqual(opt.param_groups[0]["momentum"], 0.0)
+
+    def test_square_avg_state_created(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-2, "name": "other"}]
+        opt = build_optimizer("rmsprop", groups, {})
+        p.sum().backward()
+        opt.step()
+        self.assertIn("square_avg", opt.state[p])
+
+    def test_invalid_alpha_raises(self):
+        with self.assertRaises(ValueError):
+            build_optimizer("rmsprop", _param_groups(), {"rmsprop-alpha": 1.5})
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

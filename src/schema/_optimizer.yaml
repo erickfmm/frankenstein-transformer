@@ -34,7 +34,9 @@ properties:
       |-----------|----------|-------|
       | `adamw` | General purpose **(recommended)** | Decoupled weight decay, stable |
       | `adam_pm` | Memory-constrained training | Pooled second moment: group size `s` shrinks the V-state to 1/s, Adam hyperparameters transfer (paper: arxiv:2610.24598) |
+      | `sgd` | Pure SGD baseline | Mini-batch update, no momentum, zero optimizer state (source: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
       | `sgd_momentum` | Baselines, classic tasks | Simple, less adaptive |
+      | `rmsprop` | Classical adaptive baseline | Divides the gradient by a running average of its recent squared magnitude; one state buffer, no bias correction (source: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
       | `adafactor` | Large models, low memory | Memory-efficient factored moments |
       | `galore_adamw` | Memory-constrained large models | Gradient low-rank projection |
       | `prodigy` | Minimal LR tuning | Adaptive, auto-LR |
@@ -90,7 +92,7 @@ properties:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
       `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
       arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
-      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080)
+      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)
     description_es: |-
       Algoritmo optimizador. Resumen por caso de uso:
 
@@ -98,7 +100,9 @@ properties:
       |-------------|-------------|-------|
       | `adamw` | Propósito general **(recomendado)** | Weight decay desacoplado, estable |
       | `adam_pm` | Entrenamiento con memoria limitada | Segundo momento agrupado: el tamaño de grupo `s` reduce el estado V a 1/s, los hiperparámetros de Adam se transfieren (paper: arxiv:2610.24598) |
+      | `sgd` | Línea base SGD pura | Actualización por mini-lotes, sin momentum, sin estado del optimizador (fuente: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
       | `sgd_momentum` | Líneas base, tareas clásicas | Simple, menos adaptativo |
+      | `rmsprop` | Línea base adaptativa clásica | Divide el gradiente por un promedio móvil de su magnitud cuadrada reciente; un búfer de estado, sin corrección de sesgo (fuente: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
       | `adafactor` | Modelos grandes, baja memoria | Eficiente en memoria |
       | `galore_adamw` | Modelos grandes con memoria limitada | Proyección de gradiente de bajo rango |
       | `prodigy` | Mínimo ajuste de LR | Adaptativo, LR automático |
@@ -155,7 +159,7 @@ properties:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
       `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
       arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
-      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080)
+      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)
     examples: [adamw]
   parameters:
     type: object
@@ -183,6 +187,8 @@ properties:
       - `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
       - `cautious_adamw`: `cautious_clip`
       - `anon`: `gamma`
+      - `rmsprop`: `alpha`, plus the shared `lr_*`, `wd_*` and `eps_*`. `alpha` is the EMA decay of the squared-gradient running average — the slides' exact 0.9/0.1 split (default 0.9; torch's own default is 0.99); `eps_*` is the denominator epsilon (a numerical guard absent from the slides); `wd_*` is L2-coupled into the gradient (torch semantics); `betas_*` is accepted but unused (no first moment)
+      - `sgd`: no specific suffixes — only the shared `lr_*` and L2 `wd_*`; `betas_*`/`eps_*` are accepted but unused (zero optimizer state)
       - `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
       - `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
       - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`
@@ -232,6 +238,8 @@ properties:
       - `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
       - `cautious_adamw`: `cautious_clip`
       - `anon`: `gamma`
+      - `rmsprop`: `alpha`, más los sufijos compartidos `lr_*`, `wd_*` y `eps_*`. `alpha` es el decaimiento EMA del promedio móvil del gradiente al cuadrado — la división 0.9/0.1 exacta de las diapositivas (por defecto 0.9; el valor por defecto de torch es 0.99); `eps_*` es el épsilon del denominador (una guarda numérica ausente en las diapositivas); `wd_*` es L2 acoplado al gradiente (semántica de torch); `betas_*` se acepta pero no se usa (sin primer momento)
+      - `sgd`: sin sufijos específicos — solo los compartidos `lr_*` y `wd_*` (L2); `betas_*`/`eps_*` se aceptan pero no se usan (sin estado del optimizador)
       - `apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`
       - `apollo_mini`: `update_proj_gap`, `scale`, `proj_type`, `scale_front`, `disable_nl`
       - `q_apollo`: `rank`, `update_proj_gap`, `scale`, `scale_type`, `proj_type`, `scale_front`, `disable_nl`, `quant_bits`

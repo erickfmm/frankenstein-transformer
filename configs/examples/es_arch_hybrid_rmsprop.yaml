@@ -1,0 +1,85 @@
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 50000
+    hidden_size: 768
+    num_layers: 12
+    num_loops: 1
+    num_heads: 12
+    layer_pattern:
+    - retnet
+    - titan
+    - mamba
+    - ode
+  norm:
+    type: layer_norm
+  embedding:
+    conv:
+      enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3072
+  attention:
+    ode:
+      solver: rk4
+      steps: 2
+    retnet:
+      heads: 12
+training:
+  task: mlm
+  seed: 42
+  num_epochs: 4
+  batch_size: 2
+  dataloader_workers: 2
+  max_length: 256
+  mlm_probability: 0.15
+  max_samples: 6000000
+  dataset_batch_size: 15000
+  num_workers: 6
+  cache_dir: ./temp_data/v2_dataset_cache
+  local_parquet_dir: /home/erickfmm/.cache/huggingface/hub/datasets--erickfmm--red_pajama_es_hq_35/snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/train/
+  prefer_local_cache: true
+  stream_local_parquet: true
+  join_temp_data_context_window: 0
+  join_temp_data_min_remainder_tokens: 128
+  gradient_accumulation_steps: 12
+  optimizer:
+    optimizer_class: rmsprop
+    parameters:
+      rmsprop-lr_embeddings: 1e-6
+      rmsprop-lr_pos: 2e-6
+      rmsprop-lr_attention: 3e-6
+      rmsprop-lr_ffn: 2e-6
+      rmsprop-lr_norms: 5e-6
+      rmsprop-lr_head: 2e-6
+      rmsprop-lr_mhc: 3e-6
+      rmsprop-lr_router: 2e-6
+      rmsprop-lr_residual: 2e-6
+      rmsprop-lr_other: 2e-6
+      rmsprop-wd_embeddings: 0.01
+      rmsprop-wd_pos: 0.01
+      rmsprop-wd_attention: 0.01
+      rmsprop-wd_ffn: 0.01
+      rmsprop-wd_norms: 0.001
+      rmsprop-wd_head: 0.01
+      rmsprop-wd_mhc: 0.01
+      rmsprop-wd_router: 0.01
+      rmsprop-wd_residual: 0.01
+      rmsprop-wd_other: 0.01
+      rmsprop-eps_embeddings: 1e-8
+      rmsprop-eps_pos: 1e-8
+      rmsprop-eps_attention: 1e-8
+      rmsprop-eps_ffn: 1e-8
+      rmsprop-eps_norms: 1e-8
+      rmsprop-eps_head: 1e-8
+      rmsprop-eps_mhc: 1e-8
+      rmsprop-eps_router: 1e-8
+      rmsprop-eps_residual: 1e-8
+      rmsprop-eps_other: 1e-8
+      rmsprop-alpha: 0.9
+  scheduler_total_steps: 12000
+  max_nan_retries: 4
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_es_arch_hybrid_rmsprop.csv
+  telemetry_log_interval: 5

@@ -26,8 +26,10 @@ from .nor_muon import NorMuon
 from .prodigy import Prodigy
 from .q_apollo import QApollo
 from .radam import RAdamOptimizer
+from .rmsprop import RMSProp
 from .root import ROOT
 from .schedulefree_adamw import ScheduleFreeAdamW
+from .sgd import SGDOptimizer
 from .sgd_momentum import SGDMomentum
 from .shampoo import Shampoo
 from .sophia import Sophia
@@ -64,7 +66,9 @@ __all__ = [
     "Prodigy",
     "QApollo",
     "RAdamOptimizer",
+    "RMSProp",
     "ROOT",
+    "SGDOptimizer",
     "SGDMomentum",
     "SOAP",
     "ScheduleFreeAdamW",

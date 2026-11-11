@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 49 sequence mixers across nine families, 36 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 49 sequence mixers across nine families, 38 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -110,7 +110,7 @@ memory & Memory & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Token-ID memor
 
 \subsection{Optimizer Summary}
 
-Table~\ref{tab:all-optimizers} catalogs all 36 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
+Table~\ref{tab:all-optimizers} catalogs all 38 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -132,7 +132,9 @@ Table~\ref{tab:all-optimizers} catalogs all 36 supported optimizers with their m
 
 \multicolumn{6}{c}{\textbf{Classical \& Adaptive Baselines}} \\
 \midrule
+SGD & Classical & 0 & $\mathcal{O}(n)$ & lr, wd & \citep{hinton_csc321_2012} \\
 SGD+\allowbreak Momentum & Classical & 1 ($m$) & $\mathcal{O}(n)$ & lr, momentum, wd & \citep{polyak_1964} \\
+RMSProp & Adaptive & 1 ($v$) & $\mathcal{O}(n)$ & lr, decay $\alpha$ (0.9), eps, wd & \citep{tieleman_hinton2012} \\
 AdamW & Adaptive & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{loshchilov_decoupled_2017} \\
 RAdam & Adaptive & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{liu_variance_2019} \\
 \midrule

@@ -1,4 +1,47 @@
 \subsection{Línea Base Estándar y Optimizadores Adaptativos}
+\paragraph{SGD Vainilla (Descenso de Gradiente por Mini-lotes).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/sgd.pdf}}
+\caption{Flujo por paso de SGD por mini-lotes: decaimiento L2 opcional y la actualización por gradiente escalado, sin estado del optimizador entre pasos.}
+\label{fig:opt-sgd}
+\end{figure}
+El método de primer orden más simple: actualizar los pesos con el gradiente del mini-lote actual en lugar del lote completo~\citep{hinton_csc321_2012}. En conjuntos de datos redundantes el gradiente del mini-lote es casi tan informativo como el completo, y calcularlo con productos matriz--matriz lo hace mucho más barato que las actualizaciones en línea, especialmente en GPU. En la iteración $t$ con mini-lote $B$:
+\begin{align}
+g_t &= \frac{1}{|B|} \sum_{i \in B} \nabla_\theta E_i(\theta_t) \\
+\theta_{t+1} &= \theta_t - \eta\, g_t
+\end{align}
+donde $\eta$ es el único hiperparámetro del método. La receta de ajuste de las diapositivas es heurística: reducir la tasa cuando el error oscila o diverge, aumentarla cuando el error baja de forma consistente pero lenta, y bajarla hacia el final del entrenamiento~\citep{hinton_csc321_2012}. El momentum es una extensión separada (párrafo siguiente); esta entrada es deliberadamente la línea base sin estado del catálogo.
+
+\begin{algorithm}[H]
+\caption{Descenso de Gradiente Estocástico por Mini-lotes}
+\label{alg:sgd}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta_0$, tasa de aprendizaje $\eta$, decadencia de peso $\lambda$
+\Ensure Parámetros actualizados $\theta_T$
+\For{$t = 0, 1, 2, \ldots, T-1$}
+    \State Muestrear un mini-lote $B_t$; calcular $g_t \gets \frac{1}{|B_t|}\sum_{i \in B_t}\nabla f_i(\theta_t)$
+    \If{decadencia\_de\_peso $> 0$}
+        \State $g_t \gets g_t + \lambda \theta_t$ \Comment{Regularización L2}
+    \EndIf
+    \State Actualizar parámetros: $\theta_{t+1} \gets \theta_t - \eta\, g_t$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Una única tasa global no puede adaptarse a curvaturas heterogéneas: el método zigzaguea en valles estrechos y se estanca en direcciones planas.
+\item Fuerte dependencia de programaciones de tasa ajustadas a mano; sin adaptividad por parámetro.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Cero estado del optimizador: el piso de memoria del catálogo y el paso más barato.
+\item Completamente determinista dado el orden de los lotes; el punto de referencia contra el que se mide cada otra entrada.
+\end{itemize}
+
 \paragraph{SGD con Momentum.}
 \begin{figure}[H]
 \centering
@@ -42,6 +85,51 @@ donde $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controla la decadencia
 \begin{itemize}[leftmargin=*]
 \item Baja sobrecarga de memoria: un único búfer de momentum por parámetro.
 \item Fuerte generalización cuando se ajusta cuidadosamente, y una actualización simple de implementar.
+\end{itemize}
+
+\paragraph{RMSProp.}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/optimizers/rmsprop.pdf}}
+\caption{Flujo por paso de RMSProp: decaimiento L2 opcional, el promedio móvil $v_t$ de gradientes al cuadrado y la división por coordenada por $\sqrt{v_t}$.}
+\label{fig:opt-rmsprop}
+\end{figure}
+RMSProp es la versión segura para mini-lotes de rprop: en lugar de dividir por el tamaño del gradiente actual, se fuerza a que el divisor sea casi idéntico para mini-lotes adyacentes manteniendo un promedio móvil del gradiente al cuadrado por cada peso~\citep{tieleman_hinton2012}:
+\begin{align}
+v_t &= 0.9\, v_{t-1} + 0.1\, g_t^2 \\
+\theta_{t+1} &= \theta_t - \eta\, \frac{g_t}{\sqrt{v_t} + \epsilon}
+\end{align}
+donde $g_t = \partial E/\partial w(t)$, la división $0.9/0.1$ es el decaimiento exponencial de las diapositivas (expuesto como el hiperparámetro \texttt{alpha}) y $\epsilon$ es una guarda numérica añadida por la implementación (las diapositivas no definen ninguna). El método original no incluye corrección de sesgo ni primer momento~\citep{tieleman_hinton2012}; combinarlo con momentum queda explícitamente abierto en las diapositivas (``el momentum no ayuda tanto como normalmente''). El promedio móvil es el único búfer de estado y el predecesor directo de la familia adaptativa: la idea diagonal de AdaGrad~\citep{duchi_adagrad_2011} hecha segura para mini-lotes y luego extendida en Adam.
+
+\begin{algorithm}[H]
+\caption{RMSProp}
+\label{alg:rmsprop}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta_0$, tasa de aprendizaje $\eta$, decaimiento $\alpha = 0.9$, épsilon $\epsilon$, decadencia de peso $\lambda$
+\Ensure Parámetros actualizados $\theta_T$
+\State Inicializar: promedio móvil $v \gets 0$
+\For{$t = 0, 1, 2, \ldots, T-1$}
+    \State Calcular gradiente: $g_t \gets \nabla f(\theta_t)$
+    \If{decadencia\_de\_peso $> 0$}
+        \State $g_t \gets g_t + \lambda \theta_t$ \Comment{Regularización L2}
+    \EndIf
+    \State Actualizar promedio móvil: $v \gets \alpha v + (1-\alpha) g_t^2$
+    \State Actualizar parámetros: $\theta_{t+1} \gets \theta_t - \eta\, g_t / (\sqrt{v} + \epsilon)$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item Sin corrección de sesgo: el divisor está inflado al inicio del entrenamiento, cuando $v_t$ todavía es una estimación pobre.
+\item Sigue siendo sensible al ajuste (tasa, decaimiento, épsilon) y fue en gran medida superado por Adam para transformers.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Un búfer por parámetro y un paso $\mathcal{O}(n)$: el método adaptativo más barato del catálogo.
+\item El escalado por coordenada mantiene el paso robusto frente a magnitudes de gradiente heterogéneas entre capas.
 \end{itemize}
 
 \paragraph{Adam y AdamW.}

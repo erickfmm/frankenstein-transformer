@@ -1,4 +1,47 @@
 \subsection{Standard Baseline and Adaptive Optimizers}
+\paragraph{Vanilla SGD (Mini-Batch Gradient Descent).}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/optimizers/sgd.pdf}}
+\caption{Step flow of mini-batch SGD: optional L2 weight decay and the plain scaled-gradient update, with no optimizer state carried between steps.}
+\label{fig:opt-sgd}
+\end{figure}
+The plainest first-order method: update the weights with the gradient of the current mini-batch instead of the full batch~\citep{hinton_csc321_2012}. On redundant datasets the mini-batch gradient is nearly as informative as the full one, and computing it with matrix--matrix products makes it markedly cheaper than online updates, especially on GPUs. At iteration $t$ with mini-batch $B$:
+\begin{align}
+g_t &= \frac{1}{|B|} \sum_{i \in B} \nabla_\theta E_i(\theta_t) \\
+\theta_{t+1} &= \theta_t - \eta\, g_t
+\end{align}
+where $\eta$ is the only hyperparameter of the method. The deck's own tuning recipe is heuristic: reduce the rate when the error oscillates or diverges, increase it when the error falls consistently but slowly, and turn it down towards the end of training~\citep{hinton_csc321_2012}. Momentum is a separate extension (next paragraph); this entry is deliberately the zero-state baseline of the catalog.
+
+\begin{algorithm}[H]
+\caption{Mini-Batch Stochastic Gradient Descent}
+\label{alg:sgd}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\For{$t = 0, 1, 2, \ldots, T-1$}
+    \State Sample a mini-batch $B_t$; compute $g_t \gets \frac{1}{|B_t|}\sum_{i \in B_t}\nabla f_i(\theta_t)$
+    \If{weight\_decay $> 0$}
+        \State $g_t \gets g_t + \lambda \theta_t$ \Comment{L2 regularization}
+    \EndIf
+    \State Update parameters: $\theta_{t+1} \gets \theta_t - \eta\, g_t$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item A single global rate cannot suit heterogeneous curvature: the method zig-zags across narrow ravines and stalls along flat directions.
+\item Strong dependence on hand-tuned learning-rate schedules; no per-parameter adaptivity.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Zero optimizer state: the memory floor of the catalog and the cheapest step.
+\item Fully deterministic given the batch order; the reference point against which every other entry is measured.
+\end{itemize}
+
 \paragraph{SGD with Momentum.}
 \begin{figure}[H]
 \centering
@@ -42,6 +85,51 @@ where $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controls the momentum 
 \begin{itemize}[leftmargin=*]
 \item Low memory overhead: a single momentum buffer per parameter.
 \item Strong generalization when tuned carefully, and a simple update to implement.
+\end{itemize}
+
+\paragraph{RMSProp.}
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/optimizers/rmsprop.pdf}}
+\caption{Step flow of RMSProp: optional L2 weight decay, the running average $v_t$ of squared gradients, and the per-coordinate division by $\sqrt{v_t}$.}
+\label{fig:opt-rmsprop}
+\end{figure}
+RMSProp is the mini-batch-safe version of rprop: instead of dividing by the size of the current gradient, force the divisor to be nearly identical for adjacent mini-batches by keeping a moving average of the squared gradient for each weight~\citep{tieleman_hinton2012}:
+\begin{align}
+v_t &= 0.9\, v_{t-1} + 0.1\, g_t^2 \\
+\theta_{t+1} &= \theta_t - \eta\, \frac{g_t}{\sqrt{v_t} + \epsilon}
+\end{align}
+where $g_t = \partial E/\partial w(t)$, the $0.9/0.1$ split is the exponential decay of the slides (exposed as the \texttt{alpha} hyperparameter), and $\epsilon$ is a numerical guard added by the implementation (the slides define none). No bias correction and no first moment appear in the original method~\citep{tieleman_hinton2012}; combining it with momentum is explicitly left open by the deck (``momentum does not help as much as it normally does''). The running average is the only state buffer and the direct predecessor of the adaptive family: AdaGrad's diagonal idea~\citep{duchi_adagrad_2011} made mini-batch-safe, later extended into Adam.
+
+\begin{algorithm}[H]
+\caption{RMSProp}
+\label{alg:rmsprop}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, decay $\alpha = 0.9$, epsilon $\epsilon$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: running average $v \gets 0$
+\For{$t = 0, 1, 2, \ldots, T-1$}
+    \State Compute gradient: $g_t \gets \nabla f(\theta_t)$
+    \If{weight\_decay $> 0$}
+        \State $g_t \gets g_t + \lambda \theta_t$ \Comment{L2 regularization}
+    \EndIf
+    \State Update running average: $v \gets \alpha v + (1-\alpha) g_t^2$
+    \State Update parameters: $\theta_{t+1} \gets \theta_t - \eta\, g_t / (\sqrt{v} + \epsilon)$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item No bias correction: the divisor is inflated early in training, when $v_t$ is still a poor estimate.
+\item Still tuning-sensitive (rate, decay, epsilon) and largely superseded by Adam for transformers.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item One buffer per parameter and an $\mathcal{O}(n)$ step — the cheapest adaptive method in the catalog.
+\item Per-coordinate scaling keeps the step robust to heterogeneous gradient magnitudes across layers.
 \end{itemize}
 
 \paragraph{Adam and AdamW.}

@@ -23,7 +23,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Activations | Norms | Model Classes | Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-----------:|:-----:|:-------------:|:-----:|:-------:|:------------:|
-| **50** | **36** | **12** | **44** | **6** | **4** | **9** | **189** | **4** |
+| **50** | **38** | **12** | **44** | **6** | **4** | **9** | **189** | **4** |
 
 > **50 mixer architectures** — 49 mixer classes plus the `mamba` linear passthrough; the schema exposes all 50 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
 
@@ -33,7 +33,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 |-------|--------------|
 | **1. YAML config** | Describe the model, task and optimizer in one schema-first file |
 | **2. Schema validation** | Strict JSON Schema plus cross-field rules; invalid configs are rejected before any compute |
-| **3. Train** | 36 optimizer families, AMP, schedulers and a GPU thermal guard |
+| **3. Train** | 38 optimizer families, AMP, schedulers and a GPU thermal guard |
 | **4. Checkpoint** | Save rolling checkpoints for resuming or deployment |
 | **5. Deploy** | Quantize (`quantized`/`standard`) or export to HuggingFace safetensors (`q8_0`/`q4_0`/`i2_s`) / GGUF |
 | **6. Infer / Export** | Batch, interactive and benchmark inference; SBERT similarity/search/cluster/encode |
@@ -123,7 +123,7 @@ code as the built-ins.
 | Feature | Scale |
 |---------|-------|
 | Sequence mixer architectures | **50** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
-| Optimizer families | 36 across 8 categories |
+| Optimizer families | 38 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
 | FFN activations | 44 (40 elementwise + `swiglu`, `geglu`, `reglu`, `situ`) |
 | Residual connections | 6 exposed: `standard`, `none`, `full_attn`, `block_attn`, mHC, Hyperloop |
@@ -194,7 +194,7 @@ Configure via `layer_pattern` in YAML. The schema accepts 50 mixer values. See [
 
 Parameters use prefixed keys: `<optimizer_class>-<group>_<param>` (e.g. `adamw-lr_embeddings`, `muon-ns_steps`). See [configs/README.md](configs/README.md) for the full parameter reference.
 
-**Optimizer state profile.** State buffers range from 0 (EA4LLM, gradient-free) to 12 tensors per slot (EvE, population-based). GaLore, APOLLO and Q-APOLLO keep factored or quantized state; Shampoo and SOAP keep per-dimension preconditioners; Muon-family optimizers orthogonalise hidden 2-D matrices and fall back to AdamW for embeddings, heads, positional parameters and vectors.
+**Optimizer state profile.** State buffers range from 0 (SGD, EA4LLM gradient-free) to 12 tensors per slot (EvE, population-based). GaLore, APOLLO and Q-APOLLO keep factored or quantized state; Shampoo and SOAP keep per-dimension preconditioners; Muon-family optimizers orthogonalise hidden 2-D matrices and fall back to AdamW for embeddings, heads, positional parameters and vectors.
 
 ## Component Catalog
 

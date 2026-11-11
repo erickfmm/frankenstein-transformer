@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 49 mezcladores de secuencia en nueve familias, 36 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 49 mezcladores de secuencia en nueve familias, 38 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -110,7 +110,7 @@ memory & Memoria & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ caché & Valores de m
 
 \subsection{Resumen de Optimizadores}
 
-La Tabla~\ref{tab:all-optimizers} cataloga los 36 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
+La Tabla~\ref{tab:all-optimizers} cataloga los 38 optimizadores soportados con su huella de memoria, costo computacional por paso e hiperparámetros clave. Los búferes de estado se expresan como el número de tensores propiedad del optimizador por parámetro; el costo por paso se enfoca en el término dominante más allá del cálculo del gradiente.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -132,7 +132,9 @@ La Tabla~\ref{tab:all-optimizers} cataloga los 36 optimizadores soportados con s
 
 \multicolumn{6}{c}{\textbf{Líneas Base Clásicas y Adaptativas}} \\
 \midrule
+SGD & Clásico & 0 & $\mathcal{O}(n)$ & lr, wd & \citep{hinton_csc321_2012} \\
 SGD+\allowbreak Momentum & Clásico & 1 ($m$) & $\mathcal{O}(n)$ & lr, momentum, wd & \citep{polyak_1964} \\
+RMSProp & Adaptativo & 1 ($v$) & $\mathcal{O}(n)$ & lr, decaimiento $\alpha$ (0.9), eps, wd & \citep{tieleman_hinton2012} \\
 AdamW & Adaptativo & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{loshchilov_decoupled_2017} \\
 RAdam & Adaptativo & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{liu_variance_2019} \\
 \midrule

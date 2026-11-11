@@ -139,7 +139,9 @@ training:
 ## Optimizer Chooser
 
 `training.optimizer.optimizer_class` supported values:
+- `sgd`
 - `sgd_momentum`
+- `rmsprop`
 - `adamw`
 - `adam_pm`
 - `adafactor`
@@ -198,6 +200,8 @@ encodings and cls/mask tokens, `attention` = mixers and their internal norms,
 Optimizer-specific global parameter suffixes (also prefixed):
 
 - `sgd_momentum`: `momentum`, `nesterov`
+- `sgd`: none (zero optimizer state; only the shared `lr_*`/`wd_*` apply, with `betas_*`/`eps_*` accepted but unused)
+- `rmsprop`: `alpha` (EMA decay of the squared-gradient running average — the slides' 0.9/0.1 split, default 0.9; the shared `eps_*` is the denominator guard and `wd_*` is L2-coupled into the gradient)
 - `adamw`: none
 - `adam_pm`: `group_size`, `pool_dim` (group-mean pooling of adjacent second-moment entries along rows or columns; second-moment state 1/s; `s=1` → vanilla Adam; first moment untouched; shared `lr_*`/`wd_*`/`betas_*`/`eps_*` per group)
 - `adafactor`: `beta2_decay`, `clip_threshold`, `eps1`, `eps2`
