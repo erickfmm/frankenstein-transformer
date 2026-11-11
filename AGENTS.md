@@ -25,7 +25,7 @@
 | Component registry + built-in specs | `src/registry/**` (`spec.py`, `registry.py`, `binding.py`, `schema_assembly.py`, `builtin/**`, `snapshot.py`) |
 | Plugin API + layered loader | `src/plugins/**` (`api.py`, `loader.py`), `examples/plugins/` |
 | Runtime model config (nested) | `src/model/config.py` (`FrankensteinModelConfig.from_dict`) |
-| Mixer registry + `HybridLayer` | `src/model/hybrid_layer.py` |
+| Mixer dispatch + `HybridLayer` | `src/model/hybrid_layer.py` |
 | Mixer implementations | `src/model/attention/{gated,latent,sparse}/`, top-level modules |
 | Assembled schema snapshot | `docs/schema.assembled.yaml` (`python -m src.registry.snapshot`) |
 | Optimizers + factory | `src/model/optimizer/{factory.py,<family>.py}` |

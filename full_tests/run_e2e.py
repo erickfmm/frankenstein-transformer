@@ -235,7 +235,7 @@ import _helpers as helpers  # type: ignore  # noqa: E402
 # ---------------------------------------------------------------------------
 # fasa and sparge are training-free/eval-only; skip them here.
 ATTENTIONS = [
-    "retnet", "retnet", "mamba", "ode", "titan", "standard",
+    "retnet", "mamba", "ode", "titan", "standard",
     "sigmoid", "sparse_transformer", "longformer", "bigbird",
     "sparsek", "nsa", "gla", "deltanet", "gated_deltanet",
     "gated_deltanet2", "hgrn2", "fox", "gated_softmax",

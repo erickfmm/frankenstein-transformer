@@ -17,7 +17,6 @@ class SchemaAttentionLayerTests(unittest.TestCase):
 
         expected = {
             "retnet",
-            "retnet",
             "mamba",
             "ode",
             "titan",

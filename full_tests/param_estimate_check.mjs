@@ -24,7 +24,7 @@ const tolIdx = args.indexOf('--tol');
 const TOL = tolIdx >= 0 ? parseFloat(args[tolIdx + 1]) : 0.01;
 if (tolIdx >= 0) { args.splice(tolIdx, 2); }
 
-const estPath = args[0] || path.resolve(here, '../../erickfmm.github.io/frankenstein-transformer/ft-param-estimator.js');
+const estPath = args[0] || path.resolve(here, '../erickfmm.github.io/frankenstein-transformer/ft-param-estimator.js');
 const truthPath = args[1] || path.join(here, 'param_truth.json');
 
 // Load the estimator (plain browser IIFE → eval into a sandbox namespace).

@@ -95,7 +95,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/deploy/**` | Quantization, deployment, HF export, GGUF export, inference |
 | `src/streamlit_gui/app.py` | Schema-driven YAML builder |
 | `configs/**` | Presets (`configs/*.yaml`) and smoke-tested examples (`configs/examples/*.yaml`) |
-| `tests/**` | 80 files; see §12 for the gates that constrain extensions |
+| `tests/**` | 84 files; see §12 for the gates that constrain extensions |
 | `full_tests/**` | End-to-end harness (`run_e2e.py`), parameter-truth checks |
 
 > `src/model/frankenstein_model.py` **does not exist**. It was split and a
