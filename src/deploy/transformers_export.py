@@ -103,6 +103,14 @@ class FrankensteinConfig(PretrainedConfig):
         self.model_class = model_class
         self.task = task
         self.frankenstein_config = dict(frankenstein_config or {})
+        if kwargs.get("num_labels") is None:
+            # ``num_labels`` is a reserved HF property. Artifacts exported
+            # before the null-stripping guard carry ``num_labels: null``;
+            # transformers 5.x takes that literal ``None`` and calls
+            # ``range(None)`` while building the id2label map. Treat it as
+            # unset so those legacy exports still load. The model-side value
+            # lives in ``frankenstein_config``.
+            kwargs.pop("num_labels", None)
         super().__init__(**kwargs)
 
     def to_dict(self) -> Dict[str, Any]:

@@ -980,15 +980,15 @@ class TitanTrainer:
         
         # Log config that might affect stability
         logging.error("Model configuration (stability-relevant):")
-        logging.error(f"  - BitNet enabled: {getattr(self.config.bitnet, "enabled", 'n/a')}")
+        logging.error(f"  - BitNet enabled: {getattr(self.config.bitnet, 'enabled', 'n/a')}")
         logging.error(
             "  - ODE solver: %s, steps: %s",
             (self.config.attention.get("ode") or {}).get("solver", "n/a"),
             (self.config.attention.get("ode") or {}).get("steps", "n/a"),
         )
-        logging.error(f"  - Layer pattern: {getattr(self.config.dims, "layer_pattern", 'n/a')}")
-        logging.error(f"  - Num loops: {getattr(self.config.dims, "num_loops", 'n/a')}")
-        logging.error(f"  - Dropout: {getattr(self.config.dims, "dropout", 'n/a')}")
+        logging.error(f"  - Layer pattern: {getattr(self.config.dims, 'layer_pattern', 'n/a')}")
+        logging.error(f"  - Num loops: {getattr(self.config.dims, 'num_loops', 'n/a')}")
+        logging.error(f"  - Dropout: {getattr(self.config.dims, 'dropout', 'n/a')}")
         
         logging.error("=" * 80)
         
@@ -1164,13 +1164,13 @@ class TitanTrainer:
         
         # Model-specific logging
         logging.info("🧠 Architecture: %s", self.model.__class__.__name__)
-        logging.info(f"⚡ BitNet Quantization: {getattr(self.config.bitnet, "enabled", 'n/a')}")
+        logging.info(f"⚡ BitNet Quantization: {getattr(self.config.bitnet, 'enabled', 'n/a')}")
         logging.info(
             "🌊 ODE Solver: %s (%s steps)",
             (self.config.attention.get("ode") or {}).get("solver", "n/a"),
             (self.config.attention.get("ode") or {}).get("steps", "n/a"),
         )
-        logging.info(f"🔄 Recursion Loops: {getattr(self.config.dims, "num_loops", 'n/a')}")
+        logging.info(f"🔄 Recursion Loops: {getattr(self.config.dims, 'num_loops', 'n/a')}")
         logging.info(f"📐 Gradient Accumulation: {self.gradient_accumulation_steps} steps")
         if self.gpu_temp_guard.is_active:
             logging.info(
