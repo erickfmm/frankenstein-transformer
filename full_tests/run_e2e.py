@@ -58,7 +58,10 @@ harness writes, under ``tmp/results/``:
   measured at the end of training,
 * ``configs/<combo_id>.yaml`` — the exact full YAML used for each combo,
   copied before cleanup so it survives ``--save-to delete|memory`` (disable
-  with ``--no-keep-configs``).
+  with ``--no-keep-configs``),
+* ``system_telemetry.csv`` — a 1 Hz host time series for the whole sweep:
+  machine-wide CPU/RAM percentages plus the summed RSS and count of every live
+  child process. Use it to size ``--workers`` from the run's own output.
 
 It is intentionally NOT collected by ``pytest tests/`` (it lives in ``full_tests/``
 at the repository root) and is meant to be left running for several hours.
@@ -101,15 +104,17 @@ To resume from existing tmp/results directory (skip cleanup):
     uv run --extra cu118 --extra train python full_tests/run_e2e.py --resume
 
 To validate every generated config WITHOUT training anything (real config
-loader, dims invariants, SSOG grid vs max_length, optimizer parameter keys;
-exits non-zero on any invalid combo — run this before a multi-hour sweep):
+loader, dims invariants, SSOG grid vs max_length, optimizer parameter keys, and
+any ``model.*`` key the assembled schema does not declare — a flat legacy key
+would be silently dropped at runtime; exits non-zero on any invalid combo — run
+this before a multi-hour sweep):
 
     uv run --extra cu118 --extra train python full_tests/run_e2e.py --dry-run
 
-To run the training and deploy combos with N parallel workers (default is 1,
-i.e. fully sequential):
+To run the training and deploy combos with N parallel workers (default is 28,
+i.e. 28 concurrent CLI subprocesses; pass ``--workers 1`` for a sequential run):
 
-    uv run --extra cu118 --extra train python full_tests/run_e2e.py --workers 4
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py --workers 28
 
 Each worker owns complete pipelines — it trains, deploys, evaluates and
 exports one combo before moving to the next — and launches every CLI step as an
@@ -119,6 +124,23 @@ shared result artifacts, so with ``--workers > 1`` rows are recorded in
 completion order rather than combo order. Keep ``--workers 1`` when sharing a
 single GPU (VRAM/thermal-guard contention) or on a cold HuggingFace cache with
 ``--realonall`` (do one sequential run first to populate it).
+
+CPU threads per worker are controlled with ``--omp-threads`` (default 2), which
+exports ``OMP_NUM_THREADS`` plus the rest of the OpenMP/BLAS family (``MKL``,
+``OPENBLAS``, ``NUMEXPR``, ``VECLIB``) into every subprocess. Values are never
+clamped: ``--workers 28 --omp-threads 4`` is allowed and only logs an
+oversubscription warning (28 x 4 = 112 threads over 56 cores). ``auto`` divides
+the core count by ``--workers`` instead. Arbitrary variables can be added with a
+repeatable ``--env KEY=VALUE``, applied after ``--omp-threads`` so it wins;
+``PYTHONHASHSEED`` and ``FRANKENSTEIN_TEST_SEED`` are reserved for the
+determinism contract.
+
+    uv run --extra cu118 --extra train python full_tests/run_e2e.py \
+        --workers 28 --omp-threads 2 --env TOKENIZERS_PARALLELISM=false
+
+Before touching any directory the harness prints its own command line and the
+effective value of every parameter (defaults marked ``[default]``) to stdout, so
+the sweep's log is self-describing.
 
 Artifact retention is selected with ``--save-to`` (default ``disk``):
 
@@ -218,6 +240,7 @@ import itertools
 import json
 import logging
 import os
+import shlex
 import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -369,6 +392,30 @@ TEXT_MODEL_CLASSES = {
     "frankenstein_text_encoder",
     "frankenstein_text_decoder",
 }
+
+#: Default number of parallel pipeline workers (each launches its own CLI
+#: subprocess, so this is the concurrency the host actually sees).
+DEFAULT_WORKERS = 28
+
+#: Default CPU threads per worker subprocess. The harness used to pin
+#: ``OMP_NUM_THREADS=1``; two threads keeps the tiny e2e GEMMs out of the
+#: single-thread regime without oversubscribing 28 x 2 = 56 cores.
+DEFAULT_OMP_THREADS = "2"
+
+#: The OpenMP/BLAS family. ``torch`` sizes its intra-op pool from
+#: ``OMP_NUM_THREADS`` at import time; MKL, OpenBLAS, NumExpr and VecLib each
+#: keep their own pool, so they are set together to keep the worker honest.
+THREAD_ENV_VARS = (
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+
+#: Environment variables ``--env`` may not touch: they are part of the
+#: determinism contract written into every subprocess by ``_helpers``.
+RESERVED_ENV_VARS = frozenset({"PYTHONHASHSEED", "FRANKENSTEIN_TEST_SEED"})
 
 
 # ---------------------------------------------------------------------------
@@ -1000,9 +1047,12 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         model = _ensure_ssog_grid(model, training)
         configs.append((cid, {"model_class": "frankenstein_text_encoder", "model": model, "training": training}))
 
-    add("trans_bitnet_on", {"use_bitnet": True})
-    add("trans_bitnet_routers", {"use_bitnet": True, "bitnet_routers": True, "use_moe": True, "num_experts": 2, "top_k_experts": 1})
-    add("trans_bitnet_conv", {"use_bitnet": True, "use_bitnet_conv": True, "embedding": {"conv": {"enabled": True, "kernel": 3}}})
+    add("trans_bitnet_on", {"bitnet": {"enabled": True}})
+    add("trans_bitnet_routers", {
+        "bitnet": {"enabled": True, "routers": True},
+        "moe": {"enabled": True, "num_experts": 2, "top_k": 1},
+    })
+    add("trans_bitnet_conv", {"bitnet": {"enabled": True, "conv": True}, "embedding": {"conv": {"enabled": True, "kernel": 3}}})
     add("trans_factorized_emb", {"embedding": {"factorized": {"enabled": True, "dim": 32}}})
     # EELBERT dynamic embeddings (arXiv:2310.20144): the input lookup table is
     # replaced by an on-the-fly n-gram hash of the token strings. Real runs get
@@ -1021,24 +1071,31 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
         },
     })
     add("trans_embedding_conv", {"embedding": {"conv": {"enabled": True, "kernel": 3}}})
-    add("trans_moe", {"use_moe": True, "num_experts": 2, "top_k_experts": 1})
-    add("trans_mod", {"use_mixture_of_depths": True, "mixture_of_depths_capacity_ratio": 0.5})
+    add("trans_moe", {"moe": {"enabled": True, "num_experts": 2, "top_k": 1}})
+    add("trans_mod", {"mixture_of_depths": {"enabled": True, "capacity_ratio": 0.5}})
     add("trans_residuals_none", {"residuals": {"type": "none"}})
     add("trans_residuals_full_attn", {"residuals": {"type": "full_attn", "full_attn": {"init_query_zero": True, "use_rmsnorm_keys": True}}})
     add("trans_residuals_block_attn", {"residuals": {"type": "block_attn", "block_attn": {"num_blocks": 2, "init_query_zero": True, "use_rmsnorm_keys": True}}})
-    add("trans_pos_rope", {"attention": {"titan": {"positional_encoding": "rope"}}})
-    add("trans_ssmax", {"use_ssmax": True, "ssmax_s_init": 1.0})
+    # ``titan`` reads the *model-wide* PE (``model.positional_encoding``); it has
+    # no per-mixer parameters any more (the registry spec carries no
+    # params_schema), so overriding ``attention.titan`` would fail ``bind_params``.
+    add("trans_pos_hope", {"positional_encoding": "hope"})
+    add("trans_ssmax", {"ssmax": {"enabled": True, "s_init": 1.0}})
     # Fixed numerics (arXiv:2610.31642): cancellation-free softmax and
     # zero-sum-gradient hard-target cross-entropy.
-    add("trans_fixed_softmax", {"fixed_softmax": True})
-    add("trans_fixed_ce", {"fixed_cross_entropy": True})
-    add("trans_fixed_both", {"fixed_softmax": True, "fixed_cross_entropy": True})
+    add("trans_fixed_softmax", {"numerics": {"fixed_softmax": True}})
+    add("trans_fixed_ce", {"numerics": {"fixed_cross_entropy": True}})
+    add("trans_fixed_both", {"numerics": {"fixed_softmax": True, "fixed_cross_entropy": True}})
     # SSMax rescales logits (larger margins) and BitNet perturbs weights: the
     # interaction is exactly where the precision cliff matters.
-    add("trans_fixed_softmax_ssmax_bitnet", {"fixed_softmax": True, "use_ssmax": True, "ssmax_s_init": 1.0, "use_bitnet": True})
+    add("trans_fixed_softmax_ssmax_bitnet", {
+        "numerics": {"fixed_softmax": True},
+        "ssmax": {"enabled": True, "s_init": 1.0},
+        "bitnet": {"enabled": True},
+    })
     add("trans_num_loops_2", {"dims": {"num_layers": 1, "num_loops": 2, "layer_pattern": ["standard"]}})
-    add("trans_ffn_relu", {"ffn_activation": "relu"})
-    add("trans_ffn_swiglu", {"ffn_activation": "swiglu"})
+    add("trans_ffn_relu", {"ffn": {"activation": "relu"}})
+    add("trans_ffn_swiglu", {"ffn": {"activation": "swiglu"}})
     add("trans_mhc", {
         "mhc": {"enabled": True, "expansion_rate": 2, "sinkhorn_iters": 5, "gating_init": 0.01, "checkpoint": False, "full_prec_under_bitnet": True},
     })
@@ -1049,7 +1106,7 @@ def make_transversal_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     })
     add("trans_ssog_bitnet", {
         "dims": {"layer_pattern": ["ssog", "ssog"]},
-        "use_bitnet": True,
+        "bitnet": {"enabled": True},
     })
     return configs
 
@@ -1085,7 +1142,7 @@ def make_task_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # path of the fixed cross-entropy and the decoder softmax/sampling plumbing.
     model, training = _base_config(vocab_size, num_layers=2, num_loops=1)
     model = _deep_update(model, {"dims": {"mode": "decoder", "layer_pattern": ["standard", "titan"]}})
-    model = _deep_update(model, {"fixed_softmax": True, "fixed_cross_entropy": True})
+    model = _deep_update(model, {"numerics": {"fixed_softmax": True, "fixed_cross_entropy": True}})
     training = training.copy()
     training["task"] = "causal_lm"
     configs.append(("task_causal_lm_fixed_numerics", {"model_class": "frankenstein_text_decoder", "model": model, "training": training}))
@@ -1114,10 +1171,9 @@ def _vit_model(vocab_size: int) -> dict:
         "norm": {"type": "layer_norm"},
         "embedding": {},
         "attention": {},
-        "use_moe": False,
-        "use_bitnet": False,
-        "ffn_activation": "gelu",
-        "ffn_hidden_size": 256,
+        "bitnet": {"enabled": False},
+        "moe": {"enabled": False},
+        "ffn": {"hidden_size": 256, "activation": "gelu"},
     }
 
 
@@ -1183,7 +1239,7 @@ def make_vision_configs(vocab_size: int) -> List[Tuple[str, dict]]:
     # Fixed numerics (arXiv:2610.31642) on the two CE+softmax vision paths:
     # classification CE and segmentation CE + Dice softmax.
     fixed_vit = _deep_update(_vit_model(vocab_size), {
-        "fixed_softmax": True, "fixed_cross_entropy": True,
+        "numerics": {"fixed_softmax": True, "fixed_cross_entropy": True},
     })
     image = dict(base_image, num_classes=10)
     configs.append(("vit_classification_fixed_numerics", {
@@ -1686,6 +1742,49 @@ def _combo_vocab_size(combo_id: str, fallback: int) -> int:
         return fallback
 
 
+def _unknown_schema_keys(document: dict) -> List[str]:
+    """Return the ``model:`` paths the assembled schema does not declare.
+
+    The runtime config is nested only: a ``model.*`` key the schema does not
+    know is logged as ``WARNING [schema] ... unknown key(s) ignored`` and
+    dropped, which is how the harness silently trained a different model for a
+    while (the flat ``use_bitnet``/``ffn_hidden_size`` keys were ignored, leaving
+    BitNet and MoE on and a 2x FFN). The preflight uses the same validator the
+    loader uses, but escalates these ``additionalProperties`` violations to hard
+    errors — scoped to ``model:`` so unrelated legacy keys elsewhere (the vision
+    task sub-blocks, ``vision_dataset.split``) keep their documented warn-and-drop
+    behaviour instead of blocking a sweep.
+
+    Args:
+        document: The full combo YAML document (``model:``, ``training:``, ...).
+
+    Returns:
+        Sorted paths such as ``model.attention.titan``; empty when clean.
+    """
+    try:
+        import jsonschema
+
+        from src.training.config_loader import _root_schema
+        from src.utils.schema_warnings import classify_schema_errors
+    except Exception:  # noqa: BLE001 - validation is best effort
+        return []
+    try:
+        validator_cls = getattr(
+            jsonschema, "Draft202012Validator", jsonschema.Draft7Validator
+        )
+        _, extra_errors = classify_schema_errors(
+            validator_cls(_root_schema()).iter_errors(document)
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    paths = set()
+    for error in extra_errors:
+        path = ".".join(str(part) for part in getattr(error, "absolute_path", ()))
+        if path == "model" or path.startswith("model."):
+            paths.add(path)
+    return sorted(paths)
+
+
 # ---------------------------------------------------------------------------
 # Pre-flight validation (fail fast before hours of training)
 # ---------------------------------------------------------------------------
@@ -1766,7 +1865,10 @@ def validate_combos(combos: List[Tuple[str, dict]], *, deep: bool = True) -> Lis
 
         optimizer = training.get("optimizer") or {}
         optimizer_class = str(optimizer.get("optimizer_class") or "")
-        allowed = _ALLOWED.get(optimizer_class)
+        # ``OPTIMIZER_ALLOWED_KEYS`` is a registry-backed mapping that raises
+        # (not KeyError) on an unknown name, so the empty class of combos without
+        # a ``training.optimizer`` block (audio, sbert) must not be looked up.
+        allowed = _ALLOWED.get(optimizer_class) if optimizer_class else None
         if optimizer_class and allowed is not None:
             prefix = f"{optimizer_class}-"
             unknown = [
@@ -1776,6 +1878,14 @@ def validate_combos(combos: List[Tuple[str, dict]], *, deep: bool = True) -> Lis
             ]
             if unknown:
                 errors.append(f"{combo_id}: optimizer {optimizer_class} rejects {unknown}")
+
+        unknown_config_keys = _unknown_schema_keys(config)
+        if unknown_config_keys:
+            errors.append(
+                f"{combo_id}: unknown config key(s) — the runtime config is "
+                f"nested only, a flat key would be silently dropped: "
+                f"{unknown_config_keys}"
+            )
 
         if load_training_config is not None:
             try:
@@ -1792,6 +1902,187 @@ def validate_combos(combos: List[Tuple[str, dict]], *, deep: bool = True) -> Lis
                 )
 
     return errors
+
+
+# ---------------------------------------------------------------------------
+# CPU/env plumbing and the startup banner
+# ---------------------------------------------------------------------------
+def _effective_threads(omp_threads: Any, workers: int) -> Optional[int]:
+    """Resolve ``--omp-threads`` to a thread count, or ``None`` when invalid.
+
+    Args:
+        omp_threads: Raw flag value (``"auto"`` or an integer-like string).
+        workers: Number of parallel pipeline workers.
+
+    Returns:
+        The resolved thread count (``>= 1``), or ``None`` when the value cannot
+        be interpreted. ``"auto"`` divides the available cores by the worker
+        count, never going below one thread.
+    """
+    cpu_count = os.cpu_count() or 1
+    workers = max(int(workers or 1), 1)
+    raw = str(omp_threads).strip().lower()
+    if raw == "auto":
+        return max(1, cpu_count // workers)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 1 else None
+
+
+def _resolve_worker_env(
+    args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> Tuple[Dict[str, str], int, List[str]]:
+    """Build the environment handed to every harness subprocess.
+
+    The thread variables must exist in the child's environment, not in the
+    parent: ``torch`` reads ``OMP_NUM_THREADS`` when it is imported, so setting
+    it here (and passing it through ``subprocess.run(env=...)``) is what
+    actually bounds a worker's thread pool.
+
+    Args:
+        args: Parsed CLI arguments.
+        parser: The argument parser, used for ``parser.error`` on bad values.
+
+    Returns:
+        ``(env, threads, notes)`` where ``env`` is the complete override map,
+        ``threads`` the resolved per-worker thread count and ``notes`` the
+        human-readable remarks to log once logging is configured.
+    """
+    cpu_count = os.cpu_count() or 1
+    notes: List[str] = []
+    threads = _effective_threads(args.omp_threads, args.workers)
+    if threads is None:
+        parser.error("--omp-threads must be an integer >= 1 or 'auto'")
+    if str(args.omp_threads).strip().lower() == "auto":
+        notes.append(
+            f"--omp-threads auto -> {threads} thread(s) per worker "
+            f"(cpu_count {cpu_count} // workers {args.workers})"
+        )
+
+    env: Dict[str, str] = {name: str(threads) for name in THREAD_ENV_VARS}
+    for item in args.env or []:
+        key, separator, value = str(item).partition("=")
+        key = key.strip()
+        if not separator or not key:
+            parser.error(f"--env expects KEY=VALUE, got {item!r}")
+        if key in RESERVED_ENV_VARS:
+            parser.error(
+                f"--env cannot override {key}: it is part of the determinism "
+                "contract (PYTHONHASHSEED=0, FRANKENSTEIN_TEST_SEED=SEED)"
+            )
+        env[key] = value
+
+    total = args.workers * threads
+    if total > cpu_count:
+        notes.append(
+            f"oversubscribed: {args.workers} workers x {threads} threads = "
+            f"{total} threads over {cpu_count} cores"
+        )
+    return env, threads, notes
+
+
+def _format_invocation(argv: Optional[List[str]]) -> str:
+    """Return the exact command line that launched this run.
+
+    Args:
+        argv: Argument list passed to :func:`main` (``None`` means ``sys.argv``).
+
+    Returns:
+        Shell-quoted command line, starting with the script name.
+    """
+    if argv is None:
+        argv = sys.argv[1:]
+    program = sys.argv[0] if sys.argv else "full_tests/run_e2e.py"
+    try:
+        program = str(Path(program).resolve().relative_to(Path.cwd()))
+    except (ValueError, OSError):
+        program = str(program)
+    return " ".join(shlex.quote(part) for part in [program, *map(str, argv)])
+
+
+def _emit_run_banner(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    argv: Optional[List[str]] = None,
+) -> None:
+    """Print the invocation and every effective parameter value to stdout.
+
+    This is the first thing ``main`` does after parsing: the sweep log then
+    always starts with the exact command and the value of every flag, including
+    the ones left at their default (marked ``default``). That makes a long run
+    reproducible from its own stdout, which matters when several sweeps are
+    compared and only the log survives.
+
+    Args:
+        parser: The argument parser (used to recover the declared defaults).
+        args: Parsed CLI arguments.
+        argv: Raw argument list, for the command line reproduction.
+    """
+    try:
+        defaults = vars(build_parser().parse_args([]))
+        try:
+            import psutil
+
+            total_ram_gib = psutil.virtual_memory().total / (1024.0 ** 3)
+            swap_gib = psutil.swap_memory().total / (1024.0 ** 3)
+        except Exception:  # noqa: BLE001
+            total_ram_gib = float("nan")
+            swap_gib = float("nan")
+
+        cpu_count = os.cpu_count() or 1
+        threads = _effective_threads(getattr(args, "omp_threads", "1"), args.workers)
+        thread_note = (
+            f"{threads} per worker = {args.workers * threads} threads / {cpu_count} cores"
+            if threads is not None
+            else f"unresolved ({getattr(args, 'omp_threads', '?')!r})"
+        )
+
+        lines: List[str] = ["=" * 86, "run_e2e: effective parameters", "=" * 86]
+        lines.append(f"command  : {_format_invocation(argv)}")
+        lines.append(f"cwd      : {Path.cwd()}")
+        lines.append(f"python   : {sys.executable}")
+        lines.append(
+            f"host     : {cpu_count} cores | {total_ram_gib:.1f} GiB RAM | "
+            f"{swap_gib:.1f} GiB swap | {sys.platform}"
+        )
+        lines.append(f"threads  : {thread_note}")
+        env_pairs = [f"{name}={value}" for name, value in _resolve_env_display(args)]
+        lines.append(f"env      : {', '.join(env_pairs) if env_pairs else '(none)'}")
+        lines.append("-" * 86)
+        for action in parser._actions:  # noqa: SLF001 - intentional introspection
+            if isinstance(action, argparse._HelpAction) or not action.option_strings:
+                continue
+            flag = action.option_strings[0]
+            value = getattr(args, action.dest, None)
+            default = defaults.get(action.dest)
+            source = "default" if value == default else "explicit"
+            shown = "(none)" if value is None else (
+                ", ".join(map(str, value)) if isinstance(value, list) and value else str(value)
+            )
+            lines.append(f"  {flag:<40} {shown:<28} [{source}]")
+        lines.append("=" * 86)
+        print("\n".join(lines), flush=True)
+    except Exception as exc:  # noqa: BLE001 - a banner must never abort a sweep
+        print(f"run_e2e: argv={argv!r} (banner failed: {exc})", flush=True)
+
+
+def _resolve_env_display(args: argparse.Namespace) -> List[Tuple[str, str]]:
+    """Return the ``(name, value)`` thread/env pairs for the banner.
+
+    Args:
+        args: Parsed CLI arguments.
+
+    Returns:
+        Sorted-by-name pairs; the thread variables are derived the same way as
+        :func:`_resolve_worker_env` so the banner shows what will be exported.
+    """
+    try:
+        env, _, _ = _resolve_worker_env(args, argparse.ArgumentParser(add_help=False))
+    except SystemExit:
+        return []
+    return sorted(env.items())
 
 
 # ---------------------------------------------------------------------------
@@ -1877,10 +2168,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--workers",
         type=int,
-        default=1,
+        default=DEFAULT_WORKERS,
         help=(
             "Number of parallel worker threads for the training and deploy "
-            "combos (default: 1 = sequential)."
+            f"combos (default: {DEFAULT_WORKERS}). Each worker launches its own "
+            "CLI subprocess, so the host sees --workers concurrent processes."
+        ),
+    )
+    parser.add_argument(
+        "--omp-threads",
+        default=DEFAULT_OMP_THREADS,
+        metavar="N|auto",
+        help=(
+            "CPU threads per worker subprocess: sets OMP_NUM_THREADS and the "
+            "OpenMP/BLAS family (MKL, OpenBLAS, NumExpr, VecLib). Values are "
+            "never clamped. "
+            f"Default: {DEFAULT_OMP_THREADS}. 'auto' = max(1, cpu_count // --workers)."
+        ),
+    )
+    parser.add_argument(
+        "--env",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "Extra environment variable for every subprocess (train, deploy, "
+            "inference-eval, transformers-export, bitnet-gguf). Repeatable, and "
+            "applied after --omp-threads, so it wins. PYTHONHASHSEED and "
+            "FRANKENSTEIN_TEST_SEED are reserved for the determinism contract."
         ),
     )
     parser.add_argument(
@@ -2042,9 +2357,12 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Build every combo, apply --realonall/global overrides and "
             "validate the configs (real config loader, dims invariants, "
-            "SSOG grid vs max_length, optimizer parameter keys) WITHOUT "
-            "training, deploying or exporting anything. Exits non-zero if "
-            "any combo is invalid. Run this before any multi-hour sweep."
+            "SSOG grid vs max_length, optimizer parameter keys, and any "
+            "model.* key the assembled schema does not declare — the runtime "
+            "config is nested only, so a flat legacy key would be silently "
+            "dropped) WITHOUT training, deploying or exporting anything. Exits "
+            "non-zero if any combo is invalid. Run this before any multi-hour "
+            "sweep."
         ),
     )
     parser.add_argument(
@@ -2072,6 +2390,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # First thing after parsing: print the exact invocation and every effective
+    # parameter (defaults included) so the sweep log is self-describing.
+    _emit_run_banner(parser, args, argv)
+
     if args.workers < 1:
         parser.error("--workers must be >= 1")
     if args.timeout < 0:
@@ -2125,6 +2448,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     }[args.logging_level]
     helpers.setup_logging(log_level)
 
+    # Thread/env overrides for every subprocess (validated here so a bad --env
+    # stops the run before any directory is touched).
+    worker_env, omp_threads, env_notes = _resolve_worker_env(args, parser)
+    for note in env_notes:
+        logging.info("Threads: %s", note)
+
     # ``--save-to memory`` redirects every transient artifact to a RAM-backed
     # tmpfs; the result directory stays on disk. ``disk``/``delete`` use the
     # repository's tmp/ tree as before.
@@ -2151,7 +2480,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     helpers.write_sitecustomize(helpers.TMP_DIR)
     tokenizer_path = helpers.ensure_toy_tokenizer(args.vocab_size)
     parquet_path = helpers.ensure_toy_parquet()
-    runner, env_extra = helpers.resolve_runner()
+    runner, env_extra = helpers.resolve_runner(worker_env)
     python_runner = helpers.resolve_python_runner() if not args.skip_deploy else []
 
     # ``--realonall`` binds every sweep to the real corpora. The tokenizer
@@ -2179,6 +2508,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         logging.info("Python:    %s", " ".join(python_runner))
     logging.info("Real data: %s", "enabled (--realonall)" if args.realonall else "disabled")
     logging.info("Workers:   %d", args.workers)
+    logging.info("Threads:   %d per worker (%s)", omp_threads, ", ".join(
+        f"{name}={value}" for name, value in sorted(env_extra.items())
+    ))
     logging.info("Save to:   %s (scratch: %s)", args.save_to, helpers.TMP_DIR)
     logging.info(
         "Configs:   %s",
@@ -2339,6 +2671,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     logging.info("Planning to run %d training combos", len(combos))
     logging.debug("Category=%s limit=%s skip_attn_pairs=%s skip_singles=%s skip_deploy=%s",
                   args.category, args.limit, args.skip_attn_pairs, args.skip_singles, args.skip_deploy)
+
+    # 1 Hz host CPU/RAM series for the whole sweep: machine-wide usage plus the
+    # summed RSS of every live child process. This is the artifact that answers
+    # "how many workers fit here" after the run.
+    telemetry_recorder = helpers.SystemTelemetryRecorder(
+        workers=args.workers
+    ).start()
+    logging.info(
+        "Host telemetry: %s (1 Hz)", helpers.RESULTS_SYSTEM_TELEMETRY_CSV_PATH
+    )
 
     if args.workers > 1:
         if args.device == "cuda":
@@ -2788,7 +3130,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         model, training = _base_config(args.vocab_size, num_layers=2, num_loops=1)
         model = _deep_update(model, {
             "dims": {"layer_pattern": ["standard", "standard"]},
-            "use_bitnet": True,
+            "bitnet": {"enabled": True},
         })
         bitnet_id = "bitnet_std_attn_for_gguf"
         bitnet_config: Dict[str, Any] = {
@@ -2842,6 +3184,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Final write (ensures everything is flushed), then drop the scratch tree in
     # the modes whose contract is "only the results survive".
+    telemetry_recorder.stop()
     helpers.write_results(results)
     if args.save_to in {"delete", "memory"}:
         helpers.cleanup_scratch()

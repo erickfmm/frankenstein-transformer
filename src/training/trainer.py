@@ -52,6 +52,11 @@ try:
         greedy_rnnt_decode,
         rnnt_loss,
     )
+    from .system_telemetry import (
+        SYSTEM_TELEMETRY_COLUMNS,
+        SystemTelemetrySampler,
+        default_system_telemetry,
+    )
 except ImportError:
     from utils.storage_manager import StorageManager
     from utils.gpu_temp_guard import (
@@ -71,6 +76,11 @@ except ImportError:
         ctc_greedy_decode,
         greedy_rnnt_decode,
         rnnt_loss,
+    )
+    from training.system_telemetry import (
+        SYSTEM_TELEMETRY_COLUMNS,
+        SystemTelemetrySampler,
+        default_system_telemetry,
     )
 
 
@@ -157,6 +167,10 @@ class TrainingConfig:
     gpu_metrics_backend: str = "nvml"
     nvml_device_index: int = 0
     enable_block_grad_norms: bool = True
+    # System (host CPU/RAM) telemetry — device independent, so it is recorded
+    # on CPU and CUDA runs alike.
+    system_metrics_enabled: bool = True
+    system_metrics_thread_breakdown: bool = True
     # Weights & Biases (optional; requires the `wandb` extra)
     wandb_project: Optional[str] = None
     wandb_mode: str = "online"
@@ -326,6 +340,13 @@ class TitanTrainer:
         # === NEW: CSV Logger ===
         self.csv_file = None
         self.csv_writer = None
+        # Host CPU/RAM telemetry: sampled every logged step, on CPU and CUDA.
+        self.system_telemetry = SystemTelemetrySampler(
+            enabled=getattr(self.training_config, "system_metrics_enabled", True),
+            thread_breakdown=getattr(
+                self.training_config, "system_metrics_thread_breakdown", True
+            ),
+        )
         self.csv_columns = self._get_csv_columns()
 
         # Optional Weights & Biases run, initialized lazily on the first log
@@ -482,6 +503,7 @@ class TitanTrainer:
             'scaler_scale', 'gpu_memory_gb', 'gpu_cached_gb',
             'has_nan', 'has_inf', 'has_zero', 'repair_action',
             'gpu_temp_c', 'gpu_power_w', 'gpu_util_pct', 'gpu_mem_used_mib',
+            *SYSTEM_TELEMETRY_COLUMNS,
             *[f'grad_norm_{category}' for category in BLOCK_CATEGORIES],
             'step_time_ms', 'tokens_per_sec', 'clip_ratio', 'effective_batch_size'
         ]
@@ -493,6 +515,10 @@ class TitanTrainer:
             "gpu_util_pct": 0.0,
             "gpu_mem_used_mib": 0.0,
         }
+
+    def _get_default_system_telemetry(self) -> Dict[str, float]:
+        """Return the zero-filled host CPU/RAM payload used when not sampling."""
+        return default_system_telemetry()
 
     def _get_default_block_grad_norms(self) -> Dict[str, float]:
         return {category: 0.0 for category in BLOCK_CATEGORIES}
@@ -741,6 +767,7 @@ class TitanTrainer:
         tokens_per_sec: float,
         clip_ratio: float,
         effective_batch_size: int,
+        system_telemetry: Optional[Dict[str, float]] = None,
     ) -> None:
         """Log step metrics (and per-block grad norms) to Weights & Biases.
 
@@ -767,6 +794,13 @@ class TitanTrainer:
             "gpu_util_pct": float(telemetry["gpu_util_pct"]),
             "gpu_mem_used_mib": float(telemetry["gpu_mem_used_mib"]),
         }
+        host = system_telemetry or {}
+        payload.update(
+            {
+                f"system/{column}": float(host.get(column, 0.0))
+                for column in SYSTEM_TELEMETRY_COLUMNS
+            }
+        )
         moe_stats = getattr(self.model, "last_moe_stats", None) or {}
         for name in (
             "max_vio",
@@ -794,6 +828,7 @@ class TitanTrainer:
                          has_nan: bool = False, has_inf: bool = False,
                          has_zero: bool = False, repair_action: str = "none",
                          gpu_telemetry: Optional[Dict[str, float]] = None,
+                         system_telemetry: Optional[Dict[str, float]] = None,
                          block_grad_norms: Optional[Dict[str, float]] = None,
                          step_time_ms: float = 0.0, tokens_per_sec: float = 0.0,
                          clip_ratio: float = 0.0, effective_batch_size: int = 0):
@@ -805,6 +840,7 @@ class TitanTrainer:
             gpu_cached = torch.cuda.memory_reserved() / 1024**3
 
         telemetry = gpu_telemetry or self._get_default_gpu_telemetry()
+        host_telemetry = system_telemetry or self._get_default_system_telemetry()
         grad_buckets = block_grad_norms or self._get_default_block_grad_norms()
         
         self.csv_writer.writerow([
@@ -827,6 +863,10 @@ class TitanTrainer:
             f"{float(telemetry['gpu_power_w']):.2f}",
             f"{float(telemetry['gpu_util_pct']):.2f}",
             f"{float(telemetry['gpu_mem_used_mib']):.2f}",
+            *[
+                f"{float(host_telemetry.get(column, 0.0)):.2f}"
+                for column in SYSTEM_TELEMETRY_COLUMNS
+            ],
             *[f"{float(grad_buckets[category]):.6f}" for category in BLOCK_CATEGORIES],
             f"{float(step_time_ms):.2f}",
             f"{float(tokens_per_sec):.2f}",
@@ -861,6 +901,10 @@ class TitanTrainer:
                 "gpu_util_pct": float(telemetry["gpu_util_pct"]),
                 "gpu_mem_used_mib": float(telemetry["gpu_mem_used_mib"]),
                 **{
+                    column: float(host_telemetry.get(column, 0.0))
+                    for column in SYSTEM_TELEMETRY_COLUMNS
+                },
+                **{
                     f"grad_norm_{category}": float(grad_buckets[category])
                     for category in BLOCK_CATEGORIES
                 },
@@ -889,6 +933,7 @@ class TitanTrainer:
             tokens_per_sec=tokens_per_sec,
             clip_ratio=clip_ratio,
             effective_batch_size=effective_batch_size,
+            system_telemetry=host_telemetry,
         )
     
     def _check_for_nan(self, loss: torch.Tensor, step: int, batch: dict) -> bool:
@@ -2168,6 +2213,11 @@ class TitanTrainer:
                             else self._get_default_gpu_telemetry()
                         )
                         gpu_telemetry = self._merge_guard_temperature(gpu_telemetry)
+                        system_telemetry = (
+                            self.system_telemetry.sample()
+                            if should_log_heavy
+                            else self._get_default_system_telemetry()
+                        )
                         block_grad_norms = (
                             self._collect_block_grad_norms()
                             if should_log_heavy
@@ -2221,6 +2271,7 @@ class TitanTrainer:
                                 has_zero=grad_stats["has_zero"],
                                 repair_action=repair_action,
                                 gpu_telemetry=gpu_telemetry,
+                                system_telemetry=system_telemetry,
                                 block_grad_norms=block_grad_norms,
                                 step_time_ms=step_time_ms,
                                 tokens_per_sec=tokens_per_sec,
@@ -2284,6 +2335,7 @@ class TitanTrainer:
                             has_zero=grad_stats["has_zero"],
                             repair_action=repair_action,
                             gpu_telemetry=gpu_telemetry,
+                            system_telemetry=system_telemetry,
                             block_grad_norms=block_grad_norms,
                             step_time_ms=step_time_ms,
                             tokens_per_sec=tokens_per_sec,
@@ -2358,6 +2410,7 @@ class TitanTrainer:
                         has_zero=False,
                         repair_action="telemetry_fatal_stop",
                         gpu_telemetry=telemetry,
+                        system_telemetry=self._get_default_system_telemetry(),
                         block_grad_norms=self._get_default_block_grad_norms(),
                         step_time_ms=0.0,
                         tokens_per_sec=0.0,
@@ -2389,6 +2442,7 @@ class TitanTrainer:
                         has_zero=False,
                         repair_action="oom_skip_batch",
                         gpu_telemetry=telemetry,
+                        system_telemetry=self._get_default_system_telemetry(),
                         block_grad_norms=self._get_default_block_grad_norms(),
                         step_time_ms=0.0,
                         tokens_per_sec=0.0,

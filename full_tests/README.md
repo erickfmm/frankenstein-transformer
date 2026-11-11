@@ -88,6 +88,40 @@ Número de muestras reales comparadas por artefacto desplegado:
 uv run --extra cu118 --extra train python full_tests/run_e2e.py --infer-samples 8
 ```
 
+### Paralelismo, hilos de CPU y monitoreo (`--workers`, `--omp-threads`, `--env`)
+
+Por defecto el harness lanza **28 workers** en paralelo, cada uno con **2 hilos de CPU**:
+
+```bash
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --workers 28 --omp-threads 2
+```
+
+- **`--workers N`** (por defecto `28`): número de pipelines concurrentes. Cada worker lanza su propio subproceso del CLI, así que el host ve N procesos a la vez.
+- **`--omp-threads N|auto`** (por defecto `2`): hilos de CPU **por subproceso**. Exporta `OMP_NUM_THREADS` y el resto de la familia OpenMP/BLAS (`MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`). **No se recorta nunca**: `--workers 28 --omp-threads 4` es válido y solo emite un aviso de sobresuscripción. `auto` reparte los núcleos entre los workers (`max(1, cpu_count // workers)`).
+- **`--env KEY=VALUE`** (repetible): cualquier otra variable de entorno para todos los subprocesos (train, deploy, inferencia, export, gguf). Se aplica después de `--omp-threads`, así que gana. `PYTHONHASHSEED` y `FRANKENSTEIN_TEST_SEED` están reservados por el contrato de determinismo y no se pueden sobrescribir.
+
+```bash
+# Sobresuscribir a propósito (solo avisa) y silenciar el tokenizador
+uv run --extra cu118 --extra train python full_tests/run_e2e.py \
+    --workers 28 --omp-threads 4 --env TOKENIZERS_PARALLELISM=false
+```
+
+Antes de tocar ningún directorio, el harness **imprime su propio comando y el valor efectivo de cada parámetro** (los que quedan en su valor por defecto aparecen marcados `[default]`), de modo que el log del barrido se explica solo:
+
+```
+======================================================================================
+run_e2e: effective parameters
+======================================================================================
+command  : full_tests/run_e2e.py --category opt
+host     : 56 cores | 125.8 GiB RAM | 1.0 GiB swap | linux
+threads  : 2 per worker = 56 threads / 56 cores
+env      : MKL_NUM_THREADS=2, NUMEXPR_NUM_THREADS=2, OMP_NUM_THREADS=2, ...
+  --workers                            28                             [default]
+  --omp-threads                        2                              [default]
+```
+
+Además, el harness escribe `full_tests/tmp/results/system_telemetry.csv` a 1 Hz durante todo el barrido: CPU/RAM de la máquina, uso de swap, load average y la **suma de RSS de todos los procesos hijos**. Es el archivo que permite decidir cuántos workers aguantar sin colgar la máquina (`tail -f` funciona mientras corre). Cada CSV de entrenamiento (`training_metrics/<combo>.csv`) añade sus propias columnas del proceso (`cpu_rss_mb`, `cpu_rss_peak_mb`, `cpu_percent`, `cpu_threads`, …), también en corridas con GPU.
+
 ### Retención de artefactos (`--save-to`)
 
 Por defecto se guarda todo en `full_tests/tmp/`:

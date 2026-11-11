@@ -935,6 +935,44 @@ properties:
                   '
     examples:
     - true
+  system_metrics_enabled:
+    type: boolean
+    default: true
+    title: Host CPU/RAM Telemetry
+    title_es: Telemetría CPU/RAM del Host
+    description: 'Log host CPU and RAM usage on every logged step, on CPU and CUDA runs alike. Each row records the training process (`cpu_percent`, `cpu_cores`, `cpu_threads`, `cpu_rss_mb`, `cpu_rss_peak_mb`, `cpu_thread_hot_pct`) and the whole machine (`sys_cpu_percent`, `sys_ram_used_pct`, `sys_ram_used_gb`, `sys_ram_avail_gb`, `sys_swap_used_pct`, `sys_load_1m`). Use it to size `--workers` and to catch a worker that is about to be OOM-killed.
+      
+      
+      **Impact:** ~0.1 ms per logged step (psutil); no effect on the training math.
+      
+                  '
+    description_es: 'Registrar el uso de CPU y RAM del host en cada paso registrado, tanto en CPU como en CUDA. Cada fila guarda el proceso de entrenamiento (`cpu_percent`, `cpu_cores`, `cpu_threads`, `cpu_rss_mb`, `cpu_rss_peak_mb`, `cpu_thread_hot_pct`) y la máquina completa (`sys_cpu_percent`, `sys_ram_used_pct`, `sys_ram_used_gb`, `sys_ram_avail_gb`, `sys_swap_used_pct`, `sys_load_1m`). Sirve para dimensionar `--workers` y para detectar un worker a punto de ser matado por OOM.
+      
+      
+      **Impacto:** ~0.1 ms por paso registrado (psutil); no afecta la matemática del entrenamiento.
+      
+                  '
+    examples:
+    - true
+  system_metrics_thread_breakdown:
+    type: boolean
+    default: true
+    title: Per-Thread CPU Breakdown
+    title_es: Desglose de CPU por Hilo
+    description: 'Also record `cpu_thread_hot_pct`, the utilisation of the busiest single thread, read from `/proc/self/task/<tid>/stat`. It shows whether the OpenMP/BLAS thread pool (`OMP_NUM_THREADS`) is actually being used or one thread is doing all the work. Linux only; ignored elsewhere.
+      
+      
+      **Impact:** One read per thread per logged step; negligible for the tiny e2e models.
+      
+                  '
+    description_es: 'Registrar además `cpu_thread_hot_pct`, la utilización del hilo más ocupado, leída de `/proc/self/task/<tid>/stat`. Muestra si el pool OpenMP/BLAS (`OMP_NUM_THREADS`) se está usando de verdad o si un solo hilo hace todo el trabajo. Solo Linux; se ignora en otras plataformas.
+      
+      
+      **Impacto:** Una lectura por hilo y por paso registrado; despreciable para los modelos pequeños del e2e.
+      
+                  '
+    examples:
+    - true
   wandb_project:
     type: [string, "null"]
     default: null

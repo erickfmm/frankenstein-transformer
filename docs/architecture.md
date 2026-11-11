@@ -960,6 +960,24 @@ split via `training.sbert.max_eval_samples`. Wired in `engine.py`
 `test_split.json` so deploy/quantized/HF accuracy is measured on the held-out
 examples.
 
+**Host CPU/RAM telemetry.** `system_metrics_enabled: true` (default) makes every
+logged step record the host side of the run, on CPU and CUDA alike, because the
+host is the shared resource when several workers run in parallel: the training
+process (`cpu_percent`, `cpu_cores`, `cpu_threads`, `cpu_rss_mb`,
+`cpu_rss_peak_mb`, `cpu_thread_hot_pct`) and the whole machine
+(`sys_cpu_percent`, `sys_ram_used_pct`, `sys_ram_used_gb`, `sys_ram_avail_gb`,
+`sys_swap_used_pct`, `sys_load_1m`). `system_metrics_thread_breakdown: true`
+(default) adds the busiest single thread from `/proc/self/task/<tid>/stat`,
+which shows whether the `OMP_NUM_THREADS`/MKL thread pool is actually being used
+or one thread is doing all the work. Implemented in
+`src/training/system_telemetry.py`; the values are also forwarded to the
+`metrics_callback` payload and to W&B as `system/<column>`. The columns are
+appended to the existing CSV schema, so an older metrics file rotates under
+`csv_rotate_on_schema_change`. `full_tests/run_e2e.py` complements this with a
+1 Hz `results/system_telemetry.csv` (machine totals plus the summed RSS of every
+live child), and `--omp-threads`/`--env` export the thread variables into every
+subprocess.
+
 **Per-block gradient norms.** With `enable_block_grad_norms: true` (default),
 each logged step records the L2 gradient norm of every canonical parameter
 block — `embeddings`, `pos`, `attention`, `ffn`, `norm`, `head`, `mhc`,

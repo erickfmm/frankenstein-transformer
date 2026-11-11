@@ -22,7 +22,9 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -53,6 +55,8 @@ RESULTS_PARAM_METRICS_PATH = RESULTS_DIR / "param_metrics.json"
 #: Inference-vs-real comparison rows (``inference.csv``).
 RESULTS_INFERENCE_CSV_PATH = RESULTS_DIR / "inference.csv"
 RESULTS_INFERENCE_ACCURACY_CSV_PATH = RESULTS_DIR / "inference_accuracy.csv"
+#: 1 Hz host CPU/RAM time series of the whole sweep (``system_telemetry.csv``).
+RESULTS_SYSTEM_TELEMETRY_CSV_PATH = RESULTS_DIR / "system_telemetry.csv"
 #: Downloaded/cached real corpora used by ``--realonall``.
 REAL_DATA_DIR = DATA_DIR / "real"
 
@@ -188,7 +192,7 @@ def _run_silent(cmd: Sequence[str], cwd: Optional[Path] = None, env: Optional[di
         return -2, "", str(exc)
 
 
-def resolve_runner() -> Tuple[List[str], dict]:
+def resolve_runner(env_extra: Optional[dict] = None) -> Tuple[List[str], dict]:
     """Return the CLI command prefix and extra env for training subprocesses.
 
     Tries (in order):
@@ -196,8 +200,20 @@ def resolve_runner() -> Tuple[List[str], dict]:
       2. ``uv run --extra cu118 --extra train python -m src.cli``
       3. A local virtualenv at ``.venv``
       4. The current interpreter with ``python -m src.cli``
+
+    Args:
+        env_extra: Environment variables for every harness subprocess, usually
+            built from the harness flags (``--omp-threads``/``--env``). The
+            determinism pair (``PYTHONHASHSEED``, ``FRANKENSTEIN_TEST_SEED``)
+            and the historical ``OMP_NUM_THREADS=1`` are only used as defaults,
+            so an explicit override wins.
+
+    Returns:
+        ``(command_prefix, env_extra)`` with the defaults filled in.
     """
-    env_extra = {"PYTHONHASHSEED": "0", "OMP_NUM_THREADS": "1"}
+    env_extra = dict(env_extra or {})
+    env_extra.setdefault("PYTHONHASHSEED", "0")
+    env_extra.setdefault("OMP_NUM_THREADS", "1")
     project_root = str(PROJECT_ROOT)
 
     # 1) uv project env (cu118 torch + train extras), entrypoint
@@ -352,6 +368,148 @@ def write_sitecustomize(tmp_dir: Optional[Path] = None) -> Path:
     hook_path.parent.mkdir(parents=True, exist_ok=True)
     hook_path.write_text(SITECUSTOMIZE_PY, encoding="utf-8")
     return hook_path
+
+
+# ---------------------------------------------------------------------------
+# Host telemetry (1 Hz whole-machine + worker-tree sampler)
+# ---------------------------------------------------------------------------
+class SystemTelemetryRecorder:
+    """Sample machine CPU/RAM and the summed RSS of the harness children at 1 Hz.
+
+    Per-step training telemetry (:mod:`src.training.system_telemetry`) only sees
+    the process that writes it. When ``--workers`` is greater than one, the
+    question "how many workers fit in this machine" needs the aggregate: total
+    host usage plus every training/deploy subprocess. This recorder writes that
+    time series next to the other results, so a sweep can be resized from its own
+    output instead of guesswork.
+
+    The thread is a daemon and writes straight to ``results/system_telemetry.csv``
+    (flushed every row), so ``tail -f`` works while the sweep is still running.
+
+    Attributes:
+        path: CSV destination.
+        interval: Seconds between samples.
+        columns: Header row, in write order.
+    """
+
+    columns = (
+        "timestamp",
+        "elapsed_s",
+        "workers",
+        "children",
+        "children_rss_mb",
+        "cpu_percent",
+        "ram_used_pct",
+        "ram_used_gb",
+        "ram_avail_gb",
+        "swap_used_pct",
+        "load_1m",
+    )
+
+    def __init__(
+        self,
+        path: Optional[Path] = None,
+        interval: float = 1.0,
+        workers: int = 1,
+    ) -> None:
+        self.path = Path(path) if path is not None else RESULTS_SYSTEM_TELEMETRY_CSV_PATH
+        self.interval = max(float(interval), 0.1)
+        self.workers = int(workers)
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._started_at = 0.0
+        self._header_written = False
+        self._process = None
+        self._psutil = None
+        try:
+            import psutil
+
+            self._psutil = psutil
+            self._process = psutil.Process(os.getpid())
+            psutil.cpu_percent(interval=None)
+        except Exception:  # noqa: BLE001 - telemetry must never break the sweep
+            self._psutil = None
+            self._process = None
+
+    def start(self) -> "SystemTelemetryRecorder":
+        """Start the daemon sampler thread and return ``self`` for chaining."""
+        if self._thread is not None:
+            return self
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._started_at = time.time()
+        self._thread = threading.Thread(
+            target=self._run, name="system-telemetry", daemon=True
+        )
+        self._thread.start()
+        return self
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Signal the sampler to stop and join it."""
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=timeout)
+            self._thread = None
+
+    def _sample(self) -> Dict[str, Any]:
+        """Take one row: machine-wide usage plus the summed child RSS."""
+        row: Dict[str, Any] = {
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "elapsed_s": f"{time.time() - self._started_at:.1f}",
+            "workers": self.workers,
+            "children": 0,
+            "children_rss_mb": 0.0,
+            "cpu_percent": 0.0,
+            "ram_used_pct": 0.0,
+            "ram_used_gb": 0.0,
+            "ram_avail_gb": 0.0,
+            "swap_used_pct": 0.0,
+            "load_1m": 0.0,
+        }
+        if self._psutil is None:
+            return row
+        try:
+            row["cpu_percent"] = f"{float(self._psutil.cpu_percent(interval=None)):.1f}"
+            virtual = self._psutil.virtual_memory()
+            row["ram_used_pct"] = f"{float(virtual.percent):.1f}"
+            row["ram_used_gb"] = f"{float(virtual.used) / 1024 ** 3:.2f}"
+            row["ram_avail_gb"] = f"{float(virtual.available) / 1024 ** 3:.2f}"
+            row["swap_used_pct"] = f"{float(self._psutil.swap_memory().percent):.1f}"
+            row["load_1m"] = f"{float(os.getloadavg()[0]):.2f}"
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            if self._process is not None:
+                total_mb = 0.0
+                count = 0
+                for child in self._process.children(recursive=True):
+                    try:
+                        total_mb += float(child.memory_info().rss) / (1024.0 ** 2)
+                        count += 1
+                    except Exception:  # noqa: BLE001 - child may exit mid-iteration
+                        continue
+                row["children"] = count
+                row["children_rss_mb"] = f"{total_mb:.1f}"
+        except Exception:  # noqa: BLE001
+            pass
+        return row
+
+    def _write(self, row: Dict[str, Any]) -> None:
+        """Append one sample to the CSV, writing the header on first use."""
+        with self.path.open("a", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(self.columns))
+            if not self._header_written and self.path.stat().st_size == 0:
+                writer.writeheader()
+                self._header_written = True
+            writer.writerow(row)
+            handle.flush()
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self._write(self._sample())
+            except Exception:  # noqa: BLE001
+                pass
+            self._stop.wait(self.interval)
 
 
 # ---------------------------------------------------------------------------
@@ -587,7 +745,24 @@ def dynamic_embedding_vocab(vocab_size: int) -> List[str]:
 
 
 def default_model_cfg(vocab_size: int = TOY_VOCAB_SIZE, num_layers: int = 2, num_loops: int = 1) -> dict:
-    """Return a minimal ``model:`` block."""
+    """Return a minimal, schema-valid ``model:`` block (nested shape only).
+
+    Every key is written in the nested form the runtime reads
+    (``model.bitnet.enabled``, ``model.ffn.hidden_size``, ``model.moe.enabled``,
+    ...). The flat legacy keys (``use_bitnet``, ``ffn_hidden_size``,
+    ``top_k_experts``, ...) were removed with the flattener: the schema logs
+    them as unknown keys and drops them, so writing them would silently train a
+    different model (BitNet and MoE on by default, a 2x FFN) than the sweep
+    claims to test.
+
+    Args:
+        vocab_size: Vocabulary size for the toy tokenizer.
+        num_layers: Logical layer count.
+        num_loops: Weight-sharing loops over the layer stack.
+
+    Returns:
+        The ``model:`` mapping used by every generated e2e combo.
+    """
     return {
         "dims": {
             "vocab_size": vocab_size,
@@ -596,7 +771,6 @@ def default_model_cfg(vocab_size: int = TOY_VOCAB_SIZE, num_layers: int = 2, num
             "num_loops": num_loops,
             "num_heads": 8,
             "num_kv_heads": 4,
-            "retention_heads": 8,
             "dropout": 0.0,
             "layer_pattern": ["standard", "standard"],
             "mode": "encoder",
@@ -607,20 +781,12 @@ def default_model_cfg(vocab_size: int = TOY_VOCAB_SIZE, num_layers: int = 2, num
             "dynamic": {"enabled": False},
             "conv": {"enabled": False, "kernel": 3},
         },
-        "attention": {
-            "titan": {"positional_encoding": "hope"},
-        },
+        "attention": {},
         "residuals": {"type": "standard"},
-        "use_bitnet": False,
-        "bitnet_routers": False,
-        "use_bitnet_conv": False,
-        "use_moe": False,
-        "num_experts": 2,
-        "top_k_experts": 1,
-        "use_mixture_of_depths": False,
-        "mixture_of_depths_capacity_ratio": 0.5,
-        "ffn_hidden_size": 96,
-        "ffn_activation": "gelu",
+        "bitnet": {"enabled": False, "routers": False, "conv": False},
+        "moe": {"enabled": False},
+        "mixture_of_depths": {"enabled": False, "capacity_ratio": 0.5},
+        "ffn": {"hidden_size": 96, "activation": "gelu"},
     }
 
 
