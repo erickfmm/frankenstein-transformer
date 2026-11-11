@@ -1,0 +1,48 @@
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 128
+    hidden_size: 64
+    num_layers: 3
+    num_heads: 4
+    layer_pattern:
+    - standard
+    - retnet
+    - titan
+    mode: encoder
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 128
+    # SiTU-GLU (Kimi K3): smooth-capped Swish gate times a smooth-capped up
+    # projection, bounded by beta_gate * beta_up = 100.
+    activation: situ
+    activation_config:
+      situ_beta_gate: 4.0
+      situ_beta_up: 25.0
+training:
+  task: mlm
+  seed: 42
+  num_epochs: 1
+  batch_size: 2
+  max_length: 64
+  mlm_probability: 0.15
+  max_samples: 1000
+  cache_dir: ./temp_data/activation_situ_cache
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-3
+      adamw-lr_norms: 1e-3
+      adamw-lr_attention: 1e-3
+      adamw-lr_other: 1e-3
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+  scheduler_total_steps: 100
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  max_nan_retries: 3

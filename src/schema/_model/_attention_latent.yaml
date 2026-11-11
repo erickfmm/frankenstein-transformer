@@ -43,6 +43,40 @@ properties:
 
           **Referencias:** (paper: arxiv:2506.09342)
         examples: [384]
+      num_heads:
+        type: [integer, "null"]
+        default: null
+        title: "MLA Number of Heads"
+        title_es: "Número de Cabezas MLA"
+        description: |-
+          Attention-head count for `mla`, overriding `dims.num_heads`. Kimi K3
+          uses 96 heads. `null` (default) uses `dims.num_heads`.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Número de cabezas de atención para `mla`, sobrescribiendo
+          `dims.num_heads`. Kimi K3 usa 96 cabezas. `null` (por defecto) usa
+          `dims.num_heads`.
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 1
+        examples: [96]
+      head_dim:
+        type: [integer, "null"]
+        default: null
+        title: "MLA Head Dimension"
+        title_es: "Dimensión de Cabeza MLA"
+        description: |-
+          Per-head width for `mla`. `null` (default) uses
+          `hidden_size // num_heads`. Set it explicitly to decouple the head
+          geometry from `hidden_size` (Kimi K3 MLA head width: 128).
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Ancho por cabeza para `mla`. `null` (por defecto) usa
+          `hidden_size // num_heads`. Definirlo explícitamente desacopla la
+          geometría de cabezas de `hidden_size` (ancho de cabeza MLA de Kimi K3:
+          128).
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 1
+        examples: [128]
   gqla:
     type: object
     additionalProperties: false
@@ -367,3 +401,129 @@ properties:
 
           **Referencias:** (paper: arxiv:2505.13544)
         examples: [2]
+  gmla:
+    type: object
+    additionalProperties: false
+    description: |-
+      Hyperparameters for `gmla` (DeepSeek-style Gated MLA): joint KV latent rank, low-rank query bottleneck, decoupled NoPE/RoPE key widths, value width and the full-rank output gate. Only applies when `gmla` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2607.24653) (paper: arxiv:2405.04434)
+    description_es: |-
+      Hiperparámetros para `gmla` (Gated MLA estilo DeepSeek): rango del latente KV conjunto, cuello de botella low-rank de queries, anchos NoPE/RoPE desacoplados de claves, ancho de valores y compuerta de salida full-rank. Solo aplica cuando `gmla` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2607.24653) (paper: arxiv:2405.04434)
+    properties:
+      latent_rank:
+        type: [integer, "null"]
+        default: null
+        title: "GMLA Latent Rank"
+        title_es: "Rango Latente GMLA"
+        description: |-
+          Rank of the joint key-value latent `c_KV` cached per token. Kimi K3
+          uses 512. `null` (default) uses `hidden_size // 2`.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Rango del latente clave-valor conjunto `c_KV` cacheado por token.
+          Kimi K3 usa 512. `null` (por defecto) usa `hidden_size // 2`.
+          **Referencias:** (paper: arxiv:2607.24653)
+        examples: [512]
+      q_lora_rank:
+        type: [integer, "null"]
+        default: null
+        title: "GMLA Query LoRA Rank"
+        title_es: "Rango LoRA de Queries GMLA"
+        description: |-
+          Query bottleneck width `W_UQ(W_DQ x)`. Kimi K3 uses 1536. `null`
+          (default) skips the low-rank path (a direct query projection).
+          **References:** (paper: arxiv:2607.24653) (paper: arxiv:2405.04434)
+        description_es: |-
+          Ancho del cuello de botella de queries `W_UQ(W_DQ x)`. Kimi K3 usa
+          1536. `null` (por defecto) omite la ruta low-rank (proyección directa).
+          **Referencias:** (paper: arxiv:2607.24653) (paper: arxiv:2405.04434)
+        examples: [1536]
+      num_heads:
+        type: [integer, "null"]
+        default: null
+        title: "GMLA Number of Heads"
+        title_es: "Número de Cabezas GMLA"
+        description: |-
+          Attention-head count, overriding `dims.num_heads`. Kimi K3 uses 96.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Número de cabezas de atención, sobrescribiendo `dims.num_heads`.
+          Kimi K3 usa 96.
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 1
+        examples: [96]
+      qk_nope_head_dim:
+        type: integer
+        default: 128
+        title: "GMLA NoPE Head Width"
+        title_es: "Ancho de Cabeza NoPE GMLA"
+        description: |-
+          Width of the non-positional (NoPE) key/query slice per head. Kimi K3
+          uses 128.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Ancho de la porción de clave/query no posicional (NoPE) por cabeza.
+          Kimi K3 usa 128.
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 1
+        examples: [128]
+      qk_rope_head_dim:
+        type: integer
+        default: 64
+        title: "GMLA RoPE Head Width"
+        title_es: "Ancho de Cabeza RoPE GMLA"
+        description: |-
+          Width of the rotary key/query slice per head (unused when
+          `use_nope: true`). Kimi K3 uses 64.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Ancho de la porción rotatoria de clave/query por cabeza (sin uso con
+          `use_nope: true`). Kimi K3 usa 64.
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 1
+        examples: [64]
+      v_head_dim:
+        type: integer
+        default: 128
+        title: "GMLA Value Head Width"
+        title_es: "Ancho de Cabeza de Valores GMLA"
+        description: |-
+          Value width per head. Kimi K3 uses 128.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Ancho de valores por cabeza. Kimi K3 usa 128.
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 1
+        examples: [128]
+      use_nope:
+        type: boolean
+        default: true
+        title: "GMLA NoPE"
+        title_es: "NoPE GMLA"
+        description: |-
+          Drop the rotary key/query slice entirely (NoPE). Kimi K3 sets
+          `mla_use_nope: true`, so the latent attention is position-independent
+          and extrapolates to 1M tokens without RoPE retuning.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Elimina por completo la porción rotatoria de clave/query (NoPE).
+          Kimi K3 usa `mla_use_nope: true`, así que la atención latente es
+          independiente de la posición y extrapola a 1M de tokens sin reajustar
+          RoPE.
+          **Referencias:** (paper: arxiv:2607.24653)
+        examples: [true]
+      use_output_gate:
+        type: boolean
+        default: true
+        title: "GMLA Output Gate"
+        title_es: "Compuerta de Salida GMLA"
+        description: |-
+          Apply the full-rank input-dependent output gate `silu(W_g x)`. Kimi
+          K3 enables it.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Aplica la compuerta de salida full-rank dependiente de la entrada
+          `silu(W_g x)`. Kimi K3 la activa.
+          **Referencias:** (paper: arxiv:2607.24653)
+        examples: [true]

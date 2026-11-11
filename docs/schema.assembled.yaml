@@ -597,7 +597,11 @@ properties:
 
               and memory. Typical: 512 (small), 768 (BERT-base), 1024 (BERT-large), 2048+ (large models).
 
-              **Must be divisible by `num_heads`.**
+              **Must be divisible by `num_heads`, unless a mixer declares its own
+
+              `attention.<mixer>.head_dim`** (e.g. `kda`/`mla`/`gmla`, which can expand
+
+              the head geometry beyond `hidden_size`).
 
 
               **Examples explained:**
@@ -618,7 +622,13 @@ properties:
 
               capacidad y memoria. Típico: 512 (pequeño), 768 (BERT-base), 1024 (BERT-large), 2048+
 
-              (modelos grandes). **Debe ser divisible por `num_heads`.**
+              (modelos grandes). **Debe ser divisible por `num_heads`, salvo que un
+
+              mixer declare su propio `attention.<mixer>.head_dim`** (p. ej.
+
+              `kda`/`mla`/`gmla`, que pueden expandir la geometría de cabezas más allá
+
+              de `hidden_size`).
 
 
               **Ejemplos explicados:**
@@ -973,7 +983,12 @@ properties:
 
               - Mixing recurrent (retnet, mamba) with attention (standard, titan): Recurrent layers provide memory and long-range context at O(1) inference cost, while attention layers provide high-precision local interactions. This is the recommended pattern for models that need both efficiency and quality.
 
-              - ⚠️ `sparge` and `fasa` apply their sparse heuristic **only in evaluation/inference**. While training, `HybridLayer` substitutes standard dense attention over the same projections (`q/k/v/out`), so they can be trained from scratch; the trained weights are exactly the ones the sparse path reads at eval time.'
+              - ⚠️ `sparge` and `fasa` apply their sparse heuristic **only in evaluation/inference**. While training, `HybridLayer` substitutes standard dense attention over the same projections (`q/k/v/out`), so they can be trained from scratch; the trained weights are exactly the ones the sparse path reads at eval time.
+
+
+              | `gmla` | Gated MLA — DeepSeek-style latent attention with low-rank queries, NoPE/rope split and a full-rank output gate (paper: arxiv:2607.24653) |
+
+              '
             description_es: 'Secuencia ordenada de tipos de capa apilados en el modelo. Cada elemento define una
 
               capa física. La longitud del patrón debe igualar `num_layers`. Tipos disponibles:
@@ -1089,7 +1104,12 @@ properties:
 
               - Mezcla de recurrente (retnet, mamba) con atención (standard, titan): Las capas recurrentes proporcionan memoria y contexto de largo alcance a costo O(1) en inferencia, mientras que las capas de atención proporcionan interacciones locales de alta precisión. Este es el patrón recomendado para modelos que necesitan tanto eficiencia como calidad.
 
-              - ⚠️ `sparge` y `fasa` aplican su heurística dispersa **solo en evaluación/inferencia**. Durante el entrenamiento `HybridLayer` sustituye atención estándar densa sobre las mismas proyecciones (`q/k/v/out`), por lo que pueden entrenarse desde cero; los pesos entrenados son exactamente los que usa la ruta dispersa al evaluar.'
+              - ⚠️ `sparge` y `fasa` aplican su heurística dispersa **solo en evaluación/inferencia**. Durante el entrenamiento `HybridLayer` sustituye atención estándar densa sobre las mismas proyecciones (`q/k/v/out`), por lo que pueden entrenarse desde cero; los pesos entrenados son exactamente los que usa la ruta dispersa al evaluar.
+
+
+              | `gmla` | Gated MLA — DeepSeek-style latent attention with low-rank queries, NoPE/rope split and a full-rank output gate (paper: arxiv:2607.24653) |
+
+              '
             items:
               description: One mixer type from the `layer_pattern` enum; see the table in `dims.layer_pattern` for the full catalogue with per-mixer references.
               description_es: Un tipo de mezclador del enum `layer_pattern`; consulta la tabla en `dims.layer_pattern` para el catálogo completo con referencias por mezclador.
@@ -1117,6 +1137,7 @@ properties:
               - gated_softmax
               - gla
               - gma
+              - gmla
               - gqa
               - gqla
               - gta
@@ -1390,6 +1411,38 @@ properties:
             default: 0.0
             examples:
             - 0.0
+          eps:
+            type: number
+            title: Normalization Epsilon
+            title_es: Epsilon de Normalización
+            description: 'Numerical stabilizer added under the RMS/variance reduction of the block
+
+              normalization (`layer_norm`, `rms_norm`, `prms_norm`). Must be `> 0`.
+
+              Ignored by normalization-free variants (`dynamic_tanh`, `derf`,
+
+              `flash_norm`, which has no learnable scale). Kimi K3 uses `1e-5`
+
+              (HF `rms_norm_eps`).
+
+
+              **References:** (paper: arxiv:2607.24653) (paper: arxiv:1910.07467)'
+            description_es: 'Estabilizador numérico sumado bajo la reducción RMS/varianza de la
+
+              normalización de bloque (`layer_norm`, `rms_norm`, `prms_norm`). Debe ser
+
+              `> 0`. Se ignora en las variantes libres de normalización
+
+              (`dynamic_tanh`, `derf`, `flash_norm`, que no tiene escala aprendible).
+
+              Kimi K3 usa `1e-5` (HF `rms_norm_eps`).
+
+
+              **Referencias:** (paper: arxiv:2607.24653) (paper: arxiv:1910.07467)'
+            exclusiveMinimum: 0
+            default: 1.0e-06
+            examples:
+            - 1.0e-05
           qk_norm:
             type: object
             title: Query–Key Normalization & Logit Control
@@ -2659,6 +2712,13 @@ properties:
                 title_es: Codificación posicional de gma
                 description: Whether `gma` consumes the model-wide positional encoding.
                 description_es: Si `gma` consume la codificación posicional global.
+              gmla_use_pe:
+                type: boolean
+                default: false
+                title: gmla positional encoding
+                title_es: Codificación posicional de gmla
+                description: Whether `gmla` consumes the model-wide positional encoding.
+                description_es: Si `gmla` consume la codificación posicional global.
               gqa_use_pe:
                 type: boolean
                 default: true
@@ -2858,7 +2918,7 @@ properties:
 
           gated_deltanet2, hgrn2, fox, longformer, bigbird,
 
-          sparse_transformer, sparsek, nsa, sparge, fasa, kda,
+          sparse_transformer, sparsek, nsa, sparge, fasa,
 
           memory, mamba) do not need a sub-object. `gqa` reads `dims.num_kv_heads`.
 
@@ -2874,7 +2934,7 @@ properties:
 
           gated_deltanet2, hgrn2, fox, longformer, bigbird,
 
-          sparse_transformer, sparsek, nsa, sparge, fasa, kda,
+          sparse_transformer, sparsek, nsa, sparge, fasa,
 
           memory, mamba) no necesitan sub-objeto. `gqa` lee `dims.num_kv_heads`.
 
@@ -4715,6 +4775,162 @@ properties:
                   **Referencias:** (paper: arxiv:2606.18283)'
                 examples:
                 - 1.0
+          gmla:
+            type: object
+            additionalProperties: false
+            description: 'Hyperparameters for `gmla` (DeepSeek-style Gated MLA): joint KV latent rank, low-rank query bottleneck, decoupled NoPE/RoPE key widths, value width and the full-rank output gate. Only applies when `gmla` appears in `layer_pattern`.
+
+              **References:** (paper: arxiv:2607.24653) (paper: arxiv:2405.04434)'
+            description_es: 'Hiperparámetros para `gmla` (Gated MLA estilo DeepSeek): rango del latente KV conjunto, cuello de botella low-rank de queries, anchos NoPE/RoPE desacoplados de claves, ancho de valores y compuerta de salida full-rank. Solo aplica cuando `gmla` aparece en `layer_pattern`.
+
+              **Referencias:** (paper: arxiv:2607.24653) (paper: arxiv:2405.04434)'
+            properties:
+              latent_rank:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: GMLA Latent Rank
+                title_es: Rango Latente GMLA
+                description: 'Rank of the joint key-value latent `c_KV` cached per token. Kimi K3
+
+                  uses 512. `null` (default) uses `hidden_size // 2`.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Rango del latente clave-valor conjunto `c_KV` cacheado por token.
+
+                  Kimi K3 usa 512. `null` (por defecto) usa `hidden_size // 2`.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                examples:
+                - 512
+              q_lora_rank:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: GMLA Query LoRA Rank
+                title_es: Rango LoRA de Queries GMLA
+                description: 'Query bottleneck width `W_UQ(W_DQ x)`. Kimi K3 uses 1536. `null`
+
+                  (default) skips the low-rank path (a direct query projection).
+
+                  **References:** (paper: arxiv:2607.24653) (paper: arxiv:2405.04434)'
+                description_es: 'Ancho del cuello de botella de queries `W_UQ(W_DQ x)`. Kimi K3 usa
+
+                  1536. `null` (por defecto) omite la ruta low-rank (proyección directa).
+
+                  **Referencias:** (paper: arxiv:2607.24653) (paper: arxiv:2405.04434)'
+                examples:
+                - 1536
+              num_heads:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: GMLA Number of Heads
+                title_es: Número de Cabezas GMLA
+                description: 'Attention-head count, overriding `dims.num_heads`. Kimi K3 uses 96.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Número de cabezas de atención, sobrescribiendo `dims.num_heads`.
+
+                  Kimi K3 usa 96.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 1
+                examples:
+                - 96
+              qk_nope_head_dim:
+                type: integer
+                default: 128
+                title: GMLA NoPE Head Width
+                title_es: Ancho de Cabeza NoPE GMLA
+                description: 'Width of the non-positional (NoPE) key/query slice per head. Kimi K3
+
+                  uses 128.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Ancho de la porción de clave/query no posicional (NoPE) por cabeza.
+
+                  Kimi K3 usa 128.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 1
+                examples:
+                - 128
+              qk_rope_head_dim:
+                type: integer
+                default: 64
+                title: GMLA RoPE Head Width
+                title_es: Ancho de Cabeza RoPE GMLA
+                description: 'Width of the rotary key/query slice per head (unused when
+
+                  `use_nope: true`). Kimi K3 uses 64.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Ancho de la porción rotatoria de clave/query por cabeza (sin uso con
+
+                  `use_nope: true`). Kimi K3 usa 64.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 1
+                examples:
+                - 64
+              v_head_dim:
+                type: integer
+                default: 128
+                title: GMLA Value Head Width
+                title_es: Ancho de Cabeza de Valores GMLA
+                description: 'Value width per head. Kimi K3 uses 128.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Ancho de valores por cabeza. Kimi K3 usa 128.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 1
+                examples:
+                - 128
+              use_nope:
+                type: boolean
+                default: true
+                title: GMLA NoPE
+                title_es: NoPE GMLA
+                description: 'Drop the rotary key/query slice entirely (NoPE). Kimi K3 sets
+
+                  `mla_use_nope: true`, so the latent attention is position-independent
+
+                  and extrapolates to 1M tokens without RoPE retuning.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Elimina por completo la porción rotatoria de clave/query (NoPE).
+
+                  Kimi K3 usa `mla_use_nope: true`, así que la atención latente es
+
+                  independiente de la posición y extrapola a 1M de tokens sin reajustar
+
+                  RoPE.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                examples:
+                - true
+              use_output_gate:
+                type: boolean
+                default: true
+                title: GMLA Output Gate
+                title_es: Compuerta de Salida GMLA
+                description: 'Apply the full-rank input-dependent output gate `silu(W_g x)`. Kimi
+
+                  K3 enables it.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Aplica la compuerta de salida full-rank dependiente de la entrada
+
+                  `silu(W_g x)`. Kimi K3 la activa.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                examples:
+                - true
           gqla:
             type: object
             additionalProperties: false
@@ -4913,6 +5129,211 @@ properties:
                   **Referencias:** (paper: arxiv:2602.21371)'
                 examples:
                 - 12
+          kda:
+            type: object
+            additionalProperties: false
+            description: 'Hyperparameters for `kda` (Kimi Delta Attention): head geometry and the
+
+              K3 refinements (input-dependent bounded decay, short convolution and the
+
+              full-rank output gate). Only applies when `kda` appears in
+
+              `layer_pattern`.
+
+              **References:** (paper: arxiv:2510.26692) (paper: arxiv:2607.24653)'
+            description_es: 'Hiperparámetros para `kda` (Kimi Delta Attention): geometría de cabezas
+
+              y los refinamientos de K3 (decaimiento acotado dependiente de la entrada,
+
+              convolución corta y compuerta de salida full-rank). Solo aplica cuando
+
+              `kda` aparece en `layer_pattern`.
+
+              **Referencias:** (paper: arxiv:2510.26692) (paper: arxiv:2607.24653)'
+            properties:
+              num_heads:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: KDA Number of Heads
+                title_es: Número de Cabezas KDA
+                description: 'Attention-head count for `kda`, overriding `dims.num_heads`. KDA may
+
+                  expand the head width beyond `hidden_size` (Kimi K3 uses 96 heads ×
+
+                  128 = 12288 with `hidden_size` 7168). `null` (default) uses
+
+                  `dims.num_heads`.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Número de cabezas de atención para `kda`, sobrescribiendo
+
+                  `dims.num_heads`. KDA puede expandir el ancho de cabeza más allá de
+
+                  `hidden_size` (Kimi K3 usa 96 cabezas × 128 = 12288 con
+
+                  `hidden_size` 7168). `null` (por defecto) usa `dims.num_heads`.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 1
+                examples:
+                - 96
+              head_dim:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: KDA Head Dimension
+                title_es: Dimensión de Cabeza KDA
+                description: 'Per-head width for `kda`. `null` (default) uses
+
+                  `hidden_size // num_heads`, which still requires divisibility. Set it
+
+                  explicitly to decouple the head geometry from `hidden_size` (Kimi K3:
+
+                  128).
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Ancho por cabeza para `kda`. `null` (por defecto) usa
+
+                  `hidden_size // num_heads`, lo que sigue exigiendo divisibilidad.
+
+                  Definirlo explícitamente desacopla la geometría de cabezas de
+
+                  `hidden_size` (Kimi K3: 128).
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 1
+                examples:
+                - 128
+              decay_mode:
+                type: string
+                enum:
+                - kimilinear
+                - k3
+                default: kimilinear
+                title: KDA Decay Mode
+                title_es: Modo de Decaimiento KDA
+                description: '`kimilinear` keeps the Kimi Linear log-decay
+
+                  (`exp(base − softplus(delta))`, free parameters). `k3` selects the
+
+                  Kimi K3 input-dependent bounded decay: the logit is a low-rank
+
+                  projection of the input plus a per-head bias, mapped through
+
+                  `g_min·σ(e^{A_h} z)` so retention is bounded below by `exp(g_min)`.
+
+                  **References:** (paper: arxiv:2510.26692) (paper: arxiv:2607.24653)'
+                description_es: '`kimilinear` mantiene el log-decay de Kimi Linear
+
+                  (`exp(base − softplus(delta))`, parámetros libres). `k3` selecciona el
+
+                  decaimiento acotado dependiente de la entrada de Kimi K3: el logit es
+
+                  una proyección low-rank de la entrada más un sesgo por cabeza, mapeado
+
+                  por `g_min·σ(e^{A_h} z)`, de modo que la retención queda acotada
+
+                  inferiormente por `exp(g_min)`.
+
+                  **Referencias:** (paper: arxiv:2510.26692) (paper: arxiv:2607.24653)'
+                examples:
+                - kimilinear
+                - k3
+              decay_min_log:
+                type: number
+                default: -5.0
+                title: KDA Minimum Log-Decay
+                title_es: Log-Decaimiento Mínimo KDA
+                description: 'Lower bound `g_min` of the K3 decay logit (only used when
+
+                  `decay_mode=k3`). Kimi K3 uses `−5`, bounding retention below by
+
+                  `e^{−5} ≈ 6.7e−3`. Must be `< 0`.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Cota inferior `g_min` del logit de decaimiento K3 (solo se usa con
+
+                  `decay_mode=k3`). Kimi K3 usa `−5`, acotando la retención por
+
+                  `e^{−5} ≈ 6.7e−3`. Debe ser `< 0`.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                maximum: 0
+                examples:
+                - -5.0
+              decay_low_rank:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: KDA Decay Low-Rank Width
+                title_es: Ancho Low-Rank del Decaimiento KDA
+                description: 'Width of the low-rank projection that produces the input-dependent
+
+                  decay logits in `decay_mode=k3`. `null` (default) uses
+
+                  `max(1, hidden_size // 16)`.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Ancho de la proyección low-rank que produce los logits de
+
+                  decaimiento dependientes de la entrada en `decay_mode=k3`. `null`
+
+                  (por defecto) usa `max(1, hidden_size // 16)`.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 1
+                examples:
+                - 128
+              short_conv_kernel:
+                type: integer
+                default: 0
+                title: KDA Short Convolution Kernel
+                title_es: Kernel de Convolución Corta KDA
+                description: 'Depthwise causal short-convolution kernel applied to the input
+
+                  (followed by SiLU) before the Q/K/V projections. Kimi K3 uses `4`;
+
+                  `0` (default) disables it. When enabled, the incremental cache keeps
+
+                  the last `kernel − 1` pre-conv rows.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Kernel de convolución corta causal depthwise aplicado a la entrada
+
+                  (seguido de SiLU) antes de las proyecciones Q/K/V. Kimi K3 usa `4`;
+
+                  `0` (por defecto) lo desactiva. Cuando está activo, el caché
+
+                  incremental conserva las últimas `kernel − 1` filas pre-conv.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 0
+                examples:
+                - 0
+                - 4
+              use_full_rank_gate:
+                type: boolean
+                default: true
+                title: KDA Full-Rank Output Gate
+                title_es: Compuerta de Salida Full-Rank KDA
+                description: 'Use a full-rank input-dependent output gate (`silu(W_g x)`) instead
+
+                  of a per-head scalar gate. Kimi K3 uses the full-rank gate (default).
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Usar una compuerta de salida full-rank dependiente de la entrada
+
+                  (`silu(W_g x)`) en vez de una compuerta escalar por cabeza. Kimi K3
+
+                  usa la compuerta full-rank (por defecto).
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                examples:
+                - true
           lsa:
             type: object
             additionalProperties: false
@@ -5261,6 +5682,54 @@ properties:
                   **Referencias:** (paper: arxiv:2506.09342)'
                 examples:
                 - 384
+              num_heads:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: MLA Number of Heads
+                title_es: Número de Cabezas MLA
+                description: 'Attention-head count for `mla`, overriding `dims.num_heads`. Kimi K3
+
+                  uses 96 heads. `null` (default) uses `dims.num_heads`.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Número de cabezas de atención para `mla`, sobrescribiendo
+
+                  `dims.num_heads`. Kimi K3 usa 96 cabezas. `null` (por defecto) usa
+
+                  `dims.num_heads`.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 1
+                examples:
+                - 96
+              head_dim:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: MLA Head Dimension
+                title_es: Dimensión de Cabeza MLA
+                description: 'Per-head width for `mla`. `null` (default) uses
+
+                  `hidden_size // num_heads`. Set it explicitly to decouple the head
+
+                  geometry from `hidden_size` (Kimi K3 MLA head width: 128).
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Ancho por cabeza para `mla`. `null` (por defecto) usa
+
+                  `hidden_size // num_heads`. Definirlo explícitamente desacopla la
+
+                  geometría de cabezas de `hidden_size` (ancho de cabeza MLA de Kimi K3:
+
+                  128).
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                minimum: 1
+                examples:
+                - 128
           mlra:
             type: object
             additionalProperties: false
@@ -6807,41 +7276,59 @@ properties:
                 - none
                 - sign
                 - centered_sign
+                - quantile
                 title: Expert Bias Update Rule
                 title_es: Regla de Actualización del Sesgo
                 description: 'Auxiliary-loss-free balancing (DeepSeek-V3 `noaux_tc`): a per-expert
 
-                  bias is added to the scores before selection only, and moved once per
+                  bias is added to the scores before selection only. `sign` adds
 
-                  optimizer step. `sign` adds `+rate` to underloaded experts and
+                  `+rate` to underloaded experts and `−rate` to overloaded ones;
 
-                  `−rate` to overloaded ones; `centered_sign` subtracts the mean step
+                  `centered_sign` subtracts the mean step so the bias mean does not
 
-                  so the bias mean does not drift. Requires `router.scoring` different
+                  drift; `quantile` (Kimi K3 Quantile Balancing) replaces the fixed
 
-                  from `softmax`.
+                  step with the router-score quantile that matches each expert''s
+
+                  target load, derived from a single forward pass (Top-(k+1) cutoff,
+
+                  (q+1)-th largest margin, q = m·k/n) and applied per micro-batch.
+
+                  `sign`/`centered_sign` move once per optimizer step. Requires
+
+                  `router.scoring` different from `softmax`.
 
 
-                  **References:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982)'
+                  **References:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982) (paper: arxiv:2607.24653)'
                 description_es: 'Balanceo libre de pérdida auxiliar (DeepSeek-V3 `noaux_tc`): un sesgo
 
-                  por experto se suma a las puntuaciones solo antes de la selección y
+                  por experto se suma a las puntuaciones solo antes de la selección.
 
-                  se mueve una vez por paso de optimizador. `sign` suma `+rate` a los
+                  `sign` suma `+rate` a los expertos subcargados y `−rate` a los
 
-                  expertos subcargados y `−rate` a los sobrecargados; `centered_sign`
+                  sobrecargados; `centered_sign` resta el paso medio para que la media
 
-                  resta el paso medio para que la media del sesgo no derive. Requiere
+                  del sesgo no derive; `quantile` (Quantile Balancing de Kimi K3)
 
-                  `router.scoring` distinto de `softmax`.
+                  reemplaza el paso fijo por el cuantil de puntuaciones que iguala la
+
+                  carga objetivo de cada experto, derivado de un único forward
+
+                  (cutoff Top-(k+1), margen (q+1)-ésimo mayor, q = m·k/n) y aplicado
+
+                  por micro-batch. `sign`/`centered_sign` se mueven una vez por paso de
+
+                  optimizador. Requiere `router.scoring` distinto de `softmax`.
 
 
-                  **Referencias:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982)'
+                  **Referencias:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982) (paper: arxiv:2607.24653)'
                 default: none
                 examples:
                 - none
                 - sign
                 - centered_sign
+                - quantile
               bias_update_rate:
                 type: number
                 minimum: 0
@@ -7727,7 +8214,7 @@ properties:
               (paper: arxiv:2208.14111)). Configure via `ffn.activation_config`.
 
 
-              **Gated FFN variants** (own their projections, replace the FFN block): `swiglu`, `geglu`, `reglu`.
+              **Gated FFN variants** (own their projections, replace the FFN block): `swiglu`, `geglu`, `reglu`, `situ`.
 
 
               **Impact:** `silu`/`gelu` tend to converge well. With BitNet or quantization, `silu` may be
@@ -7791,7 +8278,7 @@ properties:
               (paper: arxiv:2208.14111)). Configurar vía `ffn.activation_config`.
 
 
-              **Variantes FFN con compuerta** (tienen sus proyecciones, reemplazan el bloque FFN): `swiglu`, `geglu`, `reglu`.
+              **Variantes FFN con compuerta** (tienen sus proyecciones, reemplazan el bloque FFN): `swiglu`, `geglu`, `reglu`, `situ`.
 
 
               **Referencias:** `silu`/`swish` (paper: arxiv:1710.05941) (paper: arxiv:1702.03118); `gelu` (paper:
@@ -7851,6 +8338,7 @@ properties:
             - selu
             - sigmoid
             - silu
+            - situ
             - softexp
             - softplus
             - softsign
@@ -7868,9 +8356,9 @@ properties:
             title: FFN Activation Configuration
             title_es: Configuración de Activación de FFN
             description: "Optional nested parameters for learnable / parametric activations. Ignored for\nstateless activations. All keys are optional.\n\n**RAF (Rational Activation Function (paper: arxiv:2208.14111)):**\n- `raf_degrees`: `[m, n]` Padé numerator/denominator degrees (ints ≥ 1). Default `[5, 4]`.\n- `raf_version`: denominator form, one of `A` (default, \"safe\"), `B`, `C`, `D`, `N`.\n- `raf_approx_func`: init target — `gelu` (default), `relu`, `leaky_relu`, `leaky_relu_0.1`,\n  `sigmoid`, `tanh`, `swish`, `silu`, `identity`.\n- `raf_trainable`: freeze the rational coefficients when `false`. Default `true`.\n- `raf_input_scaling`: per-token min-max scaling to `[-3, 3]` before the RAF (RAFT\n  preprocessing). Default `false`.\n\n**Parametric activations:** `prelu_init` (default `0.25`), `elu_alpha` (`1.0`),\n`celu_alpha`, `swish_beta` (`1.0`), `leaky_relu_slope` (`0.01`), `pelu_alpha`, `mpelu_alpha`,\n`mpelu_beta`, `felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`,\n\
-              `preu_beta`, `softexp_alpha`, `maxout_pieces` (int ≥ 1, default `2`).\n\n**References:** (paper: arxiv:2208.14111) (paper: arxiv:1502.01852) (paper: arxiv:1710.05941)\n"
+              `preu_beta`, `softexp_alpha`, `maxout_pieces` (int ≥ 1, default `2`).\n\n**SiTU-GLU:** `situ_beta_gate` (`4.0`) and `situ_beta_up` (`25.0`) set the\nsmooth-cap betas of the gate and up branches.\n\n**References:** (paper: arxiv:2208.14111) (paper: arxiv:1502.01852) (paper: arxiv:1710.05941)\n"
             description_es: "Parámetros anidados opcionales para activaciones aprendibles / paramétricas. Se ignoran para\nactivaciones sin estado. Todas las claves son opcionales.\n\n**RAF (Rational Activation Function (paper: arxiv:2208.14111)):**\n- `raf_degrees`: grados `[m, n]` del numerador/denominador Padé (ints ≥ 1). Por defecto `[5, 4]`.\n- `raf_version`: forma del denominador, uno de `A` (por defecto, \"segura\"), `B`, `C`, `D`, `N`.\n- `raf_approx_func`: objetivo de inicialización — `gelu` (por defecto), `relu`, `leaky_relu`,\n  `leaky_relu_0.1`, `sigmoid`, `tanh`, `swish`, `silu`, `identity`.\n- `raf_trainable`: congela los coeficientes racionales cuando es `false`. Por defecto `true`.\n- `raf_input_scaling`: escalado min-max por token a `[-3, 3]` antes del RAF (preprocesamiento\n  RAFT). Por defecto `false`.\n\n**Activaciones paramétricas:** `prelu_init` (`0.25`), `elu_alpha` (`1.0`), `celu_alpha`,\n`swish_beta` (`1.0`), `leaky_relu_slope` (`0.01`), `pelu_alpha`, `mpelu_alpha`,\
-              \ `mpelu_beta`,\n`felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`, `preu_beta`,\n`softexp_alpha`, `maxout_pieces` (int ≥ 1, `2`).\n\n**Referencias:** (paper: arxiv:2208.14111) (paper: arxiv:1502.01852) (paper: arxiv:1710.05941)\n"
+              \ `mpelu_beta`,\n`felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`, `preu_beta`,\n`softexp_alpha`, `maxout_pieces` (int ≥ 1, `2`).\n\n**SiTU-GLU:** `situ_beta_gate` (`4.0`) y `situ_beta_up` (`25.0`) fijan los\nbetas de tope suave de las ramas gate y up.\n\n**Referencias:** (paper: arxiv:2208.14111) (paper: arxiv:1502.01852) (paper: arxiv:1710.05941)\n"
             additionalProperties: false
             properties:
               raf_degrees:
@@ -8109,6 +8597,46 @@ properties:
                 default: 0.0
                 examples:
                 - 0.0
+              situ_beta_gate:
+                description: 'SiTU-GLU smooth-cap beta of the gate branch (`situ` activation):
+
+                  the gate becomes `β₁ tanh(u/β₁) · σ(u)`. Must be `> 0`. Kimi K3 uses
+
+                  `4.0`.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Beta del tope suave de la rama de puerta de SiTU-GLU (activación
+
+                  `situ`): la puerta pasa a `β₁ tanh(u/β₁) · σ(u)`. Debe ser `> 0`.
+
+                  Kimi K3 usa `4.0`.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                type: number
+                exclusiveMinimum: 0
+                default: 4.0
+                examples:
+                - 4.0
+              situ_beta_up:
+                description: 'SiTU-GLU smooth-cap beta of the up branch (`situ` activation): the
+
+                  up projection becomes `β₂ tanh(v/β₂)`. Must be `> 0`. Kimi K3 uses
+
+                  `25.0`, bounding the product by `β₁β₂ = 100`.
+
+                  **References:** (paper: arxiv:2607.24653)'
+                description_es: 'Beta del tope suave de la rama up de SiTU-GLU (activación `situ`):
+
+                  la proyección up pasa a `β₂ tanh(v/β₂)`. Debe ser `> 0`. Kimi K3 usa
+
+                  `25.0`, acotando el producto por `β₁β₂ = 100`.
+
+                  **Referencias:** (paper: arxiv:2607.24653)'
+                type: number
+                exclusiveMinimum: 0
+                default: 25.0
+                examples:
+                - 25.0
               maxout_pieces:
                 description: 'Number of linear pieces per Maxout unit.
 
@@ -10631,10 +11159,13 @@ properties:
                   prefix: muon
                   supports_shared_per_group_suffixes: true
                   specific_global_suffixes:
+                  - clip_value
                   - momentum
                   - nesterov
                   - ns_eps
                   - ns_steps
+                  - per_head
+                  - per_head_heads
                 muon2:
                   prefix: muon2
                   supports_shared_per_group_suffixes: true

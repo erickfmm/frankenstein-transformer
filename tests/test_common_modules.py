@@ -480,3 +480,30 @@ class GetNormTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class NormEpsTests(unittest.TestCase):
+    def test_rms_norm_eps_comes_from_config(self):
+        cfg = FrankensteinModelConfig.from_dict({
+            "dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 1,
+                     "num_loops": 1, "num_heads": 4, "dropout": 0.0,
+                     "layer_pattern": ["standard"]},
+            "attention": {"retnet": {"heads": 4}},
+            "moe": {"num_experts": 2, "top_k": 1, "enabled": False},
+            "norm": {"type": "rms_norm", "eps": 1e-5},
+            "bitnet": {"enabled": False},
+        })
+        self.assertAlmostEqual(get_norm(cfg).eps, 1e-5)
+
+    def test_layer_norm_eps_comes_from_config(self):
+        cfg = FrankensteinModelConfig.from_dict({
+            "dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 1,
+                     "num_loops": 1, "num_heads": 4, "dropout": 0.0,
+                     "layer_pattern": ["standard"]},
+            "attention": {"retnet": {"heads": 4}},
+            "moe": {"num_experts": 2, "top_k": 1, "enabled": False},
+            "norm": {"type": "layer_norm", "eps": 1e-5},
+            "bitnet": {"enabled": False},
+        })
+        self.assertAlmostEqual(get_norm(cfg).eps, 1e-5)

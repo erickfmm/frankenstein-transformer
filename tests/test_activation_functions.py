@@ -344,3 +344,42 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class SituGluTests(unittest.TestCase):
+    """SiTU-GLU (Kimi K3, arXiv:2607.24653 §2.3.2)."""
+
+    def test_registered_as_glu(self):
+        self.assertIn("situ", GLU_VARIANTS)
+        self.assertNotIn("situ", ELEMENTWISE_ACTIVATIONS)
+
+    def test_gate_and_up_branches_are_smooth_capped(self):
+        beta1, beta2 = 4.0, 25.0
+        ffn = make_gated_ffn("situ", 4, 8, bias=False)
+        with torch.no_grad():
+            ffn.gate_proj.weight.copy_(torch.eye(8, 4))
+            ffn.up_proj.weight.copy_(torch.eye(8, 4))
+            ffn.down_proj.weight.copy_(torch.eye(4, 8))
+        x = torch.tensor([[10.0, -10.0, 0.5, 0.0]])
+        u = ffn.gate_proj(x)
+        v = ffn.up_proj(x)
+        gate = beta1 * torch.tanh(u / beta1) * torch.sigmoid(u)
+        up = beta2 * torch.tanh(v / beta2)
+        expected = ffn.down_proj(gate * up)
+        torch.testing.assert_close(ffn(x), expected)
+        self.assertTrue(bool(((gate * up).abs() <= beta1 * beta2 + 1e-5).all()))
+
+    def test_matches_swiglu_near_origin(self):
+        torch.manual_seed(0)
+        situ = make_gated_ffn("situ", 4, 8, beta_gate=1e6, beta_up=1e6, bias=False)
+        swiglu = make_gated_ffn("swiglu", 4, 8, bias=False)
+        with torch.no_grad():
+            for a, b in (
+                (situ.gate_proj, swiglu.gate_proj),
+                (situ.up_proj, swiglu.up_proj),
+                (situ.down_proj, swiglu.down_proj),
+            ):
+                b.weight.copy_(a.weight)
+        x = torch.randn(2, 3, 4) * 0.1
+        torch.testing.assert_close(situ(x), swiglu(x), rtol=1e-4, atol=1e-5)

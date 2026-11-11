@@ -23,9 +23,9 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Activations | Norms | Model Classes | Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-----------:|:-----:|:-------------:|:-----:|:-------:|:------------:|
-| **49** | **36** | **12** | **43** | **6** | **4** | **9** | **189** | **4** |
+| **50** | **36** | **12** | **44** | **6** | **4** | **9** | **189** | **4** |
 
-> **49 mixer architectures** — 48 mixer classes plus the `mamba` linear passthrough; the schema exposes all 49 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
+> **50 mixer architectures** — 49 mixer classes plus the `mamba` linear passthrough; the schema exposes all 50 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
 
 ## How It Works
 
@@ -122,10 +122,10 @@ code as the built-ins.
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | **49** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
+| Sequence mixer architectures | **50** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
 | Optimizer families | 36 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
-| FFN activations | 43 (40 elementwise + `swiglu`, `geglu`, `reglu`) |
+| FFN activations | 44 (40 elementwise + `swiglu`, `geglu`, `reglu`, `situ`) |
 | Residual connections | 6 exposed: `standard`, `none`, `full_attn`, `block_attn`, mHC, Hyperloop |
 | Embedding variants | 12 positional encodings + 4 structural optimizations (factorized, embedding conv, dynamic EELBERT, audio frontend) |
 | Model classes | `frankenstein_text_encoder`, `frankenstein_text_decoder`, `frankenstein_vit`, `frankenstein_audio` + reusable in-process engine API |
@@ -142,7 +142,7 @@ code as the built-ins.
 
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
-| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 49 mixer architectures |
+| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 50 mixer architectures |
 | `frankenstein_text_decoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 | `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `vision_dataset:` blocks |
 | `frankenstein_audio` | Encoder (audio) | Audio Transformer for ASR and audio/signal classification; log-mel/spectrogram/raw frontend, conv subsampling, CTC/RNN-T or classification heads; forces `mode: encoder`, requires `audio:` + `audio_dataset:` blocks |
@@ -177,7 +177,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 ⚠️ `sparge` and `fasa` are **inference-sparse**: they train as dense attention over their own projections, then activate their sparse heuristic in `eval()`. They are valid in training presets.
 
-Configure via `layer_pattern` in YAML. The schema accepts 49 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
+Configure via `layer_pattern` in YAML. The schema accepts 50 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
 
 ## Optimizer Categories
 
@@ -224,7 +224,7 @@ This section condenses the comprehensive [summary tables annex](docs/paper/appen
 
 Unconstrained Hyper-Connections (HC) appear in the paper as the reference scheme but are **not exposed** by this codebase.
 
-### Activation functions (43)
+### Activation functions (44)
 
 | Family | Count | Names |
 |--------|------:|-------|
@@ -232,7 +232,7 @@ Unconstrained Hyper-Connections (HC) appear in the paper as the reference scheme
 | Rectified | 12 | `leaky_relu`, `relu6`, `hardswish`, `prelu`, `abs_relu`, `nl_relu`, `brelu`, `vrelu`, `hexpo`, `ptanh`, `dis_relu`, `lisht` |
 | Exponential | 12 | `elu`, `selu`, `celu`, `pelu`, `mpelu`, `felu`, `eelu`, `pdelu`, `preu`, `softexp`, `elish`, `hardelish` |
 | Learnable | 4 | `swish`, `swish_trainable`, `maxout`, `raf` |
-| Gated FFN | 3 | `swiglu`, `geglu`, `reglu` |
+| Gated FFN | 4 | `swiglu`, `geglu`, `reglu`, `situ` |
 
 `swish` uses a fixed `β`; `swish_trainable` learns it. The GLU variants are implemented by `GatedFFN`, not by `get_activation()`.
 
@@ -288,7 +288,7 @@ This engine powers the **`dashai-frankenstein` plugin**, which registers Franken
 | [docs/figures/readme-command-flow.mmd](docs/figures/readme-command-flow.mmd) | Source for the README command/pipeline figure |
 | [docs/architecture.md](docs/architecture.md) | Canonical implementation spec: architecture, state, extension guide |
 | [docs/architecture.md](docs/architecture.md#711-vision-transformer-image-vision_dataset) | Vision Transformer (frankenstein_vit) — patch prediction, classification, segmentation |
-| [docs/architecture.md](docs/architecture.md#component-registry-and-plugin-schema-assembly) | Component registry, plugin schema assembly, and mixer selection guide (49 architectures / 9 families) |
+| [docs/architecture.md](docs/architecture.md#component-registry-and-plugin-schema-assembly) | Component registry, plugin schema assembly, and mixer selection guide (50 architectures / 9 families) |
 | [docs/dashai-plugin-audit.md](docs/dashai-plugin-audit.md) | DashAI plugin integration design and status |
 | [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specification, API, papers, bibliography) |
 | [docs/transformers_compatibility.md](docs/transformers_compatibility.md) | HuggingFace export compatibility guide |

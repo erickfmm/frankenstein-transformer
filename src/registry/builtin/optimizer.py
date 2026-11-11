@@ -265,6 +265,9 @@ OPTIMIZER_SPECS = (
             "nesterov": ParamBinding(as_bool, True),
             "ns_steps": ParamBinding(as_int, 5),
             "ns_eps": ParamBinding(as_float, 1e-07),
+            "per_head": ParamBinding(as_bool, False),
+            "per_head_heads": ParamBinding(as_int, 0),
+            "clip_value": ParamBinding(as_float, 0.0),
         },
     ),
     OptimizerSpec(

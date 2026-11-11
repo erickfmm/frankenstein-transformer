@@ -1093,6 +1093,16 @@ class TitanTrainer:
                 self.model.named_parameters()
             ).items()
         ]
+        # Align each group's params with their qualified names so optimizers
+        # can classify projections (per-head Muon splits Q/K/V by head).
+        names_by_id = {
+            id(param): qualname
+            for qualname, param in self.model.named_parameters()
+        }
+        for group in param_groups:
+            group["param_names"] = [
+                names_by_id.get(id(param), "") for param in group["params"]
+            ]
         
         # Log parameter distribution
         for group in param_groups:

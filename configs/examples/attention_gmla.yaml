@@ -1,0 +1,54 @@
+model_class: frankenstein_text_decoder
+model:
+  dims:
+    vocab_size: 128
+    hidden_size: 64
+    num_layers: 2
+    num_heads: 4
+    layer_pattern:
+    - gmla
+    - gmla
+    mode: decoder
+  positional_encoding_parameters:
+    use_pe:
+      gmla_use_pe: false
+  attention:
+    gmla:
+      latent_rank: 32
+      q_lora_rank: 32
+      num_heads: 4
+      qk_nope_head_dim: 16
+      qk_rope_head_dim: 8
+      v_head_dim: 16
+      use_nope: true
+      use_output_gate: true
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 128
+    activation: swiglu
+training:
+  task: causal_lm
+  seed: 42
+  num_epochs: 1
+  batch_size: 2
+  max_length: 64
+  max_samples: 1000
+  cache_dir: ./temp_data/attention_gmla_cache
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-3
+      adamw-lr_norms: 1e-3
+      adamw-lr_attention: 1e-3
+      adamw-lr_other: 1e-3
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+  scheduler_total_steps: 100
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  max_nan_retries: 3

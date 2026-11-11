@@ -42,7 +42,9 @@ properties:
     description: |-
       Dimension of the model's hidden representations. Key size parameter affecting capacity
       and memory. Typical: 512 (small), 768 (BERT-base), 1024 (BERT-large), 2048+ (large models).
-      **Must be divisible by `num_heads`.**
+      **Must be divisible by `num_heads`, unless a mixer declares its own
+      `attention.<mixer>.head_dim`** (e.g. `kda`/`mla`/`gmla`, which can expand
+      the head geometry beyond `hidden_size`).
 
       **Examples explained:**
       - `hidden_size=768` with `num_heads=12` → 64 dimensions per head. Standard BERT-base configuration, good balance of capacity and memory (~110M total params with 12 layers).
@@ -55,7 +57,10 @@ properties:
     description_es: |-
       Dimensión de las representaciones ocultas del modelo. Parámetro clave de tamaño que afecta
       capacidad y memoria. Típico: 512 (pequeño), 768 (BERT-base), 1024 (BERT-large), 2048+
-      (modelos grandes). **Debe ser divisible por `num_heads`.**
+      (modelos grandes). **Debe ser divisible por `num_heads`, salvo que un
+      mixer declare su propio `attention.<mixer>.head_dim`** (p. ej.
+      `kda`/`mla`/`gmla`, que pueden expandir la geometría de cabezas más allá
+      de `hidden_size`).
 
       **Ejemplos explicados:**
       - `hidden_size=768` con `num_heads=12` → 64 dimensiones por cabeza. Configuración BERT-base estándar, buen balance de capacidad y memoria (~110M params totales con 12 capas).

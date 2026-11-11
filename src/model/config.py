@@ -49,7 +49,7 @@ _FFN_ACTIVATION_CONFIG_KEYS = {
     "pelu_alpha", "mpelu_alpha", "mpelu_beta", "felu_alpha", "eelu_alpha",
     "eelu_beta", "pdelu_alpha", "preu_alpha", "preu_beta", "softexp_alpha",
     "raf_degrees", "raf_version", "raf_approx_func", "raf_trainable",
-    "raf_input_scaling", "maxout_pieces",
+    "raf_input_scaling", "maxout_pieces", "situ_beta_gate", "situ_beta_up",
 }
 
 
@@ -77,9 +77,12 @@ def _validate_ffn_activation_config(activation: str, cfg: Dict[str, Any]) -> Non
         "prelu_init", "elu_alpha", "celu_alpha", "swish_beta", "leaky_relu_slope",
         "pelu_alpha", "mpelu_alpha", "mpelu_beta", "felu_alpha", "eelu_alpha",
         "eelu_beta", "pdelu_alpha", "preu_alpha", "preu_beta", "softexp_alpha",
+        "situ_beta_gate", "situ_beta_up",
     ):
         if fk in cfg and not isinstance(cfg[fk], (int, float)):
             raise ValueError(f"ffn_activation_config.{fk} must be a number")
+        if fk in cfg and cfg[fk] <= 0:
+            raise ValueError(f"ffn_activation_config.{fk} must be > 0")
     if "maxout_pieces" in cfg:
         if not isinstance(cfg["maxout_pieces"], int) or cfg["maxout_pieces"] < 1:
             raise ValueError("ffn_activation_config.maxout_pieces must be an int >= 1")
@@ -151,6 +154,7 @@ class NormConfig:
     type: str = "dynamic_tanh"
     partial_ratio: float = 0.0625
     flashnorm_partial_ratio: float = 0.0
+    eps: float = 1e-6
     qk_norm: QKNormConfig = field(default_factory=QKNormConfig)
 
 
@@ -710,10 +714,15 @@ class FrankensteinModelConfig:
                 "moe_aux_loss_type must be 'none', 'batch' or 'sequence', got "
                 f"{moe.balancing.aux_loss!r}"
             )
-        if moe.balancing.bias_update not in {"none", "sign", "centered_sign"}:
+        if moe.balancing.bias_update not in {
+            "none",
+            "sign",
+            "centered_sign",
+            "quantile",
+        }:
             raise ValueError(
-                "moe_bias_update must be 'none', 'sign' or 'centered_sign', got "
-                f"{moe.balancing.bias_update!r}"
+                "moe_bias_update must be 'none', 'sign', 'centered_sign' or "
+                f"'quantile', got {moe.balancing.bias_update!r}"
             )
         if moe.shared.gate not in {"none", "sigmoid"}:
             raise ValueError(

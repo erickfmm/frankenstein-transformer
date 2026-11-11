@@ -265,8 +265,8 @@ question tool to ask the user whenever a decision is genuinely ambiguous
   ask the user whether to also draft `configs/<name>.yaml` (like
   `configs/kimi_k3.yaml`) — it joins the smoke-tested preset set either way;
 - census bumps: the *actual* old numbers read from the repo (do not hardcode 49
-  or 9) — global mixer count, per-family count, taxonomy labels. Today: 49
-  mixers in 9 families (48 concrete classes + the `mamba` placeholder), 36
+  or 9) — global mixer count, per-family count, taxonomy labels. Today: 50
+  mixers in 9 families (49 concrete classes + the `mamba` placeholder), 36
   optimizers, 84 test files, 99 `.mmd` diagrams / 142 `.svg` renders.
 
 Print the **file-by-file plan table** (file → change) in the chat response
@@ -311,7 +311,7 @@ intent:
 | 11 | `configs/examples/<family>_<mixer>_adamw.yaml` | Tiny example; must pass `load_training_config`. Draft the full YAML. |
 | 12 | *(optional)* `configs/<name>.yaml` | Full preset if the user approved it (D-C3-style question). Draft it. |
 | 13 | `full_tests/run_e2e.py` | Append the name to `ATTENTIONS` (~lines 237–272; add a one-line comment with the arXiv id like the recent entries). This **auto-generates the e2e combos**: `attn_single_<name>` (1-layer solo) and every `attn_<a>__<name>` / `attn_<name>__<b>` pair — no builder edits needed. Skip when training-free (see the list's header comment; `fasa`/`sparge` precedent). |
-| 14 | `tests/test_schema_attention_layers.py` | Add the name to the expected enum set **and** bump the count in `test_cache_specs_match_layer_pattern_enum` (49 → 50). |
+| 14 | `tests/test_schema_attention_layers.py` | Add the name to the expected enum set **and** bump the count in `test_cache_specs_match_layer_pattern_enum` (50 → 51). |
 | 15 | Family test (`tests/test_<family>_attention.py` or `test_attention_modules.py`) | Test class: builds on a tiny config, forward in encoder + decoder modes, output shape, knobs honored, no NaN/Inf, BitNet on; name the methods. |
 | 16 | `tests/test_bitnet_coverage.py` | Add the name to the mixer list. |
 | 17 | `tests/test_kv_cache_mixers.py` | **No hand edit**: the parity suite parametrizes itself from `IMPLEMENTED_MIXERS`; only the incremental branch + membership are real edits (KV-cache decision 1). |

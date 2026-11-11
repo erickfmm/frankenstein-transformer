@@ -205,7 +205,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `prodigy`: `d_coef`
 - `lion`: none
 - `sophia`: `rho`, `update_k`
-- `muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps` (orthogonalizes hidden-layer 2-D matrices only; `embeddings`, `pos`, `head` and non-2-D params use a decoupled AdamW fallback driven by the shared `lr_*`, `wd_*`, `betas_*`, `eps_*` keys)
+- `muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `per_head`, `per_head_heads`, `clip_value` (orthogonalizes hidden-layer 2-D matrices only; `per_head: true` + `per_head_heads` splits Q/K/V (and latent `uk_proj`/`uv_proj`) attention projections per head, and `clip_value` applies K2-style element-wise weight clipping to the orthogonalized matrices; `embeddings`, `pos`, `head` and non-2-D params use a decoupled AdamW fallback driven by the shared `lr_*`, `wd_*`, `betas_*`, `eps_*` keys)
 - `turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps` (same hybrid routing as `muon`)
 - `af_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`, `vector_lr`, `tied_cap`, `tied_scale`, `rho_hidden`, `rho_output`, `chunk_rows`, `bisection_steps`, `max_bracket_steps`
 - `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
@@ -296,6 +296,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - Gated blocks: `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa` (First Passage Attention, arXiv:2610.22714), `gated_softmax`, `kda` (Kimi Delta Attention, arXiv:2510.26692).
 - Latent blocks (KV-compression / head-mixing, generalising GQA):
   - `mla` — Multi-Head Latent Attention + RoPE (arXiv:2506.09342).
+  - `gmla` — Gated MLA: DeepSeek-style latent attention with q-LoRA, NoPE/rope split and a full-rank output gate (arXiv:2607.24653).
   - `gqla` — Group-Query Latent Attention, two decoding paths (arXiv:2605.15250).
   - `mlra` — Multi-Head Low-Rank Attention, partitionable latent (arXiv:2603.02188).
   - `tucker` — Tucker Attention, generalised low-rank factorisation (arXiv:2603.30033).
@@ -360,7 +361,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 
 #### model.attention.<mixer>
 
-Per-mixer sub-objects: `ca`, `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
+Per-mixer sub-objects: `ca`, `kda`, `mla`, `gmla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
 `cca`, `ccgqa`, `msa`, `sparda`, `lsa`, `fastconformer`, `engram`, `gma`, `ssog`, `conformer`,
 `falcon`, `ode` (`solver`, `steps`), `retnet` (`heads`). Optional rank fields
 accept `null` (= derive from `hidden_size` / `num_heads`).
@@ -399,7 +400,7 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
 #### model.ffn
 
 - `hidden_size`: FFN intermediate dimension (null = 2× `dims.hidden_size`).
-- `activation`: `silu`, `gelu`, or any of the 43 supported activations.
+- `activation`: `silu`, `gelu`, or any of the 44 supported activations.
 - `activation_config`: nested object for learnable/parametric activations.
 
 #### model.classification_head
@@ -450,8 +451,17 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
   `configs/examples/es_arch_fpa_adamw.yaml` and the 110M reference preset
   `configs/fpa.yaml`.
 
+### Kimi Delta Attention (model.attention.kda)
+
+- `model.attention.kda.num_heads`, `model.attention.kda.head_dim`: decouple the head geometry from `dims.num_heads`/`hidden_size` (Kimi K3: 96 x 128).
+- `model.attention.kda.decay_mode`: `kimilinear` (default) or `k3` (input-dependent bounded decay, `g_min` = `decay_min_log`).
+- `model.attention.kda.decay_min_log`, `decay_low_rank`: bound `g_min` (default -5) and the low-rank width of the decay logits.
+- `model.attention.kda.short_conv_kernel`: causal depthwise short conv + SiLU before Q/K/V (default 0 = off; K3: 4).
+- `model.attention.kda.use_full_rank_gate`: full-rank `silu(W_g x)` output gate (default true).
+
 ### Latent / KV-compression family (model.attention.*)
 
+- `model.attention.gmla`: `latent_rank`, `q_lora_rank`, `num_heads`, `qk_nope_head_dim`, `qk_rope_head_dim`, `v_head_dim`, `use_nope`, `use_output_gate` (defaults: `hidden_size // 2`, off, `dims.num_heads`, 128, 64, 128, true, true).
 - `model.attention.mla.latent_rank`: rank of the joint KV latent for `mla` (default `hidden_size // 2`).
 - `model.attention.gqla.latent_rank`: latent rank for `gqla` (default `hidden_size // 2`).
 - `model.attention.gqla.num_groups`: number of GQA groups for the expanded path (default `num_heads // 4`).

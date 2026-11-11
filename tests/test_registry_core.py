@@ -95,9 +95,9 @@ class DerivedViewTests(unittest.TestCase):
         from src.registry.builtin.optimizer import OPTIMIZER_SPECS
         from src.registry.builtin.residual import RESIDUAL_SPECS
 
-        self.assertEqual(len(ATTENTION_SPECS), 49)
+        self.assertEqual(len(ATTENTION_SPECS), 50)
         self.assertEqual(len(OPTIMIZER_SPECS), 36)
-        self.assertEqual(len(ACTIVATION_SPECS), 43)
+        self.assertEqual(len(ACTIVATION_SPECS), 44)
         self.assertEqual(len(NORM_SPECS), 6)
         self.assertEqual(len(RESIDUAL_SPECS), 4)
         self.assertEqual(len(EMBEDDING_SPECS), 3)

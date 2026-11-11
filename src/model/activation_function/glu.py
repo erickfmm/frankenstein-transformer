@@ -46,6 +46,12 @@ class GatedFFN(nn.Module):
             output before the activation. ``None`` disables it. Used by MoE
             experts (``moe.experts.activation_clamp``) to bound outlier
             activations.
+        beta_gate: SiTU-GLU smooth-cap beta of the gate branch
+            (``β₁ tanh(u/β₁) · σ(u)``). ``None`` keeps the selected
+            ``gate_fn``. When set together with ``beta_up`` the block becomes
+            SiTU-GLU (arXiv:2607.24653, §2.3.2) and ``clamp_value`` is ignored.
+        beta_up: SiTU-GLU smooth-cap beta of the up branch
+            (``β₂ tanh(v/β₂)``). ``None`` leaves the up projection unmodified.
 
     Attributes:
         gate_proj: Linear ``hidden -> intermediate`` feeding the gate function.
@@ -64,6 +70,8 @@ class GatedFFN(nn.Module):
         dropout: float = 0.0,
         proj_factory: Callable[[int, int, bool], nn.Module] | None = None,
         clamp_value: float | None = None,
+        beta_gate: float | None = None,
+        beta_up: float | None = None,
     ):
         super().__init__()
         build = proj_factory or (lambda i, o, b: nn.Linear(i, o, bias=b))
@@ -72,6 +80,8 @@ class GatedFFN(nn.Module):
         self.down_proj = build(intermediate_size, hidden_size, bias)
         self.gate_fn = gate_fn
         self.clamp_value = float(clamp_value) if clamp_value else None
+        self.beta_gate = float(beta_gate) if beta_gate else None
+        self.beta_up = float(beta_up) if beta_up else None
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -84,12 +94,20 @@ class GatedFFN(nn.Module):
             Tensor of shape ``(..., hidden_size)``.
         """
         gate_input = self.gate_proj(x)
-        if self.clamp_value is not None:
-            gate_input = torch.clamp(
-                gate_input, -self.clamp_value, self.clamp_value
-            )
-        gate = self.gate_fn(gate_input)
+        if self.beta_gate is not None:
+            # SiTU-GLU gate branch: smooth-capped Swish, β₁ tanh(u/β₁)·σ(u).
+            gate = self.beta_gate * torch.tanh(gate_input / self.beta_gate)
+            gate = gate * torch.sigmoid(gate_input)
+        else:
+            if self.clamp_value is not None:
+                gate_input = torch.clamp(
+                    gate_input, -self.clamp_value, self.clamp_value
+                )
+            gate = self.gate_fn(gate_input)
         value = self.up_proj(x)
+        if self.beta_up is not None:
+            # SiTU-GLU up branch: smooth cap β₂ tanh(v/β₂).
+            value = self.beta_up * torch.tanh(value / self.beta_up)
         return self.dropout(self.down_proj(gate * value))
 
 
@@ -101,17 +119,21 @@ def make_gated_ffn(
     dropout: float = 0.0,
     proj_factory: Callable[[int, int, bool], nn.Module] | None = None,
     clamp_value: float | None = None,
+    beta_gate: float | None = None,
+    beta_up: float | None = None,
 ) -> GatedFFN:
     """Build a :class:`GatedFFN` for the requested GLU variant.
 
     Args:
-        kind: One of ``"swiglu"``, ``"geglu"``, ``"reglu"``.
+        kind: One of ``"swiglu"``, ``"geglu"``, ``"reglu"`` or ``"situ"``.
         hidden_size: Input/output feature dimension.
         intermediate_size: Gated intermediate dimension.
         bias: Whether projections include bias. Default: ``False``.
         dropout: Dropout probability after gating. Default: ``0.0``.
         proj_factory: Optional projection factory (e.g. BitLinear).
         clamp_value: Optional symmetric clamp on the gate projection output.
+        beta_gate: SiTU-GLU gate-branch smooth cap (implies SiTU-GLU).
+        beta_up: SiTU-GLU up-branch smooth cap (implies SiTU-GLU).
 
     Returns:
         A :class:`GatedFFN` configured for the requested variant.
@@ -123,12 +145,16 @@ def make_gated_ffn(
         "swiglu": F.silu,
         "geglu": F.gelu,
         "reglu": F.relu,
+        "situ": F.silu,
     }
     gate_fn = gate_map.get(kind)
     if gate_fn is None:
         raise ValueError(
             f"Unknown GLU variant {kind!r}. Expected one of {sorted(gate_map)}."
         )
+    if kind == "situ":
+        beta_gate = 4.0 if beta_gate is None else beta_gate
+        beta_up = 25.0 if beta_up is None else beta_up
     return GatedFFN(
         hidden_size=hidden_size,
         intermediate_size=intermediate_size,
@@ -137,6 +163,8 @@ def make_gated_ffn(
         dropout=dropout,
         proj_factory=proj_factory,
         clamp_value=clamp_value,
+        beta_gate=beta_gate,
+        beta_up=beta_up,
     )
 
 

@@ -277,6 +277,14 @@ ACTIVATION_SPECS = (
         references=("2002.05202",),
         is_glu=True,
     ),
+    ActivationSpec(
+        name="situ",
+        builder="src.model.activation_function.glu:make_gated_ffn",
+        description="SiTU-GLU gated FFN — smooth-capped Swish gate (β₁ tanh(u/β₁)·σ(u)) times a smooth-capped up-projection (β₂ tanh(v/β₂)), bounded by β₁β₂ (paper: arxiv:2607.24653)",
+        description_es="FFN con compuerta SiTU-GLU — puerta Swish con tope suave (β₁ tanh(u/β₁)·σ(u)) por una proyección up con tope suave (β₂ tanh(v/β₂)), acotada por β₁β₂ (paper: arxiv:2607.24653)",
+        references=("2607.24653",),
+        is_glu=True,
+    ),
 )
 
 

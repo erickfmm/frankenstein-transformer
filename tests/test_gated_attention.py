@@ -235,3 +235,47 @@ class KDAAttentionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KDAK3Tests(unittest.TestCase):
+    """Kimi K3 refinements of KDA (arXiv:2607.24653 §2.1.1)."""
+
+    def test_k3_decay_is_bounded_below(self):
+        attn = KDAAttention(
+            _cfg(attention={"kda": {"decay_mode": "k3", "decay_min_log": -5.0}})
+        )
+        x = _x()
+        z = attn.decay_up(torch.nn.functional.silu(attn.decay_down(x)))
+        z = z + attn.decay_bias
+        z = z.view(BSZ, SEQ, attn.num_heads, attn.head_dim)
+        scale = torch.exp(attn.decay_log_scale).view(
+            1, 1, attn.num_heads, 1
+        )
+        g = attn.decay_min_log * torch.sigmoid(z * scale)
+        alpha = torch.exp(g)
+        self.assertTrue(
+            bool((alpha >= torch.exp(torch.tensor(-5.0)) - 1e-6).all())
+        )
+
+    def test_head_override_expands_beyond_hidden(self):
+        # 3 heads x 16 = 48 (no expansion); 3 heads x 32 = 96 expands.
+        attn = KDAAttention(
+            _cfg(attention={"kda": {"num_heads": 3, "head_dim": 32}})
+        )
+        self.assertEqual(attn.total_dim, 96)
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_short_conv_is_causal(self):
+        attn = KDAAttention(
+            _cfg(attention={"kda": {"decay_mode": "k3", "short_conv_kernel": 4}})
+        )
+        self.assertIsNotNone(attn.short_conv)
+        x = _x()
+        y = attn(x)
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+        # Prefix causality: changing the last token cannot affect earlier ones.
+        y2 = attn(x.clone().index_put_(
+            (torch.tensor([0]), torch.tensor([SEQ - 1])),
+            torch.randn(DIM),
+        ))
+        torch.testing.assert_close(y[:, : SEQ - 1], y2[:, : SEQ - 1])

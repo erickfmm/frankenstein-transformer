@@ -22,7 +22,7 @@ load.
 
 | Dimension | Count | Defined in |
 |---|---:|---|
-| `model.dims.layer_pattern` values | **49** (48 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
+| `model.dims.layer_pattern` values | **50** (49 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
 | Optimizer families | **36** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
@@ -79,11 +79,11 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/residuals/**` | Residual strategies + factory |
 | `src/model/moe/**` | MoE router scoring, load balancing, experts, shared experts, LatentMoE, hash layers |
 | `src/model/numerics.py` | Fixed softmax / cross-entropy swaps (arXiv:2610.31642) |
-| `src/model/attention/**` | 49 mixers (48 classes + `mamba`): `gated/`, `latent/`, `sparse/`, top-level modules |
+| `src/model/attention/**` | 50 mixers (49 classes + `mamba`): `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
 | `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
-| `src/model/activation_function/**` | 43 activations + `ALL_ACTIVATIONS` factory |
+| `src/model/activation_function/**` | 44 activations + `ALL_ACTIVATIONS` factory |
 | `src/model/optimizer/**` | 36 optimizers + registry + parameter routing |
 | `src/engine.py` | Framework-neutral `build_model()` used by CLI, DashAI plugin and exports |
 | `src/training/main.py`, `trainer.py` | Task dispatch and training loop |
@@ -163,7 +163,7 @@ nested-to-flat flattening step. `FrankensteinModelConfig`
 | Nested path | Runtime access |
 |---|---|
 | `model.dims.*` | `config.dims.*` |
-| `model.norm.*` | `config.norm.*` (`type`, `partial_ratio`, `flashnorm_partial_ratio`, `qk_norm.*`) |
+| `model.norm.*` | `config.norm.*` (`type`, `partial_ratio`, `flashnorm_partial_ratio`, `eps`, `qk_norm.*`) |
 | `model.attention.<mixer>.*` | bound through the mixer's `ComponentSpec` → `params.<leaf>` |
 | `model.positional_encoding_parameters.<pe>.*` | read by the encoding builder; `use_pe.<mixer>_use_pe` toggles |
 | `model.embedding.type` | `config.embedding.type` (`standard`/`factorized`/`dynamic`) |
@@ -250,7 +250,7 @@ flowchart TD
 
     subgraph HYBRID["HybridLayer internals"]
       N1["norm1 = get_norm()"]
-      MX["mixer registry<br/>(48 classes + mamba)"]
+      MX["mixer registry<br/>(49 classes + mamba)"]
       FF["FFN / GatedFFN / MoE"]
       N2["norm2 = get_norm()<br/>or FlashNormLinear fusion"]
       MOD["Mixture-of-Depths router"]
@@ -389,7 +389,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-49 enum values in 9 families. `config subkey` is the optional
+50 enum values in 9 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -422,7 +422,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `hgrn2` | Gated | — | yes |
 | `fox` | Gated | — | yes |
 | `gated_softmax` | Gated | — | yes |
-| `kda` | Gated | — | yes |
+| `kda` | Gated | `kda.*` (head geometry, `decay_mode` k3, short conv) | yes |
 | `fpa` | Gated | `fpa.*` | yes |
 | `falcon1` | Fast-weight | `falcon.*` | yes |
 | `falcon2` | Fast-weight | `falcon.*` | yes |
@@ -430,7 +430,8 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `falcon1a` | Fast-weight | `falcon.*` | yes |
 | `falcon2a` | Fast-weight | `falcon.*` | yes |
 | `falcon3a` | Fast-weight | `falcon.*` | yes |
-| `mla` | Latent | `mla.latent_rank` | yes |
+| `mla` | Latent | `mla.latent_rank`, `mla.num_heads`, `mla.head_dim` | yes |
+| `gmla` | Latent (gated) | `gmla.*` (latent rank, q-LoRA, NoPE/rope widths, output gate) | yes |
 | `gqla` | Latent | `gqla.*` | yes |
 | `mlra` | Latent | `mlra.*` | yes |
 | `tucker` | Latent | `tucker.*` | yes |
@@ -551,24 +552,24 @@ SSMax (`model.ssmax.enabled`, `ssmax.s_init`) is a transversal logit rescale
 | Field | Default | Notes |
 |---|---:|---|
 | `hidden_size` | `null` | Defaults to `4 × hidden_size` in the model builder |
-| `activation` | `silu` | 43 values (below) |
+| `activation` | `silu` | 44 values (below) |
 | `activation_config` | `{}` | Strict sub-object for learnable/parametric parameters |
 
-Activation families (43): **standard** `silu`, `gelu`, `gelu_tanh`, `relu`,
+Activation families (44): **standard** `silu`, `gelu`, `gelu_tanh`, `relu`,
 `relu6`, `leaky_relu`, `prelu`, `sigmoid`, `tanh`, `softplus`, `mish`,
 `hardswish`, `identity`, `softsign`, `arctan`, `elliott`; **rectified**
 `abs_relu`, `nl_relu`, `brelu`, `vrelu`, `hexpo`, `ptanh`, `dis_relu`;
 **exponential** `elu`, `selu`, `celu`, `pelu`, `mpelu`, `felu`, `eelu`,
 `pdelu`, `preu`, `softexp`, `elish`, `hardelish`, `lisht`; **learnable**
 `swish`, `swish_trainable`, `maxout`, `raf`; **gated (GLU)** `swiglu`, `geglu`,
-`reglu`.
+`reglu`, `situ`.
 
 `get_activation()` raises on GLU names; `HybridLayer` builds a `GatedFFN`
 instead. `activation_config` keys: `raf_degrees`, `raf_version`, `raf_approx_func`,
 `raf_trainable`, `raf_input_scaling`, `prelu_init`, `elu_alpha`, `celu_alpha`,
 `swish_beta`, `leaky_relu_slope`, `pelu_alpha`, `mpelu_alpha`, `mpelu_beta`,
 `felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`,
-`preu_beta`, `softexp_alpha`, `maxout_pieces`.
+`preu_beta`, `softexp_alpha`, `maxout_pieces`, `situ_beta_gate`, `situ_beta_up`.
 
 ### 7.7 Routing and quantization blocks
 
@@ -593,7 +594,7 @@ instead. `activation_config` keys: `raf_degrees`, `raf_version`, `raf_approx_fun
 |---|---|---|
 | Router | `router.scoring` (softmax), `pre_softmax` (false), `renormalize` (true), `routed_scaling_factor` (1.0), `dtype` (float32), `jitter_eps` (0.0), `z_loss_coeff` (0.0) | softmax / sigmoid / sqrt-softplus gating, top-k renormalisation, output scale, fp32 router, ST-MoE z-loss |
 | Routing | `routing.type` (token_choice), `capacity_factor` (0.0), `hash_layers` (0), `hash_table` (random), `hash_seed` (42) | token or expert choice, dropless/capacity dropping, fixed token-id tables |
-| Balancing | `balancing.aux_loss` (batch), `aux_loss_coeff` (0.01), `bias_update` (none), `bias_update_rate` (0.001) | batch/sequence auxiliary loss and the auxiliary-loss-free expert bias (`sign`, `centered_sign`) |
+| Balancing | `balancing.aux_loss` (batch), `aux_loss_coeff` (0.01), `bias_update` (none), `bias_update_rate` (0.001) | batch/sequence auxiliary loss and the auxiliary-loss-free expert bias (`sign`, `centered_sign`, `quantile`; Quantile Balancing ignores `bias_update_rate` and applies per micro-batch) |
 | Shared | `shared.count` (0), `shared.hidden_size` (null), `shared.gate` (none) | always-on experts, optional sigmoid gate |
 | Latent | `latent.enabled` (false), `latent.dim` (null), `latent.norm_before_up_proj` (false) | LatentMoE `d -> ℓ -> d` projections (Kimi K3 RMSNorm before the up-projection) |
 | Experts | `experts.activation_clamp` (0.0) | upper bound on each expert's gated intermediate |
@@ -752,7 +753,7 @@ logical roles). Per-layer storage is typed:
 | `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
 
 **Capability registry (D5).** `src/model/cache/capabilities.py` re-exports the
-per-mixer `CacheSpec` declared on each registry `MixerSpec` (49 built-ins) and
+per-mixer `CacheSpec` declared on each registry `MixerSpec` (50 built-ins) and
 derives its `CACHE_SPECS` map from the registry. A layer caches only when
 the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
 (incremental branch implemented + parity-tested). Everything else receives
@@ -886,7 +887,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 | Auto-LR | `prodigy`, `schedulefree_adamw` | Remove LR tuning/scheduling |
 | Adaptive | `radam`, `adan`, `adopt`, `ademamix`, `mars_adamw`, `cautious_adamw`, `lamb` | Rectification, Nesterov, dual EMA, variance reduction, masking, layer-wise scaling |
 | Second-order | `sophia`, `shampoo`, `soap` | Diagonal Hessian / Kronecker / eigenbasis |
-| Orthogonalized | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `root`, `muon2`, `nor_muon`, `conda`, `tuon`, `namo`, `namo_d` | Momentum orthogonalization; `muon`/`turbo_muon` follow the hybrid recipe (Newton-Schulz on hidden-layer 2-D matrices, decoupled AdamW on the `embeddings`/`pos`/`head` groups and on every non-2-D parameter, using the group `betas`/`eps`); `ada_muon` adds an element-wise second moment on the orthogonalized direction with RMS-aligned Adam-scale updates; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer); `dion3` orthogonalizes only a fraction of the momentum rows with Gram Newton-Schulz and error feedback (single momentum buffer, optional NorMuon row moments); `root` calibrates the Newton-Schulz coefficients per matrix shape and soft-thresholds momentum outliers before orthogonalization (single momentum buffer, dynamic percentile threshold `quantile`); `muon2` preconditions the momentum with an Adam-style second-moment EMA before orthogonalization (β₁/β₂ from the shared per-group `betas`, `η√(m/n)` update scale, `factored` toggles the Muon²-F row/column moments); `nor_muon` normalizes the orthogonalized update neuron-wise (a per-row second-moment EMA of `O_t`, β₂ from the shared per-group `betas`, ε from the shared `eps`, update rescaled to RMS `0.2η` via `η̂ = 0.2η√(mn)/‖O_t‖_F`); `conda` runs a full Adam update inside the lazy SVD subspace of the first moment (second moment of the projected gradients, refreshed every `update_proj_gap` steps, `scale` multiplier; every 2-D parameter takes this path and only non-2-D parameters use the decoupled AdamW fallback); `tuon` stacks same-shape hidden matrices of a group, mixes them with a unitary layer transform (DecorQ: eigenvectors of the layer Gram matrix, refreshed every `refresh_interval` steps), polarizes each transformed slice with Newton-Schulz, inverts the transform and rescales the stack to RMS 1/√max(m,n) (`K=1` buckets reduce to `muon`; the AdamW fallback is unchanged); `namo` rescales the orthogonalized momentum by a single Adam-type scalar α_t = ‖M̂_t‖_F/(√v̂_t+ε) built from a scalar second-moment EMA of ‖G_t‖²_F (μ₁/μ₂ from `namo-betas`, ε from the shared `eps`, decoupled decay scaled by α_t, one scalar of extra state); `namo_d` right-multiplies the orthogonalized momentum by a clamped diagonal built from per-column second moments and column norms (`namo_d-clamp` c ∈ (0,1], default 0.1, `d̃ = clamp(d, c·d̄, d̄/c)`), giving neuron-wise adaptivity at the cost of strict orthogonality and one ℝⁿ vector of extra state |
+| Orthogonalized | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `root`, `muon2`, `nor_muon`, `conda`, `tuon`, `namo`, `namo_d` | Momentum orthogonalization; `muon`/`turbo_muon` follow the hybrid recipe (Newton-Schulz on hidden-layer 2-D matrices, decoupled AdamW on the `embeddings`/`pos`/`head` groups and on every non-2-D parameter, using the group `betas`/`eps`); `muon-per_head` + `muon-per_head_heads` orthogonalize each Q/K/V (and latent `uk_proj`/`uv_proj`) head block separately, and `muon-clip_value` adds K2-style element-wise weight clipping; `ada_muon` adds an element-wise second moment on the orthogonalized direction with RMS-aligned Adam-scale updates; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer); `dion3` orthogonalizes only a fraction of the momentum rows with Gram Newton-Schulz and error feedback (single momentum buffer, optional NorMuon row moments); `root` calibrates the Newton-Schulz coefficients per matrix shape and soft-thresholds momentum outliers before orthogonalization (single momentum buffer, dynamic percentile threshold `quantile`); `muon2` preconditions the momentum with an Adam-style second-moment EMA before orthogonalization (β₁/β₂ from the shared per-group `betas`, `η√(m/n)` update scale, `factored` toggles the Muon²-F row/column moments); `nor_muon` normalizes the orthogonalized update neuron-wise (a per-row second-moment EMA of `O_t`, β₂ from the shared per-group `betas`, ε from the shared `eps`, update rescaled to RMS `0.2η` via `η̂ = 0.2η√(mn)/‖O_t‖_F`); `conda` runs a full Adam update inside the lazy SVD subspace of the first moment (second moment of the projected gradients, refreshed every `update_proj_gap` steps, `scale` multiplier; every 2-D parameter takes this path and only non-2-D parameters use the decoupled AdamW fallback); `tuon` stacks same-shape hidden matrices of a group, mixes them with a unitary layer transform (DecorQ: eigenvectors of the layer Gram matrix, refreshed every `refresh_interval` steps), polarizes each transformed slice with Newton-Schulz, inverts the transform and rescales the stack to RMS 1/√max(m,n) (`K=1` buckets reduce to `muon`; the AdamW fallback is unchanged); `namo` rescales the orthogonalized momentum by a single Adam-type scalar α_t = ‖M̂_t‖_F/(√v̂_t+ε) built from a scalar second-moment EMA of ‖G_t‖²_F (μ₁/μ₂ from `namo-betas`, ε from the shared `eps`, decoupled decay scaled by α_t, one scalar of extra state); `namo_d` right-multiplies the orthogonalized momentum by a clamped diagonal built from per-column second moments and column norms (`namo_d-clamp` c ∈ (0,1], default 0.1, `d̃ = clamp(d, c·d̄, d̄/c)`), giving neuron-wise adaptivity at the cost of strict orthogonality and one ℝⁿ vector of extra state |
 | Tunable | `anon` | `gamma` adaptivity |
 | Evolutionary | `eve`, `ea4llm` | Population-based, closure-based step; `eve` is population-of-4 differential evolution with a targeted Adam fallback (12× state), `ea4llm` is gradient-free Gaussian evolution strategies with zero optimizer state and N forward evaluations per step (both require `gradient_accumulation_steps: 1` and are unavailable for SBERT) |
 

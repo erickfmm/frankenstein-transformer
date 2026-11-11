@@ -1,3 +1,28 @@
+# Kimi K3 (arXiv:2607.24653) — spec-fidelity preset.
+#
+# VERIFICADO EXACTO vs paper Tabla 1 + config.json de moonshotai/Kimi-K3:
+#   dims (vocab 163840, hidden 7168, 93 capas), layer_pattern 69 kda + 24 gmla
+#   (MLA final extra), latent 3584 + norm pre-up-proj, moe 896/16, expert 3072,
+#   2 shared, sigmoid + scale 1.0, 1 capa densa, rms_norm, cosine,
+#   block_attn 8x12 (AttnRes), SiTU-GLU (β₁=4, β₂=25), Quantile Balancing,
+#   Per-Head Muon + wd 0.1, 96 cabezas en KDA y Gated MLA, NoPE.
+#
+# DESVIACIONES DOCUMENTADAS (plan .opencode/plan/kimi-k3-drift-plan.md):
+#   - num_heads 56 (global) frente a 96 de K3: los mixers KDA/GMLA declaran
+#     sus propias 96 cabezas (attention.kda.num_heads / attention.gmla.num_heads),
+#     así que el patrón real del preset sí usa 96.
+#   - KDA usa la recurrencia secuencial en PyTorch (sin kernel chunkwise DPLR).
+#   - Gated MLA re-expande K/V del latente en cada paso (sin decode absorbido).
+#   - MLP densa de la capa 1 ampliada a 33792 (HF); memoria single-device.
+#   - muon-clip_value 0.1 es placeholder: el paper no publica la magnitud del
+#     weight clipping de Kimi K2.
+#   - max_length 4096: límite práctico single-device; el paper usa
+#     curriculum 8K→64K (pretrain) → 256K→1M (cooldown).
+#
+# FUERA DE FOCO (documentado en el plan, no perseguido):
+#   - MTP (1 capa entrenada en el paper; desactivada en los pesos liberados).
+#   - Vía visual nativa MoonViT-V2 + projector (multimodal interleaved).
+#   - Contexto 1M y su curriculum de datos.
 model_class: frankenstein_text_decoder
 model:
   dims:
@@ -5,113 +30,139 @@ model:
     hidden_size: 7168
     num_layers: 93
     num_loops: 1
+    # Global default only: KDA and Gated MLA override it below (K3 uses 96).
     num_heads: 56
     dropout: 0.0
     layer_pattern:
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
+    - gmla
     - kda
     - kda
     - kda
-    - mla
-    - mla
+    - gmla
+    - kda
+    - kda
+    - kda
+    - gmla
+    - gmla
     mode: decoder
+  positional_encoding_parameters:
+    # K3 uses NoPE in every MLA layer. `gmla` defaults to NoPE via its spec,
+    # and the flag is set explicitly for documentation.
+    use_pe:
+      gmla_use_pe: false
   norm:
     type: rms_norm
+    eps: 1.0e-05
   embedding:
     factorized:
       enabled: false
     conv:
       enabled: false
   attention:
-    mla:
+    kda:
+      # Kimi K3: 96 heads x 128 = 12288 (expands beyond hidden_size 7168).
+      num_heads: 96
+      head_dim: 128
+      decay_mode: k3
+      decay_min_log: -5.0
+      short_conv_kernel: 4
+      use_full_rank_gate: true
+    gmla:
       latent_rank: 512
+      q_lora_rank: 1536
+      num_heads: 96
+      qk_nope_head_dim: 128
+      qk_rope_head_dim: 64
+      v_head_dim: 128
+      use_nope: true
+      use_output_gate: true
   moe:
     enabled: true
     num_experts: 896
@@ -121,12 +172,11 @@ model:
       scoring: sigmoid
       routed_scaling_factor: 1.0
     balancing:
-      # Kimi K3 uses quantile balancing over the global batch; approximated
-      # with the centred sign rule (documented deviation: quantile needs
-      # cross-rank histograms, out of scope for the single-device runtime).
+      # Kimi K3 Quantile Balancing: bias derived from a single forward pass
+      # (Top-(k+1) cutoff, (q+1)-th largest margin, q = m*k/n), applied per
+      # micro-batch. No fixed step and no auxiliary loss.
       aux_loss: none
-      bias_update: centered_sign
-      bias_update_rate: 0.001
+      bias_update: quantile
     shared:
       count: 2
       hidden_size: 3072
@@ -137,53 +187,75 @@ model:
     layout:
       dense_layers: 1
     experts:
-      # SiTU-GLU gate cap (4) approximation; the exact smooth cap is future work.
-      activation_clamp: 4.0
+      # SiTU-GLU already bounds both branches (|f| <= β₁β₂ = 100); the hard
+      # clamp approximation is no longer needed.
+      activation_clamp: 0.0
+  residuals:
+    # Block AttnRes: 8 blocks x 12 layers (93 = 7*12 + 9), embedding as source 0.
+    type: block_attn
+    block_attn:
+      num_blocks: 8
   bitnet:
     enabled: false
   ffn:
-    hidden_size: 3072
-    activation: swiglu
+    # Dense layer 1 width (HF intermediate_size); experts keep 3072 above.
+    hidden_size: 33792
+    activation: situ
+    activation_config:
+      situ_beta_gate: 4.0
+      situ_beta_up: 25.0
 training:
-  task: mlm
+  task: causal_lm
   seed: 42
   batch_size: 1
   dataloader_workers: 2
   max_length: 4096
-  mlm_probability: 0.15
   max_samples: 20000000
   dataset_batch_size: 25000
   num_workers: 8
   cache_dir: ./temp_data/v2_dataset_cache
   gradient_accumulation_steps: 16
   optimizer:
-    optimizer_class: adamw
+    # Kimi K3: Per-Head Muon on Q/K/V + K2 weight clipping, weight decay 0.1.
+    # Peak LR is not published (scaling-law tuned); values are placeholders.
+    optimizer_class: muon
     parameters:
-      adamw-lr_embeddings: 1.0e-06
-      adamw-lr_norms: 5.0e-06
-      adamw-lr_attention: 3.0e-06
-      adamw-lr_other: 2.0e-06
-      adamw-wd_embeddings: 0.01
-      adamw-wd_norms: 0.001
-      adamw-wd_attention: 0.01
-      adamw-wd_other: 0.01
-      adamw-betas_embeddings:
-      - 0.9
-      - 0.95
-      adamw-betas_norms:
-      - 0.9
-      - 0.95
-      adamw-betas_attention:
-      - 0.9
-      - 0.95
-      adamw-betas_other:
-      - 0.9
-      - 0.95
-      adamw-eps_embeddings: 1.0e-08
-      adamw-eps_norms: 1.0e-08
-      adamw-eps_attention: 1.0e-08
-      adamw-eps_other: 1.0e-08
+      muon-lr_embeddings: 0.0001
+      muon-lr_pos: 0.0001
+      muon-lr_attention: 0.02
+      muon-lr_ffn: 0.02
+      muon-lr_norms: 0.0001
+      muon-lr_head: 0.0001
+      muon-lr_mhc: 0.02
+      muon-lr_router: 0.02
+      muon-lr_residual: 0.02
+      muon-lr_other: 0.02
+      muon-wd_embeddings: 0.1
+      muon-wd_pos: 0.1
+      muon-wd_attention: 0.1
+      muon-wd_ffn: 0.1
+      muon-wd_norms: 0.1
+      muon-wd_head: 0.1
+      muon-wd_mhc: 0.1
+      muon-wd_router: 0.1
+      muon-wd_residual: 0.1
+      muon-wd_other: 0.1
+      muon-betas_embeddings: [0.9, 0.95]
+      muon-betas_pos: [0.9, 0.95]
+      muon-betas_norms: [0.9, 0.95]
+      muon-betas_head: [0.9, 0.95]
+      muon-betas_other: [0.9, 0.95]
+      muon-eps_embeddings: 1.0e-08
+      muon-eps_pos: 1.0e-08
+      muon-eps_norms: 1.0e-08
+      muon-eps_head: 1.0e-08
+      muon-eps_other: 1.0e-08
+      muon-per_head: true
+      # K3 uses 96 heads in both KDA and Gated MLA projections.
+      muon-per_head_heads: 96
+      # Kimi K2 weight clipping (magnitude not published; placeholder).
+      muon-clip_value: 0.1
   scheduler_total_steps: 10000
-  scheduler_warmup_ratio: 0.1
+  scheduler_warmup_ratio: 0.01
   scheduler_type: cosine
   gradient_log_interval: 10

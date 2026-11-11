@@ -86,19 +86,29 @@ class MLAAttention(nn.Module):
         params = mixer_params(config, "mla", params)
         super().__init__()
         self.hidden_size = config.dims.hidden_size
-        self.num_heads = config.dims.num_heads
-        self.head_dim = self.hidden_size // self.num_heads
-        if self.hidden_size % self.num_heads != 0:
-            raise ValueError("hidden_size must be divisible by num_heads for MLAAttention")
+        default_heads = max(1, int(config.dims.num_heads))
+        self.num_heads = int(params.value("num_heads", default_heads) or default_heads)
+        explicit_head_dim = params.value("head_dim", None)
+        if explicit_head_dim:
+            # Kimi K3 decouples the head geometry from hidden_size.
+            self.head_dim = int(explicit_head_dim)
+        else:
+            if self.hidden_size % self.num_heads != 0:
+                raise ValueError(
+                    "hidden_size must be divisible by num_heads for "
+                    "MLAAttention (or set attention.mla.head_dim)"
+                )
+            self.head_dim = self.hidden_size // self.num_heads
+        self.total_dim = self.num_heads * self.head_dim
         self.latent_rank = int(params.value("latent_rank", max(1, self.hidden_size // 2)))
         self.rope_base = float(getattr(config, "rope_base", 10000.0))
 
         proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.dkv_proj = proj_cls(self.hidden_size, self.latent_rank, bias=False)
-        self.uk_proj = proj_cls(self.latent_rank, self.num_heads * self.head_dim, bias=False)
-        self.uv_proj = proj_cls(self.latent_rank, self.num_heads * self.head_dim, bias=False)
-        self.q_proj = proj_cls(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.out_proj = proj_cls(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.uk_proj = proj_cls(self.latent_rank, self.total_dim, bias=False)
+        self.uv_proj = proj_cls(self.latent_rank, self.total_dim, bias=False)
+        self.q_proj = proj_cls(self.hidden_size, self.total_dim, bias=False)
+        self.out_proj = proj_cls(self.total_dim, self.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.dims.dropout)
         self.mode = getattr(config.dims, "mode", "encoder")
         self.scale = self.head_dim ** -0.5

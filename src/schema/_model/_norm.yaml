@@ -122,6 +122,29 @@ properties:
     maximum: 1
     default: 0.0
     examples: [0.0]
+  eps:
+    type: number
+    title: "Normalization Epsilon"
+    title_es: "Epsilon de Normalización"
+    description: |-
+      Numerical stabilizer added under the RMS/variance reduction of the block
+      normalization (`layer_norm`, `rms_norm`, `prms_norm`). Must be `> 0`.
+      Ignored by normalization-free variants (`dynamic_tanh`, `derf`,
+      `flash_norm`, which has no learnable scale). Kimi K3 uses `1e-5`
+      (HF `rms_norm_eps`).
+
+      **References:** (paper: arxiv:2607.24653) (paper: arxiv:1910.07467)
+    description_es: |-
+      Estabilizador numérico sumado bajo la reducción RMS/varianza de la
+      normalización de bloque (`layer_norm`, `rms_norm`, `prms_norm`). Debe ser
+      `> 0`. Se ignora en las variantes libres de normalización
+      (`dynamic_tanh`, `derf`, `flash_norm`, que no tiene escala aprendible).
+      Kimi K3 usa `1e-5` (HF `rms_norm_eps`).
+
+      **Referencias:** (paper: arxiv:2607.24653) (paper: arxiv:1910.07467)
+    exclusiveMinimum: 0
+    default: 1.0e-6
+    examples: [1.0e-5]
   qk_norm:
     type: object
     title: "Query–Key Normalization & Logit Control"

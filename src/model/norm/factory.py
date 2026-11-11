@@ -40,6 +40,7 @@ def norm_params(config: Any) -> dict:
     return {
         "partial_ratio": getattr(block, "partial_ratio", 0.0625),
         "flashnorm_partial_ratio": getattr(block, "flashnorm_partial_ratio", 0.0),
+        "eps": getattr(block, "eps", 1e-6),
     }
 
 
@@ -59,7 +60,7 @@ def is_norm_fusable(config: Any) -> bool:
 
 def _build_layer_norm(config: Any, params) -> nn.Module:
     """Build a standard :class:`nn.LayerNorm`."""
-    return nn.LayerNorm(config.dims.hidden_size)
+    return nn.LayerNorm(config.dims.hidden_size, eps=float(params.eps))
 
 
 def _build_dynamic_tanh(config: Any, params) -> nn.Module:
@@ -74,12 +75,16 @@ def _build_derf(config: Any, params) -> nn.Module:
 
 def _build_rms_norm(config: Any, params) -> nn.Module:
     """Build a full RMSNorm."""
-    return RMSNorm(config.dims.hidden_size)
+    return RMSNorm(config.dims.hidden_size, eps=float(params.eps))
 
 
 def _build_prms_norm(config: Any, params) -> nn.Module:
     """Build a partial RMSNorm."""
-    return RMSNorm(config.dims.hidden_size, partial_ratio=float(params.partial_ratio))
+    return RMSNorm(
+        config.dims.hidden_size,
+        eps=float(params.eps),
+        partial_ratio=float(params.partial_ratio),
+    )
 
 
 def _build_flash_norm(config: Any, params) -> nn.Module:

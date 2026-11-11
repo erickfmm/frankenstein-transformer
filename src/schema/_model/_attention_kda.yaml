@@ -1,0 +1,147 @@
+type: object
+additionalProperties: false
+properties:
+  kda:
+    type: object
+    additionalProperties: false
+    description: |-
+      Hyperparameters for `kda` (Kimi Delta Attention): head geometry and the
+      K3 refinements (input-dependent bounded decay, short convolution and the
+      full-rank output gate). Only applies when `kda` appears in
+      `layer_pattern`.
+      **References:** (paper: arxiv:2510.26692) (paper: arxiv:2607.24653)
+    description_es: |-
+      Hiperparámetros para `kda` (Kimi Delta Attention): geometría de cabezas
+      y los refinamientos de K3 (decaimiento acotado dependiente de la entrada,
+      convolución corta y compuerta de salida full-rank). Solo aplica cuando
+      `kda` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2510.26692) (paper: arxiv:2607.24653)
+    properties:
+      num_heads:
+        type: [integer, "null"]
+        default: null
+        title: "KDA Number of Heads"
+        title_es: "Número de Cabezas KDA"
+        description: |-
+          Attention-head count for `kda`, overriding `dims.num_heads`. KDA may
+          expand the head width beyond `hidden_size` (Kimi K3 uses 96 heads ×
+          128 = 12288 with `hidden_size` 7168). `null` (default) uses
+          `dims.num_heads`.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Número de cabezas de atención para `kda`, sobrescribiendo
+          `dims.num_heads`. KDA puede expandir el ancho de cabeza más allá de
+          `hidden_size` (Kimi K3 usa 96 cabezas × 128 = 12288 con
+          `hidden_size` 7168). `null` (por defecto) usa `dims.num_heads`.
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 1
+        examples: [96]
+      head_dim:
+        type: [integer, "null"]
+        default: null
+        title: "KDA Head Dimension"
+        title_es: "Dimensión de Cabeza KDA"
+        description: |-
+          Per-head width for `kda`. `null` (default) uses
+          `hidden_size // num_heads`, which still requires divisibility. Set it
+          explicitly to decouple the head geometry from `hidden_size` (Kimi K3:
+          128).
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Ancho por cabeza para `kda`. `null` (por defecto) usa
+          `hidden_size // num_heads`, lo que sigue exigiendo divisibilidad.
+          Definirlo explícitamente desacopla la geometría de cabezas de
+          `hidden_size` (Kimi K3: 128).
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 1
+        examples: [128]
+      decay_mode:
+        type: string
+        enum: [kimilinear, k3]
+        default: kimilinear
+        title: "KDA Decay Mode"
+        title_es: "Modo de Decaimiento KDA"
+        description: |-
+          `kimilinear` keeps the Kimi Linear log-decay
+          (`exp(base − softplus(delta))`, free parameters). `k3` selects the
+          Kimi K3 input-dependent bounded decay: the logit is a low-rank
+          projection of the input plus a per-head bias, mapped through
+          `g_min·σ(e^{A_h} z)` so retention is bounded below by `exp(g_min)`.
+          **References:** (paper: arxiv:2510.26692) (paper: arxiv:2607.24653)
+        description_es: |-
+          `kimilinear` mantiene el log-decay de Kimi Linear
+          (`exp(base − softplus(delta))`, parámetros libres). `k3` selecciona el
+          decaimiento acotado dependiente de la entrada de Kimi K3: el logit es
+          una proyección low-rank de la entrada más un sesgo por cabeza, mapeado
+          por `g_min·σ(e^{A_h} z)`, de modo que la retención queda acotada
+          inferiormente por `exp(g_min)`.
+          **Referencias:** (paper: arxiv:2510.26692) (paper: arxiv:2607.24653)
+        examples: [kimilinear, k3]
+      decay_min_log:
+        type: number
+        default: -5.0
+        title: "KDA Minimum Log-Decay"
+        title_es: "Log-Decaimiento Mínimo KDA"
+        description: |-
+          Lower bound `g_min` of the K3 decay logit (only used when
+          `decay_mode=k3`). Kimi K3 uses `−5`, bounding retention below by
+          `e^{−5} ≈ 6.7e−3`. Must be `< 0`.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Cota inferior `g_min` del logit de decaimiento K3 (solo se usa con
+          `decay_mode=k3`). Kimi K3 usa `−5`, acotando la retención por
+          `e^{−5} ≈ 6.7e−3`. Debe ser `< 0`.
+          **Referencias:** (paper: arxiv:2607.24653)
+        maximum: 0
+        examples: [-5.0]
+      decay_low_rank:
+        type: [integer, "null"]
+        default: null
+        title: "KDA Decay Low-Rank Width"
+        title_es: "Ancho Low-Rank del Decaimiento KDA"
+        description: |-
+          Width of the low-rank projection that produces the input-dependent
+          decay logits in `decay_mode=k3`. `null` (default) uses
+          `max(1, hidden_size // 16)`.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Ancho de la proyección low-rank que produce los logits de
+          decaimiento dependientes de la entrada en `decay_mode=k3`. `null`
+          (por defecto) usa `max(1, hidden_size // 16)`.
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 1
+        examples: [128]
+      short_conv_kernel:
+        type: integer
+        default: 0
+        title: "KDA Short Convolution Kernel"
+        title_es: "Kernel de Convolución Corta KDA"
+        description: |-
+          Depthwise causal short-convolution kernel applied to the input
+          (followed by SiLU) before the Q/K/V projections. Kimi K3 uses `4`;
+          `0` (default) disables it. When enabled, the incremental cache keeps
+          the last `kernel − 1` pre-conv rows.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Kernel de convolución corta causal depthwise aplicado a la entrada
+          (seguido de SiLU) antes de las proyecciones Q/K/V. Kimi K3 usa `4`;
+          `0` (por defecto) lo desactiva. Cuando está activo, el caché
+          incremental conserva las últimas `kernel − 1` filas pre-conv.
+          **Referencias:** (paper: arxiv:2607.24653)
+        minimum: 0
+        examples: [0, 4]
+      use_full_rank_gate:
+        type: boolean
+        default: true
+        title: "KDA Full-Rank Output Gate"
+        title_es: "Compuerta de Salida Full-Rank KDA"
+        description: |-
+          Use a full-rank input-dependent output gate (`silu(W_g x)`) instead
+          of a per-head scalar gate. Kimi K3 uses the full-rank gate (default).
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Usar una compuerta de salida full-rank dependiente de la entrada
+          (`silu(W_g x)`) en vez de una compuerta escalar por cabeza. Kimi K3
+          usa la compuerta full-rank (por defecto).
+          **Referencias:** (paper: arxiv:2607.24653)
+        examples: [true]

@@ -491,29 +491,37 @@ properties:
         examples: [0.001, 0.01]
       bias_update:
         type: string
-        enum: [none, sign, centered_sign]
+        enum: [none, sign, centered_sign, quantile]
         title: "Expert Bias Update Rule"
         title_es: "Regla de Actualización del Sesgo"
         description: |-
           Auxiliary-loss-free balancing (DeepSeek-V3 `noaux_tc`): a per-expert
-          bias is added to the scores before selection only, and moved once per
-          optimizer step. `sign` adds `+rate` to underloaded experts and
-          `−rate` to overloaded ones; `centered_sign` subtracts the mean step
-          so the bias mean does not drift. Requires `router.scoring` different
-          from `softmax`.
+          bias is added to the scores before selection only. `sign` adds
+          `+rate` to underloaded experts and `−rate` to overloaded ones;
+          `centered_sign` subtracts the mean step so the bias mean does not
+          drift; `quantile` (Kimi K3 Quantile Balancing) replaces the fixed
+          step with the router-score quantile that matches each expert's
+          target load, derived from a single forward pass (Top-(k+1) cutoff,
+          (q+1)-th largest margin, q = m·k/n) and applied per micro-batch.
+          `sign`/`centered_sign` move once per optimizer step. Requires
+          `router.scoring` different from `softmax`.
 
-          **References:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982)
+          **References:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982) (paper: arxiv:2607.24653)
         description_es: |-
           Balanceo libre de pérdida auxiliar (DeepSeek-V3 `noaux_tc`): un sesgo
-          por experto se suma a las puntuaciones solo antes de la selección y
-          se mueve una vez por paso de optimizador. `sign` suma `+rate` a los
-          expertos subcargados y `−rate` a los sobrecargados; `centered_sign`
-          resta el paso medio para que la media del sesgo no derive. Requiere
-          `router.scoring` distinto de `softmax`.
+          por experto se suma a las puntuaciones solo antes de la selección.
+          `sign` suma `+rate` a los expertos subcargados y `−rate` a los
+          sobrecargados; `centered_sign` resta el paso medio para que la media
+          del sesgo no derive; `quantile` (Quantile Balancing de Kimi K3)
+          reemplaza el paso fijo por el cuantil de puntuaciones que iguala la
+          carga objetivo de cada experto, derivado de un único forward
+          (cutoff Top-(k+1), margen (q+1)-ésimo mayor, q = m·k/n) y aplicado
+          por micro-batch. `sign`/`centered_sign` se mueven una vez por paso de
+          optimizador. Requiere `router.scoring` distinto de `softmax`.
 
-          **Referencias:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982)
+          **Referencias:** (paper: arxiv:2408.15664) (paper: arxiv:2502.16982) (paper: arxiv:2607.24653)
         default: none
-        examples: [none, sign, centered_sign]
+        examples: [none, sign, centered_sign, quantile]
       bias_update_rate:
         type: number
         minimum: 0

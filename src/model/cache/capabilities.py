@@ -60,6 +60,7 @@ IMPLEMENTED_MIXERS = frozenset(
         "fpa",            # F1 (range-minimum field extras; exact, Prop. 2.4b)
         # ---- F1 latent family ----
         "mla",            # F1 (latent cached, expand + RoPE per step)
+        "gmla",           # F1 (latent cached, NoPE, expand + gate per step)
         "gqla",           # F1
         "mlra",           # F1
         "tucker",         # F1

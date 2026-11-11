@@ -164,7 +164,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "layer_pattern"
             ]["items"]["enum"]
         )
-        self.assertEqual(len(CACHE_SPECS), 49)
+        self.assertEqual(len(CACHE_SPECS), 50)
         self.assertTrue(set(CACHE_SPECS).issubset(enum_values))
 
     def test_inference_schema_is_referenced(self):

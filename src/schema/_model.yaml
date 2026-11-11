@@ -50,7 +50,7 @@ properties:
       its own sub-object here; mixers without config knobs (standard, sigmoid,
       gated_softmax, gla, deltanet, gated_deltanet,
       gated_deltanet2, hgrn2, fox, longformer, bigbird,
-      sparse_transformer, sparsek, nsa, sparge, fasa, kda,
+      sparse_transformer, sparsek, nsa, sparge, fasa,
       memory, mamba) do not need a sub-object. `gqa` reads `dims.num_kv_heads`.
 
       **References:** (paper: arxiv:1706.03762) (paper: arxiv:2307.08621) (paper: arxiv:2312.00752)
@@ -60,7 +60,7 @@ properties:
       su propio sub-objeto aquí; los mixers sin parámetros de configuración (standard,
       sigmoid, gated_softmax, gla, deltanet, gated_deltanet,
       gated_deltanet2, hgrn2, fox, longformer, bigbird,
-      sparse_transformer, sparsek, nsa, sparge, fasa, kda,
+      sparse_transformer, sparsek, nsa, sparge, fasa,
       memory, mamba) no necesitan sub-objeto. `gqa` lee `dims.num_kv_heads`.
 
       **Referencias:** (paper: arxiv:1706.03762) (paper: arxiv:2307.08621) (paper: arxiv:2312.00752)
@@ -69,6 +69,10 @@ properties:
     properties:
       mla:
         $ref: "_model/_attention_latent.yaml#/properties/mla"
+      gmla:
+        $ref: "_model/_attention_latent.yaml#/properties/gmla"
+      kda:
+        $ref: "_model/_attention_kda.yaml#/properties/kda"
       gqla:
         $ref: "_model/_attention_latent.yaml#/properties/gqla"
       mlra:

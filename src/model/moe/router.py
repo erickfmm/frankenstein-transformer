@@ -67,8 +67,10 @@ class MoERouter(nn.Module):
         dtype: ``"float32"`` (default) or ``"bfloat16"`` router math.
         jitter_eps: Switch-style uniform multiplicative input jitter.
         z_loss_coeff: Weight of the ``logsumexp`` z-loss (0 disables it).
-        bias_update: ``"none"``, ``"sign"`` or ``"centered_sign"``.
-        bias_update_rate: Fixed step ``γ`` of the expert bias.
+        bias_update: ``"none"``, ``"sign"``, ``"centered_sign"`` or
+            ``"quantile"``.
+        bias_update_rate: Fixed step ``γ`` of the expert bias (ignored by the
+            ``quantile`` rule).
         linear_factory: Optional projection factory (e.g. ``BitLinear``).
     """
 
@@ -215,8 +217,23 @@ class MoERouter(nn.Module):
 
         weights = self.mix_weights(scores, indices)
 
+        # Quantile Balancing (Kimi K3, arXiv:2607.24653 §2.3.3) derives the
+        # next bias from this forward pass's margins. Applied immediately
+        # (per micro-batch) so the next forward sees it; the derivation never
+        # touches the current dispatch.
+        if (
+            self.training
+            and self.bias_update == "quantile"
+            and indices_override is None
+        ):
+            self._quantile_bias_update(scores)
+
         # Accumulate selection counts for the once-per-step bias update.
-        if self.training and self._pending_counts is not None:
+        if (
+            self.training
+            and self._pending_counts is not None
+            and self.bias_update != "quantile"
+        ):
             counts = torch.bincount(
                 indices.reshape(-1), minlength=self.num_experts
             ).to(self._pending_counts.dtype)
@@ -227,6 +244,48 @@ class MoERouter(nn.Module):
     # ------------------------------------------------------------------
     # Load-balancing bias
     # ------------------------------------------------------------------
+    @torch.no_grad()
+    def _quantile_bias_update(self, scores: torch.Tensor) -> None:
+        """Move the bias by the Quantile-Balancing rule (per forward pass).
+
+        With ``m`` tokens and ``n`` experts, each expert's target load is
+        ``q = m·k/n``. The cutoff ``α_i`` is the (k+1)-th largest biased score
+        of token ``i``; the new bias is minus the (q+1)-th largest margin
+        ``s_ij − α_i``, which leaves exactly ``q`` margins above the threshold
+        (arXiv:2607.24653 §2.3.3, App. C; non-integral ``q`` is floored).
+        Boundary ties (a row's margin at its own cutoff is exactly 0) are
+        included by nudging the threshold one ULP-scale below the order
+        statistic, so underloaded experts receive at least their target load.
+
+        Args:
+            scores: Sigmoid (or softplus-sqrt) router scores ``(m, n)``.
+        """
+        if self.expert_bias is None or self.top_k >= self.num_experts:
+            return
+        m, n = scores.shape
+        if m == 0 or n == 0:
+            return
+        q = m * int(self.top_k) / n
+        q_int = int(q)
+        if q_int < 1:
+            return
+
+        biased = scores.detach() + self.expert_bias.to(scores.dtype)
+        cutoff = torch.topk(biased, int(self.top_k) + 1, dim=-1).values[:, -1]
+        # Margins s_ij − α_i (arXiv:2607.24653 §2.3.3, App. C).
+        margins = scores.detach() - cutoff.unsqueeze(-1)
+        # kthvalue(k=m-q) is the (q+1)-th largest margin: exactly q margins
+        # stay strictly above it, i.e. the target load. Ties at the boundary
+        # (margins are exactly 0 for each row's (k+1)-th expert) are included
+        # by nudging the threshold one ULP-scale below the order statistic.
+        threshold = torch.kthvalue(margins, m - q_int, dim=0).values
+        eps = (
+            torch.finfo(margins.dtype).eps
+            * float(margins.abs().amax().clamp_min(1.0))
+            * 32.0
+        )
+        self.expert_bias.copy_(-(threshold - eps).to(self.expert_bias.dtype))
+
     @torch.no_grad()
     def update_expert_bias(
         self, counts: Optional[torch.Tensor] = None
@@ -244,6 +303,10 @@ class MoERouter(nn.Module):
             ``True`` when the bias was updated.
         """
         if self.expert_bias is None:
+            return False
+        if self.bias_update == "quantile":
+            # Quantile Balancing is applied per forward pass (see
+            # ``_quantile_bias_update``); nothing to do at the step boundary.
             return False
         source = counts if counts is not None else self._pending_counts
         if source is None or float(source.sum().item()) <= 0.0:

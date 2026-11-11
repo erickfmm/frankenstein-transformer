@@ -440,3 +440,54 @@ def test_transformers_export_contains_moe_block():
     assert moe["latent"]["dim"] == 3584
     assert moe["latent"]["norm_before_up_proj"] is True
     assert payload["num_experts_per_tok"] == 8
+
+
+def test_quantile_balancing_matches_target_margin_count():
+    """QB leaves exactly q = m*k/n margins above the cutoff (no ties)."""
+    torch.manual_seed(0)
+    m, n, k = 64, 8, 2
+    router = MoERouter(
+        hidden_size=n,
+        num_experts=n,
+        top_k=k,
+        scoring="sigmoid",
+        bias_update="quantile",
+    )
+    router.train()
+    scores = torch.rand(m, n)
+    biased = scores + router.expert_bias
+    cutoff = torch.topk(biased, k + 1, dim=-1).values[:, -1]
+    router._quantile_bias_update(scores)
+    q = m * k // n
+    margin_counts = ((scores + router.expert_bias) > cutoff[:, None]).sum(0)
+    assert int(q) == 16
+    # Boundary ties are included, so no expert stays below its target load.
+    assert all(int(c) >= q for c in margin_counts)
+
+
+def test_quantile_small_batch_is_noop():
+    """q = m*k/n < 1 leaves the bias unchanged."""
+    router = MoERouter(
+        hidden_size=4, num_experts=4, top_k=1, scoring="sigmoid",
+        bias_update="quantile",
+    )
+    with torch.no_grad():
+        router.linear.weight.copy_(torch.eye(4))
+    router.train()
+    before = router.expert_bias.clone()
+    router(torch.randn(1, 4))
+    assert torch.equal(before, router.expert_bias)
+
+
+def test_quantile_bias_frozen_in_eval():
+    router = MoERouter(
+        hidden_size=4, num_experts=4, top_k=1, scoring="sigmoid",
+        bias_update="quantile",
+    )
+    with torch.no_grad():
+        router.linear.weight.copy_(torch.eye(4))
+    router.eval()
+    before = router.expert_bias.clone()
+    with torch.no_grad():
+        router(torch.randn(4, 4))
+    assert torch.equal(before, router.expert_bias)

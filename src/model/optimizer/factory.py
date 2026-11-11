@@ -179,6 +179,10 @@ def _build_param_groups_for_optimizer(
                 1e-8,
             )
         converted["name"] = group_name
+        if "param_names" in group:
+            # Per-parameter names (aligned with ``params``) let optimizers such
+            # as per-head Muon classify projections; harmless otherwise.
+            converted["param_names"] = group["param_names"]
         result.append(converted)
     return result
 

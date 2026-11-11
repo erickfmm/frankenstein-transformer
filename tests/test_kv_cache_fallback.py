@@ -52,7 +52,7 @@ class RegistryConsistencyTests(unittest.TestCase):
         enum = _schema_enum()
         # CACHE_SPECS is derived from the built-in specs (49); the assembled
         # enum may also contain config-declared plugin mixers.
-        self.assertEqual(len(CACHE_SPECS), 49)
+        self.assertEqual(len(CACHE_SPECS), 50)
         self.assertTrue(set(CACHE_SPECS).issubset(set(enum)))
         # All implemented mixers must exist in the schema enum.
         self.assertTrue(IMPLEMENTED_MIXERS.issubset(set(enum)))

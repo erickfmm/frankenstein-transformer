@@ -83,7 +83,7 @@ properties:
       `raf` (**Rational Activation Function**, learnable Padé polynomial ratio, Fang et al.
       (paper: arxiv:2208.14111)). Configure via `ffn.activation_config`.
 
-      **Gated FFN variants** (own their projections, replace the FFN block): `swiglu`, `geglu`, `reglu`.
+      **Gated FFN variants** (own their projections, replace the FFN block): `swiglu`, `geglu`, `reglu`, `situ`.
 
       **Impact:** `silu`/`gelu` tend to converge well. With BitNet or quantization, `silu` may be
       more robust. Learnable activations (`raf`, `prelu`, `swish_trainable`) add parameters but can
@@ -119,7 +119,7 @@ properties:
       `maxout`, `raf` (**Rational Activation Function**, razón polinómica Padé aprendible, Fang et al.
       (paper: arxiv:2208.14111)). Configurar vía `ffn.activation_config`.
 
-      **Variantes FFN con compuerta** (tienen sus proyecciones, reemplazan el bloque FFN): `swiglu`, `geglu`, `reglu`.
+      **Variantes FFN con compuerta** (tienen sus proyecciones, reemplazan el bloque FFN): `swiglu`, `geglu`, `reglu`, `situ`.
 
       **Referencias:** `silu`/`swish` (paper: arxiv:1710.05941) (paper: arxiv:1702.03118); `gelu` (paper:
       arxiv:1606.08415); `relu` (paper: https://www.cs.toronto.edu/~fritz/absps/reluICML.pdf);
@@ -131,7 +131,7 @@ properties:
       arxiv:1302.4389); `lisht` (paper: arxiv:1811.05870); `pelu` (paper: arxiv:1605.09332); `softexp`
       (paper: arxiv:1602.01321); `raf` (paper: arxiv:2208.14111); `swiglu`/`geglu`/`reglu` (paper:
       arxiv:2002.05202); surveys (paper: arxiv:2101.09957) (paper: arxiv:2109.14545)
-    enum: [silu, gelu, gelu_tanh, relu, sigmoid, tanh, arctan, softsign, elliott, identity, softplus, mish, leaky_relu, relu6, hardswish, prelu, abs_relu, nl_relu, brelu, vrelu, hexpo, ptanh, dis_relu, lisht, elu, selu, celu, pelu, mpelu, felu, eelu, pdelu, preu, softexp, elish, hardelish, swish, swish_trainable, maxout, raf, swiglu, geglu, reglu]
+    enum: [silu, gelu, gelu_tanh, relu, sigmoid, tanh, arctan, softsign, elliott, identity, softplus, mish, leaky_relu, relu6, hardswish, prelu, abs_relu, nl_relu, brelu, vrelu, hexpo, ptanh, dis_relu, lisht, elu, selu, celu, pelu, mpelu, felu, eelu, pdelu, preu, softexp, elish, hardelish, swish, swish_trainable, maxout, raf, swiglu, geglu, reglu, situ]
     default: silu
     examples: [gelu, silu]
   activation_config:
@@ -156,6 +156,9 @@ properties:
       `mpelu_beta`, `felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`,
       `preu_beta`, `softexp_alpha`, `maxout_pieces` (int ≥ 1, default `2`).
 
+      **SiTU-GLU:** `situ_beta_gate` (`4.0`) and `situ_beta_up` (`25.0`) set the
+      smooth-cap betas of the gate and up branches.
+
       **References:** (paper: arxiv:2208.14111) (paper: arxiv:1502.01852) (paper: arxiv:1710.05941)
     description_es: |
       Parámetros anidados opcionales para activaciones aprendibles / paramétricas. Se ignoran para
@@ -174,6 +177,9 @@ properties:
       `swish_beta` (`1.0`), `leaky_relu_slope` (`0.01`), `pelu_alpha`, `mpelu_alpha`, `mpelu_beta`,
       `felu_alpha`, `eelu_alpha`, `eelu_beta`, `pdelu_alpha`, `preu_alpha`, `preu_beta`,
       `softexp_alpha`, `maxout_pieces` (int ≥ 1, `2`).
+
+      **SiTU-GLU:** `situ_beta_gate` (`4.0`) y `situ_beta_up` (`25.0`) fijan los
+      betas de tope suave de las ramas gate y up.
 
       **Referencias:** (paper: arxiv:2208.14111) (paper: arxiv:1502.01852) (paper: arxiv:1710.05941)
     additionalProperties: false
@@ -379,6 +385,36 @@ properties:
         type: number
         default: 0.0
         examples: [0.0]
+      situ_beta_gate:
+        description: |-
+          SiTU-GLU smooth-cap beta of the gate branch (`situ` activation):
+          the gate becomes `β₁ tanh(u/β₁) · σ(u)`. Must be `> 0`. Kimi K3 uses
+          `4.0`.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Beta del tope suave de la rama de puerta de SiTU-GLU (activación
+          `situ`): la puerta pasa a `β₁ tanh(u/β₁) · σ(u)`. Debe ser `> 0`.
+          Kimi K3 usa `4.0`.
+          **Referencias:** (paper: arxiv:2607.24653)
+        type: number
+        exclusiveMinimum: 0
+        default: 4.0
+        examples: [4.0]
+      situ_beta_up:
+        description: |-
+          SiTU-GLU smooth-cap beta of the up branch (`situ` activation): the
+          up projection becomes `β₂ tanh(v/β₂)`. Must be `> 0`. Kimi K3 uses
+          `25.0`, bounding the product by `β₁β₂ = 100`.
+          **References:** (paper: arxiv:2607.24653)
+        description_es: |-
+          Beta del tope suave de la rama up de SiTU-GLU (activación `situ`):
+          la proyección up pasa a `β₂ tanh(v/β₂)`. Debe ser `> 0`. Kimi K3 usa
+          `25.0`, acotando el producto por `β₁β₂ = 100`.
+          **Referencias:** (paper: arxiv:2607.24653)
+        type: number
+        exclusiveMinimum: 0
+        default: 25.0
+        examples: [25.0]
       maxout_pieces:
         description: |-
           Number of linear pieces per Maxout unit.

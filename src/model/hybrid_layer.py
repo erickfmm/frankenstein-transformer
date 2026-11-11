@@ -177,6 +177,18 @@ class HybridLayer(nn.Module):
 
         self.norm2 = get_norm(config)
         is_glu = config.ffn.activation in GLU_VARIANTS
+        activation_name = str(config.ffn.activation)
+        activation_cfg = getattr(config.ffn, "activation_config", None) or {}
+        situ_beta_gate = (
+            float(activation_cfg.get("situ_beta_gate", 4.0))
+            if activation_name == "situ"
+            else None
+        )
+        situ_beta_up = (
+            float(activation_cfg.get("situ_beta_up", 25.0))
+            if activation_name == "situ"
+            else None
+        )
 
         # FlashNorm fusion (Prop. 2 of arXiv:2407.09577): when norm_type is
         # flash_norm and the FFN is the simple elementwise non-MoE path,
@@ -218,6 +230,8 @@ class HybridLayer(nn.Module):
                     dropout=float(getattr(config.dims, "dropout", 0.0) or 0.0),
                     proj_factory=proj_cls,
                     clamp_value=(float(clamp) if clamp else None),
+                    beta_gate=situ_beta_gate,
+                    beta_up=situ_beta_up,
                 )
             if fuse_ffn_input and in_out == config.dims.hidden_size:
                 # Fused first projection: FlashNorm + Linear in one module.

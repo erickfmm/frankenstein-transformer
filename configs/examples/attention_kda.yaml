@@ -1,0 +1,51 @@
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 128
+    hidden_size: 64
+    num_layers: 2
+    num_heads: 4
+    layer_pattern:
+    - kda
+    - standard
+    mode: encoder
+  attention:
+    kda:
+      # 4 heads x 16 = 64 (same width as hidden_size here); K3-style refinements.
+      num_heads: 4
+      head_dim: 16
+      decay_mode: k3
+      decay_min_log: -5.0
+      short_conv_kernel: 4
+      use_full_rank_gate: true
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 128
+    activation: gelu
+training:
+  task: mlm
+  seed: 42
+  num_epochs: 1
+  batch_size: 2
+  max_length: 64
+  mlm_probability: 0.15
+  max_samples: 1000
+  cache_dir: ./temp_data/attention_kda_cache
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-3
+      adamw-lr_norms: 1e-3
+      adamw-lr_attention: 1e-3
+      adamw-lr_other: 1e-3
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+  scheduler_total_steps: 100
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  max_nan_retries: 3
