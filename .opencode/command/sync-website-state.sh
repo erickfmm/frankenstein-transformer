@@ -106,6 +106,10 @@ echo "[drift]"
 pair_file "$REPO_ROOT/docs/schema.assembled.yaml" "$SITE/schema.yaml" "docs/schema.assembled.yaml" "schema.yaml"
 pair_tree "$REPO_ROOT/src/schema" "$SITE/schema" "src/schema" "schema" -type f
 
+# component registry (the mirror's utils/schema_loader.py imports
+# registry.schema_assembly in the standalone layout, so this copy is functional)
+pair_tree "$REPO_ROOT/src/registry" "$SITE/registry" "src/registry" "registry" -type f -name "*.py"
+
 # configs -> examples (top-level yamls + README only; subdirs via explicit pair below)
 pair_tree "$REPO_ROOT/configs" "$SITE/examples" "configs" "examples" -maxdepth 1 -type f -name "*.yaml"
 pair_file "$REPO_ROOT/configs/README.md" "$SITE/examples/README.md" "configs/README.md" "examples/README.md"
