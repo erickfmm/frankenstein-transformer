@@ -46,6 +46,8 @@ RUNS_DIR = TMP_DIR / "runs"
 RESULTS_DIR = FULL_TESTS_DIR / "tmp" / "results"
 #: Ready-to-process per-model training CSVs (``<combo_id>.csv``).
 RESULTS_TRAINING_METRICS_DIR = RESULTS_DIR / "training_metrics"
+#: Full YAML config of every combo (``<combo_id>.yaml``), saved before cleanup.
+RESULTS_CONFIGS_DIR = RESULTS_DIR / "configs"
 #: Per-model parameter counts by block category (``param_metrics.json``).
 RESULTS_PARAM_METRICS_PATH = RESULTS_DIR / "param_metrics.json"
 #: Inference-vs-real comparison rows (``inference.csv``).
@@ -1484,6 +1486,24 @@ def run_inference_eval(
 # ---------------------------------------------------------------------------
 # Result persistence
 # ---------------------------------------------------------------------------
+def save_results_config(combo_id: str, config: dict) -> Path:
+    """Save a combo's full YAML config under ``tmp/results/configs/``.
+
+    The copy is written before any cleanup, so it survives ``--save-to
+    delete|memory`` (the results directory always stays on disk). It is the
+    exact config used to launch the combo, including the batch-size,
+    test-percentage and thermal-guard overrides.
+
+    Args:
+        combo_id: Combo identifier (used as the file stem).
+        config: The combo's full config dict.
+
+    Returns:
+        Path of the written YAML file.
+    """
+    return write_yaml(config, RESULTS_CONFIGS_DIR / f"{combo_id}.yaml")
+
+
 def write_results(results: List[RunResult]) -> Tuple[Path, Path]:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     data = [r.to_dict() for r in results]
@@ -1702,7 +1722,8 @@ def cleanup_combo_artifacts(combo_id: str) -> None:
     Removes the run directory (checkpoints, metrics cache, per-run data) plus
     its deploy, inference-eval, transformers-export and BitNet-GGUF artifacts.
     The result artifacts (``tmp/results/**``: metrics CSVs, ``inference.csv``,
-    ``param_metrics.json``, ``results.json|md``) are kept.
+    ``param_metrics.json``, ``configs/<combo_id>.yaml``, ``results.json|md``)
+    are kept.
 
     Args:
         combo_id: Combo identifier whose artifacts are removed.

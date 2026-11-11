@@ -55,7 +55,10 @@ harness writes, under ``tmp/results/``:
   reported by the trainer in ``test_metrics.json``),
 * ``results.json`` / ``results.md`` — the run status table, including
   ``test_acc``/``test_f1`` columns with the held-out accuracy and macro-F1
-  measured at the end of training.
+  measured at the end of training,
+* ``configs/<combo_id>.yaml`` — the exact full YAML used for each combo,
+  copied before cleanup so it survives ``--save-to delete|memory`` (disable
+  with ``--no-keep-configs``).
 
 It is intentionally NOT collected by ``pytest tests/`` (it lives in ``full_tests/``
 at the repository root) and is meant to be left running for several hours.
@@ -125,15 +128,16 @@ Artifact retention is selected with ``--save-to`` (default ``disk``):
   under ``full_tests/tmp/``.
 * ``delete`` — each combo's run directory, models and data are deleted right
   after its pipeline finishes; only the results (metrics CSVs,
-  ``inference.csv``, ``param_metrics.json``, ``results.json|md``) survive. The
-  whole scratch tree is dropped when the run ends. Combos whose pipeline
-  failed keep their artifacts unless ``--no-keep-failed`` is passed (default:
-  ``--keep-failed``, so failures can be reproduced).
+  ``inference.csv``, ``param_metrics.json``, ``configs/``, ``results.json|md``)
+  survive. The whole scratch tree is dropped when the run ends. Combos whose
+  pipeline failed keep their artifacts unless ``--no-keep-failed`` is passed
+  (default: ``--keep-failed``, so failures can be reproduced).
 * ``memory`` — the run directory and deployed models live on a RAM-backed
   tmpfs (``/dev/shm/frankenstein-full-tests-<pid>``) and no harness artifact
-  touches the disk; results still go to ``tmp/results/``. The tmpfs tree is
-  removed at the end. Requires a writable ``/dev/shm``; the HuggingFace
-  ``datasets`` cache (outside the harness' control) is not redirected.
+  touches the disk; results (including ``configs/``) still go to
+  ``tmp/results/``. The tmpfs tree is removed at the end. Requires a writable
+  ``/dev/shm``; the HuggingFace ``datasets`` cache (outside the harness'
+  control) is not redirected.
 
 Held-out evaluation is enabled by default:
 
@@ -200,6 +204,9 @@ schema key, never into an ad-hoc one):
   ``sbert.max_eval_samples``).
 * ``--save-to {disk,delete,memory}`` (default ``disk``) selects artifact
   retention; see the retention examples above.
+* ``--keep-configs`` / ``--no-keep-configs`` (default: on) copies every combo's
+  full YAML into ``tmp/results/configs/<combo_id>.yaml`` before cleanup, so the
+  exact config survives ``--save-to delete|memory``.
 
 When ``--test-percentage 0`` is passed and none of the other overrides is
 used, the harness writes exactly the same YAML it has always written.
@@ -1979,6 +1986,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--keep-configs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Copy every combo's full generated YAML into "
+            "tmp/results/configs/<combo_id>.yaml before any cleanup, so the "
+            "exact config survives --save-to delete|memory (default: on). "
+            "Pass --no-keep-configs to keep only the live run directory "
+            "config.yaml under --save-to disk."
+        ),
+    )
+    parser.add_argument(
         "--test-percentage",
         type=int,
         default=20,
@@ -2161,6 +2180,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     logging.info("Real data: %s", "enabled (--realonall)" if args.realonall else "disabled")
     logging.info("Workers:   %d", args.workers)
     logging.info("Save to:   %s (scratch: %s)", args.save_to, helpers.TMP_DIR)
+    logging.info(
+        "Configs:   %s",
+        f"saved to {helpers.RESULTS_CONFIGS_DIR}" if args.keep_configs else "not saved",
+    )
     logging.info(
         "Timeout:   %s",
         "no limit" if timeout_secs is None else f"{timeout_secs}s",
@@ -2657,23 +2680,36 @@ def main(argv: Optional[List[str]] = None) -> int:
         produced: List[helpers.RunResult],
         rows: List[dict],
         param_counts: Optional[Dict[str, Any]],
+        config: dict,
     ) -> None:
         """Persist one finished pipeline and flush the shared artifacts.
 
         Main thread only: with parallel workers the shared result files are
-        written once per completed combo, in completion order.
+        written once per completed combo, in completion order. The combo YAML
+        is copied into ``results/configs/`` here (rather than in the worker)
+        so all ``tmp/results`` writes stay on the main thread; the config dict
+        already carries the overrides applied by the worker's training run.
 
         Args:
             combo_id: Combo identifier.
             produced: Results emitted by the pipeline (training + deploy/eval/export).
             rows: Inference-vs-real rows produced by the evaluation steps.
             param_counts: Per-block parameter counts, or ``None``.
+            config: The combo's full config dict, as launched.
         """
         results.extend(produced)
         if param_counts is not None:
             param_metrics[combo_id] = param_counts
             helpers.write_param_metrics(param_metrics)
         record_inference(rows)
+        if args.keep_configs:
+            try:
+                config_path = helpers.save_results_config(combo_id, config)
+                logging.debug("Saved combo config to %s", config_path)
+            except Exception as exc:  # noqa: BLE001
+                logging.warning(
+                    "Could not save the config YAML for %s: %s", combo_id, exc
+                )
         helpers.write_results(results)
 
     def pipeline_worker(
@@ -2720,7 +2756,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 combo_id,
             )
             combo_id_out, produced, rows, counts = pipeline_worker(combo_id, config)
-            persist_pipeline(combo_id_out, produced, rows, counts)
+            persist_pipeline(combo_id_out, produced, rows, counts, config)
             log_pipeline_result(
                 combo_id_out, produced, prefix=f"[{idx}/{len(combos)}] "
             )
@@ -2732,14 +2768,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
             futures = {
-                pool.submit(pipeline_worker, combo_id, config): (idx, combo_id)
+                pool.submit(pipeline_worker, combo_id, config): (idx, combo_id, config)
                 for idx, (combo_id, config) in enumerate(combos, start=1)
             }
             completed = 0
             for future in as_completed(futures):
-                idx, combo_id = futures[future]
+                idx, combo_id, config = futures[future]
                 combo_id_out, produced, rows, counts = future.result()
-                persist_pipeline(combo_id_out, produced, rows, counts)
+                persist_pipeline(combo_id_out, produced, rows, counts, config)
                 completed += 1
                 log_pipeline_result(
                     combo_id_out,
@@ -2801,7 +2837,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 )
             else:
                 helpers.cleanup_combo_artifacts(bitnet_id)
-        persist_pipeline(bitnet_id, produced, [], bitnet_counts)
+        persist_pipeline(bitnet_id, produced, [], bitnet_counts, bitnet_config)
         log_pipeline_result(bitnet_id, produced)
 
     # Final write (ensures everything is flushed), then drop the scratch tree in

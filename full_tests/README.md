@@ -97,8 +97,8 @@ uv run --extra cu118 --extra train python full_tests/run_e2e.py --save-to disk
 ```
 
 - **`disk`** (por defecto): se conservan los directorios de run, los checkpoints, los modelos desplegados y los datos bajo `full_tests/tmp/`.
-- **`delete`**: se ejecuta igual en disco, pero al terminar el pipeline de cada combo (entrenamiento + deploy + inferencia + export) se borran su directorio de run, sus modelos y sus datos; solo sobreviven los resultados (`training_metrics/*.csv`, `inference.csv`, `param_metrics.json`, `results.json|md`). Al final del barrido se elimina todo el árbol de scratch.
-- **`memory`**: el directorio de run y los modelos desplegados viven en un tmpfs en RAM (`/dev/shm/frankenstein-full-tests-<pid>`); ningún artefacto del harness toca el disco. Los resultados siguen escribiéndose en `full_tests/tmp/results/`. El tmpfs se elimina al terminar. Requiere `/dev/shm` escribible y es incompatible con `--resume`; la caché de `datasets` de HuggingFace (fuera del control del harness) no se redirige.
+- **`delete`**: se ejecuta igual en disco, pero al terminar el pipeline de cada combo (entrenamiento + deploy + inferencia + export) se borran su directorio de run, sus modelos y sus datos; solo sobreviven los resultados (`training_metrics/*.csv`, `inference.csv`, `param_metrics.json`, `configs/*.yaml`, `results.json|md`). Al final del barrido se elimina todo el árbol de scratch.
+- **`memory`**: el directorio de run y los modelos desplegados viven en un tmpfs en RAM (`/dev/shm/frankenstein-full-tests-<pid>`); ningún artefacto del harness toca el disco. Los resultados (incluidos `configs/*.yaml`) siguen escribiéndose en `full_tests/tmp/results/`. El tmpfs se elimina al terminar. Requiere `/dev/shm` escribible y es incompatible con `--resume`; la caché de `datasets` de HuggingFace (fuera del control del harness) no se redirige.
 
 ```bash
 # Solo resultados, borrando modelos y datos al terminar cada combo
@@ -106,6 +106,12 @@ uv run --extra cu118 --extra train python full_tests/run_e2e.py --save-to delete
 
 # Modelo y deploy solo en RAM
 uv run --extra cu118 --extra train python full_tests/run_e2e.py --save-to memory
+```
+
+Por defecto (`--keep-configs`) el YAML completo de cada combo se copia a `full_tests/tmp/results/configs/<combo_id>.yaml` **antes** de cualquier limpieza, de modo que sobrevive tanto a `--save-to delete` como a `--save-to memory`. Para no conservarlo:
+
+```bash
+uv run --extra cu118 --extra train python full_tests/run_e2e.py --no-keep-configs
 ```
 
 ### Evaluación con partición de test (`--test-percentage`)
@@ -185,7 +191,7 @@ Todo se escribe bajo `full_tests/tmp/results/` (git-ignorado):
 
 ## Archivos
 
-- `_helpers.py` — entrenamiento del tokenizador SPM, generación del parquet sintético y del corpus real, runner de subprocesos, helpers de deploy/infer/export/gguf, persistencia de resultados y artefactos (`inference.csv`, `inference_accuracy.csv`, `param_metrics.json`, `training_metrics/`), lectura de `test_metrics.json`/`test_split.json` y limpieza por combo (`--save-to delete|memory`).
+- `_helpers.py` — entrenamiento del tokenizador SPM, generación del parquet sintético y del corpus real, runner de subprocesos, helpers de deploy/infer/export/gguf, persistencia de resultados y artefactos (`inference.csv`, `inference_accuracy.csv`, `param_metrics.json`, `training_metrics/`, `configs/<combo_id>.yaml`), lectura de `test_metrics.json`/`test_split.json` y limpieza por combo (`--save-to delete|memory`).
 - `_infer_eval.py` — subproceso de evaluación inferencia-vs-real (texto, ViT y audio), restringido a los índices de `test_split.json` cuando están disponibles.
 - `run_e2e.py` — bucles for que generan todas las combinaciones, aplican `--realonall` y ejecutan el pipeline completo de cada combo (train → deploy → infer → export) en un mismo worker, con `--save-to` y `--test-percentage`.
 - `tmp/` — tokenizador, datos, checkpoints por run, resultados, deploys. **Git-ignorado.** Con `--save-to memory` este árbol se ubica en `/dev/shm` (salvo `tmp/results/`).
