@@ -1,0 +1,15 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart LR
+  visitor["<b>Query (Q)</b><br/>the visitor’s question:<br/>“I am the word <i>eats</i> —<br/>who here matters to me?”"]
+  cards["<b>Key (K)</b><br/>the catalog cards:<br/>each book announces<br/>“this is what I am about”"]
+  lib["<b>The librarian<br/>(attention)</b><br/>compares question ↔ card<br/>(dot product → score)"]
+  soft["<b>softmax</b><br/>score → share %<br/>how much of each<br/>book to borrow"]
+  books["<b>Value (V)</b><br/>the book contents:<br/>what the visitor<br/>takes home"]
+  leave["<b>The visitor leaves<br/>with a mix</b><br/>55% <i>cat</i> + 35% <i>fish</i> + …<br/>(% × contents, added up)"]
+  visitor --> lib
+  cards --> lib
+  lib --> soft
+  soft --> books
+  books --> leave
+  roles["every word plays all three roles:<br/>asks (Q) · advertises (K) · delivers (V)"]
+  lib -.- roles

@@ -1,0 +1,12 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  sent["Una capa lee “El gato come pescado”<br/>con varias cabezas a la vez"]
+  h1["<b>Cabeza 1</b> — el ojo de la gramática<br/><i>gato</i> → <i>come</i>: ¿quién lo hace?"]
+  h2["<b>Cabeza 2</b> — el ojo del objeto<br/><i>come</i> → <i>pescado</i>: ¿qué lo recibe?"]
+  h3["<b>Cabeza 3</b> — el ojo del tiempo<br/>tiempo verbal: presente, hábito"]
+  h4["<b>Cabeza 4</b> — el ojo del estilo<br/>artículos y modificadores: “el”, “un”…"]
+  join["los cuatro informes se concatenan<br/>y se remezclan con una proyección aprendida"]
+  out["un <i>come</i> mucho más rico:<br/>gramática + papeles + tiempo + estilo"]
+  sent --> h1 & h2 & h3 & h4
+  h1 & h2 & h3 & h4 --> join
+  join --> out

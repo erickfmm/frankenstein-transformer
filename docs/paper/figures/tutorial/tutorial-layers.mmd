@@ -1,0 +1,13 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  in["Raw text — the first draft<br/>“The cat eats fish”"]
+  l1["<b>Layer 1</b> — like pass 1<br/>fix spelling and grammar<br/>sees words, forms, gender"]
+  l2["<b>Layer 2</b> — like pass 2<br/>clarify each sentence<br/>who does what to whom"]
+  l3["<b>Layer 3</b> — like pass 3<br/>consistency and flow<br/>idioms, abstract meaning"]
+  dots["··· the block repeats 12–48 times ···"]
+  out["Deep, context-aware meaning<br/>each layer refines the last"]
+  in --> l1
+  l1 --> l2
+  l2 --> l3
+  l3 --> dots
+  dots --> out

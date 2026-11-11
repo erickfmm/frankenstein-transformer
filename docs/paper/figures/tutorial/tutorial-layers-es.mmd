@@ -1,0 +1,13 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  in["Texto crudo — el primer borrador<br/>“El gato come pescado”"]
+  l1["<b>Capa 1</b> — como la pasada 1<br/>corregir ortografía y gramática<br/>ve palabras, formas, género"]
+  l2["<b>Capa 2</b> — como la pasada 2<br/>aclarar cada oración<br/>quién hace qué y a quién"]
+  l3["<b>Capa 3</b> — como la pasada 3<br/>consistencia y flujo<br/>modismos, significado abstracto"]
+  dots["··· el bloque se repite 12–48 veces ···"]
+  out["Significado profundo y contextual<br/>cada capa refina la anterior"]
+  in --> l1
+  l1 --> l2
+  l2 --> l3
+  l3 --> dots
+  dots --> out

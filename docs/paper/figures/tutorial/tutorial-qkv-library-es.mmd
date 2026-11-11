@@ -1,0 +1,15 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart LR
+  visitor["<b>Consulta (Q)</b><br/>la pregunta del visitante:<br/>“soy la palabra <i>come</i> —<br/>¿quién importa para mí?”"]
+  cards["<b>Clave (K)</b><br/>las fichas del catálogo:<br/>cada libro anuncia<br/>“esto es lo que soy”"]
+  lib["<b>El bibliotecario<br/>(la atención)</b><br/>compara pregunta ↔ ficha<br/>(producto punto → puntaje)"]
+  soft["<b>softmax</b><br/>puntaje → porcentaje<br/>cuánto tomar<br/>de cada libro"]
+  books["<b>Valor (V)</b><br/>el contenido del libro:<br/>lo que el visitante<br/>se lleva a casa"]
+  leave["<b>El visitante se va<br/>con una mezcla</b><br/>55% <i>gato</i> + 35% <i>pescado</i> + …<br/>(% × contenidos, sumados)"]
+  visitor --> lib
+  cards --> lib
+  lib --> soft
+  soft --> books
+  books --> leave
+  roles["cada palabra juega los tres roles:<br/>pregunta (Q) · anuncia (K) · entrega (V)"]
+  lib -.- roles

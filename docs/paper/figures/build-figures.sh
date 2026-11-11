@@ -54,7 +54,7 @@ render_width() { # render_width relative_mmd_path
     mixer-taxonomy.mmd) echo 2600 ;;
     latent-map.mmd) echo 1200 ;;
     experiment-*.mmd) echo 1400 ;;
-    mixers/*|optimizers/*) echo 1400 ;;
+    mixers/*|optimizers/*|tutorial/*) echo 1400 ;;
     *) echo 1600 ;;
   esac
 }
@@ -79,10 +79,17 @@ render() { # render relative_mmd_path pdf|svg
   case "$src" in
     experiment-*.mmd) extra+=(-c mermaid-paper.json) ;;
   esac
-  pnpm dlx @mermaid-js/mermaid-cli \
+  # Crop the PDF page to the diagram; without it mermaid-cli 11 emits Letter.
+  if [[ "$fmt" == "pdf" ]]; then
+    extra+=(--pdfFit)
+  fi
+  # Pinned: mermaid-cli 12.x regresses "useMaxWidth:false" diagrams (every
+  # label wraps to a ~168px column). 11.4.2 measures nodes correctly.
+  # --pdfFit crops the PDF page to the diagram instead of emitting Letter.
+  pnpm dlx "@mermaid-js/mermaid-cli@11.4.2" \
     -i "$src" -o "$out" \
     -p "$PUPPETEER_CONFIG" \
-    --size "$width" \
+    --width "$width" \
     --backgroundColor white \
     "${extra[@]}"
 }

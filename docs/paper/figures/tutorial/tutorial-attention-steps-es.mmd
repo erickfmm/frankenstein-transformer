@@ -1,0 +1,27 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart LR
+  subgraph S1["PASO 1 — tres copias de cada palabra"]
+    direction TB
+    words["El · gato · come · pescado"]
+    qq["<b>Q</b> — qué busco"]
+    kk["<b>K</b> — qué anuncio"]
+    vv["<b>V</b> — el contenido que entrego"]
+    words --> qq & kk & vv
+  end
+
+  subgraph S2["PASO 2 — compatibilidad"]
+    direction TB
+    sc["un producto punto por pareja:<br/>s(come→gato) = 3.4<br/>s(come→pescado) = 2.95<br/>s(come→El) = 1.0"]
+  end
+
+  subgraph S3["PASO 3 — enfoque (softmax)"]
+    direction TB
+    sw["los puntajes se vuelven porcentajes:<br/>El 5% · gato 55% · come 5% · pescado 35%<br/>cada fila suma 100%"]
+  end
+
+  subgraph S4["PASO 4 — combinar"]
+    direction TB
+    mix["nuevo <b>come</b> = 5%·V(El) + 55%·V(gato)<br/>+ 5%·V(come) + 35%·V(pescado)"]
+  end
+
+  S1 --> S2 --> S3 --> S4

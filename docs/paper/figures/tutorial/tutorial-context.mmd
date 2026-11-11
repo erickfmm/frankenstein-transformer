@@ -1,0 +1,19 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  alone["<b>The word alone: bank</b><br/>three unrelated meanings"]
+  m1["a financial institution"]
+  m2["a bench to sit on"]
+  m3["the ground beside a river"]
+  alone --> m1
+  alone --> m2
+  alone --> m3
+
+  subgraph ctx["The word inside its sentence — the neighbors vote"]
+    direction LR
+    s1["“The bank was full of people waiting”<br/><b>people + waiting</b> → branch office"]
+    s2["“Mary went to the bank”<br/><b>went to + Mary</b> → office… or riverbank?<br/>both readings stay alive"]
+  end
+
+  verdict["<b>Contextualization</b> — the meaning of every word is<br/>re-read in the light of all the words around it"]
+  alone -. "with context" .-> ctx
+  ctx --> verdict

@@ -1,0 +1,19 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  alone["<b>La palabra sola: banco</b><br/>tres significados sin relación"]
+  m1["una institución financiera"]
+  m2["un asiento para sentarse"]
+  m3["la orilla de un río"]
+  alone --> m1
+  alone --> m2
+  alone --> m3
+
+  subgraph ctx["La palabra dentro de su oración — los vecinos votan"]
+    direction LR
+    s1["“El banco estaba lleno de gente esperando”<br/><b>gente + esperando</b> → sucursal"]
+    s2["“María fue al banco”<br/><b>fue + María</b> → ¿oficina… o río?<br/>ambas lecturas siguen vivas"]
+  end
+
+  verdict["<b>Contextualización</b> — el significado de cada palabra se<br/>relee a la luz de todas las que la rodean"]
+  alone -. "con contexto" .-> ctx
+  ctx --> verdict

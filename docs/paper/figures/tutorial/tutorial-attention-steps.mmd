@@ -1,0 +1,27 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart LR
+  subgraph S1["STEP 1 — three copies of every word"]
+    direction TB
+    words["The · cat · eats · fish"]
+    qq["<b>Q</b> — what I am looking for"]
+    kk["<b>K</b> — what I advertise"]
+    vv["<b>V</b> — the content I deliver"]
+    words --> qq & kk & vv
+  end
+
+  subgraph S2["STEP 2 — compatibility"]
+    direction TB
+    sc["one dot product per pair:<br/>s(eats→cat) = 3.4<br/>s(eats→fish) = 2.95<br/>s(eats→The) = 1.0"]
+  end
+
+  subgraph S3["STEP 3 — focus (softmax)"]
+    direction TB
+    sw["scores become percentages:<br/>The 5% · cat 55% · eats 5% · fish 35%<br/>every row sums to 100%"]
+  end
+
+  subgraph S4["STEP 4 — combine"]
+    direction TB
+    mix["new <b>eats</b> = 5%·V(The) + 55%·V(cat)<br/>+ 5%·V(eats) + 35%·V(fish)"]
+  end
+
+  S1 --> S2 --> S3 --> S4

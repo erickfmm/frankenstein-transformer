@@ -29,6 +29,15 @@ uv run --with matplotlib --with seaborn --with numpy \
 `optimizer-tutorial-flow.mmd` is the only tutorial figure that belongs to the
 Mermaid build; everything else in that folder is Python output.
 
+`tutorial/` holds the figures of the beginner tutorial (Annex 1). The five
+Mermaid diagrams (`tutorial-*.mmd`) exist in English and `-es` Spanish
+variants because the tutorial sentences differ per language (the only
+bilingual figure set in the paper; `docs/paper/` embeds `*.pdf` and
+`docs/paper-es/` embeds `*-es.pdf`). The three matplotlib charts
+(`tut-attention-heatmap`, `tut-softmax-focus`, `tut-complexity-growth`) are
+rendered with their `-es` counterparts by `tutorial/make_tutorial_figures.py`,
+same PDF+SVG convention and rebuild command as the optimizer tutorial above.
+
 `experiments/` holds the figures of the empirical-evaluation section and its
 appendices. `experiments/round2/*.pdf` and `*.svg` are matplotlib charts
 exported by `experimentos/2/report/make_paper_figures.py`, which imports the
@@ -64,6 +73,10 @@ pin a specific browser, use:
 ```bash
 PUPPETEER_EXECUTABLE=/path/to/chrome ./build-figures.sh svg
 ```
+
+The Mermaid CLI is pinned to `@mermaid-js/mermaid-cli@11.4.2` (`--width` +
+`--pdfFit`): 12.x regresses `useMaxWidth:false` diagrams by wrapping every
+label into a ~168px column.
 
 `puppeteer-config.json` is kept for manual runs of `mermaid-cli`; the build
 script generates its own temporary Puppeteer config so it works on machines

@@ -1,0 +1,12 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  sent["One layer reads “The cat eats fish”<br/>with several heads at the same time"]
+  h1["<b>Head 1</b> — the grammar eye<br/><i>cat</i> → <i>eats</i>: who does it?"]
+  h2["<b>Head 2</b> — the object eye<br/><i>eats</i> → <i>fish</i>: what receives it?"]
+  h3["<b>Head 3</b> — the time eye<br/>verb tense: present, a habit"]
+  h4["<b>Head 4</b> — the style eye<br/>articles and modifiers: “the”, “a”…"]
+  join["the four reports are concatenated<br/>and re-mixed by one learned projection"]
+  out["a much richer <i>eats</i>:<br/>grammar + roles + time + style together"]
+  sent --> h1 & h2 & h3 & h4
+  h1 & h2 & h3 & h4 --> join
+  join --> out
