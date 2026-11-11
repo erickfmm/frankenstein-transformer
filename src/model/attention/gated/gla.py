@@ -95,17 +95,17 @@ class GatedLinearAttention(nn.Module):
         """
         params = mixer_params(config, "gla", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.total_dim = self.head_dim * self.num_heads
 
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for GatedLinearAttention")
 
-        gate_low_rank = max(1, int(getattr(config, "gla_gate_low_rank", 16)))
+        gate_low_rank = max(1, int(params.value("gate_low_rank", 16)))
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.q_proj = proj_cls(self.hidden_size, self.total_dim, bias=False)
         self.k_proj = proj_cls(self.hidden_size, self.total_dim, bias=False)
         self.v_proj = proj_cls(self.hidden_size, self.total_dim, bias=False)
@@ -116,8 +116,8 @@ class GatedLinearAttention(nn.Module):
         )
         self.out_proj = proj_cls(self.total_dim, self.hidden_size, bias=False)
         self.norm = nn.LayerNorm(self.total_dim)
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()

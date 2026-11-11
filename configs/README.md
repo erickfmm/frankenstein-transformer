@@ -291,8 +291,8 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - `dropout`: global dropout.
 - `layer_pattern`: list of blocks.
 - `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankenstein_text_decoder`, which forces decoder).
-- Legacy blocks: `retnet`, `mamba`, `ode`, `titan`, `standard`, `sigmoid`.
-- Sparse blocks: `sparse_transformer`, `longformer`, `bigbird`, `sparsek`, `nsa`, `sparge`, `fasa`, `msa` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda` (SparDA, arXiv:2606.04511), `lsa` (Latent Sparse Attention, arXiv:2610.42147), `fastconformer` (Fast Conformer limited-context attention, arXiv:2305.05084).
+- Legacy blocks: `retnet`, `mamba`, `ode`, `standard`, `sigmoid`.
+- Sparse blocks: `sparse_transformer`, `longformer`, `bigbird`, `sparsek`, `nsa`, `sparge`, `fasa`, `msa` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda` (SparDA, arXiv:2606.04511), `lsa` (Latent Sparse Attention, arXiv:2610.42147).
 - Gated blocks: `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa` (First Passage Attention, arXiv:2610.22714), `gated_softmax`, `kda` (Kimi Delta Attention, arXiv:2510.26692).
 - Latent blocks (KV-compression / head-mixing, generalising GQA):
   - `mla` — Multi-Head Latent Attention + RoPE (arXiv:2506.09342).
@@ -304,8 +304,8 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   - `mtla` — Multi-head Temporal Latent Attention, temporal KV merge (arXiv:2505.13544).
   - `cca` — Compressed Convolutional Attention, attention in compressed latent + convs (arXiv:2510.04476).
   - `ccgqa` — Compressed Convolutional Grouped Query Attention, CCA + decoupled GQA in latent (arXiv:2510.04476).
-- Convolution-augmented: `conformer` — Conformer, macaron FFN₁ + MHSA + convolution module (arXiv:2005.08100).
-- Memory blocks: `memory` — Memory Attention, token-ID memory values `V = K + Norm(E[s])` replacing the value projection (arXiv:2609.28399).
+- Convolution-augmented: `conformer` — Conformer, macaron FFN₁ + MHSA + convolution module (arXiv:2005.08100); `fastconformer` — Fast Conformer limited-context attention, local window + head-pinned global token (arXiv:2305.05084).
+- Memory blocks: `titan` — Titans attention window (the neural-memory module is not implemented, arXiv:2501.00663); `engram` — conditional N-gram memory lookup (arXiv:2601.07372); `memory` — Memory Attention, token-ID memory values `V = K + Norm(E[s])` replacing the value projection (arXiv:2609.28399).
 - Training-free policy: `sparge` and `fasa` are eval-only; training mode raises an explicit runtime error.
 
 #### model.norm

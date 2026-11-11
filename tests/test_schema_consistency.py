@@ -275,15 +275,45 @@ _DEFAULT_PAIRS = {
 }
 
 
+def _resolve_default(config, schema_path):
+    """Resolve the runtime default for a schema path (nested blocks)."""
+    from collections.abc import Mapping
+
+    from src.model.config import AudioConfig, ImageConfig
+
+    parts = [part for part in schema_path.split(".") if part != "properties"]
+    if parts[0] in {"model"}:
+        parts = parts[1:]
+    node = config
+    for part in parts:
+        if isinstance(node, Mapping):
+            if part in node:
+                node = node[part]
+                continue
+            if parts[0] == "attention" and len(parts) >= 3:
+                from src.registry import ComponentFamily, ensure_builtins, registry
+
+                ensure_builtins()
+                spec = registry.get(ComponentFamily.MIXER, parts[1])
+                return dict(spec.defaults).get(parts[-1])
+            return object()
+        if part == "audio" and node is config and config.audio is None:
+            node = AudioConfig()
+            continue
+        if part == "image" and node is config and config.image is None:
+            node = ImageConfig()
+            continue
+        node = getattr(node, part)
+    return node
+
+
 def test_schema_defaults_match_dataclass(schema):
-    config = FrankensteinModelConfig.from_flat()
+    config = FrankensteinModelConfig.from_dict({})
     mismatches = []
     for schema_path, attribute in _DEFAULT_PAIRS.items():
         field_schema = _at(schema, schema_path)
         assert "default" in field_schema, f"{schema_path} has no declared default"
-        expected = config
-        for part in attribute.split("."):
-            expected = getattr(expected, part)
+        expected = _resolve_default(config, schema_path)
         if field_schema["default"] != expected:
             mismatches.append((schema_path, field_schema["default"], expected))
     assert not mismatches, mismatches

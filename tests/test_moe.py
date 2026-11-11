@@ -17,7 +17,7 @@ import math
 import pytest
 import torch
 
-from src.model.config import FrankensteinModelConfig
+from src.model.config import FrankensteinModelConfig, merge_model_blocks
 from src.model.hybrid_layer import HybridLayer
 from src.model.moe.balancing import load_balancing_loss, max_vio
 from src.model.moe.layer import MoELayer
@@ -27,23 +27,9 @@ from src.utils.param_categories import categorize_param
 
 
 def _config(**overrides) -> FrankensteinModelConfig:
-    values = dict(
-        vocab_size=100,
-        hidden_size=32,
-        num_layers=2,
-        num_loops=1,
-        num_heads=4,
-        layer_pattern=["standard", "standard"],
-        dropout=0.0,
-        use_bitnet=False,
-        norm_type="layer_norm",
-        ffn_hidden_size=64,
-        use_moe=True,
-        num_experts=4,
-        top_k_experts=2,
-    )
-    values.update(overrides)
-    return FrankensteinModelConfig.from_flat(**values)
+    values = {"dims": {"vocab_size": 100, "hidden_size": 32, "num_layers": 2, "num_loops": 1, "num_heads": 4, "layer_pattern": ['standard', 'standard'], "dropout": 0.0}, "bitnet": {"enabled": False}, "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}, "moe": {"enabled": True, "num_experts": 4, "top_k": 2}}
+    values = merge_model_blocks(values, overrides)
+    return FrankensteinModelConfig.from_dict({**values})
 
 
 def _expert_factory(intermediate_size, in_out_size, clamp):
@@ -64,51 +50,49 @@ def _expert_factory(intermediate_size, in_out_size, clamp):
 
 def test_softmax_top1_auto_enables_pre_softmax():
     with pytest.warns(UserWarning, match="pre_softmax"):
-        cfg = _config(top_k_experts=1)
-    assert cfg.moe_router_pre_softmax is True
+        cfg = _config(moe={'top_k': 1})
+    assert cfg.moe.router.pre_softmax is True
 
-    cfg = _config(top_k_experts=1, moe_router_pre_softmax=True)
-    assert cfg.moe_router_pre_softmax is True
+    cfg = _config(moe={'top_k': 1, 'router': {'pre_softmax': True}})
+    assert cfg.moe.router.pre_softmax is True
 
 
 def test_bias_requires_non_softmax_scoring():
     with pytest.raises(ValueError, match="bias_update"):
-        _config(moe_bias_update="sign")
-    cfg = _config(moe_router_scoring="sigmoid", moe_bias_update="sign")
-    assert cfg.moe_bias_update == "sign"
+        _config(moe={'balancing': {'bias_update': 'sign'}})
+    cfg = _config(moe={'router': {'scoring': 'sigmoid'}, 'balancing': {'bias_update': 'sign'}})
+    assert cfg.moe.balancing.bias_update == "sign"
 
 
 def test_expert_choice_forbids_balancing():
     with pytest.raises(ValueError, match="self-balancing"):
-        _config(moe_routing_type="expert_choice")
-    cfg = _config(moe_routing_type="expert_choice", moe_aux_loss_type="none")
-    assert cfg.moe_routing_type == "expert_choice"
+        _config(moe={'routing': {'type': 'expert_choice'}})
+    cfg = _config(moe={'routing': {'type': 'expert_choice'}, 'balancing': {'aux_loss': 'none'}})
+    assert cfg.moe.routing.type == "expert_choice"
 
 
 def test_hash_layers_require_token_choice_and_no_bias():
     with pytest.raises(ValueError, match="token_choice"):
-        _config(moe_routing_type="expert_choice", moe_aux_loss_type="none",
-                moe_hash_layers=1)
+        _config(moe={'routing': {'type': 'expert_choice', 'hash_layers': 1}, 'balancing': {'aux_loss': 'none'}})
     with pytest.raises(ValueError, match="bias"):
-        _config(moe_router_scoring="sigmoid", moe_bias_update="sign",
-                moe_hash_layers=1)
+        _config(moe={'router': {'scoring': 'sigmoid'}, 'balancing': {'bias_update': 'sign'}, 'routing': {'hash_layers': 1}})
 
 
 def test_latent_requires_valid_dim():
     with pytest.raises(ValueError, match="latent"):
-        _config(moe_latent_enabled=True)
+        _config(moe={'latent': {'enabled': True}})
     with pytest.raises(ValueError, match="latent_dim"):
-        _config(moe_latent_enabled=True, moe_latent_dim=32)
-    cfg = _config(moe_latent_enabled=True, moe_latent_dim=16)
-    assert cfg.moe_latent_dim == 16
+        _config(moe={'latent': {'enabled': True, 'dim': 32}})
+    cfg = _config(moe={'latent': {'enabled': True, 'dim': 16}})
+    assert cfg.moe.latent.dim == 16
 
 
 def test_layout_mask():
-    cfg = _config(num_layers=5, moe_dense_layers=1, moe_layer_frequency=2)
+    cfg = _config(dims={'num_layers': 5}, moe={'layout': {'dense_layers': 1, 'every_n_layers': 2}})
     assert cfg.moe_layer_mask() == [False, True, False, True, False]
     assert cfg.moe_layer_count() == 2
 
-    dense = _config(num_layers=3, use_moe=False)
+    dense = _config(dims={'num_layers': 3}, moe={'enabled': False})
     assert dense.moe_layer_mask() == [False, False, False]
 
 
@@ -132,7 +116,7 @@ def _router(**overrides):
         bias_update="none",
         bias_update_rate=0.0,
     )
-    values.update(overrides)
+    values = merge_model_blocks(values, overrides)
     torch.manual_seed(0)
     return MoERouter(**values)
 
@@ -207,11 +191,7 @@ def test_centered_sign_update_keeps_zero_mean():
 
 
 def test_bias_update_frozen_in_eval():
-    model = _config(
-        moe_router_scoring="sigmoid",
-        moe_bias_update="sign",
-        moe_bias_update_rate=0.1,
-    )
+    model = _config(moe={'router': {'scoring': 'sigmoid'}, 'balancing': {'bias_update': 'sign', 'bias_update_rate': 0.1}})
     encoder = FrankensteinEncoder(model)
     encoder.eval()
     encoder(torch.randint(0, 100, (2, 8)))
@@ -268,11 +248,7 @@ def _layer(config, **kwargs):
 
 
 def test_shared_experts_and_gate():
-    cfg = _config(
-        moe_shared_experts_count=1,
-        moe_shared_expert_hidden_size=64,
-        moe_shared_expert_gate="sigmoid",
-    )
+    cfg = _config(moe={'shared': {'count': 1, 'hidden_size': 64, 'gate': 'sigmoid'}})
     layer = _layer(cfg)
     assert len(layer.shared_experts) == 1
     gate = torch.sigmoid(layer.shared_gate_proj(torch.randn(5, 32)))
@@ -280,11 +256,7 @@ def test_shared_experts_and_gate():
 
 
 def test_latent_projection_shapes_and_norm():
-    cfg = _config(
-        moe_latent_enabled=True,
-        moe_latent_dim=16,
-        moe_latent_norm_before_up_proj=True,
-    )
+    cfg = _config(moe={'latent': {'enabled': True, 'dim': 16, 'norm_before_up_proj': True}})
     layer = _layer(cfg)
     assert layer.latent_down_proj.in_features == 32
     assert layer.latent_down_proj.out_features == 16
@@ -297,7 +269,7 @@ def test_latent_projection_shapes_and_norm():
 
 
 def test_capacity_factor_drops_tokens():
-    cfg = _config(moe_capacity_factor=0.6)
+    cfg = _config(moe={'routing': {'capacity_factor': 0.6}})
     layer = _layer(cfg)
     out = layer(torch.randn(2, 8, 32))
     assert out.shape == (2, 8, 32)
@@ -306,14 +278,14 @@ def test_capacity_factor_drops_tokens():
 
 
 def test_expert_choice_balances_load():
-    cfg = _config(moe_routing_type="expert_choice", moe_aux_loss_type="none")
+    cfg = _config(moe={'routing': {'type': 'expert_choice'}, 'balancing': {'aux_loss': 'none'}})
     layer = _layer(cfg)
     layer(torch.randn(1, 8, 32))
     assert layer.last_moe_stats["max_vio"] == pytest.approx(0.0)
 
 
 def test_hash_layers_are_context_free():
-    cfg = _config(moe_hash_layers=1)
+    cfg = _config(moe={'routing': {'hash_layers': 1}})
     layer = _layer(cfg, use_hash=True)
     table = layer.tid2eid
     assert table.shape == (100, 2)
@@ -331,14 +303,14 @@ def test_hash_layers_are_context_free():
 
 
 def test_hash_layers_require_input_ids():
-    cfg = _config(moe_hash_layers=1)
+    cfg = _config(moe={'routing': {'hash_layers': 1}})
     layer = _layer(cfg, use_hash=True)
     with pytest.raises(ValueError, match="input_ids"):
         layer(torch.randn(1, 2, 32))
 
 
 def test_activation_clamp_bounds_experts():
-    cfg = _config(moe_activation_clamp=0.5, ffn_activation="swiglu")
+    cfg = _config(moe={'experts': {'activation_clamp': 0.5}}, ffn={'activation': 'swiglu'})
     hybrid = HybridLayer(cfg, layer_type="standard", layer_index=0)
     expert = hybrid.moe_layer.experts[0]
     assert expert.clamp_value == pytest.approx(0.5)
@@ -348,11 +320,10 @@ def test_activation_clamp_bounds_experts():
 
 
 def test_layer_layout_builds_routers_on_expected_layers():
-    cfg = _config(num_layers=4, moe_dense_layers=1, moe_layer_frequency=2,
-                  layer_pattern=["standard"] * 4)
+    cfg = _config(dims={'num_layers': 4, 'layer_pattern': ['standard'] * 4}, moe={'layout': {'dense_layers': 1, 'every_n_layers': 2}})
     layers = [
         HybridLayer(cfg, layer_type="standard", layer_index=i)
-        for i in range(cfg.num_layers)
+        for i in range(cfg.dims.num_layers)
     ]
     assert [layer.use_moe for layer in layers] == [False, True, False, True]
     assert layers[0].moe_layer is None
@@ -361,16 +332,10 @@ def test_layer_layout_builds_routers_on_expected_layers():
 
 
 def test_hash_layers_follow_first_moe_layers():
-    cfg = _config(
-        num_layers=4,
-        moe_dense_layers=1,
-        moe_layer_frequency=1,
-        moe_hash_layers=2,
-        layer_pattern=["standard"] * 4,
-    )
+    cfg = _config(dims={'num_layers': 4, 'layer_pattern': ['standard'] * 4}, moe={'layout': {'dense_layers': 1, 'every_n_layers': 1}, 'routing': {'hash_layers': 2}})
     layers = [
         HybridLayer(cfg, layer_type="standard", layer_index=i)
-        for i in range(cfg.num_layers)
+        for i in range(cfg.dims.num_layers)
     ]
     assert [layer.use_hash for layer in layers] == [False, True, True, False]
 
@@ -423,36 +388,46 @@ def test_param_categories_cover_moe_modules():
 def test_transformers_export_contains_moe_block():
     from src.deploy.transformers_export import _build_transformers_config
 
-    flat = {
-        "use_moe": True,
-        "num_experts": 256,
-        "top_k_experts": 8,
-        "moe_expert_hidden_size": 2048,
-        "moe_router_scoring": "sigmoid",
-        "moe_router_renormalize": True,
-        "moe_routed_scaling_factor": 2.5,
-        "moe_shared_experts_count": 1,
-        "moe_dense_layers": 3,
-        "moe_bias_update": "sign",
-        "moe_aux_loss_type": "sequence",
-        "moe_aux_loss_coeff": 1e-4,
-        "moe_latent_enabled": True,
-        "moe_latent_dim": 3584,
-        "moe_latent_norm_before_up_proj": True,
-        "moe_layer_frequency": 1,
-        "moe_routing_type": "token_choice",
-        "moe_capacity_factor": 0.0,
-        "moe_hash_layers": 0,
-        "moe_router_dtype": "float32",
-        "moe_router_z_loss_coeff": 0.0,
-        "moe_router_pre_softmax": False,
-        "moe_shared_expert_hidden_size": 2048,
-        "moe_shared_expert_gate": "none",
-        "moe_activation_clamp": 0.0,
-        "moe_bias_update_rate": 1e-3,
-        "ffn_hidden_size": 18432,
+    model_block = {
+        "dims": {"layer_pattern": ["standard"]},
+        "ffn": {"hidden_size": 18432},
+        "moe": {
+            "enabled": True,
+            "num_experts": 256,
+            "top_k": 8,
+            "expert_hidden_size": 2048,
+            "router": {
+                "scoring": "sigmoid",
+                "renormalize": True,
+                "routed_scaling_factor": 2.5,
+                "pre_softmax": False,
+                "dtype": "float32",
+                "z_loss_coeff": 0.0,
+            },
+            "shared": {"count": 1, "hidden_size": 2048, "gate": "none"},
+            "layout": {"dense_layers": 3, "every_n_layers": 1},
+            "balancing": {
+                "bias_update": "sign",
+                "aux_loss": "sequence",
+                "aux_loss_coeff": 1e-4,
+                "bias_update_rate": 1e-3,
+            },
+            "latent": {
+                "enabled": True,
+                "dim": 3584,
+                "norm_before_up_proj": True,
+            },
+            "routing": {
+                "type": "token_choice",
+                "capacity_factor": 0.0,
+                "hash_layers": 0,
+            },
+            "num_experts": 256,
+            "top_k": 8,
+            "experts": {"activation_clamp": 0.0},
+        },
     }
-    payload = _build_transformers_config(flat, "frankenstein_text_decoder", "mlm", "X")
+    payload = _build_transformers_config(model_block, "frankenstein_text_decoder", "mlm", "X")
     moe = payload["moe"]
     assert moe["num_experts"] == 256
     assert moe["num_experts_per_tok"] == 8

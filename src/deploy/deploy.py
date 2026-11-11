@@ -103,7 +103,7 @@ class ModelDeployer:
 
         ``config.model_class`` is the primary discriminator because every
         :class:`FrankensteinModelConfig` instance carries all modality
-        fields (``audio_feature``, ``patch_size``, ...) — ``hasattr`` alone
+        blocks (``audio``, ``image``) are optional — ``hasattr`` alone
         cannot tell an audio config from a text one.
 
         Args:
@@ -113,7 +113,7 @@ class ModelDeployer:
             A ``FrankensteinDecoder``, ``FrankensteinViT``,
             ``FrankensteinAudio`` or plain :class:`FrankensteinEncoder`.
         """
-        if getattr(config, "mode", "encoder") == "decoder":
+        if getattr(config.dims, "mode", "encoder") == "decoder":
             return FrankensteinDecoder(config)
         recorded = str(getattr(config, "model_class", None) or "").strip().lower()
         if recorded == "frankenstein_audio":
@@ -123,9 +123,7 @@ class ModelDeployer:
             from ..model.frankenstein_vit import FrankensteinViT
             return FrankensteinViT(config)
         # Vision Transformer: detect via patch_size > 0 and in_channels present.
-        if getattr(config, "image", None) is not None and getattr(
-            config, "pos_embedding_type", ""
-        ) in ("learned_1d", "none"):
+        if getattr(config, "image", None) is not None and getattr(config.image, "pos_embedding_type", "") in ("learned_1d", "none"):
             from ..model.frankenstein_vit import FrankensteinViT
             return FrankensteinViT(config)
         return FrankensteinEncoder(config)
@@ -207,8 +205,8 @@ class ModelDeployer:
         # Set model to eval mode
         self.model.eval()
 
-        use_bitnet = bool(getattr(self.config, "use_bitnet", False))
-        bitnet_routers = bool(getattr(self.config, "bitnet_routers", False))
+        use_bitnet = bool(getattr(self.config.bitnet, "enabled", False))
+        bitnet_routers = bool(getattr(self.config.bitnet, "routers", False))
 
         # Optionally bake ternary weights before quantizing so the packed
         # representation is faithful ({-1, 0, 1} * scale).
@@ -244,8 +242,8 @@ class ModelDeployer:
             
             additional_data = {
                 'config': config_dict,
-                'vocab_size': self.config.vocab_size,
-                'hidden_size': self.config.hidden_size,
+                'vocab_size': self.config.dims.vocab_size,
+                'hidden_size': self.config.dims.hidden_size,
                 'use_bitnet': use_bitnet,
                 'bitnet_routers': bitnet_routers,
             }
@@ -324,38 +322,38 @@ class ModelDeployer:
         if model_class == "frankenstein_vit":
             pixels = torch.rand(
                 2,
-                int(getattr(cfg, "in_channels", 3)),
-                int(getattr(cfg, "image_height", 224)),
-                int(getattr(cfg, "image_width", 224)),
+                int(cfg.image.in_channels),
+                int(cfg.image.height),
+                int(cfg.image.width),
                 device=self.device,
             )
             vit_task = task if task in ("classification", "patch_prediction", "segmentation") else "classification"
             return pixels, {"task": vit_task}
 
         if model_class == "frankenstein_audio":
-            length = int(getattr(cfg, "audio_sample_rate", 16000))
-            if str(getattr(cfg, "audio_feature", "logmel")).lower() == "raw":
+            length = int(cfg.audio.sample_rate)
+            if str(cfg.audio.feature).lower() == "raw":
                 waveform = torch.randn(
-                    2, length, int(getattr(cfg, "audio_in_channels", 1)),
+                    2, length, int(cfg.audio.in_channels),
                     device=self.device,
                 )
             else:
                 waveform = torch.randn(2, length, device=self.device)
             audio_task = task if task in ("asr", "audio_classification", "mlm") else "audio_classification"
             kwargs = {"task": audio_task}
-            if audio_task == "asr" and str(getattr(cfg, "asr_loss", "ctc")).lower() == "transducer":
+            if audio_task == "asr" and str(cfg.audio.asr_loss).lower() == "transducer":
                 kwargs["target_ids"] = torch.zeros((2, 4), dtype=torch.long, device=self.device)
             return waveform, kwargs
 
         # Text encoder/decoder: token ids. SSOG requires seq_len == grid_h *
         # grid_w, so honor the configured raster instead of the default 64.
         seq_len = 64
-        if "ssog" in (getattr(cfg, "layer_pattern", None) or []):
-            seq_len = int(getattr(cfg, "ssog_grid_h", 1)) * int(
-                getattr(cfg, "ssog_grid_w", seq_len)
+        if "ssog" in (getattr(cfg.dims, "layer_pattern", None) or []):
+            seq_len = int((cfg.attention.get("ssog") or {}).get("grid_h", 1)) * int(
+                (cfg.attention.get("ssog") or {}).get("grid_w", seq_len)
             )
         ids = torch.randint(
-            0, max(2, int(cfg.vocab_size)), (2, seq_len), device=self.device
+            0, max(2, int(cfg.dims.vocab_size)), (2, seq_len), device=self.device
         )
         return ids, {}
 
@@ -496,7 +494,7 @@ def main(argv=None):
             )
     else:
         # Use default config
-        config = FrankensteinModelConfig.from_flat()
+        config = FrankensteinModelConfig()
     
     # Create deployer
     deployer = ModelDeployer(config, device=resolved_device, task=args.task)

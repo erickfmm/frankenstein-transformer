@@ -6,7 +6,7 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.attention.gated import (
         GatedLinearAttention,
         DeltaNetAttention,
@@ -20,29 +20,9 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(**overrides):
-    base = dict(
-        vocab_size=64,
-        hidden_size=48,
-        num_layers=1,
-        num_loops=1,
-        num_heads=6,
-        retention_heads=6,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        use_moe=False,
-        ode_solver="rk4",
-        ode_steps=1,
-        ffn_hidden_size=96,
-        ffn_activation="gelu",
-        positional_encoding="hope",
-        mode="encoder",
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": 64, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}, "positional_encoding": 'hope'}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 BSZ, SEQ, DIM = 2, 8, 48
@@ -59,7 +39,7 @@ class GatedLinearAttentionTests(unittest.TestCase):
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_mode(self):
-        attn = GatedLinearAttention(_cfg(mode="decoder"))
+        attn = GatedLinearAttention(_cfg(dims={'mode': 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
@@ -70,7 +50,7 @@ class GatedLinearAttentionTests(unittest.TestCase):
 
     def test_invalid_hidden_raises(self):
         with self.assertRaises(ValueError):
-            GatedLinearAttention(_cfg(hidden_size=50, num_heads=6))
+            GatedLinearAttention(_cfg(dims={'hidden_size': 50, 'num_heads': 6}))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -80,7 +60,7 @@ class DeltaNetAttentionTests(unittest.TestCase):
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_mode(self):
-        attn = DeltaNetAttention(_cfg(mode="decoder"))
+        attn = DeltaNetAttention(_cfg(dims={'mode': 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
@@ -136,11 +116,11 @@ class FirstPassageAttentionTests(unittest.TestCase):
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_output_shape(self):
-        attn = FirstPassageAttention(_cfg(mode="decoder"))
+        attn = FirstPassageAttention(_cfg(dims={'mode': 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_output_is_finite(self):
-        attn = FirstPassageAttention(_cfg(mode="decoder")).eval()
+        attn = FirstPassageAttention(_cfg(dims={'mode': 'decoder'})).eval()
         out = attn(_x())
         self.assertTrue(torch.isfinite(out).all())
 
@@ -151,13 +131,13 @@ class FirstPassageAttentionTests(unittest.TestCase):
         self.assertIsNotNone(x.grad)
 
     def test_knobs_honored(self):
-        attn = FirstPassageAttention(_cfg(fpa_beta_init=2.5, fpa_tau=0.5))
+        attn = FirstPassageAttention(_cfg(attention={'fpa': {'beta_init': 2.5, 'tau': 0.5}}))
         self.assertTrue(torch.allclose(attn.beta, torch.full((6,), 2.5)))
         self.assertEqual(attn.tau, 0.5)
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_bitnet_on(self):
-        attn = FirstPassageAttention(_cfg(use_bitnet=True))
+        attn = FirstPassageAttention(_cfg(bitnet={'enabled': True}))
         out = attn(_x())
         self.assertEqual(out.shape, (BSZ, SEQ, DIM))
         self.assertTrue(torch.isfinite(out).all())
@@ -222,7 +202,7 @@ class GatedSoftmaxAttentionTests(unittest.TestCase):
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_output_shape(self):
-        attn = GatedSoftmaxAttention(_cfg(mode="decoder"))
+        attn = GatedSoftmaxAttention(_cfg(dims={'mode': 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
@@ -239,7 +219,7 @@ class KDAAttentionTests(unittest.TestCase):
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_mode(self):
-        attn = KDAAttention(_cfg(mode="decoder"))
+        attn = KDAAttention(_cfg(dims={'mode': 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
@@ -250,7 +230,7 @@ class KDAAttentionTests(unittest.TestCase):
 
     def test_invalid_hidden_raises(self):
         with self.assertRaises(ValueError):
-            KDAAttention(_cfg(hidden_size=50, num_heads=6))
+            KDAAttention(_cfg(dims={'hidden_size': 50, 'num_heads': 6}))
 
 
 if __name__ == "__main__":

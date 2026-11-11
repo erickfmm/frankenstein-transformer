@@ -26,24 +26,7 @@ from src.model.frankenstein_encoder import FrankensteinEncoder
 
 
 def _config(use_bitnet: bool = False) -> FrankensteinModelConfig:
-    return FrankensteinModelConfig.from_flat(
-        vocab_size=32,
-        hidden_size=64,
-        num_layers=2,
-        num_loops=1,
-        layer_pattern=["standard", "gqa"],
-        num_heads=4,
-        num_kv_heads=2,
-        retention_heads=4,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        use_moe=False,
-        use_bitnet=use_bitnet,
-        norm_type="layer_norm",
-        ffn_hidden_size=128,
-        mode="encoder",
-    )
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 32, "hidden_size": 64, "num_layers": 2, "num_loops": 1, "layer_pattern": ['standard', 'gqa'], "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "mode": 'encoder'}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "bitnet": {"enabled": use_bitnet}, "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 128}})
 
 
 def _load_export(export_dir: Path):

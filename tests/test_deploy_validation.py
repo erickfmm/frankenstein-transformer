@@ -21,92 +21,15 @@ from src.model.frankenstein_vit import FrankensteinViT
 
 
 def _text_config():
-    return FrankensteinModelConfig.from_flat(
-        vocab_size=100,
-        hidden_size=64,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        num_kv_heads=2,
-        retention_heads=4,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        layer_pattern=["standard"],
-        norm_type="layer_norm",
-        use_bitnet=False,
-        use_moe=False,
-        use_mixture_of_depths=False,
-        ffn_hidden_size=64,
-        ffn_activation="gelu",
-        mode="encoder",
-        model_class="frankenstein_text_encoder",
-    )
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 64, "num_layers": 1, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "mixture_of_depths": {"enabled": False}, "ffn": {"hidden_size": 64, "activation": 'gelu'}, "model_class": 'frankenstein_text_encoder'})
 
 
 def _vit_config(task):
-    return FrankensteinModelConfig.from_flat(
-        vocab_size=100,
-        hidden_size=64,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        num_kv_heads=2,
-        retention_heads=4,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        layer_pattern=["standard"],
-        norm_type="layer_norm",
-        use_bitnet=False,
-        use_moe=False,
-        use_mixture_of_depths=False,
-        ffn_hidden_size=64,
-        ffn_activation="gelu",
-        mode="encoder",
-        model_class="frankenstein_vit",
-        image_height=32,
-        image_width=32,
-        patch_size=16,
-        in_channels=3,
-        num_classes=2,
-        num_seg_classes=2,
-        mask_ratio=0.5,
-        prediction_target="mean_color_3bit",
-        cls_token=True,
-        pooling_mode="cls",
-        pos_embedding_type="learned_1d",
-    )
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 64, "num_layers": 1, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "mixture_of_depths": {"enabled": False}, "ffn": {"hidden_size": 64, "activation": 'gelu'}, "model_class": 'frankenstein_vit', "image": {"height": 32, "width": 32, "patch_size": 16, "in_channels": 3, "num_seg_classes": 2, "mask_ratio": 0.5, "prediction_target": 'mean_color_3bit', "cls_token": True, "pos_embedding_type": 'learned_1d'}, "num_classes": 2, "pooling_mode": 'cls'})
 
 
 def _audio_config(feature="raw", asr_loss="ctc"):
-    return FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=32,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        num_kv_heads=2,
-        retention_heads=4,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        layer_pattern=["standard"],
-        norm_type="layer_norm",
-        use_bitnet=False,
-        use_moe=False,
-        use_mixture_of_depths=False,
-        ffn_hidden_size=32,
-        ffn_activation="gelu",
-        mode="encoder",
-        model_class="frankenstein_audio",
-        audio_feature=feature,
-        audio_in_channels=8,
-        audio_sample_rate=8000,
-        audio_conv_channels=16,
-        num_classes=3,
-        asr_loss=asr_loss,
-    )
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 1, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "mixture_of_depths": {"enabled": False}, "ffn": {"hidden_size": 32, "activation": 'gelu'}, "model_class": 'frankenstein_audio', "audio": {"feature": feature, "in_channels": 8, "sample_rate": 8000, "conv_channels": 16, "asr_loss": asr_loss}, "num_classes": 3})
 
 
 # ---------------------------------------------------------------------------

@@ -57,7 +57,6 @@ from src.deploy.inference import FrankensteinInference  # noqa: E402
 from src.engine import build_model  # noqa: E402
 from src.model.config import FrankensteinModelConfig  # noqa: E402
 from src.training.config_loader import load_training_config  # noqa: E402
-from src.utils.config_flatten import flatten_model_dict  # noqa: E402
 
 TEXT_MODEL_CLASSES = {
     "frankenstein_text_encoder",
@@ -183,7 +182,7 @@ def _load_raw_model(deploy_dir: Path, model_class: str, device: str) -> torch.nn
     """
     config_dict = json.loads((deploy_dir / "config.json").read_text(encoding="utf-8"))
     config_dict.pop("inference", None)
-    config = FrankensteinModelConfig.from_flat(**flatten_model_dict(config_dict))
+    config = FrankensteinModelConfig.from_dict(config_dict)
     model = build_model(model_class, config)
 
     model_files = sorted(deploy_dir.glob("model*.pt"))

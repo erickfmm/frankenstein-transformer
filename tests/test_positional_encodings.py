@@ -534,13 +534,7 @@ class LearnedAbsolutePETests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class BuildPosEncoderFactoryTests(unittest.TestCase):
     def _cfg(self, pe):
-        return FrankensteinModelConfig.from_flat(
-            vocab_size=100, hidden_size=48, num_layers=1, num_loops=1,
-            num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-            dropout=0.0, layer_pattern=["standard"], use_bitnet=False,
-            norm_type="layer_norm", use_moe=False, ffn_activation="gelu",
-            positional_encoding=pe,
-        )
+        return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 4, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "bitnet": {"enabled": False}, "norm": {"type": 'layer_norm'}, "ffn": {"activation": 'gelu'}, "positional_encoding": pe})
 
     def test_build_rope(self):
         from src.model.embeddings.rope import RoPE

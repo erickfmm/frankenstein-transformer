@@ -98,7 +98,7 @@ class YamlExamplesContentTests(unittest.TestCase):
 
     def test_all_gated_muon_layer_pattern_has_all_six_gated_types(self):
         cfg = self._load("es_arch_all_gated_muon.yaml")
-        pattern = set(cfg.model_config.layer_pattern)
+        pattern = set(cfg.model_config.dims.layer_pattern)
         for lt in ("gla", "deltanet", "gated_deltanet",
                    "gated_deltanet2",
                    "hgrn2", "fox", "gated_softmax"):
@@ -130,20 +130,20 @@ class YamlExamplesContentTests(unittest.TestCase):
 
     def test_sparse_longformer_layer_pattern(self):
         cfg = self._load("es_arch_sparse_longformer_adamw.yaml")
-        for lt in cfg.model_config.layer_pattern:
+        for lt in cfg.model_config.dims.layer_pattern:
             self.assertIn(lt, {"sparse_transformer", "longformer"})
 
     def test_decoder_gated_mixed_mode_is_decoder(self):
         cfg = self._load("decoder_gated_mixed_adamw.yaml")
-        self.assertEqual(cfg.model_config.mode, "decoder")
+        self.assertEqual(cfg.model_config.dims.mode, "decoder")
 
     def test_hgrn2_fox_gated_softmax_norm_is_dynamic_tanh(self):
         cfg = self._load("es_arch_hgrn2_fox_gated_softmax_adamw.yaml")
-        self.assertEqual(cfg.model_config.norm_type, "dynamic_tanh")
+        self.assertEqual(cfg.model_config.norm.type, "dynamic_tanh")
 
     def test_gpt_like_decoder_mode_decoder(self):
         cfg = self._load("decoder_gpt_like.yaml")
-        self.assertEqual(cfg.model_config.mode, "decoder")
+        self.assertEqual(cfg.model_config.dims.mode, "decoder")
 
     def test_llama_like_decoder_rope(self):
         cfg = self._load("decoder_llama_like.yaml")
@@ -155,18 +155,18 @@ class YamlExamplesContentTests(unittest.TestCase):
 
     def test_moe_titan_has_use_moe_true(self):
         cfg = self._load("es_arch_moe_titan_ademamix.yaml")
-        self.assertTrue(cfg.model_config.use_moe)
+        self.assertTrue(cfg.model_config.moe.enabled)
 
     def test_bitnet_factorized_uses_bitnet(self):
         cfg = self._load("es_arch_bitnet_factorized_mars_adamw.yaml")
-        self.assertTrue(cfg.model_config.use_bitnet)
+        self.assertTrue(cfg.model_config.bitnet.enabled)
 
     def test_bitnet_decoder_uses_bitnet_and_routers_false(self):
         cfg = self._load("bitnet_decoder.yaml")
-        self.assertTrue(cfg.model_config.use_bitnet)
-        self.assertFalse(cfg.model_config.bitnet_routers)
-        self.assertFalse(cfg.model_config.use_bitnet_conv)
-        self.assertEqual(cfg.model_config.mode, "decoder")
+        self.assertTrue(cfg.model_config.bitnet.enabled)
+        self.assertFalse(cfg.model_config.bitnet.routers)
+        self.assertFalse(cfg.model_config.bitnet.conv)
+        self.assertEqual(cfg.model_config.dims.mode, "decoder")
         self.assertEqual(cfg.model_class, "frankenstein_text_decoder")
 
     def test_pe_rope_config(self):
@@ -184,17 +184,17 @@ class YamlExamplesContentTests(unittest.TestCase):
     def test_pe_bam_config(self):
         cfg = self._load("pe_bam.yaml")
         self.assertEqual(cfg.model_config.positional_encoding, "bam")
-        self.assertFalse(cfg.model_config.use_ssmax)
+        self.assertFalse(cfg.model_config.ssmax.enabled)
 
     def test_pe_bam_ssmax_config(self):
         cfg = self._load("pe_bam_ssmax.yaml")
         self.assertEqual(cfg.model_config.positional_encoding, "bam")
-        self.assertTrue(cfg.model_config.use_ssmax)
+        self.assertTrue(cfg.model_config.ssmax.enabled)
 
     def test_pe_alibi_ssmax_config(self):
         cfg = self._load("pe_alibi_ssmax.yaml")
         self.assertEqual(cfg.model_config.positional_encoding, "alibi")
-        self.assertTrue(cfg.model_config.use_ssmax)
+        self.assertTrue(cfg.model_config.ssmax.enabled)
 
     def test_pe_pape_config(self):
         cfg = self._load("pe_pape.yaml")

@@ -86,12 +86,12 @@ class MSAAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "msa", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for MSAAttention")
-        self.num_kv_heads = int(getattr(config, "num_kv_heads", max(1, self.num_heads // 8)))
+        self.num_kv_heads = int(getattr(config.dims, "num_kv_heads", max(1, self.num_heads // 8)))
         if self.num_heads % self.num_kv_heads != 0:
             raise ValueError("num_kv_heads must divide num_heads for MSAAttention")
         self.group_size = self.num_heads // self.num_kv_heads
@@ -100,8 +100,8 @@ class MSAAttention(nn.Module):
         self.index_dim = int(params.value("index_dim", 64))
         self.kl_loss_weight = float(params.value("kl_loss_weight", 0.0))
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
-        router_cls = BitLinear if (config.use_bitnet and getattr(config, "bitnet_routers", False)) else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
+        router_cls = BitLinear if (config.bitnet.enabled and getattr(config.bitnet, "routers", False)) else nn.Linear
         kv_dim = self.num_kv_heads * self.head_dim
         self.q_proj = proj_cls(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = proj_cls(self.hidden_size, kv_dim, bias=False)
@@ -109,8 +109,8 @@ class MSAAttention(nn.Module):
         self.out_proj = proj_cls(self.num_heads * self.head_dim, self.hidden_size, bias=False)
         self.q_idx_proj = router_cls(self.hidden_size, self.num_kv_heads * self.index_dim, bias=False)
         self.k_idx_proj = router_cls(self.hidden_size, self.index_dim, bias=False)
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
         self.scale = self.head_dim ** -0.5
         self.idx_scale = self.index_dim ** -0.5
         self.last_kl_alignment_loss: Optional[torch.Tensor] = None

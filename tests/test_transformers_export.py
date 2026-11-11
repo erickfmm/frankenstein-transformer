@@ -29,24 +29,7 @@ class TransformersExportTests(unittest.TestCase):
             train_yaml = tmp_path / "train.yaml"
             out_dir = tmp_path / "out"
 
-            model_cfg = FrankensteinModelConfig.from_flat(
-                vocab_size=32,
-                hidden_size=16,
-                num_layers=1,
-                num_loops=1,
-                layer_pattern=["standard"],
-                num_heads=4,
-                retention_heads=4,
-                num_experts=2,
-                top_k_experts=1,
-                dropout=0.1,
-                use_moe=False,
-                use_factorized_embedding=False,
-                use_embedding_conv=False,
-                norm_type="layer_norm",
-                ffn_hidden_size=32,
-                mode="encoder",
-            )
+            model_cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 32, "hidden_size": 16, "num_layers": 1, "num_loops": 1, "layer_pattern": ['standard'], "num_heads": 4, "dropout": 0.1, "mode": 'encoder'}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "embedding": {"factorized": {"enabled": False}, "conv": {"enabled": False}}, "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 32}})
             model = FrankensteinEncoder(model_cfg)
 
             torch.save(
@@ -60,42 +43,45 @@ class TransformersExportTests(unittest.TestCase):
             yaml_payload = {
                 "model_class": "frankenstein_text_encoder",
                 "model": {
-                    "vocab_size": 32,
-                    "hidden_size": 16,
-                    "num_layers": 1,
-                    "num_loops": 1,
-                    "layer_pattern": ["standard"],
-                    "num_heads": 4,
-                    "retention_heads": 4,
-                    "num_experts": 2,
-                    "top_k_experts": 1,
-                    "dropout": 0.1,
-                    "ode_solver": "rk4",
-                    "ode_steps": 2,
-                    "use_bitnet": True,
-                    "norm_type": "layer_norm",
-                    "use_factorized_embedding": False,
-                    "factorized_embedding_dim": 8,
-                    "use_embedding_conv": False,
-                    "embedding_conv_kernel": 3,
+                    "dims": {
+                        "vocab_size": 32,
+                        "hidden_size": 16,
+                        "num_layers": 1,
+                        "num_loops": 1,
+                        "layer_pattern": ["standard"],
+                        "num_heads": 4,
+                        "dropout": 0.1,
+                        "mode": "encoder",
+                    },
+                    "attention": {
+                        "retnet": {"heads": 4},
+                        "ode": {"solver": "rk4", "steps": 2},
+                        "engram": {
+                            "max_ngram_size": 3,
+                            "n_heads_per_ngram": 2,
+                            "embed_dim_per_head": 4,
+                            "kernel_size": 4,
+                            "seed": 42,
+                        },
+                    },
+                    "norm": {"type": "layer_norm"},
+                    "bitnet": {"enabled": True},
+                    "moe": {"enabled": False, "num_experts": 2, "top_k": 1},
+                    "mixture_of_depths": {
+                        "enabled": False,
+                        "capacity_ratio": 0.5,
+                        "router_aux_loss_weight": 0.0,
+                    },
+                    "embedding": {
+                        "factorized": {"enabled": False, "dim": 8},
+                        "conv": {"enabled": False, "kernel": 3},
+                    },
                     "positional_encoding": "hope",
-                    "hope_base": 10000.0,
-                    "hope_damping": 0.01,
-                    "rope_base": 10000.0,
-                    "rope_scaling": 1.0,
-                    "positional_encoding": "hope",
-                    "use_moe": False,
-                    "use_mixture_of_depths": False,
-                    "mixture_of_depths_capacity_ratio": 0.5,
-                    "mixture_of_depths_router_aux_loss_weight": 0.0,
-                    "ffn_hidden_size": 32,
-                    "ffn_activation": "silu",
-                    "mode": "encoder",
-                    "engram_max_ngram_size": 3,
-                    "engram_n_heads_per_ngram": 2,
-                    "engram_embed_dim_per_head": 4,
-                    "engram_kernel_size": 4,
-                    "engram_seed": 42,
+                    "positional_encoding_parameters": {
+                        "hope": {"base": 10000.0, "damping": 0.01},
+                        "rope": {"base": 10000.0, "scaling": 1.0},
+                    },
+                    "ffn": {"hidden_size": 32, "activation": "silu"},
                 },
                 "training": {
                     "task": "mlm",
@@ -125,9 +111,10 @@ class TransformersExportTests(unittest.TestCase):
             exported = json.loads((out_dir / "config.json").read_text())
             self.assertNotIn("rope_scaling", exported)
             self.assertNotIn("rope_parameters", exported)
-            self.assertEqual(exported["frankenstein_config"]["rope_scaling"], 1.0)
-            wrapper = (out_dir / "configuration_frankenstein.py").read_text()
-            self.assertIn('"rope_scaling", "rope_parameters"', wrapper)
+            self.assertEqual(
+                exported["frankenstein_config"]["positional_encoding_parameters"]["rope"]["scaling"],
+                1.0,
+            )
             self.assertTrue((out_dir / "configuration_frankenstein.py").exists())
             self.assertTrue((out_dir / "modeling_frankenstein.py").exists())
             self.assertTrue((out_dir / "compatibility_report.json").exists())
@@ -219,13 +206,7 @@ class TransformersExportCacheTests(unittest.TestCase):
         from src.model.config import FrankensteinModelConfig
         from src.model.frankenstein_decoder import FrankensteinDecoder
 
-        cfg = FrankensteinModelConfig.from_flat(
-            vocab_size=32, hidden_size=16, num_layers=1, num_loops=1,
-            layer_pattern=["standard"], num_heads=4, retention_heads=4,
-            dropout=0.0, use_bitnet=False, mode="decoder",
-            positional_encoding="rope", norm_type="layer_norm",
-            ffn_hidden_size=32,
-        )
+        cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 32, "hidden_size": 16, "num_layers": 1, "num_loops": 1, "layer_pattern": ['standard'], "num_heads": 4, "dropout": 0.0, "mode": 'decoder'}, "attention": {"retnet": {"heads": 4}}, "bitnet": {"enabled": False}, "positional_encoding": 'rope', "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 32}})
         torch.manual_seed(0)
         model = FrankensteinDecoder(cfg).eval()
         prompt = torch.randint(0, 32, (1, 5))

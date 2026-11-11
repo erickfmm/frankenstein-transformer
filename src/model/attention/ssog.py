@@ -156,15 +156,15 @@ class SSOGAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "ssog", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
 
         if self.hidden_size % self.num_heads != 0:
             raise ValueError(
                 "hidden_size must be divisible by num_heads for SSOGAttention"
             )
-        if str(getattr(config, "mode", "encoder")) == "decoder":
+        if str(getattr(config.dims, "mode", "encoder")) == "decoder":
             raise ValueError(
                 "ssog is encoder-only: the separable Gaussian field has "
                 "no causal formulation. Set model.dims.mode to 'encoder' and "
@@ -186,10 +186,10 @@ class SSOGAttention(nn.Module):
                 f"ssog grid must be >= 1x1, got {self.grid_h}x{self.grid_w}"
             )
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.dims.dropout)
 
         # Shared field: per-head Gaussian atoms.
         self.mu = nn.Parameter(torch.empty(self.num_heads, self.num_atoms, 2))

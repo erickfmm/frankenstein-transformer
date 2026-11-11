@@ -12,40 +12,15 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from src.model.config import FrankensteinModelConfig  # noqa: E402
+from src.model.config import FrankensteinModelConfig, merge_model_blocks  # noqa: E402, merge_model_blocks
 from src.model.frankenstein_audio import FrankensteinAudio  # noqa: E402
 from src.training.trainer import TitanTrainer, TrainingConfig  # noqa: E402
 
 
 def _tiny_audio_config(**overrides) -> FrankensteinModelConfig:
-    params = dict(
-        vocab_size=16,
-        hidden_size=32,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        use_moe=False,
-        ode_solver="rk4",
-        ode_steps=1,
-        ffn_hidden_size=64,
-        ffn_activation="gelu",
-        positional_encoding="sinusoidal_absolute",
-        audio_n_mels=16,
-        audio_conv_channels=4,
-        audio_sample_rate=16000,
-        audio_window_ms=25.0,
-        audio_stride_ms=10.0,
-        audio_n_fft=400,
-        num_classes=3,
-    )
-    params.update(overrides)
-    return FrankensteinModelConfig.from_flat(**params)
+    params = {"dims": {"vocab_size": 16, "hidden_size": 32, "num_layers": 1, "num_loops": 1, "num_heads": 4, "dropout": 0.0, "layer_pattern": ['standard']}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "attention": {"ode": {"solver": 'rk4', "steps": 1}}, "ffn": {"hidden_size": 64, "activation": 'gelu'}, "positional_encoding": 'sinusoidal_absolute', "audio": {"n_mels": 16, "conv_channels": 4, "sample_rate": 16000, "window_ms": 25.0, "stride_ms": 10.0, "n_fft": 400}, "num_classes": 3}
+    params = merge_model_blocks(params, overrides)
+    return FrankensteinModelConfig.from_dict({**params})
 
 
 def _make_trainer(model, task, tmp_path):
@@ -74,7 +49,7 @@ def _batch(batch_size=2, num_frames=1600, num_labels=2):
 
 class TestAsrLoss:
     def test_ctc_loss_and_cer(self, tmp_path):
-        model = FrankensteinAudio(_tiny_audio_config(asr_loss="ctc"))
+        model = FrankensteinAudio(_tiny_audio_config(audio={'asr_loss': 'ctc'}))
         trainer = _make_trainer(model, "asr", tmp_path)
         try:
             loss, cer = trainer.compute_asr_loss(*_batch())
@@ -92,9 +67,7 @@ class TestAsrLoss:
 
     def test_transducer_loss_and_cer(self, tmp_path):
         model = FrankensteinAudio(
-            _tiny_audio_config(
-                asr_loss="transducer", asr_decoder_dim=16, asr_decoder_layers=1
-            )
+            _tiny_audio_config(audio={'asr_loss': 'transducer', 'asr_decoder_dim': 16, 'asr_decoder_layers': 1})
         )
         trainer = _make_trainer(model, "asr", tmp_path)
         try:
@@ -108,7 +81,7 @@ class TestAsrLoss:
             trainer.close()
 
     def test_auxiliary_losses_are_added(self, tmp_path):
-        model = FrankensteinAudio(_tiny_audio_config(asr_loss="ctc"))
+        model = FrankensteinAudio(_tiny_audio_config(audio={'asr_loss': 'ctc'}))
         trainer = _make_trainer(model, "asr", tmp_path)
         try:
             loss, _ = trainer.compute_asr_loss(*_batch())
@@ -120,7 +93,7 @@ class TestAsrLoss:
             trainer.close()
 
     def test_non_finite_auxiliary_loss_raises(self, tmp_path):
-        model = FrankensteinAudio(_tiny_audio_config(asr_loss="ctc"))
+        model = FrankensteinAudio(_tiny_audio_config(audio={'asr_loss': 'ctc'}))
         trainer = _make_trainer(model, "asr", tmp_path)
         try:
             loss, _ = trainer.compute_asr_loss(*_batch())
@@ -166,12 +139,7 @@ class TestSpecAugmentFrontend:
     """SpecAugment now lives in the model frontend (``audio.spec_augment``)."""
 
     def test_masks_apply_only_while_training(self):
-        config = _tiny_audio_config(
-            audio_spec_augment_enabled=True,
-            audio_spec_augment_freq_mask_width=4,
-            audio_spec_augment_time_masks=2,
-            audio_spec_augment_time_mask_ratio=0.5,
-        )
+        config = _tiny_audio_config(audio={'spec_augment': {'enabled': True, 'freq_mask_width': 4, 'time_masks': 2, 'time_mask_ratio': 0.5}})
         model = FrankensteinAudio(config)
         waveform = torch.randn(2, 1600) * 0.1
 
@@ -187,12 +155,7 @@ class TestSpecAugmentFrontend:
         assert not torch.allclose(train_out, eval_a)
 
     def test_masking_zeroes_frequency_and_time_bands(self):
-        config = _tiny_audio_config(
-            audio_spec_augment_enabled=True,
-            audio_spec_augment_freq_mask_width=8,
-            audio_spec_augment_time_masks=3,
-            audio_spec_augment_time_mask_ratio=0.5,
-        )
+        config = _tiny_audio_config(audio={'spec_augment': {'enabled': True, 'freq_mask_width': 8, 'time_masks': 3, 'time_mask_ratio': 0.5}})
         frontend = FrankensteinAudio(config).frontend
         features = torch.randn(2, 16, 12)
         torch.manual_seed(0)

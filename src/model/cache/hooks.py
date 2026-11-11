@@ -42,12 +42,12 @@ def build_slot_meta(
         logical_layer_idx: Global logical layer index (slot identity, D6).
         num_kv_heads: Optional override (GQA mixers).
     """
-    num_heads = int(getattr(mixer, "num_heads", config.num_heads))
-    head_dim = int(getattr(mixer, "head_dim", config.hidden_size // num_heads))
+    num_heads = int(getattr(mixer, "num_heads", config.dims.num_heads))
+    head_dim = int(getattr(mixer, "head_dim", config.dims.hidden_size // num_heads))
     if num_kv_heads is None:
         num_kv_heads = int(getattr(mixer, "num_kv_heads", num_heads))
     pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-    rope_scaling = float(getattr(config, "rope_scaling", 1.0) or 1.0)
+    rope_scaling = float(config.rope_scaling or 1.0)
     return SlotMeta(
         mixer_key=str(getattr(mixer, "__mixer_key__", "")),
         logical_layer_idx=int(logical_layer_idx),

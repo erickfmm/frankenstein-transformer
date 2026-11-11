@@ -661,7 +661,7 @@ def build_audio_dataloader_from_config(
             audio_config=audio_config,
             task=task,
             num_classes=int(getattr(model_config, "num_classes", 2) or 2),
-            vocab_size=int(getattr(model_config, "vocab_size", 32) or 32),
+            vocab_size=int(getattr(model_config.dims, "vocab_size", 32) or 32),
             max_frames=1600,
         )
 

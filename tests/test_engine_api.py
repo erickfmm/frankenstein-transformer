@@ -26,7 +26,7 @@ if TORCH_AVAILABLE:
         save_checkpoint,
     )
     from src.model.attention.common import BitLinear
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.training.config_loader import load_training_config
     from src.training.trainer import TrainingConfig
 
@@ -38,27 +38,9 @@ VOCAB, SEQ, BSZ, HEADS = 64, 8, 2, 6
 
 def _mini_cfg(**overrides):
     """Return a minimal valid :class:`FrankensteinModelConfig` for fast CPU tests."""
-    base = dict(
-        vocab_size=VOCAB,
-        hidden_size=48,
-        num_layers=1,
-        num_loops=1,
-        num_heads=HEADS,
-        retention_heads=HEADS,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        layer_pattern=["standard"],
-        ode_solver="rk4",
-        ode_steps=1,
-        use_bitnet=False,
-        norm_type="layer_norm",
-        use_factorized_embedding=False,
-        use_moe=False,
-        ffn_activation="gelu",
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": VOCAB, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": HEADS, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": HEADS}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "bitnet": {"enabled": False}, "norm": {"type": 'layer_norm'}, "embedding": {"factorized": {"enabled": False}}, "ffn": {"activation": 'gelu'}}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 def _ids():
@@ -78,9 +60,9 @@ class BuildModelTests(unittest.TestCase):
         self.assertEqual(tuple(out.shape), (BSZ, SEQ, VOCAB))
 
     def test_build_decoder_forces_decoder_mode(self):
-        cfg = _mini_cfg(mode="encoder")
+        cfg = _mini_cfg(dims={'mode': 'encoder'})
         build_model("frankenstein_text_decoder", cfg)
-        self.assertEqual(cfg.mode, "decoder")
+        self.assertEqual(cfg.dims.mode, "decoder")
 
     def test_build_model_is_in_engine_all(self):
         # Public API sanity — the DashAI plugin imports these names directly.
@@ -124,7 +106,7 @@ class ClassificationHeadTests(unittest.TestCase):
     def test_head_is_full_precision_even_under_bitnet(self):
         # Strategy A guarantee: the classification head is a plain nn.Linear
         # (NOT BitLinear) even when use_bitnet=True quantizes the backbone.
-        cfg = _mini_cfg(use_bitnet=True)
+        cfg = _mini_cfg(bitnet={'enabled': True})
         model = build_model(None, cfg, num_labels=3)
         self.assertIsNotNone(model.cls_head)
         self.assertIs(
@@ -136,7 +118,7 @@ class ClassificationHeadTests(unittest.TestCase):
 
     def test_pooling_modes_cls_and_gap(self):
         for mode in ("cls", "gap"):
-            cfg = _mini_cfg(encoder_pooling_mode=mode, classification_head=True, num_labels=4)
+            cfg = _mini_cfg(classification_head={"enabled": True, "pooling_mode": mode, "num_labels": 4})
             model = build_model(None, cfg)
             model.eval()
             with torch.no_grad():
@@ -184,7 +166,7 @@ class CheckpointRoundTripTests(unittest.TestCase):
 
         self.assertEqual(extra2.get("num_labels"), 7)
         self.assertTrue(loaded2.model_config.classification_head)
-        self.assertEqual(loaded2.model_config.num_labels, 7)
+        self.assertEqual(loaded2.model_config.classification_head.num_labels, 7)
         self.assertIsNotNone(model2.cls_head, "load_checkpoint must rebuild the head")
         self.assertEqual(model2.cls_num_labels, 7)
 
@@ -301,7 +283,7 @@ class TrainedTokenizerModelTests(unittest.TestCase):
         return LoadedTrainingConfig(
             task="mlm",
             model_class="frankenstein_text_encoder",
-            model_config=_mini_cfg(vocab_size=10),
+            model_config=_mini_cfg(dims={'vocab_size': 10}),
             base_model=None,
             tokenizer_config={
                 "source": "train_from_dataset",
@@ -326,7 +308,7 @@ class TrainedTokenizerModelTests(unittest.TestCase):
         model, tokenizer, runtime_config, descriptor = _build_trained_tokenizer_model(
             loaded, dataset=self.TEXTS, task="mlm"
         )
-        self.assertEqual(len(tokenizer), runtime_config.vocab_size)
+        self.assertEqual(len(tokenizer), runtime_config.dims.vocab_size)
         self.assertEqual(descriptor, "frankenstein_text_encoder")
         # The embedding matrix matches the trained vocabulary.
         emb = model.emb if hasattr(model, "emb") else None

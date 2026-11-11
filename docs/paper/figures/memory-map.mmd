@@ -1,5 +1,8 @@
 %%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":24,"useMaxWidth":false,"wrappingWidth":240}}}%%
 flowchart TD
-  subgraph memory["Memory family: lookup-based value capacity, O(n²) mixing"]
+  subgraph memory["Memory family: persistent storage beside attention"]
+    titans["Titans<br/>window attention + surprise-driven<br/>associative memory"]
+    engram["Engram<br/>N-gram hash lookups"]
     ma["Memory Attention<br/>V = K + RMSNorm(E[s])"]
+    titans ~~~ engram ~~~ ma
   end

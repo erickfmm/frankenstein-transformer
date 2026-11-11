@@ -25,7 +25,7 @@ _TRAINING_SCHEMA = _REPO_ROOT / "src" / "schema" / "_training.yaml"
 try:
     import torch
     import torch.nn.functional as F
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.frankenstein_encoder import FrankensteinEncoder
     from src.training.trainer import TitanTrainer, TrainingConfig
 
@@ -131,31 +131,9 @@ def test_training_config_wandb_defaults():
 
 def _tiny_encoder(**overrides) -> "FrankensteinEncoder":
     """Build a tiny encoder that exercises every non-``other`` block."""
-    defaults = dict(
-        vocab_size=64,
-        hidden_size=48,
-        num_layers=2,
-        num_loops=1,
-        num_heads=6,
-        retention_heads=6,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        use_moe=True,
-        ffn_hidden_size=96,
-        ffn_activation="gelu",
-        positional_encoding="learned_absolute",
-        mode="encoder",
-        residual_type="block_attn",
-        block_attn_num_blocks=2,
-        use_mhc=True,
-        mhc_expansion_rate=2,
-    )
-    defaults.update(overrides)
-    return FrankensteinEncoder(FrankensteinModelConfig.from_flat(**defaults))
+    defaults = {"dims": {"vocab_size": 64, "hidden_size": 48, "num_layers": 2, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 6}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": True}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}, "positional_encoding": 'learned_absolute', "residuals": {"type": 'block_attn', "block_attn": {"num_blocks": 2}}, "mhc": {"enabled": True, "expansion_rate": 2}}
+    defaults = merge_model_blocks(defaults, overrides)
+    return FrankensteinEncoder(FrankensteinModelConfig.from_dict({**defaults}))
 
 
 def _make_trainer(tmp_path, model, **training_overrides) -> "TitanTrainer":

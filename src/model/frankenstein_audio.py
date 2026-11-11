@@ -57,7 +57,7 @@ except Exception:  # noqa: BLE001 - optional dependency, any failure falls back
     _torchaudio = None
     _HAS_TORCHAUDIO = False
 
-from .config import FrankensteinModelConfig
+from .config import FrankensteinModelConfig, merge_model_blocks
 from .hybrid_layer import HybridLayer
 from .moe import aggregate_moe_aux_losses
 from .hyperloop import HyperloopConnections
@@ -187,37 +187,33 @@ class AudioFrontend(nn.Module):
 
     def __init__(self, config: FrankensteinModelConfig) -> None:
         super().__init__()
-        self.feature = str(getattr(config, "audio_feature", "logmel")).lower()
+        audio = config.audio
+        if audio is None:
+            raise ValueError("FrankensteinAudio requires the top-level 'audio' block")
+        self.feature = str(audio.feature).lower()
         if self.feature not in {"logmel", "spectrogram", "raw"}:
             raise ValueError(
                 "audio_feature must be one of {'logmel', 'spectrogram', 'raw'}, "
                 f"got {self.feature!r}"
             )
 
-        self.sample_rate = int(getattr(config, "audio_sample_rate", 16000))
-        self.n_mels = int(getattr(config, "audio_n_mels", 80))
-        self.window_ms = float(getattr(config, "audio_window_ms", 25.0))
-        self.stride_ms = float(getattr(config, "audio_stride_ms", 10.0))
-        self.n_fft = int(getattr(config, "audio_n_fft", 400))
-        self.in_channels = int(getattr(config, "audio_in_channels", 1))
-        self.conv_channels = int(getattr(config, "audio_conv_channels", 32))
-        self.hidden_size = int(config.hidden_size)
-        self.dropout_p = float(config.dropout)
+        self.sample_rate = int(getattr(audio, "sample_rate", 16000))
+        self.n_mels = int(getattr(audio, "n_mels", 80))
+        self.window_ms = float(getattr(audio, "window_ms", 25.0))
+        self.stride_ms = float(getattr(audio, "stride_ms", 10.0))
+        self.n_fft = int(getattr(audio, "n_fft", 400))
+        self.in_channels = int(getattr(audio, "in_channels", 1))
+        self.conv_channels = int(getattr(audio, "conv_channels", 32))
+        self.hidden_size = int(config.dims.hidden_size)
+        self.dropout_p = float(config.dims.dropout)
 
         # SpecAugment (arXiv:1904.08779) — masking is applied to the mel /
         # spectrogram features while the module is in training mode.
-        self.spec_augment_enabled = bool(
-            getattr(config, "audio_spec_augment_enabled", False)
-        )
-        self.spec_freq_mask_width = int(
-            getattr(config, "audio_spec_augment_freq_mask_width", 27)
-        )
-        self.spec_time_masks = int(
-            getattr(config, "audio_spec_augment_time_masks", 10)
-        )
-        self.spec_time_mask_ratio = float(
-            getattr(config, "audio_spec_augment_time_mask_ratio", 0.05)
-        )
+        spec_augment = audio.spec_augment
+        self.spec_augment_enabled = bool(spec_augment.enabled)
+        self.spec_freq_mask_width = int(spec_augment.freq_mask_width)
+        self.spec_time_masks = int(spec_augment.time_masks)
+        self.spec_time_mask_ratio = float(spec_augment.time_mask_ratio)
 
         for name, value in (
             ("audio_sample_rate", self.sample_rate),
@@ -499,11 +495,11 @@ class TransducerHead(nn.Module):
 
     def __init__(self, config: FrankensteinModelConfig) -> None:
         super().__init__()
-        self.vocab_size = int(config.vocab_size)
-        self.encoder_dim = int(config.hidden_size)
-        self.decoder_dim = int(getattr(config, "asr_decoder_dim", 320))
-        num_layers = int(getattr(config, "asr_decoder_layers", 1))
-        dropout = float(getattr(config, "asr_decoder_dropout", 0.1))
+        self.vocab_size = int(config.dims.vocab_size)
+        self.encoder_dim = int(config.dims.hidden_size)
+        self.decoder_dim = int(config.audio.asr_decoder_dim)
+        num_layers = int(config.audio.asr_decoder_layers)
+        dropout = float(config.audio.asr_decoder_dropout)
         if num_layers < 1:
             raise ValueError("asr_decoder_layers must be >= 1")
         if self.decoder_dim < 1:
@@ -583,7 +579,7 @@ class FrankensteinAudio(nn.Module):
     driven frontend (:class:`AudioFrontend`), an optional learned ``[CLS]``
     token, a :class:`HybridLayer` stack with looped depth / mHC / Hyperloop /
     AttnRes / MoD support, a final norm and the task heads. The model forces
-    ``config.mode = "encoder"`` (audio encoders are bidirectional).
+    ``config.dims.mode = "encoder"`` (audio encoders are bidirectional).
 
     The ``[CLS]`` token is only prepended for the pooled classification path,
     so the ASR frame axis stays exactly ``frontend.output_lengths(...)``.
@@ -607,14 +603,14 @@ class FrankensteinAudio(nn.Module):
     def __init__(self, config: Optional[FrankensteinModelConfig] = None) -> None:
         super().__init__()
         self.config = config or self.build_audio_config()
-        self.use_fixed_softmax = bool(getattr(self.config, "fixed_softmax", False))
+        self.use_fixed_softmax = bool(getattr(self.config.numerics, "fixed_softmax", False))
         self.last_auxiliary_losses: Dict[str, Any] = {}
         self.last_mixture_of_depths_stats: Dict[str, Any] = {}
         self.last_moe_stats: Dict[str, Any] = {}
 
         # Audio encoders are bidirectional — force encoder mode.
-        if self.config.mode != "encoder":
-            self.config.mode = "encoder"
+        if self.config.dims.mode != "encoder":
+            self.config.dims.mode = "encoder"
         # Record the concrete class for deployment dispatch (see
         # ``ModelDeployer._build_model``).
         self.config.model_class = "frankenstein_audio"
@@ -622,12 +618,12 @@ class FrankensteinAudio(nn.Module):
         cfg = self.config
         self.frontend = AudioFrontend(cfg)
         self.subsampling_factor = int(self.frontend.subsampling_factor)
-        self.dropout = nn.Dropout(cfg.dropout)
+        self.dropout = nn.Dropout(cfg.dims.dropout)
 
         # ---- [CLS] token (only for pooled classification) ----
         self.use_cls_token = str(cfg.pooling_mode) == "cls"
         if self.use_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, cfg.hidden_size))
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, cfg.dims.hidden_size))
             nn.init.trunc_normal_(self.cls_token, std=0.02)
 
         # ---- Positional encoding ----
@@ -638,11 +634,11 @@ class FrankensteinAudio(nn.Module):
             [
                 HybridLayer(
                     cfg,
-                    layer_type=cfg.layer_pattern[i % len(cfg.layer_pattern)],
+                    layer_type=cfg.dims.layer_pattern[i % len(cfg.dims.layer_pattern)],
                     pos_encoder=self.pos_encoder,
                     layer_index=i,
                 )
-                for i in range(cfg.num_layers)
+                for i in range(cfg.dims.num_layers)
             ]
         )
 
@@ -651,32 +647,32 @@ class FrankensteinAudio(nn.Module):
         self.residual: ResidualBase = build_residual(cfg)
 
         # ---- mHC / Hyperloop (reused) ----
-        self.use_mhc = bool(getattr(cfg, "use_mhc", False))
-        self.use_hyperloop = self.use_mhc and bool(getattr(cfg, "mhc_hyperloop", False))
+        self.use_mhc = bool(getattr(cfg.mhc, "enabled", False))
+        self.use_hyperloop = self.use_mhc and bool(getattr(cfg.mhc, "hyperloop", False))
         if self.use_hyperloop:
             self.hyperloop = HyperloopConnections(
-                hidden_size=cfg.hidden_size,
-                num_loops=int(cfg.num_loops),
-                expansion_rate=cfg.mhc_expansion_rate,
-                gating_init=cfg.mhc_gating_init,
-                res_parameterization=cfg.mhc_hyperloop_res_parameterization,
-                sinkhorn_iters=cfg.mhc_sinkhorn_iters,
-                use_bitnet=cfg.use_bitnet,
-                full_prec_under_bitnet=cfg.mhc_full_prec_under_bitnet,
+                hidden_size=cfg.dims.hidden_size,
+                num_loops=int(cfg.dims.num_loops),
+                expansion_rate=cfg.mhc.expansion_rate,
+                gating_init=cfg.mhc.gating_init,
+                res_parameterization=cfg.mhc.hyperloop_res_parameterization,
+                sinkhorn_iters=cfg.mhc.sinkhorn_iters,
+                use_bitnet=cfg.bitnet.enabled,
+                full_prec_under_bitnet=cfg.mhc.full_prec_under_bitnet,
             )
         elif self.use_mhc:
-            n = int(cfg.mhc_expansion_rate)
-            self.mhc_in_proj = nn.Linear(cfg.hidden_size, n * cfg.hidden_size)
-            self.mhc_out_proj = nn.Linear(n * cfg.hidden_size, cfg.hidden_size)
+            n = int(cfg.mhc.expansion_rate)
+            self.mhc_in_proj = nn.Linear(cfg.dims.hidden_size, n * cfg.dims.hidden_size)
+            self.mhc_out_proj = nn.Linear(n * cfg.dims.hidden_size, cfg.dims.hidden_size)
 
         # ---- Task heads ----
-        self.asr_loss = str(getattr(cfg, "asr_loss", "ctc")).lower()
+        self.asr_loss = str(cfg.audio.asr_loss).lower()
         self._active_task: str = "audio_classification"
-        proj_cls = BitLinear if cfg.use_bitnet else nn.Linear
+        proj_cls = BitLinear if cfg.bitnet.enabled else nn.Linear
         # CTC / vocabulary projection over the encoder frames.
-        self.head = proj_cls(cfg.hidden_size, cfg.vocab_size)
+        self.head = proj_cls(cfg.dims.hidden_size, cfg.dims.vocab_size)
         # Audio classification head: full precision, zero-initialized.
-        self.audio_classification_head = nn.Linear(cfg.hidden_size, cfg.num_classes)
+        self.audio_classification_head = nn.Linear(cfg.dims.hidden_size, cfg.num_classes)
         nn.init.zeros_(self.audio_classification_head.weight)
         if self.audio_classification_head.bias is not None:
             nn.init.zeros_(self.audio_classification_head.bias)
@@ -708,7 +704,8 @@ class FrankensteinAudio(nn.Module):
             use_bitnet: Whether to use BitNet. Default: False.
             layer_pattern: Custom layer pattern. If None, defaults to
                 ``["conformer"] * num_layers``.
-            **kwargs: Additional FrankensteinModelConfig fields.
+            **kwargs: Nested ``model:`` blocks (``dims``, ``audio``, ``ffn``,
+                ...) merged over the preset defaults.
 
         Returns:
             A pre-configured :class:`FrankensteinModelConfig` with audio
@@ -716,40 +713,23 @@ class FrankensteinAudio(nn.Module):
         """
         if layer_pattern is None:
             layer_pattern = ["conformer"] * num_layers
-        explicit_keys = {
-            "hidden_size",
-            "num_layers",
-            "num_heads",
-            "num_loops",
-            "use_bitnet",
-            "layer_pattern",
-            "ffn_activation",
-            "ffn_hidden_size",
-            "use_moe",
-            "norm_type",
-            "positional_encoding",
-            "mode",
+        blocks = {
+            "dims": {
+                "hidden_size": hidden_size,
+                "num_layers": num_layers,
+                "num_heads": num_heads,
+                "num_loops": num_loops,
+                "layer_pattern": layer_pattern,
+                "mode": "encoder",
+            },
+            "audio": {},
+            "ffn": {"activation": "silu", "hidden_size": hidden_size * 4},
+            "moe": {"enabled": False},
+            "norm": {"type": "layer_norm"},
+            "bitnet": {"enabled": use_bitnet},
+            "positional_encoding": "sinusoidal_absolute",
         }
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in explicit_keys}
-        # The audio frontend / ASR knobs keep their dataclass defaults
-        # (`audio_feature="logmel"`, 16 kHz, 80 mels, 25 ms / 10 ms, n_fft=400,
-        # 32 conv channels, `asr_loss="ctc"`, decoder dim 320) and can be
-        # overridden through ``**kwargs``.
-        return FrankensteinModelConfig.from_flat(
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            num_loops=num_loops,
-            use_bitnet=use_bitnet,
-            layer_pattern=layer_pattern,
-            ffn_activation="silu",
-            ffn_hidden_size=hidden_size * 4,  # Conformer FFN: 4×d
-            use_moe=False,
-            norm_type="layer_norm",
-            positional_encoding="sinusoidal_absolute",
-            mode="encoder",
-            **filtered_kwargs,
-        )
+        return FrankensteinModelConfig.from_dict(merge_model_blocks(blocks, kwargs))
 
     def output_lengths(self, input_lengths: torch.Tensor) -> torch.Tensor:
         """Map input sample counts to encoder frame counts.
@@ -776,23 +756,23 @@ class FrankensteinAudio(nn.Module):
         """
         # ---- Middle-cycle partitioning (Hyperloop, arXiv:2604.21254) ----
         n_begin = (
-            int(getattr(self.config, "mhc_hyperloop_begin_layers", 0))
+            int(getattr(self.config.mhc, "hyperloop_begin_layers", 0))
             if self.use_hyperloop
             else 0
         )
         n_end = (
-            int(getattr(self.config, "mhc_hyperloop_end_layers", 0))
+            int(getattr(self.config.mhc, "hyperloop_end_layers", 0))
             if self.use_hyperloop
             else 0
         )
-        n_middle = self.config.num_layers - n_begin - n_end
+        n_middle = self.config.dims.num_layers - n_begin - n_end
 
         if self.use_mhc and not self.use_hyperloop:
-            n = int(self.config.mhc_expansion_rate)
+            n = int(self.config.mhc.expansion_rate)
             bsz, seq_len, dim = x.shape
             x = self.mhc_in_proj(x).view(bsz, seq_len, n, dim)
 
-        logical_depth = int(self.config.num_layers) * int(self.config.num_loops)
+        logical_depth = int(self.config.dims.num_layers) * int(self.config.dims.num_loops)
         self.residual.register_state(num_layers=logical_depth)
         self.residual.reset_state()
         if self.residual.is_attn_res:
@@ -842,7 +822,7 @@ class FrankensteinAudio(nn.Module):
             x = hl.expand(x)
 
             middle = self.layers[n_begin : n_begin + n_middle]
-            for loop_idx in range(self.config.num_loops):
+            for loop_idx in range(self.config.dims.num_loops):
                 h_pre, h_post, h_res = hl.mappings(x, loop_idx)
                 block_in = hl.apply_fpre(x, h_pre)
                 block_out, logical_layer_idx = _run_layers(
@@ -855,7 +835,7 @@ class FrankensteinAudio(nn.Module):
                 x, self.layers[n_begin + n_middle :], logical_layer_idx
             )
         else:
-            for _ in range(self.config.num_loops):
+            for _ in range(self.config.dims.num_loops):
                 x, logical_layer_idx = _run_layers(x, self.layers, logical_layer_idx)
 
         x = self.residual.finalize(x)
@@ -872,7 +852,7 @@ class FrankensteinAudio(nn.Module):
         if mixture_of_depths_aux_losses:
             raw_aux_loss = torch.stack(mixture_of_depths_aux_losses).mean()
             weighted_aux_loss = raw_aux_loss * float(
-                getattr(self.config, "mixture_of_depths_router_aux_loss_weight", 0.0)
+                getattr(self.config.mixture_of_depths, "router_aux_loss_weight", 0.0)
             )
             auxiliary_losses["mixture_of_depths_router_loss"] = weighted_aux_loss
             self.last_mixture_of_depths_stats = {

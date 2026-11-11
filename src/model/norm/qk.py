@@ -219,15 +219,15 @@ def make_qk_norm(config, head_dim: int) -> Optional[QKNorm]:
         A :class:`QKNorm` instance for ``rms_norm`` / ``layer_norm`` /
         ``l2_norm``, otherwise ``None``.
     """
-    if not bool(getattr(config, "use_qk_norm", False)):
+    if not bool(getattr(config.norm.qk_norm, "enabled", False)):
         return None
-    method = str(getattr(config, "qk_norm_method", "rms_norm")).lower()
+    method = str(getattr(config.norm.qk_norm, "method", "rms_norm")).lower()
     if method not in FORWARD_METHODS:
         return None
     return QKNorm(
         head_dim,
         method=method,
-        eps=float(getattr(config, "qk_norm_eps", 1e-6)),
+        eps=float(getattr(config.norm.qk_norm, "eps", 1e-6)),
     )
 
 
@@ -247,8 +247,8 @@ def attach_qk_norm(module: nn.Module, config, head_dim: int) -> None:
         config: Model configuration.
         head_dim: Per-head feature dimension.
     """
-    enabled = bool(getattr(config, "use_qk_norm", False))
-    method = str(getattr(config, "qk_norm_method", "rms_norm")).lower()
+    enabled = bool(getattr(config.norm.qk_norm, "enabled", False))
+    method = str(getattr(config.norm.qk_norm, "method", "rms_norm")).lower()
     module.qk_norm_capable = True
     module.qk_norm = make_qk_norm(config, head_dim)
     module._record_qk_max_logits = enabled and method == "qk_clip"

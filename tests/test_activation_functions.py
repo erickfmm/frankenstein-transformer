@@ -28,30 +28,27 @@ if TORCH_AVAILABLE:
         make_gated_ffn,
     )
     from src.model.activation_function.learnable import _APPROX_FUNCTIONS
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
 
 
-def _cfg(ffn_activation="silu", hidden_size=8, ffn_hidden_size=16, **acfg):
-    cfg = FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=hidden_size,
-        ffn_hidden_size=ffn_hidden_size,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        retention_heads=4,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        use_moe=False,
-        ffn_activation=ffn_activation,
-    )
-    if acfg:
-        cfg.ffn.activation_config = acfg
-    return cfg
+def _cfg(ffn_activation="silu", hidden_size=8, ffn_hidden_size=16, **overrides):
+    base = {
+        "dims": {
+            "vocab_size": 64,
+            "hidden_size": hidden_size,
+            "num_layers": 1,
+            "num_loops": 1,
+            "num_heads": 4,
+            "dropout": 0.0,
+            "layer_pattern": ["standard"],
+        },
+        "ffn": {"hidden_size": ffn_hidden_size, "activation": ffn_activation},
+        "attention": {"retnet": {"heads": 4}},
+        "moe": {"num_experts": 2, "top_k": 1, "enabled": False},
+        "norm": {"type": "layer_norm"},
+        "bitnet": {"enabled": False},
+    }
+    return FrankensteinModelConfig.from_dict(merge_model_blocks(base, overrides))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -103,7 +100,7 @@ class GradientFlowTests(unittest.TestCase):
                 self.assertEqual(x.grad.shape, x.shape)
 
     def test_grad_flows_to_parameters(self):
-        act = get_activation(_cfg("raf", raf_trainable=True), dim=16)
+        act = get_activation(_cfg('raf', ffn={'activation_config': {'raf_trainable': True}}), dim=16)
         x = torch.randn(2, 4, 16)
         act(x).sum().backward()
         self.assertIsNotNone(act.numerator.grad)
@@ -173,7 +170,7 @@ class CorrectnessTests(unittest.TestCase):
         self.assertTrue(torch.allclose(y, expected, atol=1e-6))
 
     def test_swish_beta_matches_manual(self):
-        act = get_activation(_cfg("swish", swish_beta=2.0), dim=8)
+        act = get_activation(_cfg('swish', ffn={'activation_config': {'swish_beta': 2.0}}), dim=8)
         x = torch.randn(4, 8)
         expected = x * torch.sigmoid(2.0 * x)
         self.assertTrue(torch.allclose(act(x), expected, atol=1e-6))
@@ -293,14 +290,14 @@ class FactoryDispatchTests(unittest.TestCase):
             get_activation(_cfg("bogus"), dim=8)
 
     def test_factory_passes_nested_params(self):
-        cfg = _cfg("prelu", prelu_init=0.5)
+        cfg = _cfg('prelu', ffn={'activation_config': {'prelu_init': 0.5}})
         act = get_activation(cfg, dim=8)
         self.assertTrue(torch.allclose(act.weight.data, torch.full((8,), 0.5)))
 
     def test_factory_reads_ffn_hidden_size_dim(self):
         cfg = _cfg("prelu")
-        act = get_activation(cfg, dim=cfg.ffn_hidden_size)
-        self.assertEqual(act.weight.shape[0], cfg.ffn_hidden_size)
+        act = get_activation(cfg, dim=cfg.ffn.hidden_size)
+        self.assertEqual(act.weight.shape[0], cfg.ffn.hidden_size)
 
     def test_enum_covers_factory(self):
         # Every enum name must be buildable except the GLU variants.
@@ -318,55 +315,31 @@ class FrankensteinModelConfigValidationTests(unittest.TestCase):
 
     def test_default_silu(self):
         cfg = _cfg()
-        self.assertEqual(cfg.ffn_activation, "silu")
+        self.assertEqual(cfg.ffn.activation, "silu")
 
     def test_unknown_activation_rejected(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(
-                vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
-                num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard"], ffn_activation="bogus",
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 8, "num_layers": 1, "num_loops": 1, "num_heads": 4, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1}, "ffn": {"activation": 'bogus'}})
 
     def test_activation_lowercased(self):
         cfg = _cfg("MISH")
-        self.assertEqual(cfg.ffn_activation, "mish")
+        self.assertEqual(cfg.ffn.activation, "mish")
 
     def test_config_must_be_dict(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(
-                vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
-                num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard"], ffn_activation="raf",
-                ffn_activation_config=[1, 2, 3],
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 8, "num_layers": 1, "num_loops": 1, "num_heads": 4, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1}, "ffn": {"activation": 'raf', "activation_config": [1, 2, 3]}})
 
     def test_unknown_config_key_rejected(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(
-                vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
-                num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard"], ffn_activation="raf",
-                ffn_activation_config={"bogus_key": 1},
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 8, "num_layers": 1, "num_loops": 1, "num_heads": 4, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1}, "ffn": {"activation": 'raf', "activation_config": {'bogus_key': 1}}})
 
     def test_bad_raf_version_rejected(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(
-                vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
-                num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard"], ffn_activation="raf",
-                ffn_activation_config={"raf_version": "Z"},
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 8, "num_layers": 1, "num_loops": 1, "num_heads": 4, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1}, "ffn": {"activation": 'raf', "activation_config": {'raf_version': 'Z'}}})
 
     def test_bad_raf_degrees_rejected(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(
-                vocab_size=64, hidden_size=8, num_layers=1, num_loops=1,
-                num_heads=4, retention_heads=4, num_experts=2, top_k_experts=1,
-                layer_pattern=["standard"], ffn_activation="raf",
-                ffn_activation_config={"raf_degrees": [5, 4, 3]},
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 8, "num_layers": 1, "num_loops": 1, "num_heads": 4, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1}, "ffn": {"activation": 'raf', "activation_config": {'raf_degrees': [5, 4, 3]}}})
 
 
 if __name__ == "__main__":

@@ -122,7 +122,7 @@ code as the built-ins.
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | **49** across 10 families: Dense, GQA, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
+| Sequence mixer architectures | **49** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
 | Optimizer families | 36 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
 | FFN activations | 43 (40 elementwise + `swiglu`, `geglu`, `reglu`) |
@@ -165,16 +165,15 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 | Category | Code Names | Description |
 |----------|------------|-------------|
-| **Dense** (3) | `standard`, `sigmoid`, `ca` | Full quadratic attention variants: softmax, sigmoid gating, and exact continuum integration |
-| **GQA** (1) | `gqa` | Grouped-query attention with configurable KV heads |
-| **Recurrent** (5) | `retnet`, `mamba`, `ode`, `titan`, `engram` | Retention networks, state-space models, continuous-depth ODE layers, memory-augmented attention, and n-gram memory |
-| **Sparse** (12) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa`, `fastconformer` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), semantic key-clustering, and head-pinned global-token long-form patterns |
+| **Dense** (4) | `standard`, `sigmoid`, `ca`, `gqa` | Full quadratic attention variants: softmax, sigmoid gating, exact continuum integration, and grouped-query attention with configurable KV heads |
+| **Recurrent** (3) | `retnet`, `mamba`, `ode` | Retention networks, state-space models, and continuous-depth ODE layers |
+| **Sparse** (11) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), and semantic key-clustering patterns |
 | **Gated** (9) | `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa`, `gated_softmax`, `kda` | Linear attention with multiplicative gates, delta rules, gated softmax, and path-extremum forgetting |
 | **Fast-Weight** (6) | `falcon1`, `falcon2`, `falcon3`, `falcon1a`, `falcon2a`, `falcon3a` | Fast-weight / online-learning attention with per-layer fast-weight update rules |
 | **Latent** (10) | `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`, `cca`, `ccgqa`, `gma` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
 | **Geometric** (1) | `ssog` | Separable Sum of Gaussians — geometric field attention |
-| **Convolution-augmented** (1) | `conformer` | Macaron FFN₁ + MHSA + depthwise-conv module (arXiv:2005.08100) |
-| **Memory** (1) | `memory` | Token-ID memory values: `V = K + Norm(E[s])`; removes the value projection (arXiv:2609.28399) |
+| **Convolution-augmented** (2) | `conformer`, `fastconformer` | Macaron FFN₁ + MHSA + depthwise-conv module (arXiv:2005.08100); Fast Conformer's limited-context window plus a head-pinned global token (arXiv:2305.05084) |
+| **Memory** (3) | `titan`, `engram`, `memory` | Test-time memory attention, n-gram conditional memory lookup, and token-ID memory values `V = K + Norm(E[s])` (arXiv:2609.28399) |
 
 ⚠️ `sparge` and `fasa` are **inference-sparse**: they train as dense attention over their own projections, then activate their sparse heuristic in `eval()`. They are valid in training presets.
 
@@ -289,7 +288,7 @@ This engine powers the **`dashai-frankenstein` plugin**, which registers Franken
 | [docs/figures/readme-command-flow.mmd](docs/figures/readme-command-flow.mmd) | Source for the README command/pipeline figure |
 | [docs/architecture.md](docs/architecture.md) | Canonical implementation spec: architecture, state, extension guide |
 | [docs/architecture.md](docs/architecture.md#711-vision-transformer-image-vision_dataset) | Vision Transformer (frankenstein_vit) — patch prediction, classification, segmentation |
-| [docs/architecture.md](docs/architecture.md#component-registry-and-plugin-schema-assembly) | Component registry, plugin schema assembly, and mixer selection guide (49 architectures / 10 families) |
+| [docs/architecture.md](docs/architecture.md#component-registry-and-plugin-schema-assembly) | Component registry, plugin schema assembly, and mixer selection guide (49 architectures / 9 families) |
 | [docs/dashai-plugin-audit.md](docs/dashai-plugin-audit.md) | DashAI plugin integration design and status |
 | [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specification, API, papers, bibliography) |
 | [docs/transformers_compatibility.md](docs/transformers_compatibility.md) | HuggingFace export compatibility guide |

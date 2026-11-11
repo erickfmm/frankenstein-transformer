@@ -31,14 +31,16 @@ def _write_yaml(path, layer_pattern, use_bitnet=True):
     import yaml
     data = {
         "model": {
-            "vocab_size": 64,
-            "hidden_size": 64,
-            "num_layers": 2,
-            "num_heads": 4,
-            "layer_pattern": layer_pattern,
-            "use_bitnet": use_bitnet,
-            "use_moe": False,
-            "ffn_hidden_size": 128,
+            "dims": {
+                "vocab_size": 64,
+                "hidden_size": 64,
+                "num_layers": 2,
+                "num_heads": 4,
+                "layer_pattern": layer_pattern,
+            },
+            "bitnet": {"enabled": use_bitnet},
+            "moe": {"enabled": False},
+            "ffn": {"hidden_size": 128},
         }
     }
     with open(path, "w") as f:
@@ -51,11 +53,7 @@ class TestBitNetGGUFExport(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp()
 
     def _make_checkpoint(self, mode="encoder"):
-        cfg = FrankensteinModelConfig.from_flat(
-            vocab_size=64, hidden_size=64, num_layers=2, num_heads=4,
-            use_bitnet=True, use_moe=False, ffn_hidden_size=128,
-            layer_pattern=["standard"], mode=mode,
-        )
+        cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 64, "num_layers": 2, "num_heads": 4, "layer_pattern": ['standard'], "mode": mode}, "bitnet": {"enabled": True}, "moe": {"enabled": False}, "ffn": {"hidden_size": 128}})
         model = (FrankensteinDecoder(cfg) if mode == "decoder"
                  else FrankensteinEncoder(cfg))
         path = os.path.join(self.tmpdir, "c.pt")

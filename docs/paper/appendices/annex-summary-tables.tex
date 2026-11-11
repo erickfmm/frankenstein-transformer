@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 49 sequence mixers across ten families, 36 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 49 sequence mixers across nine families, 36 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -25,25 +25,24 @@ Table~\ref{tab:all-mixers} enumerates every sequence mixer supported by the \tex
 \label{tab:all-mixers}
 \endlastfoot
 
-\multicolumn{6}{c}{\textbf{Dense and convolution-augmented (5)}} \\
+\multicolumn{6}{c}{\textbf{Dense and convolution-augmented (6)}} \\
 \midrule
 standard & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Full global context; KV bottleneck at long sequences & \citep{vaswani_attention_2017} \\
 sigmoid & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Element-wise gating; hardware-efficient replacement for softmax & \citep{ramapuram_theory_2024} \\
 gqa & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Tunable KV compression; $G\times$ cache reduction via shared heads & \citep{ainslie_gqa_2023} \\
 ca & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Exact integration over piecewise-linear key/value trajectories; half-token caps; nonnegative normalized effective weights & \citep{khadangi_continuum_2026} \\
 conformer & Conv-augmented & $\mathcal{O}(n^2 d + n K d)$ & $\mathcal{O}(n)$ (full recompute) & Macaron FFNs around relative-sinusoidal MHSA and a depthwise-conv module ($K=32$); local and global context in one block & \citep{Gulati2020} \\
+fastconformer & Conv-augmented & $\mathcal{O}(n \cdot (w + g) \cdot d)$ & $\mathcal{O}(w + g)$ & Limited-context window + head-pinned global token; optional separate global projections; linear-memory long-form & \citep{rekesh_fastconformer_2023} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Recurrent (5)}} \\
+\multicolumn{6}{c}{\textbf{Recurrent (3)}} \\
 \midrule
 retnet & Recurrent & $\mathcal{O}(n^2 d)$ parallel & $\mathcal{O}(1)$ & Multi-scale decay; triple computation mode (parallel, recurrent, chunkwise) & \citep{sun_retentive_2023} \\
 mamba & Recurrent & $\mathcal{O}(n d)$ & $\mathcal{O}(1)$ & Selective state-space model; hardware-aware parallel scan & \citep{gu_mamba_2023} \\
 ode & Recurrent & $\mathcal{O}(k \cdot n^2 d)$ & $\mathcal{O}(k n)$ & Continuous-depth RK4 integration; adaptive step solver & \citep{zhang_continuous_2021} \\
-titan & Recurrent & $\mathcal{O}(c^2 + n f)$ & $\mathcal{O}(c^2 + 1)$ & Test-time memory adaptation; surprise-driven write dynamics & \citep{behrouz_titans_2025} \\
-engram & Memory & $\mathcal{O}(n \cdot N \cdot H)$ & $\mathcal{O}(1)$ lookup & Conditional N-gram memory; hash-based scalable retrieval & \citep{cheng2026conditionalmemoryscalablelookup} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Sparse (12)}} \\
+\multicolumn{6}{c}{\textbf{Sparse (11)}} \\
 \midrule
 sparse\_transformer & Sparse & $\mathcal{O}(n \sqrt{n} \cdot d)$ & $\mathcal{O}(n)$ & Factorized strided + fixed masks; $\sqrt{n}$ sparsity pattern & \citep{child_sparse_transformer_2019} \\
 longformer & Sparse & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(n)$ & Sliding window + dilation + global tokens; linear in $n$ & \citep{beltagy_longformer_2020} \\
@@ -56,7 +55,6 @@ fasa & Sparse & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ &
 msa & Sparse & $\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}} \cdot N^2 + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Index-branch block sparse; deployed at 109B scale & \citep{lai_minimax_2026} \\
 sparda & Sparse & $\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot N_b + H_q \cdot d_h \cdot N \cdot k \cdot B_k)$ & $\mathcal{O}(n)$ & Forecast-guided lookahead prefetch; predictive sparsity & \citep{fu_sparda_2026} \\
 lsa & Sparse & $\mathcal{O}(N^2/\bar{n}_b + N\,(k+n_w+n_{\text{sink}})\,d_h)$ & $\mathcal{O}(N/\bar{n}_b + k+n_w+n_{\text{sink}})$ & Semantic Ward clustering of keys; top-$k$ long-range selection; natively trainable, no extra parameters & \citep{kubicek_lsa_2026} \\
-fastconformer & Sparse & $\mathcal{O}(n \cdot (w + g) \cdot d)$ & $\mathcal{O}(w + g)$ & Limited-context window + head-pinned global token; optional separate global projections; linear-memory long-form & \citep{rekesh_fastconformer_2023} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Gated (9)}} \\
@@ -101,8 +99,10 @@ gma & Latent & $\mathcal{O}(nK d_r + nK d_v)$ & $\mathcal{O}(K)$/step & Gaussian
 ssog & Geometric field & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$ & $\mathcal{O}(R \cdot n\sqrt{n} \cdot d)$/fwd & SSOG: separable Gaussian field over relative position; content steers (bounded $\mu/\sigma/\lambda$ residuals behind cold-started gates), never scores; encoder-only & \citep{pisoni_ssog_2026} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Memory (1)}} \\
+\multicolumn{6}{c}{\textbf{Memory (3)}} \\
 \midrule
+titan & Memory & $\mathcal{O}(c^2 + n f)$ & $\mathcal{O}(c^2 + 1)$ & Test-time memory adaptation; surprise-driven write dynamics (attention window only in this implementation) & \citep{behrouz_titans_2025} \\
+engram & Memory & $\mathcal{O}(n \cdot N \cdot H)$ & $\mathcal{O}(1)$ lookup & Conditional N-gram memory; hash-based scalable retrieval & \citep{cheng2026conditionalmemoryscalablelookup} \\
 memory & Memory & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Token-ID memory values $V = K + \mathrm{Norm}(E[s])$; removes the value projection; $+Nd_v$ parameters per layer & \citep{kang_memory_attention_2026} \\
 \bottomrule
 \end{longtable}

@@ -231,15 +231,19 @@ class FrankensteinSentenceTransformer:
     
     def _get_default_config(self) -> FrankensteinModelConfig:
         """Get default config optimized for P40 24GB"""
-        return FrankensteinModelConfig.from_flat(
-            vocab_size=50000,
-            hidden_size=768,        # Reduced for SBERT training
-            num_layers=12,
-            num_loops=1,            # Less recursion for faster training
-            num_heads=12,
-            ode_steps=1,            # Minimal ODE steps for speed
-            dropout=0.1,
-            use_bitnet=True
+        return FrankensteinModelConfig.from_dict(
+            {
+                "dims": {
+                    "vocab_size": 50000,
+                    "hidden_size": 768,  # Reduced for SBERT training
+                    "num_layers": 12,
+                    "num_loops": 1,  # Less recursion for faster training
+                    "num_heads": 12,
+                    "dropout": 0.1,
+                },
+                "attention": {"ode": {"steps": 1}},
+                "bitnet": {"enabled": True},
+            }
         )
     
     def _build_sentence_transformer(self) -> SentenceTransformer:
@@ -278,12 +282,12 @@ class FrankensteinSentenceTransformer:
         # Create wrapper
         word_embedding_model = FrankensteinWrapper(
             self.base_model,
-            self.config.hidden_size
+            self.config.dims.hidden_size
         )
         
         # Add pooling layer
         pooling_model = models.Pooling(
-            self.config.hidden_size,
+            self.config.dims.hidden_size,
             pooling_mode_mean_tokens=(self.pooling_mode == "mean"),
             pooling_mode_cls_token=(self.pooling_mode == "cls"),
             pooling_mode_max_tokens=(self.pooling_mode == "max")
@@ -1844,13 +1848,17 @@ def main(argv=None):
             device=resolved_device,
         )
     else:
-        config = FrankensteinModelConfig.from_flat(
-            vocab_size=50000,
-            hidden_size=args.hidden_size,
-            num_layers=args.num_layers,
-            num_loops=1,
-            ode_steps=1,
-            use_bitnet=True
+        config = FrankensteinModelConfig.from_dict(
+            {
+                "dims": {
+                    "vocab_size": 50000,
+                    "hidden_size": args.hidden_size,
+                    "num_layers": args.num_layers,
+                    "num_loops": 1,
+                },
+                "attention": {"ode": {"steps": 1}},
+                "bitnet": {"enabled": True},
+            }
         )
         model_wrapper = FrankensteinSentenceTransformer(
             model_config=config,

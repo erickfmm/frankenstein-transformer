@@ -232,8 +232,8 @@ class FalconGates(nn.Module):
 
         params = mixer_params(config, "falcon1", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.per_column = bool(per_column)
         out_dim = self.num_heads * self.head_dim if per_column else self.num_heads
@@ -252,8 +252,8 @@ class FalconGates(nn.Module):
                 f"Unknown falcon_lambda_mode {self.lambda_mode!r}; expected 'static' or 'ctx'"
             )
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
-        gate_cls = BitLinear if (config.use_bitnet and getattr(config, "bitnet_routers", False)) else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
+        gate_cls = BitLinear if (config.bitnet.enabled and getattr(config.bitnet, "routers", False)) else nn.Linear
 
         if self.beta_mode == "ctx_beta":
             self.beta_proj = gate_cls(self.hidden_size, out_dim, bias=True)

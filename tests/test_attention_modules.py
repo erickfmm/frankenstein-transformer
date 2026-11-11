@@ -6,7 +6,7 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.attention.standard import StandardAttention
     from src.model.attention.sigmoid import SigmoidAttention
     from src.model.attention.ca import ContinuumAttention, _exp_moments
@@ -18,29 +18,9 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(**overrides):
-    base = dict(
-        vocab_size=64,
-        hidden_size=48,
-        num_layers=1,
-        num_loops=1,
-        num_heads=6,
-        retention_heads=6,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        use_moe=False,
-        ode_solver="rk4",
-        ode_steps=1,
-        ffn_hidden_size=96,
-        ffn_activation="gelu",
-        positional_encoding="hope",
-        mode="encoder",
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": 64, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}, "positional_encoding": 'hope'}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 BSZ, SEQ, DIM = 2, 8, 48
@@ -60,7 +40,7 @@ class StandardAttentionTests(unittest.TestCase):
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_decoder_output_shape(self):
-        attn = self._make(mode="decoder")
+        attn = self._make(dims={"mode": 'decoder'})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
@@ -71,7 +51,7 @@ class StandardAttentionTests(unittest.TestCase):
 
     def test_invalid_hidden_size_raises(self):
         with self.assertRaises(ValueError):
-            StandardAttention(_cfg(hidden_size=50, num_heads=6))  # 50 % 6 != 0
+            StandardAttention(_cfg(dims={'hidden_size': 50, 'num_heads': 6}))  # 50 % 6 != 0
 
     def test_gradient_flows(self):
         attn = self._make()
@@ -92,7 +72,7 @@ class StandardAttentionTests(unittest.TestCase):
         self.assertEqual(y.shape, (BSZ, 1, DIM))
 
     def test_with_bitnet(self):
-        attn = StandardAttention(_cfg(use_bitnet=True))
+        attn = StandardAttention(_cfg(bitnet={'enabled': True}))
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
@@ -111,13 +91,13 @@ class SigmoidAttentionTests(unittest.TestCase):
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_decoder_output_shape(self):
-        attn = self._make(mode="decoder")
+        attn = self._make(dims={"mode": 'decoder'})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_invalid_hidden_size_raises(self):
         with self.assertRaises(ValueError):
-            SigmoidAttention(_cfg(hidden_size=50, num_heads=6))
+            SigmoidAttention(_cfg(dims={'hidden_size': 50, 'num_heads': 6}))
 
     def test_gradient_flows(self):
         attn = self._make()
@@ -142,12 +122,12 @@ class ContinuumAttentionTests(unittest.TestCase):
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_decoder_output_shape(self):
-        attn = self._make(mode="decoder")
+        attn = self._make(dims={"mode": 'decoder'})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_decoder_is_causal(self):
-        attn = self._make(mode="decoder")
+        attn = self._make(dims={"mode": 'decoder'})
         attn.eval()
         x = self._x()
         with torch.no_grad():
@@ -159,7 +139,7 @@ class ContinuumAttentionTests(unittest.TestCase):
         self.assertTrue(torch.allclose(y[:, :-1, :], y2[:, :-1, :], atol=1e-5))
 
     def test_equal_scores_reduce_to_uniform(self):
-        attn = self._make(mode="decoder")
+        attn = self._make(dims={"mode": 'decoder'})
         seq = 6
         scores = torch.zeros(1, 1, seq, seq)
         mask = torch.triu(torch.ones(seq, seq, dtype=torch.bool), diagonal=1)
@@ -173,7 +153,7 @@ class ContinuumAttentionTests(unittest.TestCase):
 
     def test_first_token_output_is_value(self):
         # Paper section 2.4: for i = 0 the two half caps give o_0 = v_0.
-        attn = self._make(mode="decoder")
+        attn = self._make(dims={"mode": 'decoder'})
         scores = torch.zeros(1, 1, 4, 4).masked_fill(
             torch.triu(torch.ones(4, 4, dtype=torch.bool), diagonal=1)
             .unsqueeze(0).unsqueeze(0), float("-inf")
@@ -193,33 +173,33 @@ class ContinuumAttentionTests(unittest.TestCase):
             self.assertTrue(torch.allclose(j2, torch.trapz(u * u * e, u).float(), rtol=1e-4, atol=1e-5))
 
     def test_learned_gain_parameter_count(self):
-        attn = self._make(ca_learned_gain=True)
+        attn = self._make(attention={"ca": {"learned_gain": True}})
         n_proj = sum(p.numel() for n, p in attn.named_parameters() if n.endswith("_proj.weight"))
         gain = dict(attn.named_parameters())["log_gain"]
         self.assertEqual(gain.numel(), attn.num_heads)
         self.assertEqual(n_proj + gain.numel(), 4 * DIM * DIM + attn.num_heads)
 
     def test_fixed_gain_has_no_extra_parameters(self):
-        attn = self._make(ca_learned_gain=False)
+        attn = self._make(attention={"ca": {"learned_gain": False}})
         self.assertIsNone(attn.log_gain)
         self.assertEqual(
             sum(p.numel() for p in attn.parameters()), 4 * DIM * DIM
         )
 
     def test_gradient_flows(self):
-        attn = self._make(ca_learned_gain=True)
+        attn = self._make(attention={"ca": {"learned_gain": True}})
         x = self._x().requires_grad_(True)
         attn(x).sum().backward()
         self.assertIsNotNone(x.grad)
         self.assertIsNotNone(dict(attn.named_parameters())["log_gain"].grad)
 
     def test_with_bitnet(self):
-        attn = self._make(use_bitnet=True)
+        attn = self._make(bitnet={"enabled": True})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_no_nans_long_sequence(self):
-        attn = self._make(mode="decoder")
+        attn = self._make(dims={"mode": 'decoder'})
         attn.eval()
         x = torch.randn(1, 64, DIM)
         with torch.no_grad():
@@ -231,9 +211,9 @@ class ContinuumAttentionTests(unittest.TestCase):
         # output, and disabling it must reproduce the NoPE run.
         from src.model.embeddings.factory import build_pos_encoder
 
-        cfg_on = _cfg(positional_encoding="alibi", ca_use_pe=True)
-        cfg_off = _cfg(positional_encoding="alibi", ca_use_pe=False)
-        cfg_none = _cfg(positional_encoding="nope", ca_use_pe=False)
+        cfg_on = _cfg(positional_encoding='alibi', positional_encoding_parameters={'use_pe': {'ca_use_pe': True}})
+        cfg_off = _cfg(positional_encoding='alibi', positional_encoding_parameters={'use_pe': {'ca_use_pe': False}})
+        cfg_none = _cfg(positional_encoding='nope', positional_encoding_parameters={'use_pe': {'ca_use_pe': False}})
         x = self._x()
         torch.manual_seed(0)
         on = ContinuumAttention(cfg_on, pos_encoder=build_pos_encoder(cfg_on))
@@ -267,7 +247,7 @@ class MemoryAttentionTests(unittest.TestCase):
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_decoder_output_shape(self):
-        attn = self._make(mode="decoder")
+        attn = self._make(dims={"mode": 'decoder'})
         y = attn(self._x(), input_ids=self._ids())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
@@ -277,7 +257,7 @@ class MemoryAttentionTests(unittest.TestCase):
             attn(self._x())
 
     def test_decoder_is_causal(self):
-        attn = self._make(mode="decoder").eval()
+        attn = self._make(dims={"mode": 'decoder'}).eval()
         x, ids = self._x(), self._ids()
         full = attn(x, input_ids=ids)
         prefix = attn(x[:, :4], input_ids=ids[:, :4])
@@ -305,7 +285,7 @@ class MemoryAttentionTests(unittest.TestCase):
     def test_with_bitnet(self):
         from src.model.attention.common import BitLinear
 
-        attn = self._make(use_bitnet=True)
+        attn = self._make(bitnet={"enabled": True})
         self.assertIsInstance(attn.q_proj, BitLinear)
         self.assertIsInstance(attn.k_proj, BitLinear)
         self.assertIsInstance(attn.out_proj, BitLinear)
@@ -315,14 +295,14 @@ class MemoryAttentionTests(unittest.TestCase):
 
     def test_no_nans(self):
         for mode in ("encoder", "decoder"):
-            attn = self._make(mode=mode).eval()
+            attn = self._make(dims={"mode": mode}).eval()
             y = attn(self._x(), input_ids=self._ids())
             self.assertTrue(torch.isfinite(y).all())
 
     def test_qk_norm_attached_and_runs(self):
         from src.model.norm.qk import QKNorm
 
-        attn = self._make(use_qk_norm=True, qk_norm_method="rms_norm")
+        attn = self._make(norm={"qk_norm": {"enabled": True, "method": 'rms_norm'}})
         self.assertIsInstance(attn.qk_norm, QKNorm)
         y = attn(self._x(), input_ids=self._ids())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
@@ -333,8 +313,8 @@ class MemoryAttentionTests(unittest.TestCase):
                 return x + 1.0
 
         torch.manual_seed(0)
-        on = self._make(memory_use_pe=True)
-        off = self._make(memory_use_pe=False)
+        on = self._make(positional_encoding_parameters={'use_pe': {'memory_use_pe': True}})
+        off = self._make(positional_encoding_parameters={'use_pe': {'memory_use_pe': False}})
         off.load_state_dict(on.state_dict())
         pe = _AddOne()
         x, ids = self._x(), self._ids()
@@ -355,22 +335,22 @@ class TitanAttentionTests(unittest.TestCase):
         return torch.randn(BSZ, SEQ, DIM)
 
     def test_encoder_with_hope(self):
-        attn = self._make(positional_encoding="hope")
+        attn = self._make(positional_encoding='hope')
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_encoder_with_rope(self):
-        attn = self._make(positional_encoding="rope")
+        attn = self._make(positional_encoding='rope')
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_decoder_causal_mode(self):
-        attn = self._make(mode="decoder")
+        attn = self._make(dims={"mode": 'decoder'})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_logical_layer_idx_affects_hope(self):
-        attn = self._make(positional_encoding="hope")
+        attn = self._make(positional_encoding='hope')
         y0 = attn(self._x(), logical_layer_idx=0)
         y5 = attn(self._x(), logical_layer_idx=5)
         # outputs differ because HoPE uses layer_idx for scaling
@@ -378,11 +358,11 @@ class TitanAttentionTests(unittest.TestCase):
 
     def test_invalid_positional_encoding_raises(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(**{**_cfg().__dict__, "positional_encoding": "absolute"})
+            FrankensteinModelConfig.from_dict({**{**_cfg().__dict__, 'positional_encoding': 'absolute'}})
 
     def test_invalid_hidden_size_raises(self):
         with self.assertRaises(ValueError):
-            TitanAttention(_cfg(hidden_size=50, num_heads=6))
+            TitanAttention(_cfg(dims={'hidden_size': 50, 'num_heads': 6}))
 
     def test_gradient_flows(self):
         attn = self._make()
@@ -391,22 +371,22 @@ class TitanAttentionTests(unittest.TestCase):
         self.assertIsNotNone(x.grad)
 
     def test_with_bitnet_and_hope(self):
-        attn = TitanAttention(_cfg(use_bitnet=True, positional_encoding="hope"))
+        attn = TitanAttention(_cfg(bitnet={'enabled': True}, positional_encoding='hope'))
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_titan_with_nope(self):
-        attn = self._make(positional_encoding="nope")
+        attn = self._make(positional_encoding='nope')
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_titan_with_alibi(self):
-        attn = self._make(positional_encoding="alibi")
+        attn = self._make(positional_encoding='alibi')
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_titan_with_pape(self):
-        attn = self._make(positional_encoding="pape", pape_num_parabolas=4, pape_num_positions=1)
+        attn = self._make(positional_encoding='pape', positional_encoding_parameters={"pape": {"num_parabolas": 4, "num_positions": 1}})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
@@ -422,7 +402,7 @@ class ODEFuncTests(unittest.TestCase):
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_output_shape_decoder(self):
-        func = ODEFunc(_cfg(mode="decoder"))
+        func = ODEFunc(_cfg(dims={'mode': 'decoder'}))
         y = func(0.5, self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
@@ -433,22 +413,22 @@ class ODEAttentionBlockTests(unittest.TestCase):
         return torch.randn(BSZ, SEQ, DIM)
 
     def test_rk4_solver_output_shape(self):
-        block = ODEAttentionBlock(_cfg(ode_solver="rk4", ode_steps=2))
+        block = ODEAttentionBlock(_cfg(attention={'ode': {'solver': 'rk4', 'steps': 2}}))
         y = block(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_euler_solver_output_shape(self):
-        block = ODEAttentionBlock(_cfg(ode_solver="euler", ode_steps=2))
+        block = ODEAttentionBlock(_cfg(attention={'ode': {'solver': 'euler', 'steps': 2}}))
         y = block(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_single_step(self):
-        block = ODEAttentionBlock(_cfg(ode_solver="rk4", ode_steps=1))
+        block = ODEAttentionBlock(_cfg(attention={'ode': {'solver': 'rk4', 'steps': 1}}))
         y = block(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
-        block = ODEAttentionBlock(_cfg(ode_solver="rk4", ode_steps=1))
+        block = ODEAttentionBlock(_cfg(attention={'ode': {'solver': 'rk4', 'steps': 1}}))
         x = self._x().requires_grad_(True)
         block(x).sum().backward()
         self.assertIsNotNone(x.grad)
@@ -465,7 +445,7 @@ class MultiScaleRetentionTests(unittest.TestCase):
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_decoder_output_shape(self):
-        ret = MultiScaleRetention(_cfg(mode="decoder"))
+        ret = MultiScaleRetention(_cfg(dims={'mode': 'decoder'}))
         y = ret(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
@@ -489,66 +469,66 @@ class GroupedQueryAttentionTests(unittest.TestCase):
         return torch.randn(BSZ, SEQ, DIM)
 
     def test_encoder_output_shape(self):
-        attn = self._make(num_kv_heads=2)
+        attn = self._make(dims={"num_kv_heads": 2})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_decoder_output_shape(self):
-        attn = self._make(num_kv_heads=2, mode="decoder")
+        attn = self._make(dims={"num_kv_heads": 2, "mode": 'decoder'})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_kv_heads_one_mqa(self):
-        attn = self._make(num_kv_heads=1)
+        attn = self._make(dims={"num_kv_heads": 1})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_kv_heads_equal_num_heads(self):
-        attn = self._make(num_kv_heads=6)
+        attn = self._make(dims={"num_kv_heads": 6})
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_logical_layer_idx_accepted(self):
-        attn = self._make(num_kv_heads=2)
+        attn = self._make(dims={"num_kv_heads": 2})
         y = attn(self._x(), logical_layer_idx=3)
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_invalid_hidden_size_raises(self):
         with self.assertRaises(ValueError):
-            GroupedQueryAttention(_cfg(hidden_size=50, num_heads=6, num_kv_heads=2))
+            GroupedQueryAttention(_cfg(dims={'hidden_size': 50, 'num_heads': 6, 'num_kv_heads': 2}))
 
     def test_invalid_kv_heads_less_than_one_raises(self):
         with self.assertRaises(ValueError):
-            GroupedQueryAttention(_cfg(num_heads=6, num_kv_heads=0))
+            GroupedQueryAttention(_cfg(dims={'num_heads': 6, 'num_kv_heads': 0}))
 
     def test_invalid_kv_heads_greater_than_num_heads_raises(self):
         with self.assertRaises(ValueError):
-            GroupedQueryAttention(_cfg(num_heads=6, num_kv_heads=12))
+            GroupedQueryAttention(_cfg(dims={'num_heads': 6, 'num_kv_heads': 12}))
 
     def test_indivisible_kv_heads_raises(self):
         with self.assertRaises(ValueError):
-            GroupedQueryAttention(_cfg(num_heads=6, num_kv_heads=4))
+            GroupedQueryAttention(_cfg(dims={'num_heads': 6, 'num_kv_heads': 4}))
 
     def test_gradient_flows(self):
-        attn = self._make(num_kv_heads=2)
+        attn = self._make(dims={"num_kv_heads": 2})
         x = self._x().requires_grad_(True)
         attn(x).sum().backward()
         self.assertIsNotNone(x.grad)
 
     def test_batch_size_one(self):
-        attn = self._make(num_kv_heads=3)
+        attn = self._make(dims={"num_kv_heads": 3})
         x = torch.randn(1, SEQ, DIM)
         y = attn(x)
         self.assertEqual(y.shape, (1, SEQ, DIM))
 
     def test_seq_len_one(self):
-        attn = self._make(num_kv_heads=2)
+        attn = self._make(dims={"num_kv_heads": 2})
         x = torch.randn(BSZ, 1, DIM)
         y = attn(x)
         self.assertEqual(y.shape, (BSZ, 1, DIM))
 
     def test_with_bitnet(self):
-        attn = GroupedQueryAttention(_cfg(use_bitnet=True, num_kv_heads=2))
+        attn = GroupedQueryAttention(_cfg(bitnet={'enabled': True}, dims={'num_kv_heads': 2}))
         y = attn(self._x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 

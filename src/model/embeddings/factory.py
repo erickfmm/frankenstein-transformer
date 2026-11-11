@@ -64,7 +64,7 @@ def _build_alibi(config: Any, params) -> nn.Module:
     """Build ALiBi."""
     from .alibi import ALiBi
 
-    return ALiBi(int(params.get("num_heads", config.num_heads)))
+    return ALiBi(int(params.get("num_heads", config.dims.num_heads)))
 
 
 def _build_bam(config: Any, params) -> nn.Module:
@@ -72,7 +72,7 @@ def _build_bam(config: Any, params) -> nn.Module:
     from .bam import BAM
 
     return BAM(
-        int(config.num_heads),
+        int(config.dims.num_heads),
         learn_mu=bool(params.get("learn_mu", False)),
         theta_init=float(params.get("theta_init", 0.0)),
         mu_init=float(params.get("mu_init", 0.0)),
@@ -85,8 +85,8 @@ def _build_pape(config: Any, params) -> nn.Module:
     from .pape import PaPE
 
     return PaPE(
-        int(config.hidden_size),
-        int(config.num_heads),
+        int(config.dims.hidden_size),
+        int(config.dims.num_heads),
         int(config.head_dim),
         num_parabolas=int(params.get("num_parabolas", 4)),
         num_positions=int(params.get("num_positions", 1)),
@@ -98,8 +98,8 @@ def _build_pape_efficient(config: Any, params) -> nn.Module:
     from .pape_efficient import PaPEEfficient
 
     return PaPEEfficient(
-        int(config.hidden_size),
-        int(config.num_heads),
+        int(config.dims.hidden_size),
+        int(config.dims.num_heads),
         int(config.head_dim),
         num_parabolas=int(params.get("num_parabolas", 4)),
         num_positions=int(params.get("num_positions", 1)),
@@ -111,8 +111,8 @@ def _build_pape_ri(config: Any, params) -> nn.Module:
     from .pape_ri import PaPERI
 
     return PaPERI(
-        int(config.hidden_size),
-        int(config.num_heads),
+        int(config.dims.hidden_size),
+        int(config.dims.num_heads),
         int(config.head_dim),
         num_positions=int(params.get("num_positions", 2)),
     )
@@ -123,7 +123,7 @@ def _build_sinusoidal_absolute(config: Any, params) -> nn.Module:
     from .sinusoidal import SinusoidalAbsolute
 
     return SinusoidalAbsolute(
-        int(config.hidden_size),
+        int(config.dims.hidden_size),
         max_len=int(params.get("max_len", 512)),
         base=float(params.get("base", 10_000.0)),
         scale=float(params.get("scale", 1.0)),
@@ -147,7 +147,7 @@ def _build_learned_absolute(config: Any, params) -> nn.Module:
     from .learned_absolute import LearnedAbsolutePE
 
     return LearnedAbsolutePE(
-        int(config.hidden_size),
+        int(config.dims.hidden_size),
         max_len=int(params.get("max_len", 512)),
         init_std=float(params.get("init_std", 0.02)),
     )
@@ -176,11 +176,11 @@ def build_pos_encoder(config: Any) -> Optional[nn.Module]:
     module = resolve_builder(spec.builder)(config, params)
 
     # Scalable Softmax is transversal: attach it to every encoding.
-    if getattr(config, "use_ssmax", False):
+    if getattr(config.ssmax, "enabled", False):
         from .ssmax import SSMax
 
         module.ssmax = SSMax(
-            int(config.num_heads), s_init=float(getattr(config, "ssmax_s_init", 1.0))
+            int(config.dims.num_heads), s_init=float(getattr(config.ssmax, "s_init", 1.0))
         )
     else:
         module.ssmax = None
@@ -189,7 +189,7 @@ def build_pos_encoder(config: Any) -> Optional[nn.Module]:
 
 def _build_embedding_standard(config: Any, params) -> nn.Module:
     """Build a standard token embedding table."""
-    return nn.Embedding(int(config.vocab_size), int(config.hidden_size))
+    return nn.Embedding(int(config.dims.vocab_size), int(config.dims.hidden_size))
 
 
 def _build_embedding_factorized(config: Any, params) -> nn.Module:

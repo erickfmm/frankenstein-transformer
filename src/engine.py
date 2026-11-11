@@ -176,10 +176,10 @@ def build_tokenizer(loaded: LoadedTrainingConfig) -> Any:
     from .tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 
     logging.info("\n" + "=" * 60)
-    logging.info("Step 1: Training/Loading SPM tokenizer (%s vocab)", config.vocab_size)
+    logging.info("Step 1: Training/Loading SPM tokenizer (%s vocab)", config.dims.vocab_size)
     logging.info("=" * 60)
 
-    vocab_size = config.vocab_size
+    vocab_size = config.dims.vocab_size
     model_prefix = "es_redpajama_50k" if vocab_size == 50_000 else f"es_redpajama_{vocab_size}"
     model_path = f"{model_prefix}.model"
 
@@ -221,7 +221,7 @@ def build_model(
         The constructed ``nn.Module``.
     """
     if num_labels is not None:
-        config.num_labels = int(num_labels)
+        config.classification_head.num_labels = int(num_labels)
         if int(num_labels) >= 1:
             config.classification_head.enabled = True
 
@@ -234,7 +234,7 @@ def build_model(
         )
 
     if model_class == "frankenstein_text_decoder":
-        config.mode = "decoder"
+        config.dims.mode = "decoder"
         model = FrankensteinDecoder(config)
     elif model_class == "frankenstein_vit":
         model = FrankensteinViT(config)
@@ -245,42 +245,42 @@ def build_model(
 
     logging.info("Model Config:")
     logging.info("  - Model Class: %s", model_class)
-    logging.info("  - Hidden Size: %s", config.hidden_size)
+    logging.info("  - Hidden Size: %s", config.dims.hidden_size)
     logging.info(
         "  - Layers: %s x %s = %s logical",
-        config.num_layers,
-        config.num_loops,
-        config.num_layers * config.num_loops,
+        config.dims.num_layers,
+        config.dims.num_loops,
+        config.dims.num_layers * config.dims.num_loops,
     )
-    logging.info("  - Layer Pattern: %s", config.layer_pattern)
+    logging.info("  - Layer Pattern: %s", config.dims.layer_pattern)
     logging.info(
-        "  - BitNet: %s (bitnet_routers: %s)", config.use_bitnet, getattr(config, "bitnet_routers", False)
+        "  - BitNet: %s (bitnet_routers: %s)", config.bitnet.enabled, getattr(config.bitnet, "routers", False)
     )
     logging.info("  - ODE Solver: %s (%s steps)", config.attention_params("ode").get("solver", "rk4"), config.attention_params("ode").get("steps", 2))
-    logging.info("  - Norm Type: %s", config.norm_type)
-    if getattr(config, "use_moe", False):
+    logging.info("  - Norm Type: %s", config.norm.type)
+    if getattr(config.moe, "enabled", False):
         logging.info(
             "  - MoE: %s scoring, top-%s/%s, expert width %s, balancing=%s%s, "
             "shared=%s, latent=%s, MoE layers=%s/%s",
-            getattr(config, "moe_router_scoring", "softmax"),
-            getattr(config, "top_k_experts", 0),
-            getattr(config, "num_experts", 0),
-            getattr(config, "moe_expert_hidden_size", None)
-            or getattr(config, "ffn_hidden_size", None),
-            getattr(config, "moe_aux_loss_type", "none"),
+            getattr(config.moe.router, "scoring", "softmax"),
+            getattr(config.moe, "top_k", 0),
+            getattr(config.moe, "num_experts", 0),
+            getattr(config.moe, "expert_hidden_size", None)
+            or getattr(config.ffn, "hidden_size", None),
+            getattr(config.moe.balancing, "aux_loss", "none"),
             (
                 ""
-                if getattr(config, "moe_bias_update", "none") == "none"
-                else f" + {config.moe_bias_update} bias"
+                if getattr(config.moe.balancing, "bias_update", "none") == "none"
+                else f" + {config.moe.balancing.bias_update} bias"
             ),
-            getattr(config, "moe_shared_experts_count", 0),
+            getattr(config.moe.shared, "count", 0),
             (
-                f"{config.moe_latent_dim}"
-                if getattr(config, "moe_latent_enabled", False)
+                f"{config.moe.latent.dim}"
+                if getattr(config.moe.latent, "enabled", False)
                 else "off"
             ),
             config.moe_layer_count() if hasattr(config, "moe_layer_count") else "?",
-            getattr(config, "num_layers", "?"),
+            getattr(config.dims, "num_layers", "?"),
         )
     return model
 
@@ -424,8 +424,8 @@ def build_dataloader(
 def _resolve_vocab_size(model: torch.nn.Module, fallback: int = 50_000) -> int:
     """Resolve the vocabulary size from a model.
 
-    Checks ``model.config.vocab_size`` first, then ``get_input_embeddings()``,
-    falling back to the provided default.
+    Checks ``model.config.dims.vocab_size`` first, then
+    ``get_input_embeddings()``, falling back to the provided default.
 
     Args:
         model: PyTorch model.
@@ -434,8 +434,10 @@ def _resolve_vocab_size(model: torch.nn.Module, fallback: int = 50_000) -> int:
     Returns:
         Resolved vocabulary size as an integer.
     """
-    if hasattr(model, "config") and getattr(model.config, "vocab_size", None):
-        return int(model.config.vocab_size)
+    config = getattr(model, "config", None)
+    dims = getattr(config, "dims", None)
+    if dims is not None and getattr(dims, "vocab_size", None):
+        return int(dims.vocab_size)
     if hasattr(model, "get_input_embeddings"):
         emb = model.get_input_embeddings()
         if emb is not None and getattr(emb, "num_embeddings", None):
@@ -966,7 +968,7 @@ def _build_trained_tokenizer_model(
             raise ValueError(
                 "model config is required when base_model is not provided"
             )
-        config.vocab_size = len(tokenizer)
+        config.dims.vocab_size = len(tokenizer)
         inject_token_vocab(config, tokenizer)
         model = build_model(loaded.model_class, config)
         runtime_config = config
@@ -1025,14 +1027,14 @@ def _train_vision(
             dataset = DummyImageDataset(
                 task=loaded.task,
                 num_samples=64,
-                image_height=config.image_height,
-                image_width=config.image_width,
-                in_channels=config.in_channels,
-                patch_size=config.patch_size,
+                image_height=config.image.height,
+                image_width=config.image.width,
+                in_channels=config.image.in_channels,
+                patch_size=config.image.patch_size,
                 num_classes=config.num_classes,
-                num_seg_classes=config.num_seg_classes,
-                mask_ratio=config.mask_ratio,
-                prediction_target=config.prediction_target,
+                num_seg_classes=config.image.num_seg_classes,
+                mask_ratio=config.image.mask_ratio,
+                prediction_target=config.image.prediction_target,
             )
 
     if (
@@ -1165,26 +1167,26 @@ def _train_audio(
                 audio_config=loaded.audio_config,
                 task=loaded.task,
                 num_classes=int(getattr(config, "num_classes", 2) or 2),
-                vocab_size=int(getattr(config, "vocab_size", 32) or 32),
+                vocab_size=int(getattr(config.dims, "vocab_size", 32) or 32),
                 max_frames=1600,
             )
 
     if loaded.task == "asr":
         vocab_size = int(getattr(dataset, "vocab_size", 0) or 0)
-        if vocab_size > 0 and int(config.vocab_size) < vocab_size:
+        if vocab_size > 0 and int(config.dims.vocab_size) < vocab_size:
             logging.info(
                 "Resizing the ASR vocabulary from %s to the character "
                 "tokenizer vocabulary (%s)",
-                config.vocab_size,
+                config.dims.vocab_size,
                 vocab_size,
             )
-            config.vocab_size = vocab_size
-        elif vocab_size > 0 and int(config.vocab_size) > vocab_size:
+            config.dims.vocab_size = vocab_size
+        elif vocab_size > 0 and int(config.dims.vocab_size) > vocab_size:
             logging.warning(
                 "Configured vocab_size=%s exceeds the character tokenizer "
                 "vocabulary (%s); keeping the configured size (the extra ids "
                 "stay unused).",
-                config.vocab_size,
+                config.dims.vocab_size,
                 vocab_size,
             )
 
@@ -1595,7 +1597,7 @@ def load_checkpoint(path: str) -> Tuple[torch.nn.Module, LoadedTrainingConfig, A
             try:
                 from .tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 
-                vocab_size = int(getattr(loaded.model_config, "vocab_size", 50_000))
+                vocab_size = int(getattr(loaded.model_config.dims, "vocab_size", 50_000))
                 tokenizer = SpanishSPMTokenizer(vocab_size=vocab_size, model_path=os.path.join(tokenizer_dir, "tokenizer.model"))
             except Exception as exc:  # noqa: BLE001
                 logging.warning("Could not load SPM tokenizer: %s", exc)

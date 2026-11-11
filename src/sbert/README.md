@@ -350,21 +350,23 @@ Create custom FrankensteinModelConfig:
 ```python
 from model.config import FrankensteinModelConfig
 
-config = FrankensteinModelConfig.from_flat(
-    vocab_size=50000,
-    hidden_size=1024,
-    num_layers=16,
-    num_loops=2,
-    ode_steps=2,
-    retention_heads=8,
-    num_heads=16,
-    use_bitnet=True,
-    norm_type="derf",
-    use_factorized_embedding=True,
-    factorized_embedding_dim=128,
-    use_embedding_conv=True,
-    hope_base=10_000.0,
-    hope_damping=0.01
+config = FrankensteinModelConfig.from_dict(
+    {
+        "dims": {
+            "vocab_size": 50000,
+            "hidden_size": 1024,
+            "num_layers": 16,
+            "num_loops": 2,
+            "num_heads": 16,
+        },
+        "norm": {"type": "derf"},
+        "bitnet": {"enabled": True},
+        "attention": {"retnet": {"heads": 8}, "ode": {"steps": 2}},
+        "embedding": {
+            "factorized": {"enabled": True, "dim": 128},
+            "conv": {"enabled": True},
+        },
+    }
 )
 ```
 

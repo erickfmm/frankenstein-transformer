@@ -143,18 +143,18 @@ class DynamicEmbedding(nn.Module):
                 "set config.token_vocab to an id-ordered list of token strings."
             )
         self.vocab: List[str] = [str(token) for token in vocab]
-        if len(self.vocab) != int(config.vocab_size):
+        if len(self.vocab) != int(config.dims.vocab_size):
             raise ValueError(
                 f"embedding.dynamic: token_vocab has {len(self.vocab)} entries but "
-                f"vocab_size is {config.vocab_size}; the embedding ids must match "
+                f"vocab_size is {config.dims.vocab_size}; the embedding ids must match "
                 "the tokenizer vocabulary exactly"
             )
 
-        self.hidden_size = int(config.hidden_size)
-        self.ngram_max = int(config.dynamic_embedding_ngram_max)
-        self.bucket = int(config.dynamic_embedding_bucket)
-        self.seed = int(config.dynamic_embedding_seed)
-        self.precompute = bool(config.dynamic_embedding_precompute)
+        self.hidden_size = int(config.dims.hidden_size)
+        self.ngram_max = int(config.embedding.dynamic.ngram_max)
+        self.bucket = int(config.embedding.dynamic.bucket)
+        self.seed = int(config.embedding.dynamic.seed)
+        self.precompute = bool(config.embedding.dynamic.precompute)
 
         if self.ngram_max < 1:
             raise ValueError(f"dynamic_embedding_ngram_max must be >= 1, got {self.ngram_max}")
@@ -177,11 +177,11 @@ class DynamicEmbedding(nn.Module):
 
         # Optional Conv1d over the embedding stream (same composition as
         # FactorizedEmbedding: BitConv1d under BitNet when requested).
-        self.use_conv = bool(config.use_embedding_conv)
-        kernel = max(int(config.embedding_conv_kernel), 1)
+        self.use_conv = bool(config.embedding.conv.enabled)
+        kernel = max(int(config.embedding.conv.kernel), 1)
         padding = kernel // 2
-        use_bitconv = bool(getattr(config, "use_bitnet_conv", False))
-        conv_cls = BitConv1d if (config.use_bitnet and use_bitconv) else nn.Conv1d
+        use_bitconv = bool(getattr(config.bitnet, "conv", False))
+        conv_cls = BitConv1d if (config.bitnet.enabled and use_bitconv) else nn.Conv1d
         self.conv = (
             conv_cls(self.hidden_size, self.hidden_size, kernel_size=kernel, padding=padding)
             if self.use_conv

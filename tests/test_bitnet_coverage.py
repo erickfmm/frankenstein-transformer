@@ -20,54 +20,7 @@ if TORCH_AVAILABLE:
 
 
 def _make(bitnet_routers: bool, mode: str = "encoder"):
-    return FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=64,
-        num_layers=8,
-        num_heads=4,
-        num_experts=4,
-        top_k_experts=2,
-        dropout=0.0,
-        use_bitnet=True,
-        bitnet_routers=bitnet_routers,
-        use_moe=True,
-        use_mixture_of_depths=True,
-        ffn_hidden_size=128,
-        mode=mode,
-        layer_pattern=[
-            "standard",
-            "gla",
-            "deltanet",
-            "gated_deltanet",
-            "fox",
-            "fpa",
-            "hgrn2",
-            "gated_deltanet2",
-            "kda",
-            "mtla",
-            "msa",
-            "sparda",
-            "lsa",
-            "nsa",
-            "sparsek",
-            "titan",
-            "retnet",
-            "ode",
-            "gated_softmax",
-            "sigmoid",
-            "ca",
-            "gqa",
-            "memory",
-            "mla",
-            "gqla",
-            "mlra",
-            "tucker",
-            "iha",
-            "gta",
-            "gma",
-            "fastconformer",
-        ],
-    )
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 64, "num_layers": 8, "num_heads": 4, "dropout": 0.0, "mode": mode, "layer_pattern": ['standard', 'gla', 'deltanet', 'gated_deltanet', 'fox', 'fpa', 'hgrn2', 'gated_deltanet2', 'kda', 'mtla', 'msa', 'sparda', 'lsa', 'nsa', 'sparsek', 'titan', 'retnet', 'ode', 'gated_softmax', 'sigmoid', 'ca', 'gqa', 'memory', 'mla', 'gqla', 'mlra', 'tucker', 'iha', 'gta', 'gma', 'fastconformer']}, "moe": {"num_experts": 4, "top_k": 2, "enabled": True}, "bitnet": {"enabled": True, "routers": bitnet_routers}, "mixture_of_depths": {"enabled": True}, "ffn": {"hidden_size": 128}})
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch not installed")
@@ -167,14 +120,7 @@ class TestBitNetCoverage(unittest.TestCase):
         from src.model.embeddings.factorized_embedding import FactorizedEmbedding
 
         def make(use_bitnet_conv):
-            cfg = FrankensteinModelConfig.from_flat(
-                vocab_size=64, hidden_size=64, num_layers=1, num_heads=4,
-                num_experts=2, top_k_experts=1, dropout=0.0,
-                use_bitnet=True, use_bitnet_conv=use_bitnet_conv,
-                use_factorized_embedding=True, factorized_embedding_dim=32,
-                use_embedding_conv=True, use_moe=False, ffn_hidden_size=64,
-                layer_pattern=["standard"],
-            )
+            cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 64, "num_layers": 1, "num_heads": 4, "dropout": 0.0, "layer_pattern": ['standard']}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "bitnet": {"enabled": True, "conv": use_bitnet_conv}, "embedding": {"factorized": {"enabled": True, "dim": 32}, "conv": {"enabled": True}}, "ffn": {"hidden_size": 64}})
             return FactorizedEmbedding(cfg)
 
         off = make(False)
@@ -188,14 +134,7 @@ class TestBitNetCoverage(unittest.TestCase):
         """use_bitnet_conv has no effect when use_bitnet is False."""
         from src.model.embeddings.factorized_embedding import FactorizedEmbedding
 
-        cfg = FrankensteinModelConfig.from_flat(
-            vocab_size=64, hidden_size=64, num_layers=1, num_heads=4,
-            num_experts=2, top_k_experts=1, dropout=0.0,
-            use_bitnet=False, use_bitnet_conv=True,
-            use_factorized_embedding=True, factorized_embedding_dim=32,
-            use_embedding_conv=True, use_moe=False, ffn_hidden_size=64,
-            layer_pattern=["standard"],
-        )
+        cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 64, "num_layers": 1, "num_heads": 4, "dropout": 0.0, "layer_pattern": ['standard']}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "bitnet": {"enabled": False, "conv": True}, "embedding": {"factorized": {"enabled": True, "dim": 32}, "conv": {"enabled": True}}, "ffn": {"hidden_size": 64}})
         emb = FactorizedEmbedding(cfg)
         self.assertNotIsInstance(emb.conv, BitConv1d)
 

@@ -75,8 +75,8 @@ class TuckerAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "tucker", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for TuckerAttention")
@@ -84,7 +84,7 @@ class TuckerAttention(nn.Module):
         self.key_rank = int(params.value("key_rank", max(1, self.hidden_size // 2)))
         self.value_rank = int(params.value("value_rank", max(1, self.hidden_size // 2)))
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.q_factor = proj_cls(self.hidden_size, self.query_rank, bias=False)
         self.k_factor = proj_cls(self.hidden_size, self.key_rank, bias=False)
         self.v_factor = proj_cls(self.hidden_size, self.value_rank, bias=False)
@@ -92,8 +92,8 @@ class TuckerAttention(nn.Module):
         self.k_core = proj_cls(self.key_rank, self.num_heads * self.head_dim, bias=False)
         self.v_core = proj_cls(self.value_rank, self.num_heads * self.head_dim, bias=False)
         self.out_proj = proj_cls(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
         self.scale = self.head_dim ** -0.5
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()

@@ -25,15 +25,18 @@ def _yaml_text(model_overrides: str) -> str:
     return (
         "model_class: frankenstein_text_encoder\n"
         "model:\n"
-        "  vocab_size: 64\n"
-        "  hidden_size: 64\n"
-        "  num_layers: 2\n"
-        "  num_heads: 4\n"
-        "  num_experts: 4\n"
-        "  top_k_experts: 2\n"
-        "  layer_pattern: [standard]\n"
-        "  use_moe: true\n"
-        "  ffn_hidden_size: 128\n"
+        "  dims:\n"
+        "    vocab_size: 64\n"
+        "    hidden_size: 64\n"
+        "    num_layers: 2\n"
+        "    num_heads: 4\n"
+        "    layer_pattern: [standard]\n"
+        "  moe:\n"
+        "    enabled: true\n"
+        "    num_experts: 4\n"
+        "    top_k: 2\n"
+        "  ffn:\n"
+        "    hidden_size: 128\n"
         f"{model_overrides}\n"
         "training:\n"
         "  task: mlm\n"
@@ -41,13 +44,7 @@ def _yaml_text(model_overrides: str) -> str:
 
 
 def _cfg(mode="encoder", bitnet_routers=False):
-    return FrankensteinModelConfig.from_flat(
-        vocab_size=64, hidden_size=64, num_layers=2, num_heads=4,
-        num_experts=4, top_k_experts=2, dropout=0.0,
-        use_bitnet=True, bitnet_routers=bitnet_routers,
-        use_moe=True, ffn_hidden_size=128, mode=mode,
-        layer_pattern=["standard"],
-    )
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 64, "num_layers": 2, "num_heads": 4, "dropout": 0.0, "mode": mode, "layer_pattern": ['standard']}, "moe": {"num_experts": 4, "top_k": 2, "enabled": True}, "bitnet": {"enabled": True, "routers": bitnet_routers}, "ffn": {"hidden_size": 128}})
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch not installed")
@@ -70,7 +67,7 @@ class TestBitNetHFExport(unittest.TestCase):
     def test_quantization_config_declared(self):
         m = FrankensteinEncoder(_cfg())
         ckpt = self._save_ckpt(m)
-        overrides = "  use_bitnet: true\n  bitnet_routers: false"
+        overrides = "  bitnet:\n    enabled: true\n    routers: false"
         res, out = self._export(ckpt, _yaml_text(overrides))
         self.assertEqual(res["status"], "ok")
         self.assertTrue(res["bitnet"]["enabled"])
@@ -85,7 +82,7 @@ class TestBitNetHFExport(unittest.TestCase):
     def test_exported_weights_are_ternary(self):
         m = FrankensteinEncoder(_cfg())
         ckpt = self._save_ckpt(m)
-        overrides = "  use_bitnet: true\n  bitnet_routers: false"
+        overrides = "  bitnet:\n    enabled: true\n    routers: false"
         res, out = self._export(ckpt, _yaml_text(overrides))
         from safetensors.torch import load_file
 
@@ -101,7 +98,7 @@ class TestBitNetHFExport(unittest.TestCase):
         cfg.bitnet.enabled = False
         m = FrankensteinEncoder(cfg)
         ckpt = self._save_ckpt(m)
-        overrides = "  use_bitnet: false\n  bitnet_routers: false"
+        overrides = "  bitnet:\n    enabled: false"
         res, out = self._export(ckpt, _yaml_text(overrides))
         self.assertEqual(res["status"], "ok")
         self.assertFalse(res["bitnet"]["enabled"])

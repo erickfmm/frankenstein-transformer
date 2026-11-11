@@ -104,7 +104,7 @@ class FrankensteinInference:
         
         if not config_path.exists():
             logger.warning("Config file not found, using default")
-            return FrankensteinModelConfig.from_flat()
+            return FrankensteinModelConfig()
         
         with open(config_path) as f:
             config_dict = json.load(f)
@@ -116,7 +116,7 @@ class FrankensteinInference:
         config = FrankensteinModelConfig.from_dict(
                 config_dict, model_class=config_dict.get("model_class")
             )
-        logger.info(f"Config loaded: {config.hidden_size}D, {config.num_layers} layers")
+        logger.info(f"Config loaded: {config.dims.hidden_size}D, {config.dims.num_layers} layers")
         return config
 
     def load_inference_config(self, yaml_path=None, args=None) -> InferenceConfig:
@@ -180,7 +180,7 @@ class FrankensteinInference:
         model = self.model
         if not isinstance(model, FrankensteinDecoder):
             raise ValueError(
-                "Generation requires a decoder model (config.mode == 'decoder'); "
+                "Generation requires a decoder model (config.dims.mode == 'decoder'); "
                 "deployed artifact is an encoder/ViT."
             )
 
@@ -251,7 +251,7 @@ class FrankensteinInference:
         was_cached = bool(cfg.kv_cache_enabled)
         best = {"prefill_tps": 0.0, "decode_tps": 0.0}
         for _ in range(num_runs):
-            dummy = torch.randint(0, self.config.vocab_size, (1, prompt_length), device=self.device)
+            dummy = torch.randint(0, self.config.dims.vocab_size, (1, prompt_length), device=self.device)
             cache = FrankensteinCache.new(model, cfg, device=self.device)
             if self.device == "cuda":
                 torch.cuda.synchronize()
@@ -299,7 +299,7 @@ class FrankensteinInference:
         # aligns ``vocab_size`` with the deployed tokenizer).
         inject_token_vocab(self.config, self.tokenizer)
         # Initialize model (decoder when configured)
-        if isinstance(self.config.mode, str) and self.config.mode == "decoder":
+        if isinstance(self.config.dims.mode, str) and self.config.dims.mode == "decoder":
             model = FrankensteinDecoder(self.config)
         elif hasattr(self.config, "patch_size") and getattr(self.config, "pos_embedding_type", "") in ("learned_1d", "none"):
             from ..model.frankenstein_vit import FrankensteinViT
@@ -372,7 +372,7 @@ class FrankensteinInference:
             return None
 
         tokenizer = SpanishSPMTokenizer(
-            vocab_size=self.config.vocab_size,
+            vocab_size=self.config.dims.vocab_size,
             model_path=str(tokenizer_path)
         )
         logger.info("Tokenizer loaded")
@@ -390,11 +390,11 @@ class FrankensteinInference:
         except Exception as exc:  # noqa: BLE001
             logger.warning("Could not load HF tokenizer: %s", exc)
             return None
-        if len(hf_tok) != int(getattr(self.config, "vocab_size", len(hf_tok))):
+        if len(hf_tok) != int(getattr(self.config.dims, "vocab_size", len(hf_tok))):
             logger.warning(
                 "Deployed tokenizer vocab (%d) != config vocab_size (%s); "
                 "using the tokenizer's size for the model interface.",
-                len(hf_tok), getattr(self.config, "vocab_size", None),
+                len(hf_tok), getattr(self.config.dims, "vocab_size", None),
             )
         mask_id = hf_tok.mask_token_id
         logger.info("HF tokenizer loaded (vocab=%d)", len(hf_tok))
@@ -570,7 +570,7 @@ class FrankensteinInference:
         
         # Create dummy input
         dummy_input = torch.randint(
-            0, self.config.vocab_size,
+            0, self.config.dims.vocab_size,
             (batch_size, seq_length),
             device=self.device
         )
@@ -835,7 +835,7 @@ def main(argv=None):
     if generation_requested:
         if not isinstance(engine.model, FrankensteinDecoder):
             logger.error(
-                "Generation requires a decoder model (config.mode == 'decoder'); "
+                "Generation requires a decoder model (config.dims.mode == 'decoder'); "
                 "the deployed artifact is not a decoder."
             )
             return 2

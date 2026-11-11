@@ -63,17 +63,17 @@ class ODEFunc(nn.Module):
 
     def __init__(self, config, pos_encoder=None):
         super().__init__()
-        self.dim = config.hidden_size
-        self.num_heads = config.num_heads
+        self.dim = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.dim // self.num_heads
         self.scale = self.head_dim ** -0.5
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.qkv = proj_cls(self.dim, self.dim * 3, bias=False)
         self.out_proj = proj_cls(self.dim, self.dim, bias=False)
         self.norm = get_norm(config)
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()

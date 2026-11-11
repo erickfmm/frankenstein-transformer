@@ -26,7 +26,6 @@ try:
     from ..utils.schema_loader import resolve_schema
     from ..utils.schema_warnings import (
         classify_schema_errors,
-        filter_dataclass_kwargs,
         warn_extra_keys,
     )
 except ImportError:
@@ -39,31 +38,8 @@ except ImportError:
     from utils.schema_loader import resolve_schema
     from utils.schema_warnings import (
         classify_schema_errors,
-        filter_dataclass_kwargs,
         warn_extra_keys,
     )
-
-
-_MODEL_NESTED_MARKERS = frozenset(
-    {
-        "dims", "norm", "embedding", "attention", "positional_encoding",
-        "positional_encoding_parameters", "moe", "bitnet",
-        "mixture_of_depths", "ssmax", "numerics", "ffn",
-        "classification_head", "mhc", "residuals",
-    }
-)
-
-
-def _is_nested_model_block(model_block: Dict[str, Any]) -> bool:
-    """Return whether the ``model:`` block uses the nested schema shape.
-
-    Args:
-        model_block: The raw ``model:`` mapping.
-
-    Returns:
-        ``True`` when any nested grouping key is present.
-    """
-    return bool(_MODEL_NESTED_MARKERS & set(model_block))
 
 
 def _field_names(cls) -> set:
@@ -222,7 +198,7 @@ def _validate_qk_norm(model_data: Dict[str, Any]) -> None:
 
     Args:
         model_data: Flattened ``model`` block (after
-            :func:`flatten_model_dict`).
+            nested ``model:`` block).
 
     Raises:
         ValueError: If QK stabilization is enabled and any mixer in
@@ -311,64 +287,31 @@ def _root_schema() -> Dict[str, Any]:
 def _warn_unknown_schema_keys(data: Dict[str, Any], source: str) -> bool:
     """Log unknown keys found by the root schema as warnings.
 
-    The loader deliberately accepts partial and legacy documents (for
-    example configs that only set ``training`` or that use the flat
-    pre-nesting ``model:`` shape), so the root schema is used here only to
-    *harvest* ``additionalProperties`` violations. Hard schema violations
-    keep being enforced by the loader's own validators and by the
-    ``inference:`` block validator; the strict whole-document gate lives in
+    The loader accepts partial documents (for example configs that only set
+    ``training``), so the root schema is used here only to *harvest*
+    ``additionalProperties`` violations. Hard schema violations keep being
+    enforced by the loader's own validators and by the ``inference:`` block
+    validator; the strict whole-document gate lives in
     ``tests/test_schema_consistency.py``.
-
-    Legacy flat ``model:`` blocks predate the nested schema, so the block is
-    excluded from this pass and unknown flat keys are reported by
-    :func:`filter_dataclass_kwargs` instead.
 
     Args:
         data: The parsed YAML document.
         source: Human-readable config identifier used in messages.
 
     Returns:
-        ``True`` when the ``model:`` block was inspected against the schema,
-        so the caller can suppress duplicate unknown-key warnings from
-        :func:`filter_dataclass_kwargs`. ``False`` otherwise.
+        ``True`` when the document was inspected against the schema.
     """
     try:
         import jsonschema
     except ImportError:  # pragma: no cover - jsonschema ships with the deps
         return False
 
-    document = data
-    legacy_flat_model = False
-    model_block = data.get("model")
-    if (
-        isinstance(model_block, dict)
-        and model_block
-        and not _is_nested_model_block(model_block)
-    ):
-        # Legacy flat model shape: inspect everything except the model block.
-        legacy_flat_model = True
-        document = {key: value for key, value in data.items() if key != "model"}
-
     validator_cls = getattr(jsonschema, "Draft202012Validator", jsonschema.Draft7Validator)
     validator = validator_cls(_root_schema())
-    _, extra_errors = classify_schema_errors(validator.iter_errors(document))
+    _, extra_errors = classify_schema_errors(validator.iter_errors(data))
     if extra_errors:
         warn_extra_keys(extra_errors, source=source)
-    if legacy_flat_model:
-        from ..model.config import flat_name_set
-
-        unknown = sorted(set(model_block) - set(flat_name_set()))
-        if unknown:
-            import logging
-
-            logging.getLogger("frankenstein.config").warning(
-                "[schema] %s: %s: unknown key(s) ignored (not declared in "
-                "src/schema/**): %s",
-                source,
-                "model",
-                unknown,
-            )
-    return not legacy_flat_model
+    return True
 
 
 def _validate_inference_block(
@@ -749,7 +692,7 @@ def load_training_config(path: str) -> LoadedTrainingConfig:
     # a vocabulary lookup table.
     if (
         model_config is not None
-        and bool(getattr(model_config, "use_dynamic_embedding", False))
+        and bool(getattr(model_config.embedding.dynamic, "enabled", False))
         and model_class in {"frankenstein_vit", "frankenstein_audio"}
     ):
         raise ValueError(

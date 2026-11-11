@@ -7,11 +7,10 @@ per-component knobs live in per-family mappings (``attention``,
 ``positional_encoding_parameters``) and are bound through the component
 registry (:mod:`src.registry`) by the family factories.
 
-Historical flat attribute names remain readable through ``__getattr__``
-aliases (``config.hidden_size`` → ``config.dims.hidden_size``) because the
-model, training, deployment and export code reads them in thousands of
-places; per-component knobs are deliberately *not* re-exposed — components
-read their bound parameters.
+Attribute access is nested only: structural blocks are dataclasses and
+per-component knobs live in their mappings, bound through the component
+registry (:mod:`src.registry`). Positional-encoding knobs keep small
+read-only properties (``config.rope_base`` …) that read the nested mapping.
 """
 
 from __future__ import annotations
@@ -37,6 +36,7 @@ __all__ = [
     "ResidualsConfig",
     "ImageConfig",
     "AudioConfig",
+    "merge_model_blocks",
 ]
 
 _RAF_VERSIONS = {"A", "B", "C", "D", "N"}
@@ -560,28 +560,6 @@ class FrankensteinModelConfig:
             model_class = str(raw.pop("model_class"))
         else:
             raw.pop("model_class", None)
-        nested_markers = {
-            "dims", "norm", "embedding", "attention", "positional_encoding",
-            "positional_encoding_parameters", "moe", "bitnet",
-            "mixture_of_depths", "ssmax", "numerics", "ffn",
-            "classification_head", "mhc", "residuals",
-        }
-        if raw and not (nested_markers & set(raw)):
-            config = cls.from_flat(**raw)
-            if image_block is not None:
-                config.image = _build(ImageConfig, image_block)
-            if audio_block is not None:
-                config.audio = _build_with_nested(
-                    AudioConfig, audio_block, {"spec_augment": SpecAugmentConfig}
-                )
-            if config.image is not None:
-                config.num_classes = int(config.image.num_classes)
-                config.pooling_mode = str(config.image.pooling_mode)
-            elif config.audio is not None:
-                config.num_classes = int(config.audio.num_classes)
-                config.pooling_mode = str(config.audio.pooling_mode)
-            config.model_class = model_class
-            return config
         embedding_raw = raw.get("embedding") or {}
         embedding = _build_with_nested(
             EmbeddingConfig,
@@ -676,113 +654,6 @@ class FrankensteinModelConfig:
             config.pooling_mode = str(image.pooling_mode)
         elif audio is not None:
             config.pooling_mode = str(audio.pooling_mode)
-        return config
-
-    @classmethod
-    def from_flat(cls, **kwargs: Any) -> "FrankensteinModelConfig":
-        """Build from the historical flat keyword arguments.
-
-        This is the migration path for legacy checkpoints and for the test
-        suite; production code builds the nested shape directly. Flat
-        structural names are routed through :data:`_FLAT_ALIASES` and
-        per-mixer names (``mla_latent_rank``, ``falcon_beta``, …) are routed
-        into ``model.attention.<mixer>``.
-
-        Args:
-            **kwargs: Historical flat configuration fields, or nested blocks
-                (``dims=…``, ``attention={…}``).
-
-        Returns:
-            A fully populated nested configuration.
-
-        Raises:
-            TypeError: If a keyword is neither a nested field nor a known
-                flat alias.
-        """
-        from src.registry import ensure_builtins
-
-        ensure_builtins()
-        nested_names = {f.name for f in dataclasses.fields(cls)}
-        component_alias = _component_flat_aliases()
-        model: Dict[str, Any] = {}
-        attention: Dict[str, Dict[str, Any]] = dict(kwargs.pop("attention", {}) or {})
-        image_block = dict(kwargs.pop("image", None) or {}) or None
-        audio_block = dict(kwargs.pop("audio", None) or {}) or None
-        model_class = kwargs.pop("model_class", None)
-        positional = kwargs.pop("positional_encoding_parameters", None)
-        if positional:
-            model["positional_encoding_parameters"] = dict(positional)
-
-        def put(path: Tuple[str, ...], value: Any) -> None:
-            node = model
-            for part in path[:-1]:
-                child = node.get(part)
-                if dataclasses.is_dataclass(child):
-                    child = dataclasses.asdict(child)
-                    node[part] = child
-                elif not isinstance(child, dict):
-                    child = {}
-                    node[part] = child
-                node = child
-            node[path[-1]] = value
-
-        for key, value in kwargs.items():
-            if key in _FLAT_ALIASES and not dataclasses.is_dataclass(value) and not (
-                key in nested_names and isinstance(value, Mapping)
-            ):
-                path = _FLAT_ALIASES[key]
-                if path[0] == "image":
-                    image_block = dict(image_block or {})
-                    image_block[path[-1]] = value
-                elif path[0] == "audio":
-                    audio_block = dict(audio_block or {})
-                    node = audio_block
-                    for part in path[1:-1]:
-                        node = node.setdefault(part, {})
-                    node[path[-1]] = value
-                else:
-                    put(path, value)
-                continue
-            if key in nested_names or key == "positional_encoding":
-                if key in {"dims", "norm", "embedding", "moe", "bitnet",
-                           "mixture_of_depths", "ssmax", "numerics", "ffn",
-                           "classification_head", "mhc", "residuals"} and dataclasses.is_dataclass(value):
-                    model[key] = value
-                elif key == "positional_encoding":
-                    model[key] = value
-                elif key == "token_vocab":
-                    model[key] = value
-                elif key in {"num_classes", "pooling_mode"}:
-                    put(("__top__", key), value)
-                else:
-                    model[key] = value
-                continue
-            if key.endswith("_use_pe"):
-                mixer = key[: -len("_use_pe")]
-                put(("positional_encoding_parameters", "use_pe", key), value)
-                continue
-            if key in _FFN_ACTIVATION_CONFIG_KEYS:
-                put(("ffn", "activation_config", key), value)
-                continue
-            if key in component_alias:
-                for mixer, leaf in component_alias[key]:
-                    attention.setdefault(mixer, {})[leaf] = value
-                continue
-            # Unknown flat keys are warned about and dropped by the loader
-            # (the strict whole-document gate lives in the schema consistency
-            # test); programmatic callers get the same tolerant behavior.
-            continue
-        if attention:
-            model["attention"] = attention
-        top = model.pop("__top__", {})
-        config = cls.from_dict(
-            model,
-            image_block=image_block,
-            audio_block=audio_block,
-            model_class=model_class,
-        )
-        for key, value in top.items():
-            setattr(config, key, value)
         return config
 
     def to_jsonable(self) -> Dict[str, Any]:
@@ -1020,117 +891,6 @@ class FrankensteinModelConfig:
         return self.dims.head_dim
 
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        """Route historical flat-name assignments into the nested blocks.
-
-        Args:
-            name: Attribute name.
-            value: Assigned value.
-        """
-        if name.startswith("_") or name in _FIELD_NAMES:
-            if name == "classification_head" and isinstance(value, bool):
-                object.__setattr__(
-                    self, name, ClassificationHeadConfig(enabled=bool(value))
-                )
-                self.__dict__.get("_alias_cache", {}).pop(name, None)
-                return
-            object.__setattr__(self, name, value)
-            self.__dict__.get("_alias_cache", {}).pop(name, None)
-            return
-        alias = _FLAT_ALIASES.get(name)
-        if alias is not None:
-            node: Any = self
-            for part in alias[:-1]:
-                child = getattr(node, part)
-                if child is None:
-                    child = _default_block_for(part)
-                    object.__setattr__(node, part, child)
-                node = child
-            setattr(node, alias[-1], value)
-            self.__dict__.get("_alias_cache", {}).pop(name, None)
-            return
-        component = _COMPONENT_ALIASES.get(name)
-        if component is not None:
-            mixer, leaf = component
-            self.attention.setdefault(mixer, {})[leaf] = value
-            self.__dict__.get("_alias_cache", {}).pop(name, None)
-            return
-        object.__setattr__(self, name, value)
-        self.__dict__.get("_alias_cache", {}).pop(name, None)
-
-    def __getattr__(self, name: str) -> Any:
-        """Resolve historical flat attribute names (structural blocks only).
-
-        Args:
-            name: Attribute name requested by legacy code.
-
-        Returns:
-            The corresponding nested value.
-
-        Raises:
-            AttributeError: If ``name`` has no nested mapping.
-        """
-        if name.startswith("_"):
-            raise AttributeError(name)
-        if name in {
-            "dims", "norm", "embedding", "attention", "moe", "bitnet",
-            "mixture_of_depths", "ssmax", "numerics", "ffn",
-            "classification_head", "mhc", "residuals", "image", "audio",
-            "positional_encoding_parameters",
-        }:
-            raise AttributeError(name)
-        alias = _FLAT_ALIASES.get(name)
-        if alias is not None:
-            cache = self.__dict__.setdefault("_alias_cache", {})
-            if name in cache:
-                return cache[name]
-            node: Any = self
-            parts = list(alias)
-            # Modality blocks are optional; fall back to their defaults so
-            # legacy scalar reads never explode on a text-only config.
-            image = self.__dict__.get("image")
-            audio = self.__dict__.get("audio")
-            if parts[0] == "image" and image is None:
-                node = ImageConfig()
-                parts = parts[1:]
-            elif parts[0] == "audio" and audio is None:
-                node = AudioConfig()
-                parts = parts[1:]
-            for part in parts:
-                if isinstance(node, Mapping):
-                    node = node.get(part)
-                else:
-                    node = getattr(node, part)
-            cache[name] = node
-            return node
-        component = _COMPONENT_ALIASES.get(name)
-        if component is not None:
-            cache = self.__dict__.setdefault("_alias_cache", {})
-            if name in cache:
-                return cache[name]
-            mixer, leaf = component
-            raw = (self.__dict__.get("attention") or {}).get(mixer) or {}
-            value = raw.get(leaf)
-            if value is None:
-                from src.registry import ComponentFamily, ensure_builtins, registry
-
-                ensure_builtins()
-                value = dict(
-                    registry.get(ComponentFamily.MIXER, mixer).defaults
-                ).get(leaf)
-            cache[name] = value
-            return value
-        if name.endswith("_use_pe"):
-            mixer = name[: -len("_use_pe")]
-            try:
-                return self.use_pe_for(mixer, True)
-            except Exception as exc:  # noqa: BLE001 - unknown mixers fall back
-                raise AttributeError(name) from exc
-        raise AttributeError(
-            f"{type(self).__name__!r} object has no attribute {name!r}"
-        )
-
-
     # ------------------------------------------------------------------
     # positional-encoding parameters (nested ``positional_encoding_parameters``)
     # ------------------------------------------------------------------
@@ -1225,245 +985,28 @@ class FrankensteinModelConfig:
         """Learned absolute PE: initialization std."""
         return float(self._pe_param("learned", "init_std", 0.02))
 
-def _component_flat_aliases() -> Dict[str, Tuple[Tuple[str, str], ...]]:
-    """Map historical flat mixer fields to ``(mixer, param)`` pairs.
+def merge_model_blocks(base: Mapping[str, Any], overrides: Mapping[str, Any]) -> Dict[str, Any]:
+    """Deep-merge nested ``model:`` block mappings.
 
-    Returns:
-        A mapping such as ``"mla_latent_rank" -> (("mla", "latent_rank"),)``
-        and ``"falcon_beta" -> ((six falcon variants…), …)``.
-    """
-    from src.registry import ComponentFamily, ensure_builtins, registry
-
-    ensure_builtins()
-    aliases: Dict[str, Tuple[Tuple[str, str], ...]] = {}
-    for spec in registry.specs(ComponentFamily.MIXER):
-        prefix = "falcon" if spec.name.startswith("falcon") else spec.name
-        for leaf in spec.defaults:
-            if spec.name == "retnet" and leaf == "heads":
-                flat = "retention_heads"
-            elif spec.name == "ode":
-                flat = f"ode_{leaf}"
-            else:
-                flat = f"{prefix}_{leaf}"
-            aliases.setdefault(flat, [])
-            entry = (spec.name, leaf)
-            if entry not in aliases[flat]:
-                aliases[flat].append(entry)
-    return {key: tuple(value) for key, value in aliases.items()}
-
-
-_FLAT_ALIASES: Dict[str, Tuple[str, ...]] = {
-    'alibi_num_heads': ('positional_encoding_parameters', 'alibi', 'num_heads'),
-    'asr_decoder_dim': ('audio', 'asr_decoder_dim'),
-    'asr_decoder_dropout': ('audio', 'asr_decoder_dropout'),
-    'asr_decoder_layers': ('audio', 'asr_decoder_layers'),
-    'asr_loss': ('audio', 'asr_loss'),
-    'attnres_gradient_checkpoint': ('residuals', 'gradient_checkpoint'),
-    'attnres_mhc_stream_mode': ('residuals', 'mhc_stream_mode'),
-    'audio_conv_channels': ('audio', 'conv_channels'),
-    'audio_feature': ('audio', 'feature'),
-    'audio_in_channels': ('audio', 'in_channels'),
-    'audio_n_fft': ('audio', 'n_fft'),
-    'audio_n_mels': ('audio', 'n_mels'),
-    'audio_sample_rate': ('audio', 'sample_rate'),
-    'audio_spec_augment_enabled': ('audio', 'spec_augment', 'enabled'),
-    'audio_spec_augment_freq_mask_width': ('audio', 'spec_augment', 'freq_mask_width'),
-    'audio_spec_augment_time_mask_ratio': ('audio', 'spec_augment', 'time_mask_ratio'),
-    'audio_spec_augment_time_masks': ('audio', 'spec_augment', 'time_masks'),
-    'audio_stride_ms': ('audio', 'stride_ms'),
-    'audio_window_ms': ('audio', 'window_ms'),
-    'bam_eps': ('positional_encoding_parameters', 'bam', 'eps'),
-    'bam_learn_mu': ('positional_encoding_parameters', 'bam', 'learn_mu'),
-    'bam_mu_init': ('positional_encoding_parameters', 'bam', 'mu_init'),
-    'bam_theta_init': ('positional_encoding_parameters', 'bam', 'theta_init'),
-    'bitnet_routers': ('bitnet', 'routers'),
-    'block_attn_init_query_zero': ('residuals', 'block_attn', 'init_query_zero'),
-    'block_attn_num_blocks': ('residuals', 'block_attn', 'num_blocks'),
-    'block_attn_use_rmsnorm_keys': ('residuals', 'block_attn', 'use_rmsnorm_keys'),
-    'classification_head': ('classification_head', 'enabled'),
-    'cls_token': ('image', 'cls_token'),
-    'dropout': ('dims', 'dropout'),
-    'dynamic_embedding_bucket': ('embedding', 'dynamic', 'bucket'),
-    'dynamic_embedding_ngram_max': ('embedding', 'dynamic', 'ngram_max'),
-    'dynamic_embedding_precompute': ('embedding', 'dynamic', 'precompute'),
-    'dynamic_embedding_seed': ('embedding', 'dynamic', 'seed'),
-    'embedding_conv_kernel': ('embedding', 'conv', 'kernel'),
-    'encoder_pooling_mode': ('classification_head', 'pooling_mode'),
-    'factorized_embedding_dim': ('embedding', 'factorized', 'dim'),
-    'ffn_activation': ('ffn', 'activation'),
-    'ffn_activation_config': ('ffn', 'activation_config'),
-    'ffn_hidden_size': ('ffn', 'hidden_size'),
-    'fixed_cross_entropy': ('numerics', 'fixed_cross_entropy'),
-    'fixed_softmax': ('numerics', 'fixed_softmax'),
-    'flashnorm_partial_ratio': ('norm', 'flashnorm_partial_ratio'),
-    'full_attn_init_query_zero': ('residuals', 'full_attn', 'init_query_zero'),
-    'full_attn_use_rmsnorm_keys': ('residuals', 'full_attn', 'use_rmsnorm_keys'),
-    'hidden_size': ('dims', 'hidden_size'),
-    'hope_base': ('positional_encoding_parameters', 'hope', 'base'),
-    'hope_damping': ('positional_encoding_parameters', 'hope', 'damping'),
-    'image_height': ('image', 'height'),
-    'image_width': ('image', 'width'),
-    'in_channels': ('image', 'in_channels'),
-    'layer_pattern': ('dims', 'layer_pattern'),
-    'learned_init_std': ('positional_encoding_parameters', 'learned', 'init_std'),
-    'learned_max_len': ('positional_encoding_parameters', 'learned', 'max_len'),
-    'mask_ratio': ('image', 'mask_ratio'),
-    'mask_token_strategy': ('image', 'mask_token_strategy'),
-    'mhc_checkpoint': ('mhc', 'checkpoint'),
-    'mhc_expansion_rate': ('mhc', 'expansion_rate'),
-    'mhc_full_prec_under_bitnet': ('mhc', 'full_prec_under_bitnet'),
-    'mhc_gating_init': ('mhc', 'gating_init'),
-    'mhc_hyperloop': ('mhc', 'hyperloop'),
-    'mhc_hyperloop_begin_layers': ('mhc', 'hyperloop_begin_layers'),
-    'mhc_hyperloop_end_layers': ('mhc', 'hyperloop_end_layers'),
-    'mhc_hyperloop_res_parameterization': ('mhc', 'hyperloop_res_parameterization'),
-    'mhc_sinkhorn_iters': ('mhc', 'sinkhorn_iters'),
-    'mixture_of_depths_capacity_ratio': ('mixture_of_depths', 'capacity_ratio'),
-    'mixture_of_depths_router_aux_loss_weight': ('mixture_of_depths', 'router_aux_loss_weight'),
-    'mode': ('dims', 'mode'),
-    'moe_activation_clamp': ('moe', 'experts', 'activation_clamp'),
-    'moe_aux_loss_coeff': ('moe', 'balancing', 'aux_loss_coeff'),
-    'moe_aux_loss_type': ('moe', 'balancing', 'aux_loss'),
-    'moe_bias_update': ('moe', 'balancing', 'bias_update'),
-    'moe_bias_update_rate': ('moe', 'balancing', 'bias_update_rate'),
-    'moe_capacity_factor': ('moe', 'routing', 'capacity_factor'),
-    'moe_dense_layers': ('moe', 'layout', 'dense_layers'),
-    'moe_expert_hidden_size': ('moe', 'expert_hidden_size'),
-    'moe_hash_layers': ('moe', 'routing', 'hash_layers'),
-    'moe_hash_seed': ('moe', 'routing', 'hash_seed'),
-    'moe_hash_table': ('moe', 'routing', 'hash_table'),
-    'moe_latent_dim': ('moe', 'latent', 'dim'),
-    'moe_latent_enabled': ('moe', 'latent', 'enabled'),
-    'moe_latent_norm_before_up_proj': ('moe', 'latent', 'norm_before_up_proj'),
-    'moe_layer_frequency': ('moe', 'layout', 'every_n_layers'),
-    'moe_routed_scaling_factor': ('moe', 'router', 'routed_scaling_factor'),
-    'moe_router_dtype': ('moe', 'router', 'dtype'),
-    'moe_router_jitter_eps': ('moe', 'router', 'jitter_eps'),
-    'moe_router_pre_softmax': ('moe', 'router', 'pre_softmax'),
-    'moe_router_renormalize': ('moe', 'router', 'renormalize'),
-    'moe_router_scoring': ('moe', 'router', 'scoring'),
-    'moe_router_z_loss_coeff': ('moe', 'router', 'z_loss_coeff'),
-    'moe_routing_type': ('moe', 'routing', 'type'),
-    'moe_shared_expert_gate': ('moe', 'shared', 'gate'),
-    'moe_shared_expert_hidden_size': ('moe', 'shared', 'hidden_size'),
-    'moe_shared_experts_count': ('moe', 'shared', 'count'),
-    'norm_type': ('norm', 'type'),
-    'num_experts': ('moe', 'num_experts'),
-    'num_heads': ('dims', 'num_heads'),
-    'num_kv_heads': ('dims', 'num_kv_heads'),
-    'num_labels': ('classification_head', 'num_labels'),
-    'num_layers': ('dims', 'num_layers'),
-    'num_loops': ('dims', 'num_loops'),
-    'num_seg_classes': ('image', 'num_seg_classes'),
-    'pape_num_parabolas': ('positional_encoding_parameters', 'pape', 'num_parabolas'),
-    'pape_num_positions': ('positional_encoding_parameters', 'pape', 'num_positions'),
-    'pape_rotation_invariant': ('positional_encoding_parameters', 'pape', 'rotation_invariant'),
-    'patch_size': ('image', 'patch_size'),
-    'pos_embedding_type': ('image', 'pos_embedding_type'),
-    'prediction_target': ('image', 'prediction_target'),
-    'prms_partial_ratio': ('norm', 'partial_ratio'),
-    'qk_clip_alpha': ('norm', 'qk_norm', 'clip_alpha'),
-    'qk_clip_tau': ('norm', 'qk_norm', 'clip_tau'),
-    'qk_norm_eps': ('norm', 'qk_norm', 'eps'),
-    'qk_norm_method': ('norm', 'qk_norm', 'method'),
-    'quack_tau': ('norm', 'qk_norm', 'quack_tau'),
-    'residual_type': ('residuals', 'type'),
-    'rope_base': ('positional_encoding_parameters', 'rope', 'base'),
-    'rope_scaling': ('positional_encoding_parameters', 'rope', 'scaling'),
-    'seg_head_type': ('image', 'seg_head_type'),
-    'seg_l2_blocks': ('image', 'seg_l2_blocks'),
-    'seg_mask_annealing': ('image', 'seg_mask_annealing'),
-    'seg_num_queries': ('image', 'seg_num_queries'),
-    'sinusoidal_base': ('positional_encoding_parameters', 'sinusoidal', 'base'),
-    'sinusoidal_max_len': ('positional_encoding_parameters', 'sinusoidal', 'max_len'),
-    'sinusoidal_scale': ('positional_encoding_parameters', 'sinusoidal', 'scale'),
-    'ssmax_s_init': ('ssmax', 's_init'),
-    'to_grayscale': ('image', 'to_grayscale'),
-    'top_k_experts': ('moe', 'top_k'),
-    'use_bitnet': ('bitnet', 'enabled'),
-    'use_bitnet_conv': ('bitnet', 'conv'),
-    'use_dynamic_embedding': ('embedding', 'dynamic', 'enabled'),
-    'use_embedding_conv': ('embedding', 'conv', 'enabled'),
-    'use_factorized_embedding': ('embedding', 'factorized', 'enabled'),
-    'use_mhc': ('mhc', 'enabled'),
-    'use_mixture_of_depths': ('mixture_of_depths', 'enabled'),
-    'use_moe': ('moe', 'enabled'),
-    'use_qk_norm': ('norm', 'qk_norm', 'enabled'),
-    'use_ssmax': ('ssmax', 'enabled'),
-    'vocab_size': ('dims', 'vocab_size'),
-}
-
-
-_COMPONENT_ALIASES_CACHE: Optional[Dict[str, Tuple[str, str]]] = None
-
-
-def _component_alias_map() -> Dict[str, Tuple[str, str]]:
-    """Return the legacy flat mixer-name -> ``(mixer, param)`` map.
-
-    Returns:
-        A mapping resolved once from the mixer specs.
-    """
-    global _COMPONENT_ALIASES_CACHE
-    if _COMPONENT_ALIASES_CACHE is None:
-        _COMPONENT_ALIASES_CACHE = {
-            key: value[0] for key, value in _component_flat_aliases().items()
-        }
-    return _COMPONENT_ALIASES_CACHE
-
-
-class _LazyComponentAliases(dict):
-    """Dict view that materialises the component alias map on first access."""
-
-    def _ensure(self) -> None:
-        if not super().__len__():
-            super().update(_component_alias_map())
-
-    def __getitem__(self, key):
-        self._ensure()
-        return super().__getitem__(key)
-
-    def get(self, key, default=None):
-        self._ensure()
-        return super().get(key, default)
-
-    def __contains__(self, key):
-        self._ensure()
-        return super().__contains__(key)
-
-
-_COMPONENT_ALIASES: Dict[str, Tuple[str, str]] = _LazyComponentAliases()
-
-_FIELD_NAMES = {f.name for f in dataclasses.fields(FrankensteinModelConfig)}
-
-
-def _default_classification_head() -> "ClassificationHeadConfig":
-    """Return a fresh default classification-head block."""
-    return ClassificationHeadConfig()
-
-
-def _default_block_for(name: str) -> Any:
-    """Return a fresh default block for an optional modality attribute.
+    Builder helpers use this to let callers override a nested block without
+    restating its defaults (``image={"height": 32}`` keeps the default width,
+    channels and patch size).
 
     Args:
-        name: Attribute name on the config (``image`` / ``audio``).
+        base: Nested model block with defaults.
+        overrides: Nested overrides.
 
     Returns:
-        A default block instance.
+        A new merged mapping.
     """
-    return ImageConfig() if name == "image" else AudioConfig()
-
-
-def flat_name_set() -> frozenset:
-    """Return every accepted historical flat configuration name.
-
-    Returns:
-        A frozenset of flat names that :meth:`FrankensteinModelConfig.from_flat`
-        accepts (structural aliases, nested fields and per-component knobs).
-    """
-    return frozenset(
-        set(_FLAT_ALIASES)
-        | set(_component_flat_aliases())
-        | set(_FIELD_NAMES)
-        | {"num_classes", "pooling_mode", "model_class", "token_vocab"}
-        | {f"{name}_use_pe" for name in ()}
-    )
+    merged: Dict[str, Any] = {
+        key: dict(value) if isinstance(value, Mapping) else value
+        for key, value in base.items()
+    }
+    for key, value in overrides.items():
+        current = merged.get(key)
+        if isinstance(value, Mapping) and isinstance(current, Mapping):
+            merged[key] = merge_model_blocks(current, value)
+        else:
+            merged[key] = value
+    return merged

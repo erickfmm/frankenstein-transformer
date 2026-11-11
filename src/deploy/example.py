@@ -27,12 +27,16 @@ def main():
     
     # Step 1: Create a model (normally you'd load a trained one)
     print("\n[1/5] Creating model...")
-    config = FrankensteinModelConfig.from_flat(
-        vocab_size=10000,  # Smaller for demo
-        hidden_size=768,   # Smaller for demo
-        num_layers=4,      # Fewer layers for demo
-        num_loops=1,
-        ode_steps=2
+    config = FrankensteinModelConfig.from_dict(
+        {
+            "dims": {
+                "vocab_size": 10000,  # Smaller for demo
+                "hidden_size": 768,  # Smaller for demo
+                "num_layers": 4,  # Fewer layers for demo
+                "num_loops": 1,
+            },
+            "attention": {"ode": {"steps": 2}},
+        }
     )
     
     model = FrankensteinEncoder(config)
@@ -56,8 +60,8 @@ def main():
         str(checkpoint_path),
         additional_data={
             'config': config.to_jsonable(),
-            'vocab_size': config.vocab_size,
-            'hidden_size': config.hidden_size,
+            'vocab_size': config.dims.vocab_size,
+            'hidden_size': config.dims.hidden_size,
         }
     )
     print(f"✓ Checkpoint saved to {checkpoint_path}")
@@ -80,7 +84,7 @@ def main():
     )
     
     # Create dummy input
-    dummy_text_ids = torch.randint(0, config.vocab_size, (2, 32))
+    dummy_text_ids = torch.randint(0, config.dims.vocab_size, (2, 32))
     
     print("Running inference on dummy input...")
     predictions = engine.predict(dummy_text_ids)

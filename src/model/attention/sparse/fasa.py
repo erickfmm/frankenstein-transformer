@@ -104,24 +104,24 @@ class FASAAttention(nn.Module):
         """
         params = mixer_params(config, "fasa", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.scale = self.head_dim ** -0.5
 
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for FASAAttention")
 
-        self.n_tip = max(1, int(getattr(config, "fasa_n_tip", 16)))
-        self.n_fac = max(1, int(getattr(config, "fasa_n_fac", 256)))
+        self.n_tip = max(1, int(params.value("n_tip", 16)))
+        self.n_fac = max(1, int(params.value("n_fac", 256)))
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.q_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.k_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
 
         pair_dim = max(1, self.head_dim // 2)
         dominant = torch.arange(self.n_tip, dtype=torch.long) % pair_dim

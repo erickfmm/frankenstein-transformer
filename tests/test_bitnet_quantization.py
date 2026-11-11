@@ -26,21 +26,7 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(bitnet_routers=False):
-    return FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=64,
-        num_layers=4,
-        num_heads=4,
-        num_experts=4,
-        top_k_experts=2,
-        dropout=0.0,
-        use_bitnet=True,
-        bitnet_routers=bitnet_routers,
-        use_moe=True,
-        use_mixture_of_depths=True,
-        ffn_hidden_size=128,
-        layer_pattern=["standard", "gla", "msa", "sparsek"],
-    )
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 64, "num_layers": 4, "num_heads": 4, "dropout": 0.0, "layer_pattern": ['standard', 'gla', 'msa', 'sparsek']}, "moe": {"num_experts": 4, "top_k": 2, "enabled": True}, "bitnet": {"enabled": True, "routers": bitnet_routers}, "mixture_of_depths": {"enabled": True}, "ffn": {"hidden_size": 128}})
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch not installed")

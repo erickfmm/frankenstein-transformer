@@ -72,7 +72,7 @@ class TestFrankensteinViT:
     def test_gap_pooling(self, dummy_image):
         cfg = FrankensteinViT.build_vit_config(
             hidden_size=64, num_layers=2, num_heads=4, patch_size=8,
-            image_height=32, image_width=32, cls_token=False, pooling_mode="gap",
+            image_height=32, image_width=32, image={"cls_token": False}, pooling_mode="gap",
         )
         model = FrankensteinViT(cfg)
         out = model(dummy_image, task="classification")
@@ -81,7 +81,7 @@ class TestFrankensteinViT:
     def test_no_pos_embed(self, dummy_image):
         cfg = FrankensteinViT.build_vit_config(
             hidden_size=64, num_layers=2, num_heads=4, patch_size=8,
-            image_height=32, image_width=32, pos_embedding_type="none",
+            image_height=32, image_width=32, image={"pos_embedding_type": "none"},
         )
         model = FrankensteinViT(cfg)
         out = model(dummy_image, task="classification")
@@ -108,17 +108,17 @@ class TestFrankensteinViT:
 
     def test_no_bitnet(self, tiny_vit_config):
         model = FrankensteinViT(tiny_vit_config)
-        assert not tiny_vit_config.use_bitnet
+        assert not tiny_vit_config.bitnet.enabled
 
     def test_build_vit_config_defaults(self):
         cfg = FrankensteinViT.build_vit_config()
-        assert cfg.hidden_size == 768
-        assert cfg.num_layers == 12
-        assert cfg.num_heads == 12
-        assert cfg.patch_size == 16
-        assert cfg.ffn_activation == "gelu"
-        assert cfg.ffn_hidden_size == 3072  # 4 * 768
-        assert cfg.mode == "encoder"
+        assert cfg.dims.hidden_size == 768
+        assert cfg.dims.num_layers == 12
+        assert cfg.dims.num_heads == 12
+        assert cfg.image.patch_size == 16
+        assert cfg.ffn.activation == "gelu"
+        assert cfg.ffn.hidden_size == 3072  # 4 * 768
+        assert cfg.dims.mode == "encoder"
 
     def test_configure_optimizers(self, tiny_vit_config):
         model = FrankensteinViT(tiny_vit_config)
@@ -133,12 +133,12 @@ class TestFrankensteinViT:
         cfg = FrankensteinViT.build_vit_config()
         cfg.dims.mode = "decoder"
         model = FrankensteinViT(cfg)
-        assert model.config.mode == "encoder"
+        assert model.config.dims.mode == "encoder"
 
     def test_full_patch_l2_target(self, dummy_image):
         cfg = FrankensteinViT.build_vit_config(
             hidden_size=64, num_layers=2, num_heads=4, patch_size=8,
-            image_height=32, image_width=32, prediction_target="full_patch_l2",
+            image_height=32, image_width=32, image={"prediction_target": "full_patch_l2"},
         )
         model = FrankensteinViT(cfg)
         out = model(dummy_image, task="patch_prediction")

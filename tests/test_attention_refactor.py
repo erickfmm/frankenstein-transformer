@@ -45,33 +45,7 @@ from src.model.frankenstein_encoder import FrankensteinEncoder
 
 class AttentionRefactorTests(unittest.TestCase):
     def _build_config(self, layer_pattern):
-        return FrankensteinModelConfig.from_flat(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=1,
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            layer_pattern=layer_pattern,
-            ode_solver="rk4",
-            ode_steps=1,
-            use_bitnet=False,
-            norm_type="layer_norm",
-            use_factorized_embedding=False,
-            factorized_embedding_dim=16,
-            use_embedding_conv=False,
-            embedding_conv_kernel=3,
-            positional_encoding="hope",
-            use_moe=False,
-            use_mixture_of_depths=False,
-            mixture_of_depths_capacity_ratio=0.5,
-            mixture_of_depths_router_aux_loss_weight=0.0,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-        )
+        return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": layer_pattern}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "bitnet": {"enabled": False}, "norm": {"type": 'layer_norm'}, "embedding": {"factorized": {"enabled": False, "dim": 16}, "conv": {"enabled": False, "kernel": 3}}, "positional_encoding": 'hope', "mixture_of_depths": {"enabled": False, "capacity_ratio": 0.5, "router_aux_loss_weight": 0.0}, "ffn": {"hidden_size": 96, "activation": 'gelu'}})
 
     def test_import_smoke(self):
         self.assertTrue(callable(FrankensteinEncoder))
@@ -107,9 +81,9 @@ class AttentionRefactorTests(unittest.TestCase):
         config = self._build_config(["titan", "standard"])
         config.dims.num_layers = 2
         model = FrankensteinEncoder(config)
-        x = torch.randint(0, config.vocab_size, (2, 8))
+        x = torch.randint(0, config.dims.vocab_size, (2, 8))
         y = model(x)
-        self.assertEqual(y.shape, (2, 8, config.vocab_size))
+        self.assertEqual(y.shape, (2, 8, config.dims.vocab_size))
 
     def test_default_positional_encoding_is_rope(self):
         from src.model.embeddings.factory import build_pos_encoder
@@ -126,8 +100,8 @@ class AttentionRefactorTests(unittest.TestCase):
         from src.model.embeddings.hope import HoPE
         from src.model.embeddings.rope import RoPE
         base = self._build_config(["titan"])
-        cfg_hope = FrankensteinModelConfig.from_flat(**{**base.to_jsonable(), "positional_encoding": "hope"})
-        cfg_rope = FrankensteinModelConfig.from_flat(**{**base.to_jsonable(), "positional_encoding": "rope"})
+        cfg_hope = FrankensteinModelConfig.from_dict({**{**base.to_jsonable(), 'positional_encoding': 'hope'}})
+        cfg_rope = FrankensteinModelConfig.from_dict({**{**base.to_jsonable(), 'positional_encoding': 'rope'}})
         pe_hope = build_pos_encoder(cfg_hope)
         pe_rope = build_pos_encoder(cfg_rope)
         self.assertIsInstance(pe_hope, HoPE)
@@ -135,7 +109,7 @@ class AttentionRefactorTests(unittest.TestCase):
 
     def test_invalid_positional_encoding_raises(self):
         with self.assertRaisesRegex(ValueError, "positional_encoding"):
-            FrankensteinModelConfig.from_flat(**{**self._build_config(["titan"]).__dict__, "positional_encoding": "invalid"})
+            FrankensteinModelConfig.from_dict({**{**self._build_config(['titan']).__dict__, 'positional_encoding': 'invalid'}})
 
     def test_layer_type_coverage_trainable(self):
         layer_types = [
@@ -180,19 +154,19 @@ class AttentionRefactorTests(unittest.TestCase):
                 config.attention.setdefault("ssog", {})["grid_h"] = 1
                 config.attention.setdefault("ssog", {})["grid_w"] = 6
             model = FrankensteinEncoder(config)
-            x = torch.randint(0, config.vocab_size, (1, 6))
+            x = torch.randint(0, config.dims.vocab_size, (1, 6))
             y = model(x)
-            self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
+            self.assertEqual(y.shape, (1, 6, config.dims.vocab_size), msg=layer_type)
 
     def test_training_free_sparse_layers_eval_only(self):
         for layer_type in ["fasa", "sparge"]:
             config = self._build_config([layer_type])
             model = FrankensteinEncoder(config)
             model.eval()
-            x = torch.randint(0, config.vocab_size, (1, 6))
+            x = torch.randint(0, config.dims.vocab_size, (1, 6))
             with torch.no_grad():
                 y = model(x)
-            self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
+            self.assertEqual(y.shape, (1, 6, config.dims.vocab_size), msg=layer_type)
 
     def test_training_free_sparse_layers_train_as_dense(self):
         # Training-free mixers train through standard dense attention over
@@ -201,21 +175,17 @@ class AttentionRefactorTests(unittest.TestCase):
             config = self._build_config([layer_type])
             model = FrankensteinEncoder(config)
             model.train()
-            x = torch.randint(0, config.vocab_size, (1, 6))
+            x = torch.randint(0, config.dims.vocab_size, (1, 6))
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 y = model(x)
-            self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
+            self.assertEqual(y.shape, (1, 6, config.dims.vocab_size), msg=layer_type)
 
     def test_invalid_mixture_of_depths_capacity_ratio_raises(self):
-        with self.assertRaisesRegex(ValueError, "mixture_of_depths_capacity_ratio"):
-            FrankensteinModelConfig.from_flat(
-                **{
-                    **self._build_config(["standard"]).__dict__,
-                    "use_mixture_of_depths": True,
-                    "mixture_of_depths_capacity_ratio": 0.0,
-                }
-            )
+        payload = self._build_config(["standard"]).to_jsonable()
+        payload["mixture_of_depths"] = {"enabled": True, "capacity_ratio": 0.0}
+        with self.assertRaisesRegex(ValueError, "capacity_ratio"):
+            FrankensteinModelConfig.from_dict(payload)
 
     def test_mixture_of_depths_updates_only_selected_tokens(self):
         config = self._build_config(["mamba"])
@@ -246,9 +216,9 @@ class AttentionRefactorTests(unittest.TestCase):
         config.mixture_of_depths.capacity_ratio = 0.5
         config.mixture_of_depths.router_aux_loss_weight = 0.25
         model = FrankensteinEncoder(config)
-        x = torch.randint(0, config.vocab_size, (2, 6))
+        x = torch.randint(0, config.dims.vocab_size, (2, 6))
         y = model(x)
-        self.assertEqual(y.shape, (2, 6, config.vocab_size))
+        self.assertEqual(y.shape, (2, 6, config.dims.vocab_size))
         self.assertIn("mixture_of_depths_router_loss", model.last_auxiliary_losses)
         self.assertIn("average_selected_fraction", model.last_mixture_of_depths_stats)
         self.assertAlmostEqual(model.last_mixture_of_depths_stats["average_selected_fraction"], 0.5)
@@ -266,10 +236,10 @@ class AttentionRefactorTests(unittest.TestCase):
             config.attention.setdefault("gma", {})["num_components"] = 8
             config.attention.setdefault("gma", {})["routing_dim"] = 16
             mixer = GaussianMixtureAttention(config)
-            x = torch.randn(2, 7, config.hidden_size)
+            x = torch.randn(2, 7, config.dims.hidden_size)
             with torch.no_grad():
                 y = mixer(x)
-            self.assertEqual(y.shape, (2, 7, config.hidden_size), msg=mode)
+            self.assertEqual(y.shape, (2, 7, config.dims.hidden_size), msg=mode)
             self.assertTrue(torch.isfinite(y).all(), msg=mode)
 
     def test_gma_responsibilities_are_probabilistic(self):
@@ -278,12 +248,12 @@ class AttentionRefactorTests(unittest.TestCase):
         config.attention.setdefault("gma", {})["num_components"] = 5
         config.attention.setdefault("gma", {})["routing_dim"] = 12
         mixer = GaussianMixtureAttention(config)
-        x = torch.randn(1, 4, config.hidden_size)
+        x = torch.randn(1, 4, config.dims.hidden_size)
         bsz, seq_len, _ = x.shape
-        q = mixer.q_proj(x).view(bsz, seq_len, config.num_heads, mixer.routing_dim)
+        q = mixer.q_proj(x).view(bsz, seq_len, config.dims.num_heads, mixer.routing_dim)
         gamma = mixer._responsibilities(q)
         row_sums = gamma.sum(dim=-1)
-        self.assertEqual(gamma.shape, (1, 4, config.num_heads, 5))
+        self.assertEqual(gamma.shape, (1, 4, config.dims.num_heads, 5))
         self.assertTrue(torch.allclose(row_sums, torch.ones_like(row_sums), atol=1e-5))
 
     def test_ssog_forward_shape_2d_and_1d_grids(self):
@@ -295,9 +265,9 @@ class AttentionRefactorTests(unittest.TestCase):
             config.attention.setdefault("ssog", {})["grid_w"] = grid_w
             mixer = SSOGAttention(config)
             n = grid_h * grid_w
-            x = torch.randn(2, n, config.hidden_size)
+            x = torch.randn(2, n, config.dims.hidden_size)
             y = mixer(x)
-            self.assertEqual(y.shape, (2, n, config.hidden_size), msg=f"{grid_h}x{grid_w}")
+            self.assertEqual(y.shape, (2, n, config.dims.hidden_size), msg=f"{grid_h}x{grid_w}")
             self.assertTrue(torch.isfinite(y).all(), msg=f"{grid_h}x{grid_w}")
             mixer.eval()
             with torch.no_grad():
@@ -314,7 +284,7 @@ class AttentionRefactorTests(unittest.TestCase):
         torch.manual_seed(0)
         mixer = SSOGAttention(config)
         mixer.eval()
-        x = torch.randn(2, 4, config.hidden_size)
+        x = torch.randn(2, 4, config.dims.hidden_size)
         with torch.no_grad():
             y_steer = mixer(x)
             mixer.lookat = False
@@ -328,8 +298,8 @@ class AttentionRefactorTests(unittest.TestCase):
         config.attention.setdefault("ssog", {})["grid_w"] = 4
         mixer = SSOGAttention(config)
         ay, ax = mixer.axis_kernels()
-        self.assertEqual(ay.shape, (config.num_heads, mixer.num_atoms, 3, 3))
-        self.assertEqual(ax.shape, (config.num_heads, mixer.num_atoms, 4, 4))
+        self.assertEqual(ay.shape, (config.dims.num_heads, mixer.num_atoms, 3, 3))
+        self.assertEqual(ax.shape, (config.dims.num_heads, mixer.num_atoms, 4, 4))
         self.assertTrue(torch.allclose(ay.sum(dim=-1), torch.ones_like(ay.sum(dim=-1)), atol=1e-5))
         self.assertTrue(torch.allclose(ax.sum(dim=-1), torch.ones_like(ax.sum(dim=-1)), atol=1e-5))
 
@@ -338,7 +308,7 @@ class AttentionRefactorTests(unittest.TestCase):
         config.attention.setdefault("ssog", {})["grid_h"] = 2
         config.attention.setdefault("ssog", {})["grid_w"] = 2
         mixer = SSOGAttention(config)
-        x = torch.randn(1, 5, config.hidden_size)
+        x = torch.randn(1, 5, config.dims.hidden_size)
         with self.assertRaisesRegex(ValueError, "ssog"):
             mixer(x)
 
@@ -347,10 +317,12 @@ class AttentionRefactorTests(unittest.TestCase):
         base.attention.setdefault("ssog", {})["grid_h"] = 1
         base.attention.setdefault("ssog", {})["grid_w"] = 6
         # Config-level check fires at construction time.
+        payload = base.to_jsonable()
+        payload["dims"]["mode"] = "decoder"
         with self.assertRaisesRegex(ValueError, "encoder-only"):
-            FrankensteinModelConfig.from_flat(**{**base.to_jsonable(), "mode": "decoder"})
+            FrankensteinModelConfig.from_dict(payload)
         # Mixer-level guard also fires (e.g. runtime mode forcing).
-        config = FrankensteinModelConfig.from_flat(**base.to_jsonable())
+        config = FrankensteinModelConfig.from_dict(base.to_jsonable())
         config.dims.mode = "decoder"
         with self.assertRaisesRegex(ValueError, "encoder-only"):
             SSOGAttention(config)
@@ -362,7 +334,7 @@ class AttentionRefactorTests(unittest.TestCase):
         config.bitnet.enabled = True
         torch.manual_seed(1)
         mixer = SSOGAttention(config)
-        x = torch.randn(2, 4, config.hidden_size)
+        x = torch.randn(2, 4, config.dims.hidden_size)
         y = mixer(x)
         self.assertTrue(torch.isfinite(y).all())
         y.sum().backward()
@@ -387,7 +359,7 @@ class AttentionRefactorTests(unittest.TestCase):
         with torch.no_grad():
             mixer.raw_mu_delta_scale.fill_(2.0)
             mixer.mu_delta.weight.normal_(0.0, 0.5)
-        x = torch.randn(1, 4, config.hidden_size)
+        x = torch.randn(1, 4, config.dims.hidden_size)
         with torch.no_grad():
             y_steer = mixer(x)
             mixer.lookat = False

@@ -96,11 +96,12 @@ from it.
 | **Plugin (external)** | `register_*` from `src/plugins/api.py` in the plugin module → declare `plugins:` in the config (`./path.py`, `pkg.module`) or advertise the `frankenstein.plugins` entry-point group. |
 
 The runtime configuration is the **nested** YAML shape (`FrankensteinModelConfig`):
-there is no nested-to-flat flattener. Per-component knobs live in
+there is no nested-to-flat flattener, no `from_flat()` constructor and no
+attribute aliasing. Read structural blocks as `config.dims.hidden_size`,
+`config.norm.type`, `config.bitnet.enabled`, …; per-component knobs live in
 `model.attention.<mixer>` / `model.positional_encoding_parameters.<pe>` and are
-bound through the spec. Historical flat attribute reads/writes are supported by
-`__getattr__`/`__setattr__` aliases and `FrankensteinModelConfig.from_flat` for
-legacy checkpoints, but new code should use the nested fields.
+read through the bound `ComponentParams` (or the small read-only PE properties
+such as `config.rope_base`).
 
 ## Gates (must stay green)
 
@@ -131,7 +132,7 @@ legacy checkpoints, but new code should use the nested fields.
 | # | Decision |
 |---|---|
 | D1 | Schema is the executable contract; `additionalProperties: false` everywhere |
-| D2 | One flat `FrankensteinModelConfig` + explicit flattener (no nested runtime config) |
+| D2 | One nested `FrankensteinModelConfig` tree built by `from_dict` (no flat constructor aliases; superseded by D15) |
 | D3 | Model core split into `config.py` / `hybrid_layer.py` / encoder / decoder / ViT / audio; no `frankenstein_model.py` |
 | D4 | BitNet enabled by default |
 | D5 | `fasa` / `sparge` train as dense attention, sparse eval |
@@ -144,7 +145,7 @@ legacy checkpoints, but new code should use the nested fields.
 | D12 | `AGENTS.md` points to code/tests; it does not restate the spec |
 | D13 | Every pluggable component is a declarative `ComponentSpec`; the registry is the single source of truth |
 | D14 | The validated schema is assembled from core YAML + registry fragments; `additionalProperties: false` holds for plugins too |
-| D15 | The runtime config is natively nested; the flattener and per-component flat fields are gone (`from_flat` remains only as a legacy-checkpoint/test migration path) |
+| D15 | The runtime config is nested only: the flattener, `from_flat()`, the attribute aliases and the export flat view are removed |
 | D16 | Plugin loading is layered: entry-points (skip-with-warning), `plugins:` config paths (fail-hard), built-ins (same API) |
 | D17 | Test gates are registry-derived: adding a component automatically covers docs/defaults/prefix/cache coverage |
 

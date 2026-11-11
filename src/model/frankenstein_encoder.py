@@ -108,7 +108,7 @@ class FrankensteinEncoder(nn.Module):
         """
         super().__init__()
         self.config = config
-        self.use_fixed_softmax = bool(getattr(self.config, "fixed_softmax", False))
+        self.use_fixed_softmax = bool(getattr(self.config.numerics, "fixed_softmax", False))
         self.last_auxiliary_losses = {}
         self.last_mixture_of_depths_stats = {}
         self.last_moe_stats = {}
@@ -116,7 +116,7 @@ class FrankensteinEncoder(nn.Module):
         # Token embedding variant is registry-driven (``model.embedding.type``);
         # the legacy ``*.enabled`` flags are folded into ``type`` at load time.
         self.emb = build_token_embedding(config)
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.dims.dropout)
 
         self.pos_encoder = build_pos_encoder(config)
 
@@ -124,28 +124,28 @@ class FrankensteinEncoder(nn.Module):
             [
                 HybridLayer(
                     config,
-                    layer_type=config.layer_pattern[i % len(config.layer_pattern)],
+                    layer_type=config.dims.layer_pattern[i % len(config.dims.layer_pattern)],
                     pos_encoder=self.pos_encoder,
                     layer_index=i,
                 )
-                for i in range(config.num_layers)
+                for i in range(config.dims.num_layers)
             ]
         )
 
         self.final_norm = get_norm(config)
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
-        self.head = proj_cls(config.hidden_size, config.vocab_size)
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
+        self.head = proj_cls(config.dims.hidden_size, config.dims.vocab_size)
 
         # Optional sequence-level classification head (DashAI Strategy A).
         # Full-precision (NOT BitNet-quantized) so downstream fine-tuning is
         # stable regardless of the backbone's quantization flags. Disabled by
         # default; when active, ``forward`` returns ``(B, num_labels)``.
         self.classification_head = bool(config.classification_head.enabled)
-        self.cls_num_labels = getattr(config, "num_labels", None)
-        self.encoder_pooling_mode = str(getattr(config, "encoder_pooling_mode", "cls"))
+        self.cls_num_labels = getattr(config.classification_head, "num_labels", None)
+        self.encoder_pooling_mode = str(getattr(config.classification_head, "pooling_mode", "cls"))
         self.cls_head = None
         if self.classification_head and self.cls_num_labels is not None:
-            self.cls_head = nn.Linear(config.hidden_size, int(self.cls_num_labels))
+            self.cls_head = nn.Linear(config.dims.hidden_size, int(self.cls_num_labels))
 
         # ---- Residual-connection module (AttnRes / standard) ----
         # Built unconditionally so the encoder can dispatch on
@@ -160,23 +160,23 @@ class FrankensteinEncoder(nn.Module):
         # parameters — the stream is created by copying and collapsed by
         # averaging, and hyper-connections fire once per loop iteration over
         # the middle-cycle partitioning of the layer stack.
-        self.use_mhc = bool(getattr(config, "use_mhc", False))
-        self.use_hyperloop = self.use_mhc and bool(getattr(config, "mhc_hyperloop", False))
+        self.use_mhc = bool(getattr(config.mhc, "enabled", False))
+        self.use_hyperloop = self.use_mhc and bool(getattr(config.mhc, "hyperloop", False))
         if self.use_hyperloop:
             self.hyperloop = HyperloopConnections(
-                hidden_size=config.hidden_size,
-                num_loops=int(config.num_loops),
-                expansion_rate=config.mhc_expansion_rate,
-                gating_init=config.mhc_gating_init,
-                res_parameterization=config.mhc_hyperloop_res_parameterization,
-                sinkhorn_iters=config.mhc_sinkhorn_iters,
-                use_bitnet=config.use_bitnet,
-                full_prec_under_bitnet=config.mhc_full_prec_under_bitnet,
+                hidden_size=config.dims.hidden_size,
+                num_loops=int(config.dims.num_loops),
+                expansion_rate=config.mhc.expansion_rate,
+                gating_init=config.mhc.gating_init,
+                res_parameterization=config.mhc.hyperloop_res_parameterization,
+                sinkhorn_iters=config.mhc.sinkhorn_iters,
+                use_bitnet=config.bitnet.enabled,
+                full_prec_under_bitnet=config.mhc.full_prec_under_bitnet,
             )
         elif self.use_mhc:
-            n = int(config.mhc_expansion_rate)
-            self.mhc_in_proj = nn.Linear(config.hidden_size, n * config.hidden_size)
-            self.mhc_out_proj = nn.Linear(n * config.hidden_size, config.hidden_size)
+            n = int(config.mhc.expansion_rate)
+            self.mhc_in_proj = nn.Linear(config.dims.hidden_size, n * config.dims.hidden_size)
+            self.mhc_out_proj = nn.Linear(n * config.dims.hidden_size, config.dims.hidden_size)
 
     def forward(
         self,
@@ -243,25 +243,25 @@ class FrankensteinEncoder(nn.Module):
         # begin layers | looped middle layers | end layers. Without Hyperloop
         # the whole stack is the middle block and both guards are 0.
         n_begin = (
-            int(getattr(self.config, "mhc_hyperloop_begin_layers", 0))
+            int(getattr(self.config.mhc, "hyperloop_begin_layers", 0))
             if self.use_hyperloop
             else 0
         )
         n_end = (
-            int(getattr(self.config, "mhc_hyperloop_end_layers", 0))
+            int(getattr(self.config.mhc, "hyperloop_end_layers", 0))
             if self.use_hyperloop
             else 0
         )
-        n_middle = self.config.num_layers - n_begin - n_end
+        n_middle = self.config.dims.num_layers - n_begin - n_end
 
         if self.use_mhc and not self.use_hyperloop:
-            n = int(self.config.mhc_expansion_rate)
+            n = int(self.config.mhc.expansion_rate)
             bsz, seq_len, dim = x.shape
             # Expand the C-dim stream to (B, S, n, C).
             x = self.mhc_in_proj(x).view(bsz, seq_len, n, dim)
 
         # ---- Residual state init for AttnRes variants ----
-        logical_depth = int(self.config.num_layers) * int(self.config.num_loops)
+        logical_depth = int(self.config.dims.num_layers) * int(self.config.dims.num_loops)
         self.residual.register_state(num_layers=logical_depth)
         self.residual.reset_state()
         if self.residual.is_attn_res:
@@ -270,7 +270,7 @@ class FrankensteinEncoder(nn.Module):
         logical_layer_idx = 0
         mixture_of_depths_aux_losses = []
         mixture_of_depths_selected_fractions = []
-        mhc_checkpoint = bool(getattr(self.config, "mhc_checkpoint", False))
+        mhc_checkpoint = bool(getattr(self.config.mhc, "checkpoint", False))
 
         def _run_layers(x_in, layers, idx0):
             """Run a layer slice and dispatch per-layer mHC checkpointing.
@@ -334,7 +334,7 @@ class FrankensteinEncoder(nn.Module):
             # y^(l) (Eq. 4 of arXiv:2604.21254):
             #   y^(l+1) = H^res y^(l) + H^post ⊗ ( F(H^pre y^(l)) + e_l )
             middle = self.layers[n_begin : n_begin + n_middle]
-            for loop_idx in range(self.config.num_loops):
+            for loop_idx in range(self.config.dims.num_loops):
                 h_pre, h_post, h_res = hl.mappings(x, loop_idx)
                 block_in = hl.apply_fpre(x, h_pre)
                 block_out, logical_layer_idx = _run_layers(
@@ -350,7 +350,7 @@ class FrankensteinEncoder(nn.Module):
                 x, self.layers[n_begin + n_middle :], logical_layer_idx
             )
         else:
-            for _ in range(self.config.num_loops):
+            for _ in range(self.config.dims.num_loops):
                 x, logical_layer_idx = _run_layers(x, self.layers, logical_layer_idx)
 
         x = self.residual.finalize(x)
@@ -366,7 +366,7 @@ class FrankensteinEncoder(nn.Module):
         if mixture_of_depths_aux_losses:
             raw_aux_loss = torch.stack(mixture_of_depths_aux_losses).mean()
             weighted_aux_loss = (
-                raw_aux_loss * float(self.config.mixture_of_depths_router_aux_loss_weight)
+                raw_aux_loss * float(self.config.mixture_of_depths.router_aux_loss_weight)
             )
             auxiliary_losses["mixture_of_depths_router_loss"] = weighted_aux_loss
             self.last_mixture_of_depths_stats = {

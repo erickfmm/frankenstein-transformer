@@ -55,7 +55,7 @@ def get_activation(config: Any, dim: Optional[int] = None) -> nn.Module:
     Args:
         config: Model configuration (nested shape).
         dim: Feature dimension the activation operates on (the FFN
-            intermediate width). Defaults to ``config.hidden_size``.
+            intermediate width). Defaults to ``config.dims.hidden_size``.
 
     Returns:
         An :class:`nn.Module` implementing the requested activation.

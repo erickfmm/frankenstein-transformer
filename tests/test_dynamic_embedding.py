@@ -12,7 +12,7 @@ if TORCH_AVAILABLE:
     import torch.nn.functional as F
 
     from src.deploy.transformers_export import export_transformers_model
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.embeddings import DynamicEmbedding
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
@@ -24,33 +24,9 @@ VOCAB = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "runner", "running", "ban
 
 
 def _cfg(**overrides):
-    base = dict(
-        vocab_size=len(VOCAB),
-        hidden_size=32,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        retention_heads=4,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        use_moe=False,
-        layer_pattern=["standard"],
-        ode_solver="rk4",
-        ode_steps=1,
-        ffn_hidden_size=64,
-        ffn_activation="gelu",
-        positional_encoding="hope",
-        use_factorized_embedding=False,
-        use_embedding_conv=False,
-        embedding_conv_kernel=3,
-        use_dynamic_embedding=True,
-        token_vocab=VOCAB,
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": len(VOCAB), "hidden_size": 32, "num_layers": 1, "num_loops": 1, "num_heads": 4, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 4}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 64, "activation": 'gelu'}, "positional_encoding": 'hope', "embedding": {"factorized": {"enabled": False}, "conv": {"enabled": False, "kernel": 3}, "dynamic": {"enabled": True}}, "token_vocab": VOCAB}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 class _HFTokenizerStub:
@@ -94,20 +70,20 @@ class DynamicEmbeddingTests(unittest.TestCase):
 
     def test_same_seed_is_deterministic(self):
         ids = torch.randint(0, len(VOCAB), (2, 10))
-        left = DynamicEmbedding(_cfg(dynamic_embedding_seed=42))(ids)
-        right = DynamicEmbedding(_cfg(dynamic_embedding_seed=42))(ids)
+        left = DynamicEmbedding(_cfg(embedding={'dynamic': {'seed': 42}}))(ids)
+        right = DynamicEmbedding(_cfg(embedding={'dynamic': {'seed': 42}}))(ids)
         self.assertTrue(torch.equal(left, right))
 
     def test_different_seed_changes_embeddings(self):
         ids = torch.randint(0, len(VOCAB), (2, 10))
-        left = DynamicEmbedding(_cfg(dynamic_embedding_seed=42))(ids)
-        right = DynamicEmbedding(_cfg(dynamic_embedding_seed=43))(ids)
+        left = DynamicEmbedding(_cfg(embedding={'dynamic': {'seed': 42}}))(ids)
+        right = DynamicEmbedding(_cfg(embedding={'dynamic': {'seed': 43}}))(ids)
         self.assertFalse(torch.equal(left, right))
 
     def test_precompute_matches_on_the_fly(self):
         ids = torch.randint(0, len(VOCAB), (3, 7))
-        cached = DynamicEmbedding(_cfg(dynamic_embedding_precompute=True))(ids)
-        online = DynamicEmbedding(_cfg(dynamic_embedding_precompute=False))(ids)
+        cached = DynamicEmbedding(_cfg(embedding={'dynamic': {'precompute': True}}))(ids)
+        online = DynamicEmbedding(_cfg(embedding={'dynamic': {'precompute': False}}))(ids)
         # Same deterministic function; the only difference is float32 reduction
         # order in the window mean (~1e-8).
         self.assertTrue(torch.allclose(cached, online, atol=1e-6, rtol=0.0))
@@ -128,7 +104,7 @@ class DynamicEmbeddingTests(unittest.TestCase):
         self.assertEqual(tuple(table.shape), (len(VOCAB), 32))
 
     def test_conv_composition(self):
-        emb = DynamicEmbedding(_cfg(use_embedding_conv=True, embedding_conv_kernel=4))
+        emb = DynamicEmbedding(_cfg(embedding={'conv': {'enabled': True, 'kernel': 4}}))
         self.assertIsNotNone(emb.conv)
         ids = torch.randint(0, len(VOCAB), (1, 9))
         self.assertEqual(emb(ids).shape, (1, 9, 32))
@@ -143,19 +119,19 @@ class DynamicEmbeddingTests(unittest.TestCase):
 
     def test_factorized_is_mutually_exclusive(self):
         with self.assertRaises(ValueError):
-            _cfg(use_factorized_embedding=True)
+            _cfg(embedding={'factorized': {'enabled': True}})
 
     def test_invalid_ngram_max(self):
         with self.assertRaises(ValueError):
-            _cfg(dynamic_embedding_ngram_max=0)
+            _cfg(embedding={'dynamic': {'ngram_max': 0}})
 
     def test_ngram_max_must_fit_hidden_size(self):
         with self.assertRaises(ValueError):
-            _cfg(dynamic_embedding_ngram_max=64)
+            _cfg(embedding={'dynamic': {'ngram_max': 64}})
 
     def test_invalid_bucket(self):
         with self.assertRaises(ValueError):
-            _cfg(dynamic_embedding_bucket=1)
+            _cfg(embedding={'dynamic': {'bucket': 1}})
 
     def test_encoder_forward_with_dynamic_embeddings(self):
         model = FrankensteinEncoder(_cfg())
@@ -201,12 +177,12 @@ class TokenizerVocabTests(unittest.TestCase):
         self.assertIsNone(token_strings(None))
 
     def test_inject_is_noop_without_dynamic(self):
-        cfg = _cfg(use_dynamic_embedding=False, token_vocab=None)
+        cfg = _cfg(embedding={'dynamic': {'enabled': False}}, token_vocab=None)
         inject_token_vocab(cfg, _HFTokenizerStub())
         self.assertIsNone(cfg.token_vocab)
 
     def test_inject_attaches_vocab(self):
-        cfg = _cfg(use_dynamic_embedding=False, token_vocab=None)
+        cfg = _cfg(embedding={'dynamic': {'enabled': False}}, token_vocab=None)
         cfg.embedding.dynamic.enabled = True
         inject_token_vocab(cfg, _HFTokenizerStub())
         self.assertEqual(cfg.token_vocab, ["[PAD]", "hello", "world"])
@@ -289,7 +265,7 @@ class DynamicEmbeddingExportTests(unittest.TestCase):
 
             exported_config = json.loads((out_dir / "config.json").read_text())
             self.assertFalse(
-                exported_config["frankenstein_config"]["use_dynamic_embedding"]
+                exported_config["frankenstein_config"]["embedding"]["dynamic"]["enabled"]
             )
             report = json.loads((out_dir / "compatibility_report.json").read_text())
             self.assertTrue(

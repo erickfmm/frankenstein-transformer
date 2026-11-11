@@ -23,7 +23,7 @@ if TORCH_AVAILABLE:
     import torch
     import torch.nn.functional as F
 
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
     from src.model.hybrid_layer import HybridLayer
@@ -39,23 +39,9 @@ if TORCH_AVAILABLE:
 
 def _cfg(**overrides):
     """Minimal encoder config; overrides win."""
-    base = dict(
-        vocab_size=64,
-        hidden_size=32,
-        num_layers=2,
-        num_loops=1,
-        num_heads=4,
-        num_kv_heads=2,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        use_moe=False,
-        ffn_hidden_size=64,
-        layer_pattern=["standard", "titan"],
-        mode="encoder",
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 2, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": ['standard', 'titan'], "mode": 'encoder'}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "moe": {"enabled": False}, "ffn": {"hidden_size": 64}}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 class _DispatchModule(torch.nn.Module):
@@ -234,7 +220,7 @@ class DispatchTests(unittest.TestCase):
     def test_hybrid_layer_attaches_flag_to_mixers(self):
         for flag in (True, False):
             with self.subTest(fixed_softmax=flag):
-                layer = HybridLayer(_cfg(fixed_softmax=flag), "standard")
+                layer = HybridLayer(_cfg(numerics={'fixed_softmax': flag}), "standard")
                 self.assertEqual(layer.mixer.use_fixed_softmax, flag)
 
 
@@ -244,7 +230,7 @@ class ModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(7)
         plain = _cfg()
         torch.manual_seed(7)
-        fixed = _cfg(fixed_softmax=True, fixed_cross_entropy=True)
+        fixed = _cfg(numerics={'fixed_softmax': True, 'fixed_cross_entropy': True})
         m_plain = FrankensteinEncoder(plain).eval()
         m_fixed = FrankensteinEncoder(fixed).eval()
         m_fixed.load_state_dict(m_plain.state_dict())
@@ -287,7 +273,7 @@ class ModelIntegrationTests(unittest.TestCase):
 class TrainerDispatchTests(unittest.TestCase):
     def _bare_trainer(self, fixed):
         trainer = TitanTrainer.__new__(TitanTrainer)
-        trainer.config = _cfg(fixed_cross_entropy=fixed)
+        trainer.config = _cfg(numerics={'fixed_cross_entropy': fixed})
         trainer.model = torch.nn.Identity()
         return trainer
 
@@ -305,7 +291,7 @@ class TrainerDispatchTests(unittest.TestCase):
         trainer = TitanTrainer.__new__(TitanTrainer)
         trainer.config = None
         trainer.model = torch.nn.Module()
-        trainer.model.config = _cfg(fixed_cross_entropy=True)
+        trainer.model.config = _cfg(numerics={'fixed_cross_entropy': True})
         self.assertTrue(trainer._use_fixed_cross_entropy())
 
 
@@ -314,23 +300,7 @@ class CacheParityTests(unittest.TestCase):
     """Prefill + decode must equal the full forward with fixed softmax on."""
 
     def _build(self, pattern):
-        cfg = FrankensteinModelConfig.from_flat(
-            vocab_size=64,
-            hidden_size=32,
-            num_layers=1,
-            num_loops=1,
-            num_heads=4,
-            retention_heads=4,
-            num_kv_heads=2,
-            dropout=0.0,
-            use_bitnet=False,
-            layer_pattern=[pattern],
-            mode="decoder",
-            positional_encoding="rope",
-            norm_type="layer_norm",
-            ffn_hidden_size=64,
-            fixed_softmax=True,
-        )
+        cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 1, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": [pattern], "mode": 'decoder'}, "attention": {"retnet": {"heads": 4}}, "bitnet": {"enabled": False}, "positional_encoding": 'rope', "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}, "numerics": {"fixed_softmax": True}})
         torch.manual_seed(0)
         return FrankensteinDecoder(cfg).eval()
 

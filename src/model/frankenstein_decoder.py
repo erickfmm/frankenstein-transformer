@@ -11,11 +11,12 @@ memory.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .config import merge_model_blocks
 from .numerics import module_softmax
 
 from .config import FrankensteinModelConfig
@@ -51,6 +52,7 @@ class FrankensteinDecoder(nn.Module):
         num_loops: int = 1,
         use_bitnet: bool = True,
         layer_pattern: Optional[List[str]] = None,
+        **overrides: Any,
     ) -> FrankensteinModelConfig:
         """Build the default decoder preset configuration.
 
@@ -63,6 +65,8 @@ class FrankensteinDecoder(nn.Module):
                 Default: True.
             layer_pattern: Optional custom layer pattern. If None, defaults
                 to ``["titan", "retnet", "titan", "mamba"] * 3``.
+            **overrides: Nested ``model:`` blocks (``dims``, ``attention``,
+                ``moe``, ...) merged over the preset defaults.
 
         Returns:
             A pre-configured :class:`FrankensteinModelConfig` with ``mode='decoder'``.
@@ -74,24 +78,24 @@ class FrankensteinDecoder(nn.Module):
                 "titan",
                 "mamba",
             ] * 3
-        return FrankensteinModelConfig.from_flat(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            num_loops=num_loops,
-            num_heads=16,
-            retention_heads=8,
-            num_experts=8,
-            top_k_experts=2,
-            dropout=0.1,
-            ode_solver="rk4",
-            ode_steps=2,
-            use_bitnet=use_bitnet,
-            norm_type="dynamic_tanh",
-            layer_pattern=layer_pattern,
-            use_factorized_embedding=False,
-            mode="decoder",
-        )
+        blocks = {
+            "dims": {
+                "vocab_size": vocab_size,
+                "hidden_size": hidden_size,
+                "num_layers": num_layers,
+                "num_loops": num_loops,
+                "num_heads": 16,
+                "dropout": 0.1,
+                "layer_pattern": layer_pattern,
+                "mode": "decoder",
+            },
+            "norm": {"type": "dynamic_tanh"},
+            "bitnet": {"enabled": use_bitnet},
+            "moe": {"num_experts": 8, "top_k": 2},
+            "attention": {"ode": {"solver": "rk4", "steps": 2}},
+            "embedding": {"factorized": {"enabled": False}},
+        }
+        return FrankensteinModelConfig.from_dict(merge_model_blocks(blocks, overrides))
 
     def __init__(self, config: Optional[FrankensteinModelConfig] = None):
         """Initialize the decoder model.
@@ -103,12 +107,12 @@ class FrankensteinDecoder(nn.Module):
         """
         super().__init__()
         self.config = config or self.build_decoder_config()
-        self.use_fixed_softmax = bool(getattr(self.config, "fixed_softmax", False))
+        self.use_fixed_softmax = bool(getattr(self.config.numerics, "fixed_softmax", False))
         self.last_auxiliary_losses = {}
         self.last_mixture_of_depths_stats = {}
 
-        if self.config.mode != "decoder":
-            self.config.mode = "decoder"
+        if self.config.dims.mode != "decoder":
+            self.config.dims.mode = "decoder"
 
         self.backbone = FrankensteinEncoder(self.config)
 

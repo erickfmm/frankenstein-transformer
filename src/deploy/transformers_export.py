@@ -33,7 +33,8 @@ from typing import Any, Dict, List, Tuple
 import torch
 import yaml
 
-from .export_compat import flat_config_view, model_config_from
+from .export_compat import model_config_from
+from ..model.config import merge_model_blocks
 
 try:
     from .quantization import bake_bitnet_weights
@@ -79,15 +80,11 @@ QUANT_MODULE_NAME = "quantization_frankenstein.py"
 
 _CONFIGURATION_FILE = """from __future__ import annotations
 
-from dataclasses import fields
 from typing import Any, Dict
 
 from transformers import PretrainedConfig
 
 from .model.config import FrankensteinModelConfig
-
-
-_MODEL_KEYS = {field.name for field in fields(FrankensteinModelConfig)}
 
 
 class FrankensteinConfig(PretrainedConfig):
@@ -100,76 +97,25 @@ class FrankensteinConfig(PretrainedConfig):
         frankenstein_config: Dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        model_cfg = dict(frankenstein_config or {})
-        passthrough: Dict[str, Any] = {}
-        for key, value in kwargs.items():
-            if key == "num_labels" and value is None:
-                # `num_labels` is a reserved HF property. transformers 5.x
-                # keeps an explicit ``None`` (its ``__post_init__`` resolves
-                # ``kwargs.get("num_labels", ...)`` to None and then calls
-                # ``range(None)``), unlike 4.x which coerces None to 2. Treat
-                # it as unset so artifacts exported before this guard still
-                # load; the model-side value lives in ``frankenstein_config``.
-                continue
-            if key in _MODEL_KEYS or key in {"rope_scaling", "rope_parameters"}:
-                # Model keys never reach ``PretrainedConfig.__init__``: flat
-                # names can collide with reserved HF config properties whose
-                # kwargs are validated. transformers >= 5 validates
-                # ``rope_scaling``/``rope_parameters`` as mappings, while the
-                # Frankenstein config stores a float scaling factor, so both
-                # stay inside ``frankenstein_config`` (authoritative).
-                model_cfg.setdefault(key, value)
-            else:
-                passthrough[key] = value
-
+        # ``frankenstein_config`` is the nested ``model:`` block, exactly the
+        # shape ``FrankensteinModelConfig.from_dict`` accepts. The model block
+        # is never mirrored into reserved HF config properties.
         self.model_class = model_class
         self.task = task
-        self.frankenstein_config = model_cfg
-
-        super().__init__(**passthrough)
-
-        for key, value in model_cfg.items():
-            if key in {
-                "model_class", "task", "model_type", "architectures",
-                "rope_scaling", "rope_parameters",
-            }:
-                continue
-            if key == "num_labels" and value is None:
-                # `num_labels` is a reserved HF property; a None value breaks
-                # its id2label/label2id map creation.
-                continue
-            try:
-                setattr(self, key, value)
-            except (AttributeError, TypeError, ValueError):
-                # Some HF-reserved names reject the Frankenstein shape on set
-                # (``rope_scaling`` in transformers >= 5); the value remains
-                # available through ``frankenstein_config`` so the model still
-                # builds from it.
-                continue
+        self.frankenstein_config = dict(frankenstein_config or {})
+        super().__init__(**kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
         payload = super().to_dict()
         payload["model_class"] = self.model_class
         payload["task"] = self.task
         payload["frankenstein_config"] = dict(self.frankenstein_config)
-        payload.update(
-            {
-                key: value
-                for key, value in self.frankenstein_config.items()
-                if key not in {
-                    "model_class", "task", "model_type", "architectures",
-                    "rope_scaling", "rope_parameters",
-                }
-                and not (key == "num_labels" and value is None)
-            }
-        )
         return payload
 """
 
 
 _MODELING_FILE = """from __future__ import annotations
 
-from dataclasses import fields
 from pathlib import Path
 from typing import Any, Dict
 
@@ -192,23 +138,19 @@ from .quantization_frankenstein import (
 )
 
 
-_MODEL_KEYS = {field.name for field in fields(FrankensteinModelConfig)}
-
-
 def _to_model_config(config: FrankensteinConfig) -> FrankensteinModelConfig:
     source = dict(getattr(config, "frankenstein_config", {}) or {})
-    for key in _MODEL_KEYS:
-        if key not in source and hasattr(config, key):
-            source[key] = getattr(config, key)
-    return FrankensteinModelConfig.from_flat(**source)
+    return FrankensteinModelConfig.from_dict(
+        source, model_class=getattr(config, "model_class", None)
+    )
 
 
 def _build_core_model(config: FrankensteinConfig) -> nn.Module:
     model_cfg = _to_model_config(config)
     model_class = str(getattr(config, "model_class", "frankenstein_text_encoder")).lower()
     if model_class == "frankenstein_text_decoder":
-        if model_cfg.mode != "decoder":
-            model_cfg.mode = "decoder"
+        if model_cfg.dims.mode != "decoder":
+            model_cfg.dims.mode = "decoder"
         return FrankensteinDecoder(model_cfg)
     if model_class == "frankenstein_vit":
         from .model.frankenstein_vit import FrankensteinViT
@@ -572,15 +514,15 @@ def _bake_state_dict(
         Tuple of ``(baked_state_dict, num_baked_layers)``.
     """
     from src.model.config import FrankensteinModelConfig
-    from .export_compat import flat_config_view, model_config_from
+    from .export_compat import model_config_from
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
 
     model_cfg = model_config_from(model_config)
     mc = str(model_class).lower()
-    if mc == "frankenstein_text_decoder" or model_cfg.mode == "decoder":
-        if model_cfg.mode != "decoder":
-            model_cfg.mode = "decoder"
+    if mc == "frankenstein_text_decoder" or model_cfg.dims.mode == "decoder":
+        if model_cfg.dims.mode != "decoder":
+            model_cfg.dims.mode = "decoder"
         model = FrankensteinDecoder(model_cfg)
     else:
         model = FrankensteinEncoder(model_cfg)
@@ -591,17 +533,41 @@ def _bake_state_dict(
     return model.state_dict(), baked
 
 
+def _cfg_get(cfg: Dict[str, Any], path: str, default: Any = None) -> Any:
+    """Read ``a.b.c`` from a nested ``model:`` block with a fallback."""
+    node: Any = cfg
+    for part in path.split("."):
+        if not isinstance(node, dict):
+            return default
+        node = node.get(part)
+        if node is None:
+            return default
+    return node
+
+
+def _strip_none(mapping: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively drop ``None`` leaves from a nested mapping."""
+    result: Dict[str, Any] = {}
+    for key, value in mapping.items():
+        if isinstance(value, dict):
+            child = _strip_none(value)
+            if child:
+                result[key] = child
+        elif value is not None:
+            result[key] = value
+    return result
+
+
 def _dynamic_embedding_enabled(model_config: Dict[str, Any]) -> bool:
-    """Whether a (nested or flat) model config uses dynamic embeddings.
+    """Whether a nested model config uses dynamic embeddings.
 
     Args:
-        model_config: Nested ``model:`` block or flat checkpoint config.
+        model_config: Nested ``model:`` block.
 
     Returns:
-        ``True`` when ``embedding.dynamic.enabled`` (nested) or
-        ``use_dynamic_embedding`` (flat) is set.
+        ``True`` when ``embedding.dynamic.enabled`` is set.
     """
-    if bool(model_config.get("use_dynamic_embedding", False)):
+    if bool(_cfg_get(model_config, "embedding.dynamic.enabled", False)):
         return True
     embedding = model_config.get("embedding")
     if isinstance(embedding, dict):
@@ -618,7 +584,7 @@ def _resolve_dynamic_vocab(
 ) -> List[str]:
     """Resolve the tokenizer vocabulary required by dynamic embeddings.
 
-    Lookup order: flat config ``token_vocab`` → checkpoint ``config`` →
+    Lookup order: ``model.token_vocab`` → checkpoint ``config`` →
     ``tokenizer.name_or_path`` in the training YAML.
 
     Args:
@@ -633,7 +599,7 @@ def _resolve_dynamic_vocab(
         ValueError: If no vocabulary can be resolved.
     """
 
-    vocab = flat_config_view(model_config).get("token_vocab")
+    vocab = model_config.get("token_vocab")
     if vocab:
         return list(vocab)
 
@@ -699,11 +665,10 @@ def _materialize_dynamic_embedding(
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
 
-    flat = flat_config_view(model_config)
     model_cfg = model_config_from(model_config)
-    decoder = str(model_class).lower() == "frankenstein_text_decoder" or model_cfg.mode == "decoder"
+    decoder = str(model_class).lower() == "frankenstein_text_decoder" or model_cfg.dims.mode == "decoder"
     if decoder:
-        model_cfg.mode = "decoder"
+        model_cfg.dims.mode = "decoder"
         model = FrankensteinDecoder(model_cfg)
         embedding = model.backbone.emb
     else:
@@ -720,23 +685,22 @@ def _materialize_dynamic_embedding(
     model.eval()
 
     baked = 0
-    if bake_bitnet_weights is not None and bool(flat.get("use_bitnet", False)):
+    if bake_bitnet_weights is not None and bool(model_cfg.bitnet.enabled):
         baked = bake_bitnet_weights(model)
 
     exported = {name: tensor.detach().clone() for name, tensor in model.state_dict().items()}
-    export_config = dict(flat)
-    export_config["use_dynamic_embedding"] = False
-    export_config["dynamic_embedding_precompute"] = False
-    export_config["use_factorized_embedding"] = False
+    export_config = merge_model_blocks(model_config, {})
     export_config["token_vocab"] = None
-    # Keep the nested block in sync: ``from_dict`` reads ``embedding.type``
-    # (the flat ``*.enabled`` flags are folded in only when type is default).
-    embedding_block = dict(export_config.get("embedding") or {})
+    embedding_block = export_config.setdefault("embedding", {})
     embedding_block["type"] = "standard"
-    dynamic_block = dict(embedding_block.get("dynamic") or {})
-    dynamic_block["enabled"] = False
-    embedding_block["dynamic"] = dynamic_block
-    export_config["embedding"] = embedding_block
+    embedding_block["factorized"] = {
+        **(embedding_block.get("factorized") or {}), "enabled": False
+    }
+    embedding_block["dynamic"] = {
+        **(embedding_block.get("dynamic") or {}),
+        "enabled": False,
+        "precompute": False,
+    }
     return exported, export_config, baked
 
 
@@ -787,7 +751,7 @@ def _build_compatibility_report(
             "checkpoint or the deployment pipeline instead."
         )
 
-    model_layers = list(model_config.get("layer_pattern") or [])
+    model_layers = list(_cfg_get(model_config, "dims.layer_pattern") or [])
     unknown_layers = sorted(set(model_layers) - set(schema_layer_types))
     if unknown_layers:
         issues.append(
@@ -805,11 +769,11 @@ def _build_compatibility_report(
             "the exported checkpoint keeps the sparse eval path."
         )
 
-    use_bitnet = bool(model_config.get("use_bitnet", False))
-    bitnet_routers = bool(model_config.get("bitnet_routers", False))
+    use_bitnet = bool(_cfg_get(model_config, "bitnet.enabled", False))
+    bitnet_routers = bool(_cfg_get(model_config, "bitnet.routers", False))
     if use_bitnet and not bitnet_routers:
         warnings.append(
-            "use_bitnet is enabled but bitnet_routers is false: routing/scoring "
+            "BitNet is enabled but bitnet.routers is false: routing/scoring "
             "projections (MoE router, Mixture-of-Depths router, sparse "
             "block-index/forecast, top-k score nets) remain full-precision in "
             "the exported checkpoint. This is the recommended default for "
@@ -851,86 +815,83 @@ def _build_transformers_config(
     payload["architectures"] = [modeling_class]
     payload["model_class"] = model_class
     payload["task"] = task
-    # `frankenstein_config` must be flat: the generated wrapper calls
-    # FrankensteinModelConfig.from_flat(**frankenstein_config) and the schema runtime
-    # config is the flat dataclass.
-    payload["frankenstein_config"] = flat_config_view(model_config)
+    # `frankenstein_config` is the nested ``model:`` block; the generated
+    # wrapper rebuilds it with ``FrankensteinModelConfig.from_dict``.
+    payload["frankenstein_config"] = dict(model_config)
     payload["auto_map"] = {
         "AutoConfig": "configuration_frankenstein.FrankensteinConfig",
         "AutoModelForMaskedLM": "modeling_frankenstein.FrankensteinForMaskedLM",
         "AutoModelForCausalLM": "modeling_frankenstein.FrankensteinForCausalLM",
     }
     # HF-compatible Mixture-of-Experts block (DeepSeek/Qwen-style names).
-    if bool(model_config.get("use_moe", False)):
-        top_k = int(model_config.get("top_k_experts", 2))
-        bias_update = str(model_config.get("moe_bias_update", "none"))
-        payload["num_experts"] = int(model_config.get("num_experts", 8))
+    if bool(_cfg_get(model_config, "moe.enabled", False)):
+        top_k = int(_cfg_get(model_config, "moe.top_k", 2))
+        bias_update = str(_cfg_get(model_config, "moe.balancing.bias_update", "none"))
+        payload["num_experts"] = int(_cfg_get(model_config, "moe.num_experts", 8))
         payload["num_experts_per_tok"] = top_k
         payload["moe"] = {
             "enabled": True,
-            "num_experts": int(model_config.get("num_experts", 8)),
+            "num_experts": int(_cfg_get(model_config, "moe.num_experts", 8)),
             "num_experts_per_tok": top_k,
-            "moe_intermediate_size": model_config.get("moe_expert_hidden_size")
-            or model_config.get("ffn_hidden_size"),
-            "scoring_func": str(model_config.get("moe_router_scoring", "softmax")),
-            "norm_topk_prob": bool(model_config.get("moe_router_renormalize", True)),
-            "pre_softmax": bool(model_config.get("moe_router_pre_softmax", False)),
+            "moe_intermediate_size": _cfg_get(model_config, "moe.expert_hidden_size")
+            or _cfg_get(model_config, "ffn.hidden_size"),
+            "scoring_func": str(_cfg_get(model_config, "moe.router.scoring", "softmax")),
+            "norm_topk_prob": bool(_cfg_get(model_config, "moe.router.renormalize", True)),
+            "pre_softmax": bool(_cfg_get(model_config, "moe.router.pre_softmax", False)),
             "routed_scaling_factor": float(
-                model_config.get("moe_routed_scaling_factor", 1.0)
+                _cfg_get(model_config, "moe.router.routed_scaling_factor", 1.0)
             ),
-            "router_dtype": str(model_config.get("moe_router_dtype", "float32")),
-            "z_loss_coeff": float(model_config.get("moe_router_z_loss_coeff", 0.0)),
+            "router_dtype": str(_cfg_get(model_config, "moe.router.dtype", "float32")),
+            "z_loss_coeff": float(_cfg_get(model_config, "moe.router.z_loss_coeff", 0.0)),
             "n_shared_experts": int(
-                model_config.get("moe_shared_experts_count", 0)
+                _cfg_get(model_config, "moe.shared.count", 0)
             ),
-            "shared_expert_intermediate_size": model_config.get(
-                "moe_shared_expert_hidden_size"
-            ),
+            "shared_expert_intermediate_size": _cfg_get(model_config, "moe.shared.hidden_size"),
             "shared_expert_gate": str(
-                model_config.get("moe_shared_expert_gate", "none")
+                _cfg_get(model_config, "moe.shared.gate", "none")
             ),
-            "first_k_dense_replace": int(model_config.get("moe_dense_layers", 0)),
-            "moe_layer_freq": int(model_config.get("moe_layer_frequency", 1)),
+            "first_k_dense_replace": int(_cfg_get(model_config, "moe.layout.dense_layers", 0)),
+            "moe_layer_freq": int(_cfg_get(model_config, "moe.layout.every_n_layers", 1)),
             "routing_type": str(
-                model_config.get("moe_routing_type", "token_choice")
+                _cfg_get(model_config, "moe.routing.type", "token_choice")
             ),
             "capacity_factor": float(
-                model_config.get("moe_capacity_factor", 0.0)
+                _cfg_get(model_config, "moe.routing.capacity_factor", 0.0)
             ),
-            "hash_layers": int(model_config.get("moe_hash_layers", 0)),
+            "hash_layers": int(_cfg_get(model_config, "moe.routing.hash_layers", 0)),
             "latent": {
-                "enabled": bool(model_config.get("moe_latent_enabled", False)),
-                "dim": model_config.get("moe_latent_dim"),
+                "enabled": bool(_cfg_get(model_config, "moe.latent.enabled", False)),
+                "dim": _cfg_get(model_config, "moe.latent.dim"),
                 "norm_before_up_proj": bool(
-                    model_config.get("moe_latent_norm_before_up_proj", False)
+                    _cfg_get(model_config, "moe.latent.norm_before_up_proj", False)
                 ),
             },
             "balancing": {
-                "aux_loss": str(model_config.get("moe_aux_loss_type", "batch")),
+                "aux_loss": str(_cfg_get(model_config, "moe.balancing.aux_loss", "batch")),
                 "aux_loss_coeff": float(
-                    model_config.get("moe_aux_loss_coeff", 0.01)
+                    _cfg_get(model_config, "moe.balancing.aux_loss_coeff", 0.01)
                 ),
                 "bias_update": bias_update,
                 "bias_update_rate": float(
-                    model_config.get("moe_bias_update_rate", 0.001)
+                    _cfg_get(model_config, "moe.balancing.bias_update_rate", 0.001)
                 ),
             },
             "topk_method": "noaux_tc" if bias_update != "none" else "greedy",
             "activation_clamp": float(
-                model_config.get("moe_activation_clamp", 0.0)
+                _cfg_get(model_config, "moe.experts.activation_clamp", 0.0)
             ),
         }
     if quantization_config is not None:
         # Dedicated key: HF reserves `quantization_config` for its own quant
         # runtimes (bitsandbytes/GPTQ/...) and warns/skips unknown schemes.
         payload["frankenstein_quantization"] = dict(quantization_config)
-    elif bool(model_config.get("use_bitnet", False)):
+    elif bool(_cfg_get(model_config, "bitnet.enabled", False)):
         payload["quantization_config"] = {
             "quant_method": "bitnet",
             "bits": 1.58,
             "ternary_weights": True,
             "activation_bits": 8,
-            "bitnet_routers": bool(model_config.get("bitnet_routers", False)),
+            "bitnet_routers": bool(_cfg_get(model_config, "bitnet.routers", False)),
             "modules_to_not_convert": None,
             "storage": "float32_baked",
             "compressed": False,
@@ -1004,9 +965,9 @@ def _build_export_model(
     from src.model.frankenstein_encoder import FrankensteinEncoder
 
     model_cfg = model_config_from(model_config)
-    if str(model_class).lower() == "frankenstein_text_decoder" or model_cfg.mode == "decoder":
-        if model_cfg.mode != "decoder":
-            model_cfg.mode = "decoder"
+    if str(model_class).lower() == "frankenstein_text_decoder" or model_cfg.dims.mode == "decoder":
+        if model_cfg.dims.mode != "decoder":
+            model_cfg.dims.mode = "decoder"
         model = FrankensteinDecoder(model_cfg)
     elif str(model_class).lower() == "frankenstein_vit":
         from src.model.frankenstein_vit import FrankensteinViT
@@ -1197,15 +1158,9 @@ def export_transformers_model(
     # shapes match the saved weights.
     raw_checkpoint_config = _as_plain_dict(checkpoint.get("config"))
     checkpoint_config = (
-        {
-            key: value
-            for key, value in flat_config_view(raw_checkpoint_config).items()
-            if value is not None
-        }
-        if raw_checkpoint_config
-        else {}
+        _strip_none(raw_checkpoint_config) if raw_checkpoint_config else {}
     )
-    model_config = {**flat_config_view(model_config), **checkpoint_config}
+    model_config = merge_model_blocks(model_config, checkpoint_config)
 
     model_class = str(yaml_data.get("model_class") or "frankenstein_text_encoder").strip().lower()
     if model_class == "frankenstein_audio":
@@ -1217,7 +1172,7 @@ def export_transformers_model(
             "work — use the native checkpoint or the deployment pipeline."
         )
     if model_class == "frankenstein_text_decoder":
-        model_config["mode"] = "decoder"
+        model_config.setdefault("dims", {})["mode"] = "decoder"
 
     training_block = yaml_data.get("training", {}) or {}
     task = str(training_block.get("task") or "mlm").strip().lower()
@@ -1239,7 +1194,7 @@ def export_transformers_model(
 
     modeling_class = (
         "FrankensteinForCausalLM"
-        if model_config.get("mode") == "decoder" or model_class == "frankenstein_text_decoder"
+        if _cfg_get(model_config, "dims.mode") == "decoder" or model_class == "frankenstein_text_decoder"
         else "FrankensteinForMaskedLM"
     )
 
@@ -1266,7 +1221,7 @@ def export_transformers_model(
     # Build the core model once so BitNet baking and block quantization see
     # the exact module graph the exported wrapper will rebuild.
     export_model = _build_export_model(model_config, model_class, export_state_dict)
-    if bool(model_config.get("use_bitnet", False)) and bake_bitnet_weights is not None:
+    if bool(_cfg_get(model_config, "bitnet.enabled", False)) and bake_bitnet_weights is not None:
         try:
             baked_layers = bake_bitnet_weights(export_model)
         except Exception as exc:  # pragma: no cover - defensive
@@ -1294,7 +1249,7 @@ def export_transformers_model(
             quant,
             quant_runtime,
             prefixed_metadata,
-            bool(model_config.get("use_bitnet", False)),
+            bool(_cfg_get(model_config, "bitnet.enabled", False)),
         )
 
     # The HF wrappers hold the core model as `self.model`, so every tensor is
@@ -1379,8 +1334,8 @@ def export_transformers_model(
             ),
         },
         "bitnet": {
-            "enabled": bool(model_config.get("use_bitnet", False)),
-            "bitnet_routers": bool(model_config.get("bitnet_routers", False)),
+            "enabled": bool(_cfg_get(model_config, "bitnet.enabled", False)),
+            "bitnet_routers": bool(_cfg_get(model_config, "bitnet.routers", False)),
             "baked_layers": baked_layers,
         },
     }

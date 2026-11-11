@@ -242,7 +242,7 @@ class EngramLayer(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None) -> None:
         params = mixer_params(config, "engram", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
+        self.hidden_size = config.dims.hidden_size
 
         max_ngram = params.value("max_ngram_size", 3)
         n_heads = params.value("n_heads_per_ngram", 4)
@@ -259,7 +259,7 @@ class EngramLayer(nn.Module):
         self.hasher = NgramHasher(
             max_ngram_size=max_ngram,
             n_heads_per_ngram=n_heads,
-            base_vocab_size=config.vocab_size,
+            base_vocab_size=config.dims.vocab_size,
             seed=seed,
         )
 
@@ -279,7 +279,7 @@ class EngramLayer(nn.Module):
         )
 
         # Projections
-        proj_cls = BitLinear if getattr(config, "use_bitnet", False) else nn.Linear
+        proj_cls = BitLinear if getattr(config.bitnet, "enabled", False) else nn.Linear
         self.value_proj = proj_cls(engram_dim, self.hidden_size, bias=False)
         self.key_proj = proj_cls(engram_dim, self.hidden_size, bias=False)
         self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)

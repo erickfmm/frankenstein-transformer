@@ -29,6 +29,8 @@ from typing import Any, Dict, Optional
 
 import torch
 
+from ..attention.params import use_pe_for
+
 from .base import CacheSlot, SlotMeta
 from .capabilities import is_cacheable, spec_for
 from .compress import build_cache_policy
@@ -191,7 +193,7 @@ class FrankensteinCache:
         # PaPE-configured layers fall back per-layer (D10/D11): the
         # content-dependent q/k augmentation has unproven caching exactness.
         pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
-        use_pe = getattr(config, f"{layer_type}_use_pe", True)
+        use_pe = use_pe_for(config, layer_type, True)
         if pe_type in ("pape", "pape_efficient", "pape_ri") and use_pe:
             return None
 

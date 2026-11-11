@@ -7,34 +7,14 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.hybrid_layer import HybridLayer
 
 
 def _cfg(layer_pattern=None, **overrides):
-    base = dict(
-        vocab_size=64,
-        hidden_size=48,
-        num_layers=1,
-        num_loops=1,
-        num_heads=6,
-        retention_heads=6,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=layer_pattern or ["standard"],
-        use_moe=False,
-        ode_solver="rk4",
-        ode_steps=1,
-        ffn_hidden_size=96,
-        ffn_activation="gelu",
-        positional_encoding="hope",
-        mode="encoder",
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": 64, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": layer_pattern or ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}, "positional_encoding": 'hope'}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 BSZ, SEQ, DIM = 2, 8, 48
@@ -62,12 +42,12 @@ class HybridLayerMambaTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class HybridLayerDenseFfnTests(unittest.TestCase):
     def test_dense_ffn_output_shape(self):
-        layer = HybridLayer(_cfg(use_moe=False), layer_type="standard")
+        layer = HybridLayer(_cfg(moe={'enabled': False}), layer_type="standard")
         y = layer(_x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows_dense(self):
-        layer = HybridLayer(_cfg(use_moe=False), layer_type="standard")
+        layer = HybridLayer(_cfg(moe={'enabled': False}), layer_type="standard")
         x = _x().requires_grad_(True)
         layer(x).sum().backward()
         self.assertIsNotNone(x.grad)
@@ -76,26 +56,26 @@ class HybridLayerDenseFfnTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class HybridLayerMoETests(unittest.TestCase):
     def test_moe_output_shape(self):
-        cfg = _cfg(use_moe=True, num_experts=4, top_k_experts=2)
+        cfg = _cfg(moe={'enabled': True, 'num_experts': 4, 'top_k': 2})
         layer = HybridLayer(cfg, layer_type="standard")
         y = layer(_x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_moe_gradient_flows(self):
-        cfg = _cfg(use_moe=True, num_experts=4, top_k_experts=2)
+        cfg = _cfg(moe={'enabled': True, 'num_experts': 4, 'top_k': 2})
         layer = HybridLayer(cfg, layer_type="standard")
         x = _x().requires_grad_(True)
         layer(x).sum().backward()
         self.assertIsNotNone(x.grad)
 
     def test_moe_has_router(self):
-        cfg = _cfg(use_moe=True)
+        cfg = _cfg(moe={'enabled': True})
         layer = HybridLayer(cfg, layer_type="standard")
         self.assertIsNotNone(layer.router)
         self.assertIsNotNone(layer.experts)
 
     def test_dense_has_no_router(self):
-        layer = HybridLayer(_cfg(use_moe=False), layer_type="standard")
+        layer = HybridLayer(_cfg(moe={'enabled': False}), layer_type="standard")
         self.assertIsNone(layer.router)
         self.assertIsNone(layer.experts)
 
@@ -189,7 +169,7 @@ class HybridLayerMiscTests(unittest.TestCase):
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))
 
     def test_silu_activation(self):
-        cfg = _cfg(ffn_activation="silu")
+        cfg = _cfg(ffn={'activation': 'silu'})
         layer = HybridLayer(cfg, layer_type="standard")
         y = layer(_x())
         self.assertEqual(y.shape, (BSZ, SEQ, DIM))

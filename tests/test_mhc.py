@@ -11,7 +11,7 @@ if TORCH_AVAILABLE:
         SinkhornKnoppFunction,
     )
     from src.model.attention.common import BitLinear
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.hybrid_layer import HybridLayer
     from src.model.frankenstein_encoder import FrankensteinEncoder
 
@@ -89,31 +89,9 @@ class ManifoldHyperConnectionsTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class MhcModelTests(unittest.TestCase):
     def _cfg(self, **overrides):
-        base = dict(
-            vocab_size=128,
-            hidden_size=64,
-            num_layers=2,
-            num_loops=1,
-            num_heads=4,
-            retention_heads=4,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            norm_type="layer_norm",
-            use_bitnet=False,
-            use_moe=False,
-            layer_pattern=["standard", "retnet"],
-            positional_encoding="hope",
-            mode="encoder",
-            use_mhc=True,
-            mhc_expansion_rate=4,
-            mhc_sinkhorn_iters=20,
-            mhc_gating_init=0.01,
-            mhc_checkpoint=False,
-            mhc_full_prec_under_bitnet=True,
-        )
-        base.update(overrides)
-        return FrankensteinModelConfig.from_flat(**base)
+        base = {"dims": {"vocab_size": 128, "hidden_size": 64, "num_layers": 2, "num_loops": 1, "num_heads": 4, "dropout": 0.0, "layer_pattern": ['standard', 'retnet'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "positional_encoding": 'hope', "mhc": {"enabled": True, "expansion_rate": 4, "sinkhorn_iters": 20, "gating_init": 0.01, "checkpoint": False, "full_prec_under_bitnet": True}}
+        base = merge_model_blocks(base, overrides)
+        return FrankensteinModelConfig.from_dict({**base})
 
     def test_model_output_shape(self):
         cfg = self._cfg()
@@ -133,7 +111,7 @@ class MhcModelTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(mhc.proj.weight.grad).all().item())
 
     def test_checkpoint_forward_backward(self):
-        cfg = self._cfg(mhc_checkpoint=True)
+        cfg = self._cfg(mhc={"checkpoint": True})
         model = FrankensteinEncoder(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
@@ -141,7 +119,7 @@ class MhcModelTests(unittest.TestCase):
         self.assertEqual(out.shape, (2, 8, 128))
 
     def test_moe_supported_with_mhc(self):
-        cfg = self._cfg(use_moe=True, num_experts=2, top_k_experts=1)
+        cfg = self._cfg(moe={"enabled": True, "num_experts": 2, "top_k": 1})
         model = FrankensteinEncoder(cfg)
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
@@ -149,7 +127,7 @@ class MhcModelTests(unittest.TestCase):
         self.assertEqual(out.shape, (2, 8, 128))
 
     def test_mod_incompatible_with_mhc(self):
-        cfg = self._cfg(use_mixture_of_depths=True)
+        cfg = self._cfg(mixture_of_depths={"enabled": True})
         with self.assertRaises(ValueError):
             HybridLayer(cfg, layer_type="standard")
 
@@ -163,23 +141,7 @@ class MhcModelTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class MhcHybridLayerTests(unittest.TestCase):
     def _cfg(self):
-        return FrankensteinModelConfig.from_flat(
-            vocab_size=64,
-            hidden_size=48,
-            num_layers=1,
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            dropout=0.0,
-            norm_type="layer_norm",
-            use_bitnet=False,
-            use_moe=False,
-            layer_pattern=["standard"],
-            use_mhc=True,
-            mhc_expansion_rate=2,
-            positional_encoding="hope",
-            mode="encoder",
-        )
+        return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 6}}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "moe": {"enabled": False}, "mhc": {"enabled": True, "expansion_rate": 2}, "positional_encoding": 'hope'})
 
     def test_hybrid_layer_nstream_output(self):
         layer = HybridLayer(self._cfg(), layer_type="standard")
@@ -295,35 +257,38 @@ class HyperloopConnectionsTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class HyperloopModelTests(unittest.TestCase):
     def _cfg(self, **overrides):
-        base = dict(
-            vocab_size=128,
-            hidden_size=64,
-            num_layers=6,
-            num_loops=3,
-            num_heads=4,
-            retention_heads=4,
-            dropout=0.0,
-            norm_type="layer_norm",
-            use_bitnet=False,
-            use_moe=False,
-            mode="encoder",
-            positional_encoding="hope",
-            layer_pattern=[
-                "standard",
-                "retnet",
-                "titan",
-                "standard",
-                "retnet",
-                "titan",
-            ],
-            use_mhc=True,
-            mhc_expansion_rate=4,
-            mhc_hyperloop=True,
-            mhc_hyperloop_begin_layers=2,
-            mhc_hyperloop_end_layers=2,
-        )
-        base.update(overrides)
-        return FrankensteinModelConfig.from_flat(**base)
+        base = {
+            "dims": {
+                "vocab_size": 128,
+                "hidden_size": 64,
+                "num_layers": 6,
+                "num_loops": 3,
+                "num_heads": 4,
+                "dropout": 0.0,
+                "mode": "encoder",
+                "layer_pattern": [
+                    "standard",
+                    "retnet",
+                    "titan",
+                    "standard",
+                    "retnet",
+                    "titan",
+                ],
+            },
+            "attention": {"retnet": {"heads": 4}},
+            "norm": {"type": "layer_norm"},
+            "bitnet": {"enabled": False},
+            "moe": {"enabled": False},
+            "positional_encoding": "hope",
+            "mhc": {
+                "enabled": True,
+                "expansion_rate": 4,
+                "hyperloop": True,
+                "hyperloop_begin_layers": 2,
+                "hyperloop_end_layers": 2,
+            },
+        }
+        return FrankensteinModelConfig.from_dict(merge_model_blocks(base, overrides))
 
     def test_encoder_output_shape(self):
         model = FrankensteinEncoder(self._cfg())
@@ -354,7 +319,7 @@ class HyperloopModelTests(unittest.TestCase):
     def test_decoder_forward(self):
         from src.model.frankenstein_decoder import FrankensteinDecoder
 
-        model = FrankensteinDecoder(self._cfg(mode="decoder"))
+        model = FrankensteinDecoder(self._cfg(dims={"mode": 'decoder'}))
         ids = torch.randint(0, 128, (2, 8))
         self.assertEqual(model(ids).shape, (2, 8, 128))
 
@@ -362,19 +327,19 @@ class HyperloopModelTests(unittest.TestCase):
         ids = torch.randint(0, 128, (2, 8))
         for rp in ("diagonal", "sinkhorn", "identity"):
             model = FrankensteinEncoder(
-                self._cfg(mhc_hyperloop_res_parameterization=rp)
+                self._cfg(mhc={"hyperloop_res_parameterization": rp})
             )
             self.assertEqual(model(ids).shape, (2, 8, 128), msg=rp)
 
     def test_no_split_loops_whole_stack(self):
         model = FrankensteinEncoder(
-            self._cfg(mhc_hyperloop_begin_layers=0, mhc_hyperloop_end_layers=0)
+            self._cfg(mhc={"hyperloop_begin_layers": 0, "hyperloop_end_layers": 0})
         )
         ids = torch.randint(0, 128, (2, 8))
         self.assertEqual(model(ids).shape, (2, 8, 128))
 
     def test_bitnet_hyperloop_forward(self):
-        model = FrankensteinEncoder(self._cfg(use_bitnet=True))
+        model = FrankensteinEncoder(self._cfg(bitnet={"enabled": True}))
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         self.assertEqual(out.shape, (2, 8, 128))
@@ -383,7 +348,7 @@ class HyperloopModelTests(unittest.TestCase):
     def test_mod_compatible_with_hyperloop(self):
         # Hyperloop's middle-block layers run the standard C-dim path, so the
         # per-layer MoD/n-stream conflict that plain mHC has does not apply.
-        model = FrankensteinEncoder(self._cfg(use_mixture_of_depths=True))
+        model = FrankensteinEncoder(self._cfg(mixture_of_depths={"enabled": True}))
         ids = torch.randint(0, 128, (2, 8))
         out = model(ids)
         self.assertEqual(out.shape, (2, 8, 128))
@@ -394,36 +359,36 @@ class HyperloopModelTests(unittest.TestCase):
 
     def test_requires_mhc_enabled(self):
         with self.assertRaises(ValueError):
-            self._cfg(use_mhc=False)
+            self._cfg(mhc={"enabled": False})
 
     def test_requires_num_loops_ge_2(self):
         with self.assertRaises(ValueError):
-            self._cfg(num_loops=1)
+            self._cfg(dims={"num_loops": 1})
 
     def test_begin_plus_end_must_be_less_than_num_layers(self):
         with self.assertRaises(ValueError):
-            self._cfg(mhc_hyperloop_begin_layers=4, mhc_hyperloop_end_layers=3)
+            self._cfg(mhc={"hyperloop_begin_layers": 4, "hyperloop_end_layers": 3})
 
     def test_negative_begin_end_rejected(self):
         with self.assertRaises(ValueError):
-            self._cfg(mhc_hyperloop_begin_layers=-1)
+            self._cfg(mhc={"hyperloop_begin_layers": -1})
         with self.assertRaises(ValueError):
-            self._cfg(mhc_hyperloop_end_layers=-1)
+            self._cfg(mhc={"hyperloop_end_layers": -1})
 
     def test_invalid_res_parameterization_rejected(self):
         with self.assertRaises(ValueError):
-            self._cfg(mhc_hyperloop_res_parameterization="bogus")
+            self._cfg(mhc={"hyperloop_res_parameterization": 'bogus'})
 
     def test_incompatible_with_attnres_residuals(self):
         with self.assertRaises(ValueError):
-            self._cfg(residual_type="full_attn")
+            self._cfg(residuals={"type": 'full_attn'})
         with self.assertRaises(ValueError):
-            self._cfg(residual_type="block_attn")
+            self._cfg(residuals={"type": 'block_attn'})
 
     def test_hybrid_layer_still_rejects_mod_with_plain_mhc(self):
         from src.model.hybrid_layer import HybridLayer
 
-        cfg = self._cfg(mhc_hyperloop=False, use_mixture_of_depths=True)
+        cfg = self._cfg(mhc={"hyperloop": False}, mixture_of_depths={"enabled": True})
         with self.assertRaises(ValueError):
             HybridLayer(cfg, layer_type="standard")
 

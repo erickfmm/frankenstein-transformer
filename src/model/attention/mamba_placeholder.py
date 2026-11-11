@@ -29,5 +29,5 @@ def build_mamba(config: Any, pos_encoder: Optional[nn.Module] = None, params=Non
         A ``hidden_size × hidden_size`` linear projection (BitLinear under
         BitNet).
     """
-    proj_cls = BitLinear if bool(config.use_bitnet) else nn.Linear
-    return proj_cls(int(config.hidden_size), int(config.hidden_size))
+    proj_cls = BitLinear if bool(config.bitnet.enabled) else nn.Linear
+    return proj_cls(int(config.dims.hidden_size), int(config.dims.hidden_size))

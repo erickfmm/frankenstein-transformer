@@ -26,7 +26,7 @@ import pathlib
 import pytest
 import torch
 
-from src.model.config import FrankensteinModelConfig
+from src.model.config import FrankensteinModelConfig, merge_model_blocks
 from src.model.frankenstein_encoder import FrankensteinEncoder
 from src.utils.schema_loader import resolve_schema
 
@@ -38,27 +38,28 @@ TRAINING_FREE = {"fasa", "sparge"}
 
 #: e2e harness geometry (``full_tests/run_e2e.py`` base config): these exact
 #: dims produced the experiment-2 failures, so do not "simplify" them.
-HARNESS_DIMS = dict(
-    vocab_size=100,
-    hidden_size=96,
-    num_layers=1,
-    num_loops=1,
-    num_heads=8,
-    num_kv_heads=4,
-    retention_heads=8,
-    num_experts=2,
-    top_k_experts=1,
-    dropout=0.0,
-    ode_solver="rk4",
-    ode_steps=1,
-    use_bitnet=False,
-    norm_type="layer_norm",
-    use_moe=False,
-    use_mixture_of_depths=False,
-    ffn_hidden_size=96,
-    ffn_activation="gelu",
-    mode="encoder",
-)
+HARNESS_DIMS = {
+    "dims": {
+        "vocab_size": 100,
+        "hidden_size": 96,
+        "num_layers": 1,
+        "num_loops": 1,
+        "num_heads": 8,
+        "num_kv_heads": 4,
+        "dropout": 0.0,
+        "layer_pattern": ["standard"],
+        "mode": "encoder",
+    },
+    "attention": {
+        "retnet": {"heads": 8},
+        "ode": {"solver": "rk4", "steps": 1},
+    },
+    "norm": {"type": "layer_norm"},
+    "bitnet": {"enabled": False},
+    "moe": {"enabled": False, "num_experts": 2, "top_k": 1},
+    "mixture_of_depths": {"enabled": False},
+    "ffn": {"hidden_size": 96, "activation": "gelu"},
+}
 
 
 def _schema_mixers() -> list:
@@ -72,13 +73,13 @@ def _schema_mixers() -> list:
 
 
 def _build_config(layer_pattern, positional_encoding="rope", seq_len=64):
-    kwargs = dict(HARNESS_DIMS)
-    kwargs["layer_pattern"] = list(layer_pattern)
-    kwargs["positional_encoding"] = positional_encoding
+    overrides = {
+        "dims": {"layer_pattern": list(layer_pattern)},
+        "positional_encoding": positional_encoding,
+    }
     if "ssog" in layer_pattern:
-        kwargs["ssog_grid_h"] = 1
-        kwargs["ssog_grid_w"] = seq_len
-    return FrankensteinModelConfig.from_flat(**kwargs)
+        overrides["attention"] = {"ssog": {"grid_h": 1, "grid_w": seq_len}}
+    return FrankensteinModelConfig.from_dict(merge_model_blocks(HARNESS_DIMS, overrides))
 
 
 @pytest.mark.parametrize("mixer", _schema_mixers())
@@ -86,7 +87,7 @@ def test_mixer_forward_backward_at_harness_dims(mixer):
     """Every schema mixer builds, forward-passes and backprops at 96/8/64."""
     config = _build_config([mixer])
     model = FrankensteinEncoder(config)
-    x = torch.randint(0, config.vocab_size, (2, 64))
+    x = torch.randint(0, config.dims.vocab_size, (2, 64))
     if mixer in TRAINING_FREE:
         model.eval()
         with torch.no_grad():
@@ -94,7 +95,7 @@ def test_mixer_forward_backward_at_harness_dims(mixer):
     else:
         y = model(x)
         y.sum().backward()
-    assert y.shape == (2, 64, config.vocab_size)
+    assert y.shape == (2, 64, config.dims.vocab_size)
 
 
 @pytest.mark.parametrize("pe", ["rope", "hope", "sinusoidal_rotary"])
@@ -109,9 +110,9 @@ def test_latent_mixers_support_every_rotary_pe(mixer, pe):
     """
     config = _build_config([mixer], positional_encoding=pe)
     model = FrankensteinEncoder(config)
-    x = torch.randint(0, config.vocab_size, (2, 64))
+    x = torch.randint(0, config.dims.vocab_size, (2, 64))
     y = model(x)
-    assert y.shape == (2, 64, config.vocab_size)
+    assert y.shape == (2, 64, config.dims.vocab_size)
 
 
 @pytest.mark.parametrize("pe", ["alibi", "bam", "nope", "none"])
@@ -120,9 +121,9 @@ def test_latent_mixers_support_additive_pes(mixer, pe):
     """Score-bias PEs (no q/k rotation) keep working through the shared encoder."""
     config = _build_config([mixer], positional_encoding=pe)
     model = FrankensteinEncoder(config)
-    x = torch.randint(0, config.vocab_size, (2, 64))
+    x = torch.randint(0, config.dims.vocab_size, (2, 64))
     y = model(x)
-    assert y.shape == (2, 64, config.vocab_size)
+    assert y.shape == (2, 64, config.dims.vocab_size)
 
 
 @pytest.mark.parametrize("mixer", ["cca", "ccgqa"])
@@ -139,13 +140,16 @@ def test_msa_short_sequence_clamps_topk():
     Defaults are ``msa_block_size=128`` / ``msa_topk_blocks=16``; a 6-token
     input produced ``RuntimeError: selected index k out of range``.
     """
+    from src.model.attention.params import mixer_params
+
     config = _build_config(["msa"], seq_len=6)
-    assert config.msa_block_size == 128
-    assert config.msa_topk_blocks == 16
+    msa = mixer_params(config, "msa")
+    assert msa.block_size == 128
+    assert msa.topk_blocks == 16
     model = FrankensteinEncoder(config)
-    x = torch.randint(0, config.vocab_size, (2, 6))
+    x = torch.randint(0, config.dims.vocab_size, (2, 6))
     y = model(x)
-    assert y.shape == (2, 6, config.vocab_size)
+    assert y.shape == (2, 6, config.dims.vocab_size)
 
 
 @pytest.mark.parametrize(
@@ -164,14 +168,14 @@ def test_cca_ccgqa_defaults_are_always_buildable(hidden, heads):
         ccgqa.pop(key, None)
     config.__post_init__()
 
-    assert config.cca_latent_rank % heads == 0
-    assert (config.cca_latent_rank // heads) % 2 == 0
-    assert heads % config.ccgqa_num_kv_heads == 0
-    q_dh = config.ccgqa_query_latent_rank // heads
-    kv_dh = config.ccgqa_kv_latent_rank // config.ccgqa_num_kv_heads
+    assert config.attention["cca"]["latent_rank"] % heads == 0
+    assert (config.attention["cca"]["latent_rank"] // heads) % 2 == 0
+    assert heads % config.attention["ccgqa"]["num_kv_heads"] == 0
+    q_dh = config.attention["ccgqa"]["query_latent_rank"] // heads
+    kv_dh = config.attention["ccgqa"]["kv_latent_rank"] // config.attention["ccgqa"]["num_kv_heads"]
     assert q_dh == kv_dh
     assert q_dh % 2 == 0
-    assert config.ccgqa_kv_latent_rank <= config.ccgqa_query_latent_rank
+    assert config.attention["ccgqa"]["kv_latent_rank"] <= config.attention["ccgqa"]["query_latent_rank"]
 
     from src.model.attention.latent.cca import (
         CCAAttention,
@@ -192,4 +196,4 @@ def test_cca_latent_pe_is_sized_to_latent_head_dim():
     mixer = layer.mixer
     assert isinstance(mixer.latent_pe, RoPE)
     assert mixer.latent_pe.pair_dim == mixer.latent_head_dim // 2
-    assert mixer.latent_pe.pair_dim != config.hidden_size // config.num_heads // 2
+    assert mixer.latent_pe.pair_dim != config.dims.hidden_size // config.dims.num_heads // 2

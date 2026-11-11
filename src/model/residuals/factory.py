@@ -41,20 +41,20 @@ def _residuals(config: Any) -> Any:
 
 def _build_standard(config: Any, params) -> ResidualBase:
     """Build the classical residual connection."""
-    return StandardResidual(hidden_size=int(config.hidden_size))
+    return StandardResidual(hidden_size=int(config.dims.hidden_size))
 
 
 def _build_none(config: Any, params) -> ResidualBase:
     """Build the no-residual ablation."""
-    return NoResidual(hidden_size=int(config.hidden_size))
+    return NoResidual(hidden_size=int(config.dims.hidden_size))
 
 
 def _build_full_attn(config: Any, params) -> ResidualBase:
     """Build Full AttnRes."""
     block = _residuals(config)
     return FullAttentionResidual(
-        hidden_size=int(config.hidden_size),
-        num_layers=int(config.num_layers) * int(config.num_loops),
+        hidden_size=int(config.dims.hidden_size),
+        num_layers=int(config.dims.num_layers) * int(config.dims.num_loops),
         init_query_zero=bool(block.full_attn.init_query_zero),
         use_rmsnorm_keys=bool(block.full_attn.use_rmsnorm_keys),
         mhc_stream_mode=str(block.mhc_stream_mode),
@@ -66,8 +66,8 @@ def _build_block_attn(config: Any, params) -> ResidualBase:
     """Build Block AttnRes."""
     block = _residuals(config)
     return BlockAttentionResidual(
-        hidden_size=int(config.hidden_size),
-        num_layers=int(config.num_layers) * int(config.num_loops),
+        hidden_size=int(config.dims.hidden_size),
+        num_layers=int(config.dims.num_layers) * int(config.dims.num_loops),
         num_blocks=int(block.block_attn.num_blocks),
         init_query_zero=bool(block.block_attn.init_query_zero),
         use_rmsnorm_keys=bool(block.block_attn.use_rmsnorm_keys),
@@ -96,7 +96,7 @@ def build_residual(config: Any) -> ResidualBase:
     residual_type = str(block.type).lower()
     spec = registry.get(ComponentFamily.RESIDUAL, residual_type)
     module = resolve_builder(spec.builder)(config, {})
-    streams = int(config.mhc_expansion_rate) if bool(getattr(config, "use_mhc", False)) else 1
+    streams = int(config.mhc.expansion_rate) if bool(getattr(config.mhc, "enabled", False)) else 1
     module.set_streams(streams)
-    module.use_fixed_softmax = bool(getattr(config, "fixed_softmax", False))
+    module.use_fixed_softmax = bool(getattr(config.numerics, "fixed_softmax", False))
     return module

@@ -284,17 +284,17 @@ class TitanTrainer:
         # * QuacK splits the query/key weights into dedicated parameter groups,
         #   so it runs before the scheduler initializes ``initial_lr``.
         # * QK-Clip rescales query/key weights after every optimizer step.
-        qk_method = str(getattr(self.config, "qk_norm_method", "rms_norm")).lower()
-        qk_enabled = bool(getattr(self.config, "use_qk_norm", False))
+        qk_method = str(getattr(self.config.norm.qk_norm, "method", "rms_norm")).lower()
+        qk_enabled = bool(getattr(self.config.norm.qk_norm, "enabled", False))
         self._qk_clip_active = qk_enabled and qk_method == "qk_clip"
-        self._qk_clip_tau = float(getattr(self.config, "qk_clip_tau", 100.0))
-        self._qk_clip_alpha = float(getattr(self.config, "qk_clip_alpha", 0.5))
+        self._qk_clip_tau = float(getattr(self.config.norm.qk_norm, "clip_tau", 100.0))
+        self._qk_clip_alpha = float(getattr(self.config.norm.qk_norm, "clip_alpha", 0.5))
         self._quack = None
         if qk_enabled and qk_method == "quack":
             self._quack = QuacKController(
                 self.model,
                 self.optimizer,
-                tau=float(getattr(self.config, "quack_tau", 1.0)),
+                tau=float(getattr(self.config.norm.qk_norm, "quack_tau", 1.0)),
             )
             logging.info(
                 "QuacK: modulating query/key learning rates for %d weight pairs",
@@ -980,15 +980,15 @@ class TitanTrainer:
         
         # Log config that might affect stability
         logging.error("Model configuration (stability-relevant):")
-        logging.error(f"  - BitNet enabled: {getattr(self.config, 'use_bitnet', 'n/a')}")
+        logging.error(f"  - BitNet enabled: {getattr(self.config.bitnet, "enabled", 'n/a')}")
         logging.error(
             "  - ODE solver: %s, steps: %s",
-            getattr(self.config, "ode_solver", "n/a"),
-            getattr(self.config, "ode_steps", "n/a"),
+            (self.config.attention.get("ode") or {}).get("solver", "n/a"),
+            (self.config.attention.get("ode") or {}).get("steps", "n/a"),
         )
-        logging.error(f"  - Layer pattern: {getattr(self.config, 'layer_pattern', 'n/a')}")
-        logging.error(f"  - Num loops: {getattr(self.config, 'num_loops', 'n/a')}")
-        logging.error(f"  - Dropout: {getattr(self.config, 'dropout', 'n/a')}")
+        logging.error(f"  - Layer pattern: {getattr(self.config.dims, "layer_pattern", 'n/a')}")
+        logging.error(f"  - Num loops: {getattr(self.config.dims, "num_loops", 'n/a')}")
+        logging.error(f"  - Dropout: {getattr(self.config.dims, "dropout", 'n/a')}")
         
         logging.error("=" * 80)
         
@@ -1164,13 +1164,13 @@ class TitanTrainer:
         
         # Model-specific logging
         logging.info("🧠 Architecture: %s", self.model.__class__.__name__)
-        logging.info(f"⚡ BitNet Quantization: {getattr(self.config, 'use_bitnet', 'n/a')}")
+        logging.info(f"⚡ BitNet Quantization: {getattr(self.config.bitnet, "enabled", 'n/a')}")
         logging.info(
             "🌊 ODE Solver: %s (%s steps)",
-            getattr(self.config, "ode_solver", "n/a"),
-            getattr(self.config, "ode_steps", "n/a"),
+            (self.config.attention.get("ode") or {}).get("solver", "n/a"),
+            (self.config.attention.get("ode") or {}).get("steps", "n/a"),
         )
-        logging.info(f"🔄 Recursion Loops: {getattr(self.config, 'num_loops', 'n/a')}")
+        logging.info(f"🔄 Recursion Loops: {getattr(self.config.dims, "num_loops", 'n/a')}")
         logging.info(f"📐 Gradient Accumulation: {self.gradient_accumulation_steps} steps")
         if self.gpu_temp_guard.is_active:
             logging.info(
@@ -1232,7 +1232,7 @@ class TitanTrainer:
         model's own ``config`` attribute. See arXiv:2610.31642 §2.
         """
         cfg = self.config if self.config is not None else getattr(self.model, "config", None)
-        return bool(getattr(cfg, "fixed_cross_entropy", False))
+        return bool(getattr(cfg.numerics, "fixed_cross_entropy", False))
 
     def _task_cross_entropy(self, logits, targets, class_dim: int = -1, **kwargs):
         """Dispatch to the fixed hard-target CE or ``F.cross_entropy``.
@@ -1466,7 +1466,7 @@ class TitanTrainer:
         """Compute masked patch prediction loss (arXiv:2010.11929 App. B.1.2).
 
         Loss is computed only on masked patch positions. The reconstruction
-        target depends on ``config.prediction_target``:
+        target depends on ``config.image.prediction_target``:
         - ``mean_color_3bit``: 512-way cross-entropy per masked patch.
         - ``downsampled_3bit``: 16×512 cross-entropy per masked patch.
         - ``full_patch_l2``: MSE on raw patch pixels.
@@ -1494,7 +1494,7 @@ class TitanTrainer:
         if mask_bool is None:
             raise RuntimeError("No mask available for patch_prediction loss.")
 
-        target_type = getattr(self.model.config, "prediction_target", "mean_color_3bit")
+        target_type = self.model.config.image.prediction_target
         if target_type == "full_patch_l2":
             # MSE on masked patches.
             if mask_target is None:

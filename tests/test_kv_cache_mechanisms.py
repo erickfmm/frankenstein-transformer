@@ -14,29 +14,14 @@ if TORCH_AVAILABLE:
     import torch
 
     from src.model.cache import FrankensteinCache
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.frankenstein_decoder import FrankensteinDecoder
 
 
 def _cfg(**overrides):
-    base = dict(
-        vocab_size=64,
-        hidden_size=32,
-        num_layers=2,
-        num_loops=1,
-        num_heads=4,
-        retention_heads=4,
-        num_kv_heads=2,
-        dropout=0.0,
-        use_bitnet=False,
-        layer_pattern=["standard", "gqa"],
-        mode="decoder",
-        positional_encoding="rope",
-        norm_type="layer_norm",
-        ffn_hidden_size=64,
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 2, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": ['standard', 'gqa'], "mode": 'decoder'}, "attention": {"retnet": {"heads": 4}}, "bitnet": {"enabled": False}, "positional_encoding": 'rope', "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 def _paired(**overrides):
@@ -50,7 +35,7 @@ def _paired(**overrides):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class NumLoopsTests(unittest.TestCase):
     def test_looped_depth_parity_and_distinct_slots(self):
-        m1, m2 = _paired(num_loops=3)
+        m1, m2 = _paired(dims={"num_loops": 3})
         prompt = torch.randint(0, 64, (1, 5))
         with torch.inference_mode():
             legacy = m1.generate(prompt.clone(), max_new_tokens=3, greedy=True)
@@ -67,7 +52,7 @@ class NumLoopsTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class MhcTests(unittest.TestCase):
     def test_mhc_parity(self):
-        m1, m2 = _paired(use_mhc=True, mhc_expansion_rate=2)
+        m1, m2 = _paired(mhc={"enabled": True, "expansion_rate": 2})
         prompt = torch.randint(0, 64, (1, 5))
         with torch.inference_mode():
             legacy = m1.generate(prompt.clone(), max_new_tokens=3, greedy=True)
@@ -77,16 +62,7 @@ class MhcTests(unittest.TestCase):
         self.assertTrue(torch.equal(legacy, cached))
 
     def test_hyperloop_parity(self):
-        m1, m2 = _paired(
-            use_mhc=True,
-            mhc_hyperloop=True,
-            mhc_expansion_rate=2,
-            mhc_hyperloop_begin_layers=1,
-            mhc_hyperloop_end_layers=1,
-            num_layers=3,
-            num_loops=2,
-            layer_pattern=["standard", "gqa", "standard"],
-        )
+        m1, m2 = _paired(mhc={"enabled": True, "hyperloop": True, "expansion_rate": 2, "hyperloop_begin_layers": 1, "hyperloop_end_layers": 1}, dims={"num_layers": 3, "num_loops": 2, "layer_pattern": ['standard', 'gqa', 'standard']})
         prompt = torch.randint(0, 64, (1, 5))
         with torch.inference_mode():
             legacy = m1.generate(prompt.clone(), max_new_tokens=3, greedy=True)
@@ -130,7 +106,7 @@ class MixtureOfDepthsTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class AttnResFallbackTests(unittest.TestCase):
     def test_attnres_disables_cache_with_warning(self):
-        m1, m2 = _paired(residual_type="full_attn", num_layers=2)
+        m1, m2 = _paired(residuals={"type": 'full_attn'}, dims={"num_layers": 2})
         prompt = torch.randint(0, 64, (1, 5))
         with torch.inference_mode():
             import warnings

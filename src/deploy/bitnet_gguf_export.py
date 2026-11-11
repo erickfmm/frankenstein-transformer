@@ -43,7 +43,7 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import torch
 import yaml
-from .export_compat import flat_config_view, model_config_from
+from .export_compat import model_config_from
 
 GGUF_MAGIC = 0x46554747  # "GGUF" little-endian
 GGUF_VERSION = 3
@@ -232,6 +232,19 @@ def _remap_standard_tensors(
     return remapped
 
 
+def _cfg_get(cfg: dict, path: str, default=None):
+    """Read ``a.b.c`` from a nested ``model:`` block with a fallback."""
+    node = cfg
+    for part in path.split("."):
+        if not isinstance(node, dict):
+            return default
+        node = node.get(part)
+        if node is None:
+            return default
+    return node
+
+
+
 def _map_single(name: str, num_layers: int) -> str | None:
     """Translate a Frankenstein tensor name to a Llama-style GGUF name."""
     if name == "emb.weight" or name.endswith(".embedding.weight"):
@@ -299,7 +312,7 @@ def check_gguf_compatibility(yaml_path: str) -> Dict[str, Any]:
 
     model = FrankensteinModelConfig.from_dict(data.get("model", {}) or {})
 
-    if not bool(model.use_bitnet):
+    if not bool(model.bitnet.enabled):
         return {"is_compatible": False, "reason": "use_bitnet must be true"}
 
     layers = list(model.dims.layer_pattern or [])
@@ -354,7 +367,7 @@ def export_bitnet_gguf(
 
     with yaml_file.open("r", encoding="utf-8") as handle:
         yaml_data = yaml.safe_load(handle) or {}
-    model_config = flat_config_view(yaml_data.get("model", {}) or {})
+    model_config = dict(yaml_data.get("model", {}) or {})
 
     checkpoint = torch.load(str(model_file), map_location="cpu", weights_only=False)
     if not isinstance(checkpoint, dict):
@@ -390,15 +403,15 @@ def export_bitnet_gguf(
     writer.write_kv_string("general.architecture", "frankenstein")
     writer.write_kv_string("general.name", "frankenstein-bitnet")
     writer.write_kv_uint32(
-        "frankenstein.hidden_size", int(model_config.get("hidden_size", 0))
+        "frankenstein.hidden_size", int(_cfg_get(model_config, "dims.hidden_size", 0))
     )
     writer.write_kv_uint32(
-        "frankenstein.block_count", int(model_config.get("num_layers", 0))
+        "frankenstein.block_count", int(_cfg_get(model_config, "dims.num_layers", 0))
     )
     writer.write_kv_uint32(
-        "frankenstein.attention.head_count", int(model_config.get("num_heads", 0))
+        "frankenstein.attention.head_count", int(_cfg_get(model_config, "dims.num_heads", 0))
     )
-    vocab_size = int(model_config.get("vocab_size", 0))
+    vocab_size = int(_cfg_get(model_config, "dims.vocab_size", 0))
     writer.write_kv_uint32("frankenstein.vocab_size", vocab_size)
     writer.write_kv_string(
         "frankenstein.context_length",
@@ -437,13 +450,13 @@ def export_bitnet_gguf(
     final.write_kv_string("general.architecture", "frankenstein")
     final.write_kv_string("general.name", "frankenstein-bitnet")
     final.write_kv_uint32(
-        "frankenstein.hidden_size", int(model_config.get("hidden_size", 0))
+        "frankenstein.hidden_size", int(_cfg_get(model_config, "dims.hidden_size", 0))
     )
     final.write_kv_uint32(
-        "frankenstein.block_count", int(model_config.get("num_layers", 0))
+        "frankenstein.block_count", int(_cfg_get(model_config, "dims.num_layers", 0))
     )
     final.write_kv_uint32(
-        "frankenstein.attention.head_count", int(model_config.get("num_heads", 0))
+        "frankenstein.attention.head_count", int(_cfg_get(model_config, "dims.num_heads", 0))
     )
     final.write_kv_uint32("frankenstein.vocab_size", vocab_size)
     final.write_kv_string(

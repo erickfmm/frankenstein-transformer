@@ -77,12 +77,12 @@ class SparDAAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "sparda", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for SparDAAttention")
-        self.num_kv_heads = int(getattr(config, "num_kv_heads", max(1, self.num_heads // 8)))
+        self.num_kv_heads = int(getattr(config.dims, "num_kv_heads", max(1, self.num_heads // 8)))
         if self.num_heads % self.num_kv_heads != 0:
             raise ValueError("num_kv_heads must divide num_heads for SparDAAttention")
         self.group_size = self.num_heads // self.num_kv_heads
@@ -90,16 +90,16 @@ class SparDAAttention(nn.Module):
         self.topk_blocks = int(params.value("topk_blocks", 16))
         self.forecast_dim = int(params.value("forecast_dim", 64))
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
-        router_cls = BitLinear if (config.use_bitnet and getattr(config, "bitnet_routers", False)) else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
+        router_cls = BitLinear if (config.bitnet.enabled and getattr(config.bitnet, "routers", False)) else nn.Linear
         kv_dim = self.num_kv_heads * self.head_dim
         self.q_proj = proj_cls(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = proj_cls(self.hidden_size, kv_dim, bias=False)
         self.v_proj = proj_cls(self.hidden_size, kv_dim, bias=False)
         self.forecast_proj = router_cls(self.hidden_size, self.num_kv_heads * self.forecast_dim, bias=False)
         self.out_proj = proj_cls(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
         self.scale = self.head_dim ** -0.5
         self.forecast_scale = self.forecast_dim ** -0.5
 

@@ -3,8 +3,8 @@
 :func:`bind_params` turns a raw YAML parameters dict into a
 :class:`ComponentParams` namespace using the component spec's schema fragment
 for allowed keys and types, and its runtime defaults for absent values. This
-one helper replaces the per-family ``getattr(config, "<flat_field>", default)``
-ladders and the optimizer factory's hand-written coercion branches.
+one helper replaces the per-family attribute ladders and the optimizer
+factory's hand-written coercion branches.
 """
 
 from __future__ import annotations

@@ -144,7 +144,7 @@ class TestExportModelType(unittest.TestCase):
         self.assertNotIn("UltraConfig", te._MODELING_FILE)
         self.assertIn("FrankensteinEncoder", te._MODELING_FILE)
         self.assertIn("FrankensteinModelConfig", te._MODELING_FILE)
-        self.assertIn("_MODEL_KEYS", te._MODELING_FILE)
+        self.assertIn("from_dict(", te._MODELING_FILE)
         self.assertNotIn("_ULTRA_KEYS", te._MODELING_FILE)
 
 

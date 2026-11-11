@@ -19,7 +19,7 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
     from src.model.residuals import (
@@ -34,17 +34,8 @@ if TORCH_AVAILABLE:
 
 def _base_kwargs(**overrides):
     """Return a minimal valid kwargs dict for FrankensteinModelConfig."""
-    base = dict(
-        vocab_size=32,
-        hidden_size=16,
-        num_layers=3,
-        num_loops=1,
-        num_heads=2,
-        retention_heads=2,
-        num_experts=2,
-        top_k_experts=1,
-    )
-    base.update(overrides)
+    base = {"dims": {"vocab_size": 32, "hidden_size": 16, "num_layers": 3, "num_loops": 1, "num_heads": 2}, "attention": {"retnet": {"heads": 2}}, "moe": {"num_experts": 2, "top_k": 1}}
+    base = merge_model_blocks(base, overrides)
     return base
 
 
@@ -293,39 +284,27 @@ class FactoryTests(unittest.TestCase):
             ("full_attn", FullAttentionResidual),
             ("block_attn", BlockAttentionResidual),
         ]:
-            cfg = FrankensteinModelConfig.from_flat(
-                **_base_kwargs(residual_type=rt, block_attn_num_blocks=2)
-            )
+            cfg = FrankensteinModelConfig.from_dict({**_base_kwargs(residuals={'type': rt, 'block_attn': {'num_blocks': 2}})})
             res = build_residual(cfg)
             self.assertIsInstance(res, expected)
 
     def test_invalid_residual_type_raises_in_config(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(**_base_kwargs(residual_type="bogus"))
+            FrankensteinModelConfig.from_dict({**_base_kwargs(residuals={'type': 'bogus'})})
 
     def test_block_attn_validation(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(
-                **_base_kwargs(
-                    residual_type="block_attn", num_layers=2, block_attn_num_blocks=8
-                )
-            )
+            FrankensteinModelConfig.from_dict({**_base_kwargs(residuals={'type': 'block_attn', 'block_attn': {'num_blocks': 8}}, dims={'num_layers': 2})})
 
     def test_factory_propagates_mhc_nstreams(self):
-        cfg = FrankensteinModelConfig.from_flat(
-            **_base_kwargs(
-                residual_type="full_attn",
-                use_mhc=True,
-                mhc_expansion_rate=4,
-            )
-        )
+        cfg = FrankensteinModelConfig.from_dict({**_base_kwargs(residuals={'type': 'full_attn'}, mhc={'enabled': True, 'expansion_rate': 4})})
         res = build_residual(cfg)
         self.assertEqual(res.n_streams, 4)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class ConfigFlattenTests(unittest.TestCase):
-    """The new ``residuals`` sub-tree must flatten into flat kwargs."""
+    """The nested ``residuals`` sub-tree must build the residual strategy."""
 
     def test_full_attn_nested_config(self):
         nested = {
@@ -378,12 +357,11 @@ class EndToEndEncoderTests(unittest.TestCase):
     """Run the full encoder forward/backward for each residual type."""
 
     def _cfg(self, **overrides):
-        kwargs = _base_kwargs(num_layers=3, num_loops=1, block_attn_num_blocks=2)
-        kwargs.update(overrides)
-        return FrankensteinModelConfig.from_flat(**kwargs)
+        kwargs = _base_kwargs(dims={"num_layers": 3, "num_loops": 1}, residuals={"block_attn": {"num_blocks": 2}})
+        return FrankensteinModelConfig.from_dict(merge_model_blocks(kwargs, overrides))
 
     def test_standard_residual_forward_backward(self):
-        enc = FrankensteinEncoder(self._cfg(residual_type="standard")).train()
+        enc = FrankensteinEncoder(self._cfg(residuals={'type': 'standard'})).train()
         ids = torch.randint(0, 32, (2, 6))
         out = enc(ids)
         self.assertEqual(out.shape, (2, 6, 32))
@@ -393,14 +371,14 @@ class EndToEndEncoderTests(unittest.TestCase):
         self.assertTrue(any(p.grad is not None for p in enc.parameters() if p.requires_grad))
 
     def test_no_residual_forward(self):
-        enc = FrankensteinEncoder(self._cfg(residual_type="none")).eval()
+        enc = FrankensteinEncoder(self._cfg(residuals={'type': 'none'})).eval()
         ids = torch.randint(0, 32, (2, 6))
         out = enc(ids)
         self.assertEqual(out.shape, (2, 6, 32))
 
     def test_full_attn_residual_forward_backward(self):
         torch.manual_seed(0)
-        enc = FrankensteinEncoder(self._cfg(residual_type="full_attn")).train()
+        enc = FrankensteinEncoder(self._cfg(residuals={'type': 'full_attn'})).train()
         ids = torch.randint(0, 32, (2, 6))
         out = enc(ids)
         self.assertEqual(out.shape, (2, 6, 32))
@@ -410,7 +388,7 @@ class EndToEndEncoderTests(unittest.TestCase):
 
     def test_block_attn_residual_forward_backward(self):
         torch.manual_seed(0)
-        enc = FrankensteinEncoder(self._cfg(residual_type="block_attn")).train()
+        enc = FrankensteinEncoder(self._cfg(residuals={'type': 'block_attn'})).train()
         ids = torch.randint(0, 32, (2, 6))
         out = enc(ids)
         self.assertEqual(out.shape, (2, 6, 32))
@@ -420,12 +398,7 @@ class EndToEndEncoderTests(unittest.TestCase):
     def test_mhc_plus_full_attn(self):
         torch.manual_seed(0)
         enc = FrankensteinEncoder(
-            self._cfg(
-                residual_type="full_attn",
-                use_mhc=True,
-                mhc_expansion_rate=2,
-                attnres_mhc_stream_mode="independent",
-            )
+            self._cfg(residuals={'type': 'full_attn', 'mhc_stream_mode': 'independent'}, mhc={'enabled': True, 'expansion_rate': 2})
         ).train()
         ids = torch.randint(0, 32, (2, 6))
         out = enc(ids)
@@ -435,12 +408,7 @@ class EndToEndEncoderTests(unittest.TestCase):
     def test_mhc_plus_block_attn(self):
         torch.manual_seed(0)
         enc = FrankensteinEncoder(
-            self._cfg(
-                residual_type="block_attn",
-                use_mhc=True,
-                mhc_expansion_rate=2,
-                attnres_mhc_stream_mode="joint",
-            )
+            self._cfg(residuals={'type': 'block_attn', 'mhc_stream_mode': 'joint'}, mhc={'enabled': True, 'expansion_rate': 2})
         ).train()
         ids = torch.randint(0, 32, (2, 6))
         out = enc(ids)
@@ -452,12 +420,7 @@ class EndToEndEncoderTests(unittest.TestCase):
         buffer / partial sum, but the model should still train end-to-end."""
         torch.manual_seed(0)
         enc = FrankensteinEncoder(
-            self._cfg(
-                residual_type="full_attn",
-                use_mixture_of_depths=True,
-                mixture_of_depths_capacity_ratio=0.5,
-                num_layers=4,
-            )
+            self._cfg(residuals={'type': 'full_attn'}, mixture_of_depths={'enabled': True, 'capacity_ratio': 0.5}, dims={'num_layers': 4})
         ).train()
         ids = torch.randint(0, 32, (2, 8))
         out = enc(ids)
@@ -467,10 +430,10 @@ class EndToEndEncoderTests(unittest.TestCase):
         self.assertIn("mixture_of_depths_router_loss", enc.last_auxiliary_losses)
 
     def test_residual_module_attribute_present(self):
-        enc = FrankensteinEncoder(self._cfg(residual_type="standard"))
+        enc = FrankensteinEncoder(self._cfg(residuals={'type': 'standard'}))
         self.assertIsInstance(enc.residual, ResidualBase)
         self.assertFalse(enc.residual.is_attn_res)
-        enc2 = FrankensteinEncoder(self._cfg(residual_type="full_attn"))
+        enc2 = FrankensteinEncoder(self._cfg(residuals={'type': 'full_attn'}))
         self.assertTrue(enc2.residual.is_attn_res)
 
 
@@ -479,19 +442,12 @@ class EndToEndDecoderTests(unittest.TestCase):
     """Decoder-side forward and backward passes for each residual type."""
 
     def _cfg(self, **overrides):
-        kwargs = _base_kwargs(
-            num_layers=4,
-            num_loops=1,
-            layer_pattern=["titan", "retnet", "titan", "mamba"],
-            mode="decoder",
-            block_attn_num_blocks=2,
-        )
-        kwargs.update(overrides)
-        return FrankensteinModelConfig.from_flat(**kwargs)
+        kwargs = _base_kwargs(dims={"num_layers": 4, "num_loops": 1, "layer_pattern": ['titan', 'retnet', 'titan', 'mamba'], "mode": 'decoder'}, residuals={"block_attn": {"num_blocks": 2}})
+        return FrankensteinModelConfig.from_dict(merge_model_blocks(kwargs, overrides))
 
     def test_full_attn_decoder(self):
         torch.manual_seed(0)
-        dec = FrankensteinDecoder(self._cfg(residual_type="full_attn")).train()
+        dec = FrankensteinDecoder(self._cfg(residuals={'type': 'full_attn'})).train()
         ids = torch.randint(0, 32, (2, 6))
         out = dec(ids)
         self.assertEqual(out.shape, (2, 6, 32))
@@ -499,7 +455,7 @@ class EndToEndDecoderTests(unittest.TestCase):
 
     def test_block_attn_decoder(self):
         torch.manual_seed(0)
-        dec = FrankensteinDecoder(self._cfg(residual_type="block_attn")).train()
+        dec = FrankensteinDecoder(self._cfg(residuals={'type': 'block_attn'})).train()
         ids = torch.randint(0, 32, (2, 6))
         out = dec(ids)
         self.assertEqual(out.shape, (2, 6, 32))
@@ -508,7 +464,7 @@ class EndToEndDecoderTests(unittest.TestCase):
     def test_block_attn_generate(self):
         """Generate should work end-to-end with Block AttnRes."""
         torch.manual_seed(0)
-        dec = FrankensteinDecoder(self._cfg(residual_type="block_attn")).eval()
+        dec = FrankensteinDecoder(self._cfg(residuals={'type': 'block_attn'})).eval()
         ids = torch.randint(0, 32, (1, 4))
         out = dec.generate(ids, max_new_tokens=4)
         self.assertEqual(out.shape, (1, 8))
@@ -531,7 +487,7 @@ class YAMLExampleTests(unittest.TestCase):
             loaded = load_training_config(path)
             self.assertIsNotNone(loaded.model_config)
             self.assertIn(
-                loaded.model_config.residual_type,
+                loaded.model_config.residuals.type,
                 {"standard", "none", "full_attn", "block_attn"},
             )
 

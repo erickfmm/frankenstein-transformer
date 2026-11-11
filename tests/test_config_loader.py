@@ -34,23 +34,32 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_minimal_mlm_config(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
-              ffn_hidden_size: 96
-              ffn_activation: gelu
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
+              ffn:
+                hidden_size: 96
+                activation: gelu
             training:
               task: mlm
               optimizer:
@@ -60,28 +69,37 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
         cfg = load_training_config(path)
         self.assertEqual(cfg.task, "mlm")
         self.assertIsNotNone(cfg.model_config)
-        self.assertEqual(cfg.model_config.vocab_size, 100)
+        self.assertEqual(cfg.model_config.dims.vocab_size, 100)
 
     def test_mlm_sets_text_encoder_model_class_by_default(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
-              ffn_hidden_size: 96
-              ffn_activation: gelu
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
+              ffn:
+                hidden_size: 96
+                activation: gelu
             training:
               task: mlm
               optimizer:
@@ -94,21 +112,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_mlm_missing_optimizer_raises(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             training:
               task: mlm
         """)
@@ -118,21 +144,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_mlm_missing_optimizer_class_raises(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             training:
               task: mlm
               optimizer:
@@ -144,21 +178,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_invalid_task_raises(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             training:
               task: autoregressive
               optimizer:
@@ -171,21 +213,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
         path = self._cfg_path("""
             model_class: bigbert
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             training:
               task: mlm
               optimizer:
@@ -229,22 +279,30 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_tokenizer_not_dict_raises(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
-            tokenizer: "some_string_tokenizer"
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
+            tokenizer: some_string_tokenizer
             training:
               task: mlm
               optimizer:
@@ -260,21 +318,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_tokenizer_source_invalid_raises(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             tokenizer:
               source: bogus_source
             training:
@@ -288,27 +354,38 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_tokenizer_train_from_dataset_valid(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             tokenizer:
               source: train_from_dataset
               training:
                 algorithm: bpe
                 vocab_size: 500
-                special_tokens: ["[PAD]", "[UNK]", "[MASK]"]
+                special_tokens:
+                - '[PAD]'
+                - '[UNK]'
+                - '[MASK]'
             text_dataset:
               dataset_name: wikitext
               text_column: text
@@ -324,21 +401,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_tokenizer_train_from_dataset_requires_training(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             tokenizer:
               source: train_from_dataset
             training:
@@ -352,21 +437,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_tokenizer_train_from_dataset_bpe_requires_vocab_size(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             tokenizer:
               source: train_from_dataset
               training:
@@ -382,21 +475,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_tokenizer_train_from_dataset_unigram_allows_missing_vocab(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             tokenizer:
               source: train_from_dataset
               training:
@@ -412,21 +513,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_tokenizer_train_from_dataset_invalid_algorithm_raises(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             tokenizer:
               source: train_from_dataset
               training:
@@ -459,21 +568,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_custom_model_mlm_tokenizer_hf_repo(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             tokenizer:
               source: hf_repo
               name_or_path: prajjwal1/bert-tiny
@@ -489,21 +606,29 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
     def test_optimizer_parameters_accessible(self):
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
             training:
               task: mlm
               optimizer:
@@ -527,17 +652,23 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 num_heads: 6
                 retention_heads: 6
                 dropout: 0.0
-                layer_pattern: [standard]
+                layer_pattern:
+                - standard
                 mode: encoder
               norm:
                 type: flash_norm
                 flashnorm_partial_ratio: 0.25
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
-              ffn_hidden_size: 96
-              ffn_activation: gelu
+              bitnet:
+                enabled: false
+              moe:
+                enabled: false
+              attention:
+                ode:
+                  solver: rk4
+                  steps: 1
+              ffn:
+                hidden_size: 96
+                activation: gelu
             training:
               task: mlm
               optimizer:
@@ -545,31 +676,40 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 parameters: {}
         """)
         cfg = load_training_config(path)
-        self.assertEqual(cfg.model_config.norm_type, "flash_norm")
-        self.assertAlmostEqual(cfg.model_config.flashnorm_partial_ratio, 0.25)
+        self.assertEqual(cfg.model_config.norm.type, "flash_norm")
+        self.assertAlmostEqual(cfg.model_config.norm.flashnorm_partial_ratio, 0.25)
 
     def test_flash_norm_flat_schema(self):
         # Flat top-level schema still works.
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: flash_norm
-              flashnorm_partial_ratio: 0.5
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
-              ffn_hidden_size: 96
-              ffn_activation: gelu
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: flash_norm
+                flashnorm_partial_ratio: 0.5
+              bitnet:
+                enabled: false
+              ffn:
+                hidden_size: 96
+                activation: gelu
             training:
               task: mlm
               optimizer:
@@ -577,8 +717,8 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 parameters: {}
         """)
         cfg = load_training_config(path)
-        self.assertEqual(cfg.model_config.norm_type, "flash_norm")
-        self.assertAlmostEqual(cfg.model_config.flashnorm_partial_ratio, 0.5)
+        self.assertEqual(cfg.model_config.norm.type, "flash_norm")
+        self.assertAlmostEqual(cfg.model_config.norm.flashnorm_partial_ratio, 0.5)
 
     def test_mhc_hierarchical_schema(self):
         # Hierarchical schema: model.mhc.{enabled, expansion_rate, ...}.
@@ -592,16 +732,22 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 num_heads: 6
                 retention_heads: 6
                 dropout: 0.0
-                layer_pattern: [standard]
+                layer_pattern:
+                - standard
                 mode: encoder
               norm:
                 type: layer_norm
-              use_bitnet: true
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
-              ffn_hidden_size: 96
-              ffn_activation: gelu
+              bitnet:
+                enabled: true
+              moe:
+                enabled: false
+              attention:
+                ode:
+                  solver: rk4
+                  steps: 1
+              ffn:
+                hidden_size: 96
+                activation: gelu
               mhc:
                 enabled: true
                 expansion_rate: 4
@@ -616,12 +762,12 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 parameters: {}
         """)
         cfg = load_training_config(path)
-        self.assertTrue(cfg.model_config.use_mhc)
-        self.assertEqual(cfg.model_config.mhc_expansion_rate, 4)
-        self.assertEqual(cfg.model_config.mhc_sinkhorn_iters, 25)
-        self.assertAlmostEqual(cfg.model_config.mhc_gating_init, 0.02)
-        self.assertTrue(cfg.model_config.mhc_checkpoint)
-        self.assertFalse(cfg.model_config.mhc_full_prec_under_bitnet)
+        self.assertTrue(cfg.model_config.mhc.enabled)
+        self.assertEqual(cfg.model_config.mhc.expansion_rate, 4)
+        self.assertEqual(cfg.model_config.mhc.sinkhorn_iters, 25)
+        self.assertAlmostEqual(cfg.model_config.mhc.gating_init, 0.02)
+        self.assertTrue(cfg.model_config.mhc.checkpoint)
+        self.assertFalse(cfg.model_config.mhc.full_prec_under_bitnet)
 
     def test_hyperloop_hierarchical_schema(self):
         # Hyperloop (arXiv:2604.21254): model.mhc.hyperloop + middle-cycle keys.
@@ -635,14 +781,23 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 num_heads: 6
                 retention_heads: 6
                 dropout: 0.0
-                layer_pattern: [standard, retnet, titan, standard, retnet, titan]
+                layer_pattern:
+                - standard
+                - retnet
+                - titan
+                - standard
+                - retnet
+                - titan
                 mode: encoder
               norm:
                 type: layer_norm
-              use_bitnet: false
-              use_moe: false
-              ffn_hidden_size: 96
-              ffn_activation: gelu
+              bitnet:
+                enabled: false
+              moe:
+                enabled: false
+              ffn:
+                hidden_size: 96
+                activation: gelu
               mhc:
                 enabled: true
                 expansion_rate: 4
@@ -657,12 +812,12 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 parameters: {}
         """)
         cfg = load_training_config(path)
-        self.assertTrue(cfg.model_config.use_mhc)
-        self.assertTrue(cfg.model_config.mhc_hyperloop)
-        self.assertEqual(cfg.model_config.mhc_hyperloop_begin_layers, 2)
-        self.assertEqual(cfg.model_config.mhc_hyperloop_end_layers, 2)
+        self.assertTrue(cfg.model_config.mhc.enabled)
+        self.assertTrue(cfg.model_config.mhc.hyperloop)
+        self.assertEqual(cfg.model_config.mhc.hyperloop_begin_layers, 2)
+        self.assertEqual(cfg.model_config.mhc.hyperloop_end_layers, 2)
         self.assertEqual(
-            cfg.model_config.mhc_hyperloop_res_parameterization, "diagonal"
+            cfg.model_config.mhc.hyperloop_res_parameterization, "diagonal"
         )
 
     def test_hyperloop_requires_enabled_in_yaml(self):
@@ -677,14 +832,23 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
                 num_heads: 6
                 retention_heads: 6
                 dropout: 0.0
-                layer_pattern: [standard, retnet, titan, standard, retnet, titan]
+                layer_pattern:
+                - standard
+                - retnet
+                - titan
+                - standard
+                - retnet
+                - titan
                 mode: encoder
               norm:
                 type: layer_norm
-              use_bitnet: false
-              use_moe: false
-              ffn_hidden_size: 96
-              ffn_activation: gelu
+              bitnet:
+                enabled: false
+              moe:
+                enabled: false
+              ffn:
+                hidden_size: 96
+                activation: gelu
               mhc:
                 hyperloop: true
                 hyperloop_begin_layers: 2
@@ -714,24 +878,33 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
         return """
             model_class: frankenstein_text_decoder
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
-              ffn_hidden_size: 96
-              ffn_activation: gelu
-              mode: decoder
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+                mode: decoder
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
+              ffn:
+                hidden_size: 96
+                activation: gelu
         """
 
     def test_causal_lm_minimal_config(self):
@@ -746,7 +919,7 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
         self.assertEqual(cfg.task, "causal_lm")
         self.assertEqual(cfg.model_class, "frankenstein_text_decoder")
         self.assertIsNotNone(cfg.model_config)
-        self.assertEqual(cfg.model_config.mode, "decoder")
+        self.assertEqual(cfg.model_config.dims.mode, "decoder")
 
     def test_causal_lm_missing_optimizer_raises(self):
         path = self._cfg_path(self._decoder_model_block() + """
@@ -761,23 +934,32 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
         path = self._cfg_path("""
             model_class: frankenstein_text_encoder
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
-              ffn_hidden_size: 96
-              ffn_activation: gelu
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
+              ffn:
+                hidden_size: 96
+                activation: gelu
             training:
               task: causal_lm
               optimizer:
@@ -791,24 +973,33 @@ class LoadTrainingConfigCausalLMTests(unittest.TestCase):
         # No model_class provided defaults to "frankenstein_text_encoder" -> rejected.
         path = self._cfg_path("""
             model:
-              vocab_size: 100
-              hidden_size: 48
-              num_layers: 1
-              num_loops: 1
-              num_heads: 6
-              retention_heads: 6
-              num_experts: 2
-              top_k_experts: 1
-              dropout: 0.0
-              norm_type: layer_norm
-              layer_pattern: [standard]
-              use_bitnet: false
-              use_moe: false
-              ode_solver: rk4
-              ode_steps: 1
-              ffn_hidden_size: 96
-              ffn_activation: gelu
-              mode: decoder
+              dims:
+                vocab_size: 100
+                hidden_size: 48
+                num_layers: 1
+                num_loops: 1
+                num_heads: 6
+                dropout: 0.0
+                layer_pattern:
+                - standard
+                mode: decoder
+              attention:
+                retnet:
+                  heads: 6
+                ode:
+                  solver: rk4
+                  steps: 1
+              moe:
+                num_experts: 2
+                top_k: 1
+                enabled: false
+              norm:
+                type: layer_norm
+              bitnet:
+                enabled: false
+              ffn:
+                hidden_size: 96
+                activation: gelu
             training:
               task: causal_lm
               optimizer:

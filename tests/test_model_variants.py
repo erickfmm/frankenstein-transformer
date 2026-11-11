@@ -35,11 +35,11 @@ class FrankensteinDecoderTests(unittest.TestCase):
         cfg = FrankensteinDecoder.build_decoder_config(vocab_size=200)
         cfg.dims.mode = "encoder"  # override to test that the decoder enforces mode
         model = FrankensteinDecoder(cfg)
-        self.assertEqual(model.config.mode, "decoder")
+        self.assertEqual(model.config.dims.mode, "decoder")
 
     def test_default_config_is_decoder(self):
         cfg = FrankensteinDecoder.build_decoder_config(vocab_size=200)
-        self.assertEqual(cfg.mode, "decoder")
+        self.assertEqual(cfg.dims.mode, "decoder")
 
     def test_generate_output_length(self):
         model = self._small_decoder()
@@ -86,37 +86,17 @@ class FrankensteinDecoderTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class FrankensteinEncoderTests(unittest.TestCase):
     def _model(self, layer_pattern=None, **kw):
-        cfg = FrankensteinModelConfig.from_flat(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=len(layer_pattern or ["standard"]),
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            norm_type=kw.pop("norm_type", "layer_norm"),
-            use_bitnet=False,
-            layer_pattern=layer_pattern or ["standard"],
-            use_moe=False,
-            ode_solver="rk4",
-            ode_steps=1,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-            positional_encoding="hope",
-            **kw,
-        )
+        cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": len(layer_pattern or ['standard']), "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": layer_pattern or ['standard']}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": kw.pop('norm_type', 'layer_norm')}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}, "positional_encoding": 'hope', **kw})
         return FrankensteinEncoder(cfg)
 
     def test_flat_embedding_forward(self):
-        model = self._model(use_factorized_embedding=False)
+        model = self._model(embedding={"factorized": {"enabled": False}})
         x = torch.randint(0, 100, (2, 8))
         y = model(x)
         self.assertEqual(y.shape, (2, 8, 100))
 
     def test_mhc_forward(self):
-        model = self._model(use_mhc=True, mhc_expansion_rate=2)
+        model = self._model(mhc={"enabled": True, "expansion_rate": 2})
         x = torch.randint(0, 100, (2, 8))
         y = model(x)
         self.assertEqual(y.shape, (2, 8, 100))
@@ -132,226 +112,73 @@ class FrankensteinEncoderTests(unittest.TestCase):
         self.assertEqual(y.shape, (2, 8, 100))
 
     def test_factorized_embedding_forward(self):
-        model = self._model(
-            use_factorized_embedding=True,
-            factorized_embedding_dim=16,
-            use_embedding_conv=True,
-        )
+        model = self._model(embedding={"factorized": {"enabled": True, "dim": 16}, "conv": {"enabled": True}})
         x = torch.randint(0, 100, (2, 8))
         y = model(x)
         self.assertEqual(y.shape, (2, 8, 100))
 
     def test_multi_loop(self):
-        cfg = FrankensteinModelConfig.from_flat(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=2,
-            num_loops=3,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            norm_type="layer_norm",
-            use_bitnet=False,
-            layer_pattern=["standard"],
-            use_moe=False,
-            ode_solver="rk4",
-            ode_steps=1,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-        )
+        cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 2, "num_loops": 3, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}})
         model = FrankensteinEncoder(cfg)
         x = torch.randint(0, 100, (1, 5))
         y = model(x)
         self.assertEqual(y.shape, (1, 5, 100))
 
     def test_dynamic_tanh_norm(self):
-        model = self._model(norm_type="dynamic_tanh")
+        model = self._model(norm={"type": 'dynamic_tanh'})
         x = torch.randint(0, 100, (1, 4))
         y = model(x)
         self.assertEqual(y.shape, (1, 4, 100))
 
     def test_rms_norm_forward(self):
-        model = self._model(norm_type="rms_norm")
+        model = self._model(norm={"type": 'rms_norm'})
         x = torch.randint(0, 100, (1, 4))
         y = model(x)
         self.assertEqual(y.shape, (1, 4, 100))
 
     def test_prms_norm_forward(self):
-        model = self._model(norm_type="prms_norm", prms_partial_ratio=0.5)
+        model = self._model(norm={"type": 'prms_norm', "partial_ratio": 0.5})
         x = torch.randint(0, 100, (1, 4))
         y = model(x)
         self.assertEqual(y.shape, (1, 4, 100))
 
     def test_flash_norm_forward(self):
-        model = self._model(norm_type="flash_norm")
+        model = self._model(norm={"type": 'flash_norm'})
         x = torch.randint(0, 100, (1, 4))
         y = model(x)
         self.assertEqual(y.shape, (1, 4, 100))
 
     def test_flash_norm_partial_ratio_forward(self):
-        model = self._model(norm_type="flash_norm", flashnorm_partial_ratio=0.25)
+        model = self._model(norm={"type": 'flash_norm', "flashnorm_partial_ratio": 0.25})
         x = torch.randint(0, 100, (1, 4))
         y = model(x)
         self.assertEqual(y.shape, (1, 4, 100))
 
     def test_flash_norm_default_partial_ratio(self):
-        cfg = FrankensteinModelConfig.from_flat(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=1,
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            norm_type="flash_norm",
-            use_bitnet=False,
-            layer_pattern=["standard"],
-            use_moe=False,
-            ode_solver="rk4",
-            ode_steps=1,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-        )
+        cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'flash_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}})
         # Default flashnorm_partial_ratio is 0.0 (full RMS, not partial).
-        self.assertAlmostEqual(cfg.flashnorm_partial_ratio, 0.0)
+        self.assertAlmostEqual(cfg.norm.flashnorm_partial_ratio, 0.0)
 
     def test_flashnorm_partial_ratio_validation(self):
         # 0.0 is valid (full RMS).
-        cfg = FrankensteinModelConfig.from_flat(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=1,
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            norm_type="flash_norm",
-            flashnorm_partial_ratio=0.0,
-            use_bitnet=False,
-            layer_pattern=["standard"],
-            use_moe=False,
-            ode_solver="rk4",
-            ode_steps=1,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-        )
-        self.assertAlmostEqual(cfg.flashnorm_partial_ratio, 0.0)
+        cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'flash_norm', "flashnorm_partial_ratio": 0.0}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}})
+        self.assertAlmostEqual(cfg.norm.flashnorm_partial_ratio, 0.0)
         # 1.0 is valid (upper bound).
-        FrankensteinModelConfig.from_flat(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=1,
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            norm_type="flash_norm",
-            flashnorm_partial_ratio=1.0,
-            use_bitnet=False,
-            layer_pattern=["standard"],
-            use_moe=False,
-            ode_solver="rk4",
-            ode_steps=1,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-        )
+        FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'flash_norm', "flashnorm_partial_ratio": 1.0}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}})
         # Negative is invalid.
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(
-                vocab_size=100,
-                hidden_size=48,
-                num_layers=1,
-                num_loops=1,
-                num_heads=6,
-                retention_heads=6,
-                num_experts=2,
-                top_k_experts=1,
-                dropout=0.0,
-                norm_type="flash_norm",
-                flashnorm_partial_ratio=-0.1,
-                use_bitnet=False,
-                layer_pattern=["standard"],
-                use_moe=False,
-                ode_solver="rk4",
-                ode_steps=1,
-                ffn_hidden_size=96,
-                ffn_activation="gelu",
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'flash_norm', "flashnorm_partial_ratio": -0.1}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}})
         # > 1.0 is invalid.
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(
-                vocab_size=100,
-                hidden_size=48,
-                num_layers=1,
-                num_loops=1,
-                num_heads=6,
-                retention_heads=6,
-                num_experts=2,
-                top_k_experts=1,
-                dropout=0.0,
-                norm_type="flash_norm",
-                flashnorm_partial_ratio=1.5,
-                use_bitnet=False,
-                layer_pattern=["standard"],
-                use_moe=False,
-                ode_solver="rk4",
-                ode_steps=1,
-                ffn_hidden_size=96,
-                ffn_activation="gelu",
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'flash_norm', "flashnorm_partial_ratio": 1.5}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}})
 
     def test_prms_norm_default_ratio(self):
-        cfg = FrankensteinModelConfig.from_flat(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=1,
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            norm_type="prms_norm",
-            use_bitnet=False,
-            layer_pattern=["standard"],
-            use_moe=False,
-            ode_solver="rk4",
-            ode_steps=1,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-        )
-        self.assertAlmostEqual(cfg.prms_partial_ratio, 0.0625)
+        cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'prms_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}})
+        self.assertAlmostEqual(cfg.norm.partial_ratio, 0.0625)
 
     def test_prms_partial_ratio_validation(self):
         with self.assertRaises(ValueError):
-            FrankensteinModelConfig.from_flat(
-                vocab_size=100,
-                hidden_size=48,
-                num_layers=1,
-                num_loops=1,
-                num_heads=6,
-                retention_heads=6,
-                num_experts=2,
-                top_k_experts=1,
-                dropout=0.0,
-                norm_type="prms_norm",
-                prms_partial_ratio=0.0,
-                use_bitnet=False,
-                layer_pattern=["standard"],
-                use_moe=False,
-                ode_solver="rk4",
-                ode_steps=1,
-                ffn_hidden_size=96,
-                ffn_activation="gelu",
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 100, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'prms_norm', "partial_ratio": 0.0}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}})
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -360,33 +187,30 @@ class FrankensteinAudioTests(unittest.TestCase):
 
     def _small_audio(self, **kw):
         cfg = FrankensteinAudio.build_audio_config(
-            vocab_size=100,
+            dims={"vocab_size": 100, "dropout": 0.0},
             hidden_size=48,
             num_layers=2,
             num_heads=4,
             num_loops=1,
             use_bitnet=False,
-            dropout=0.0,
-            audio_n_mels=32,
-            audio_conv_channels=8,
+            audio={"n_mels": 32, "conv_channels": 8},
             num_classes=4,
-            ffn_hidden_size=96,
+            ffn={"hidden_size": 96},
             **kw,
         )
         return FrankensteinAudio(cfg)
 
     def test_mode_forced_to_encoder(self):
         cfg = FrankensteinAudio.build_audio_config(
-            vocab_size=100,
+            dims={"vocab_size": 100},
             hidden_size=48,
             num_heads=4,
             num_layers=2,
-            audio_n_mels=32,
-            audio_conv_channels=8,
+            audio={"n_mels": 32, "conv_channels": 8},
         )
         cfg.dims.mode = "decoder"  # override to test that the audio model enforces mode
         model = FrankensteinAudio(cfg)
-        self.assertEqual(model.config.mode, "encoder")
+        self.assertEqual(model.config.dims.mode, "encoder")
 
     def test_audio_classification_forward(self):
         model = self._small_audio()

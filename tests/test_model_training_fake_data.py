@@ -21,7 +21,7 @@ if TORCH_AVAILABLE:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.frankenstein_encoder import FrankensteinEncoder
 
@@ -39,29 +39,9 @@ EXPERTS = 2
 
 def _cfg(layer_pattern, mode="encoder", use_moe=False, **kw):
     """Return a minimal FrankensteinModelConfig for the given layer pattern."""
-    defaults = dict(
-        vocab_size=VOCAB,
-        hidden_size=HIDDEN,
-        num_layers=len(layer_pattern),
-        num_loops=1,
-        num_heads=HEADS,
-        retention_heads=HEADS,
-        num_experts=EXPERTS,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=layer_pattern,
-        use_moe=use_moe,
-        ode_solver="euler",
-        ode_steps=1,
-        ffn_hidden_size=HIDDEN * 2,
-        ffn_activation="gelu",
-        positional_encoding="hope",
-        mode=mode,
-    )
-    defaults.update(kw)
-    return FrankensteinModelConfig.from_flat(**defaults)
+    defaults = {"dims": {"vocab_size": VOCAB, "hidden_size": HIDDEN, "num_layers": len(layer_pattern), "num_loops": 1, "num_heads": HEADS, "dropout": 0.0, "layer_pattern": layer_pattern, "mode": mode}, "attention": {"retnet": {"heads": HEADS}, "ode": {"solver": 'euler', "steps": 1}}, "moe": {"num_experts": EXPERTS, "top_k": 1, "enabled": use_moe}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": HIDDEN * 2, "activation": 'gelu'}, "positional_encoding": 'hope'}
+    defaults = merge_model_blocks(defaults, kw)
+    return FrankensteinModelConfig.from_dict({**defaults})
 
 
 def _fake_batch():
@@ -362,49 +342,43 @@ class MixedPatternTrainingTests(unittest.TestCase):
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_multi_loop_training(self):
-        cfg = _cfg(["standard", "titan"], num_loops=2, num_layers=2)
+        cfg = _cfg(['standard', 'titan'], dims={'num_loops': 2, 'num_layers': 2})
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_bitnet_training(self):
-        cfg = _cfg(["standard"], use_bitnet=True)
+        cfg = _cfg(['standard'], bitnet={'enabled': True})
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_derf_norm_training(self):
-        cfg = _cfg(["standard"], norm_type="derf")
+        cfg = _cfg(['standard'], norm={'type': 'derf'})
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_dynamic_tanh_norm_training(self):
-        cfg = _cfg(["standard"], norm_type="dynamic_tanh")
+        cfg = _cfg(['standard'], norm={'type': 'dynamic_tanh'})
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_factorized_embedding_training(self):
-        cfg = _cfg(
-            ["standard"],
-            use_factorized_embedding=True,
-            factorized_embedding_dim=16,
-            use_embedding_conv=True,
-            embedding_conv_kernel=3,
-        )
+        cfg = _cfg(['standard'], embedding={'factorized': {'enabled': True, 'dim': 16}, 'conv': {'enabled': True, 'kernel': 3}})
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_rope_positional_encoding_training(self):
-        cfg = _cfg(["standard"], positional_encoding="rope")
+        cfg = _cfg(['standard'], positional_encoding='rope')
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))
 
     def test_bam_positional_encoding_training(self):
-        cfg = _cfg(["standard"], positional_encoding="bam")
+        cfg = _cfg(['standard'], positional_encoding='bam')
         model = FrankensteinEncoder(cfg)
         losses = _train_steps(model, n=3)
         self.assertTrue(all(torch.isfinite(torch.tensor(l)) for l in losses))

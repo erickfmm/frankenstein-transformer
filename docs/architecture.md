@@ -12,8 +12,8 @@
 Frankenstein Transformer is a **schema-first**, configuration-driven toolkit for
 experimenting with transformer sequence mixers, optimizers, normalization layers
 and positional encodings without changing Python code. One strict JSON-Schema
-validates a YAML file; the runtime flattens it into a single dataclass and
-dispatches to factories and registries. The in-repo presets must validate
+validates a YAML file; the runtime materialises it as a nested dataclass tree
+and dispatches to factories and registries. The in-repo presets must validate
 cleanly; at runtime, keys the schema does not know *yet* are logged as
 `[schema] … unknown key(s) ignored` warnings (see §7) instead of aborting the
 load.
@@ -47,8 +47,7 @@ flowchart TD
     Y["YAML config<br/>configs/*.yaml"] --> V{"Schema validation<br/>src/schema.yaml<br/>+ _conditional_rules.yaml"}
     V -- invalid --> E["Fail fast<br/>field-level error"]
     V -- valid --> L["load_training_config()<br/>src/training/config_loader.py"]
-    L --> F["flatten_model_dict()<br/>flatten_image_dict()<br/>flatten_audio_dict()<br/>src/utils/config_flatten.py"]
-    F --> C["FrankensteinModelConfig<br/>src/model/config.py (flat dataclass)"]
+    L --> C["FrankensteinModelConfig.from_dict()<br/>src/model/config.py<br/>(nested dataclass tree)"]
     C --> B["engine.build_model()<br/>Encoder | Decoder | ViT | Audio"]
     B --> T["TitanTrainer<br/>src/training/trainer.py"]
     T --> K["Checkpoints + metrics + telemetry"]
@@ -70,8 +69,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/schema.yaml` | JSON-Schema entrypoint; `$ref`s every module |
 | `src/schema/**` | Schema modules (model, training, optimizer, datasets, vision, audio) |
 | `src/training/config_loader.py` | Schema resolution + cross-field validation + `LoadedTrainingConfig` |
-| `src/utils/config_flatten.py` | Nested YAML → flat `FrankensteinModelConfig` kwargs |
-| `src/model/config.py` | `FrankensteinModelConfig` flat dataclass (single coupling point) |
+| `src/model/config.py` | `FrankensteinModelConfig` nested dataclass tree (single coupling point) |
 | `src/model/hybrid_layer.py` | `HybridLayer`: mixer registry, norm wiring, dense/MoE FFN dispatch, MoD, BitNet, residual hand-off |
 | `src/model/frankenstein_encoder.py` | Encoder backbone (bidirectional; owns shared PE, mHC, AttnRes) |
 | `src/model/frankenstein_decoder.py` | Causal decoder (forces `mode=decoder`) |
@@ -109,8 +107,7 @@ The YAML file is the single source of truth for model/training settings.
 ```mermaid
 flowchart LR
     Y["YAML"] --> CL["config_loader<br/>schema + rules"]
-    CL --> FL["config_flatten<br/>nested → flat"]
-    FL --> CFG["FrankensteinModelConfig<br/>flat dataclass"]
+    CL --> CFG["FrankensteinModelConfig.from_dict()<br/>nested dataclass tree"]
     CFG --> REG["registries / factories"]
     REG --> ENC["FrankensteinEncoder"]
     REG --> DEC["FrankensteinDecoder"]
@@ -165,7 +162,7 @@ nested-to-flat flattening step. `FrankensteinModelConfig`
 
 | Nested path | Runtime access |
 |---|---|
-| `model.dims.*` | `config.dims.*` (plus `config.hidden_size`, … read-only aliases) |
+| `model.dims.*` | `config.dims.*` |
 | `model.norm.*` | `config.norm.*` (`type`, `partial_ratio`, `flashnorm_partial_ratio`, `qk_norm.*`) |
 | `model.attention.<mixer>.*` | bound through the mixer's `ComponentSpec` → `params.<leaf>` |
 | `model.positional_encoding_parameters.<pe>.*` | read by the encoding builder; `use_pe.<mixer>` toggles |
@@ -176,11 +173,12 @@ nested-to-flat flattening step. `FrankensteinModelConfig`
 
 `FrankensteinModelConfig.from_dict()` builds the tree from the raw blocks and
 validates the cross-field invariants (MoE anatomy, mHC × MoD exclusivity,
-residual/hyperloop compatibility, audio/ViT ranges, …). `from_flat()` remains
-as a migration path for legacy checkpoints, the exporters and the test suite;
-it routes historical flat names through `_FLAT_ALIASES` and per-component names
-into `model.attention.<mixer>`. Read-only `__getattr__`/`__setattr__` aliases
-keep `config.hidden_size`, `config.norm_type`, … working for structural code.
+residual/hyperloop compatibility, audio/ViT ranges, …). There is no flat
+constructor and no attribute aliasing: every read uses the nested path
+(`config.dims.hidden_size`, `config.norm.type`, `config.bitnet.enabled`, …),
+per-component knobs are read through the bound `ComponentParams`, and
+positional-encoding knobs keep small read-only properties
+(`config.rope_base`, …) that read the nested mapping.
 
 ### Component registry and plugin schema assembly
 
@@ -391,7 +389,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-49 enum values in 10 families. `config subkey` is the optional
+49 enum values in 9 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -399,12 +397,13 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `standard` | Dense | — | yes |
 | `sigmoid` | Dense | — | yes |
 | `ca` | Dense | `ca.*` | yes |
-| `gqa` | GQA | `dims.num_kv_heads` | yes |
+| `gqa` | Dense | `dims.num_kv_heads` | yes |
 | `retnet` | Recurrent | `retnet.heads` | yes |
 | `mamba` | Recurrent | — (linear placeholder) | yes |
 | `ode` | Recurrent | `ode.solver`, `ode.steps` | yes |
-| `titan` | Recurrent | — | yes |
-| `engram` | Recurrent / memory | `engram.*` | yes |
+| `titan` | Memory | — | yes |
+| `engram` | Memory | `engram.*` | yes |
+| `memory` | Memory | `dims.num_kv_heads` | yes |
 | `sparse_transformer` | Sparse | — | yes |
 | `longformer` | Sparse | — | yes |
 | `swa` | Sparse | `swa.*` | yes |
@@ -415,6 +414,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `sparda` | Sparse | `sparda.*` | yes |
 | `sparge` | Sparse | — | yes (dense train, sparse eval) |
 | `fasa` | Sparse | — | yes (dense train, sparse eval) |
+| `lsa` | Sparse (semantic) | `lsa.*` | yes |
 | `gla` | Gated | — | yes |
 | `deltanet` | Gated | — | yes |
 | `gated_deltanet` | Gated | — | yes |
@@ -442,9 +442,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `gma` | Latent (Gaussian mixture) | `gma.*` | yes |
 | `ssog` | Geometric field | `ssog.*` | yes (encoder, grid input) |
 | `conformer` | Convolution-augmented | `conformer.*` | yes |
-| `memory` | Memory | `dims.num_kv_heads` | yes |
-| `lsa` | Sparse (semantic) | `lsa.*` | yes |
-| `fastconformer` | Sparse | `fastconformer.*` | yes |
+| `fastconformer` | Convolution-augmented | `fastconformer.*` | yes |
 
 Inference-sparse mixers: `HybridLayer.TRAINING_FREE_LAYERS = {"fasa", "sparge"}`
 run standard dense attention in `train()` mode (via `mixer.dense_forward`, sharing
@@ -480,7 +478,8 @@ immutable once a block completes, so the `BucketKVSlot` incremental branch is
 exact; flat search scores about `T/keys_per_bucket` centroids per decode step.
 
 `fastconformer` implements Fast Conformer limited-context attention from
-arXiv:2305.05084: every query attends to a symmetric local window
+arXiv:2305.05084 — the long-form variant of the Convolution-augmented Conformer
+block: every query attends to a symmetric local window
 (`fastconformer.window_size`, paper §3.4: 128 per side, i.e. 256) plus
 `fastconformer.global_tokens` global attention tokens pinned at the head
 positions `{0, s, …, (g−1)s}` (`s = fastconformer.global_tokens_spacing`), which
@@ -1033,15 +1032,13 @@ blocks into fp32 parameters at load time; `quantized_linear` (v2) keeps
 `PackedLinear` buffers packed and dequantizes in `forward`. No
 `pytorch_model.bin` or bitsandbytes runtime is involved.
 
-The generated `configuration_frankenstein.py` keeps the flat model config under
-`frankenstein_config` (the authoritative copy) and mirrors it at the top level
-for HF interop. Two rules keep transformers 5.x happy: model keys are never
-forwarded to `PretrainedConfig.__init__`, and a `null` `num_labels` is omitted
-from `config.json`. Both `num_labels` and `rope_scaling` are reserved HF
-properties whose setters validate (`range(None)` for the former, a dict check
-for the latter, which the flat config stores as a float factor); values rejected
-on `setattr` stay available through `frankenstein_config`, so the core model
-still builds from them.
+The generated `configuration_frankenstein.py` keeps the nested `model:` block
+under `frankenstein_config` (the authoritative copy) and never mirrors model
+keys into reserved HF properties: the wrapper rebuilds the config with
+`FrankensteinModelConfig.from_dict`. A `null` `num_labels` is omitted from
+`config.json`, and the RoPE scaling factor stays inside the nested
+`positional_encoding_parameters` mapping where transformers' own
+`rope_scaling` validation cannot reject it.
 
 ## 11. Extending the software
 
@@ -1074,8 +1071,8 @@ flowchart LR
 3. Add `configs/examples/<family>_<name>.yaml` when user-facing. For plugins,
    list the module under the top-level `plugins:` key (or install it with the
    `frankenstein.plugins` entry point).
-4. Run the gates in §12. No schema enum, `by_optimizer`, `if/then`, flatten
-   rename or `config.py` field edit is needed.
+4. Run the gates in §12. No schema enum, `by_optimizer`, `if/then` or
+   `config.py` field edit is needed.
 
 ### 11.2 Add a model class, task or dataset
 
@@ -1132,7 +1129,7 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 | # | Decision | Rationale |
 |---|---|---|
 | D1 | The JSON Schema is the contract; `additionalProperties: false` everywhere | Presets validate strictly; runtime logs unknown keys as warnings (so configs may lead the schema) but never reads an undocumented key |
-| D2 | Keep one flat `FrankensteinModelConfig` plus an explicit flattener | The runtime stays simple and old checkpoints stay loadable |
+| D2 | The runtime config is one nested `FrankensteinModelConfig` tree (`from_dict`), with no flat constructor or attribute aliases | The runtime mirrors the YAML blocks one-to-one; superseded by D15 |
 | D3 | Split the old `frankenstein_model.py` into `config.py`, `hybrid_layer.py`, encoder/decoder/ViT | Smaller coupling surface; enforced by a regression test |
 | D4 | `model.bitnet.enabled` defaults to **true** | BitNet is the project's deployment story; disable explicitly for FP32 |
 | D5 | `fasa` and `sparge` train as dense attention and infer sparsely | Their selection/pruning rules are inference-time by design; the dense surrogate shares the projections so trained weights are exactly the ones the sparse path reads |
@@ -1143,6 +1140,11 @@ Every extension must keep these green. Run them on CPU (see `AGENTS.md`).
 | D10 | Model classes force their mode (`decoder` for the text decoder, `encoder` for ViT and audio) | Causal, vision and audio paths cannot be configured inconsistently |
 | D11 | The paper is the source of truth for theory; `docs/architecture.md` is the single canonical implementation spec | `docs/specs/` had drifted from the code and duplicated both the paper and this content |
 | D12 | `AGENTS.md` points to code/tests instead of restating the spec | Avoids the same drift in the agent contract |
+| D13 | Every pluggable component is a declarative `ComponentSpec`; the registry is the single source of truth | Schema enums, parameter fragments, defaults, capability flags and bilingual docs derive from one record |
+| D14 | The validated schema is assembled from core YAML + registry fragments; `additionalProperties: false` holds for plugins too | A component is declared once and cannot drift across parallel lists |
+| D15 | The runtime config is nested only; the flat constructor, the `__getattr__`/`__setattr__` aliases and the export flat view are removed | One shape end-to-end; legacy flat checkpoints and HF artifacts must be re-created |
+| D16 | Plugin loading is layered: entry-points (skip-with-warning), `plugins:` config paths (fail-hard), built-ins (same API) | Third-party components validate and dispatch exactly like built-ins |
+| D17 | Test gates are registry-derived | Adding a component automatically covers docs/defaults/prefix/cache coverage |
 
 ## 14. Known limitations
 

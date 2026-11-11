@@ -7,7 +7,7 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 if TORCH_AVAILABLE:
     import torch
 
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.attention.gated import (
         Falcon1Attention,
         Falcon1AAttention,
@@ -19,29 +19,9 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(**overrides):
-    base = dict(
-        vocab_size=64,
-        hidden_size=48,
-        num_layers=1,
-        num_loops=1,
-        num_heads=6,
-        retention_heads=6,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        use_moe=False,
-        ode_solver="rk4",
-        ode_steps=1,
-        ffn_hidden_size=96,
-        ffn_activation="gelu",
-        positional_encoding="hope",
-        mode="encoder",
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": 64, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}, "positional_encoding": 'hope'}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 BSZ, SEQ, DIM = 2, 8, 48
@@ -66,23 +46,23 @@ class FalconBasicTests(unittest.TestCase):
 
     def test_output_shapes(self):
         for name, cls in FALCON_CLASSES:
-            attn = cls(_cfg(falcon_chunk_size=8))
+            attn = cls(_cfg(attention={'falcon1': {'chunk_size': 8}}))
             self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM), msg=name)
 
     def test_recurrent_output_shapes(self):
         for name, cls in FALCON_CLASSES:
-            attn = cls(_cfg(falcon_chunk_size=None))
+            attn = cls(_cfg(attention={'falcon1': {'chunk_size': None}}))
             self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM), msg=name)
 
     def test_decoder_mode(self):
         for name, cls in FALCON_CLASSES:
-            attn = cls(_cfg(mode="decoder", falcon_chunk_size=8))
+            attn = cls(_cfg(dims={'mode': 'decoder'}, attention={'falcon1': {'chunk_size': 8}}))
             self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM), msg=name)
 
     def test_gradient_flows(self):
         for name, cls in FALCON_CLASSES:
             for chunk in (None, 8):
-                attn = cls(_cfg(falcon_chunk_size=chunk))
+                attn = cls(_cfg(attention={'falcon1': {'chunk_size': chunk}}))
                 x = _x().requires_grad_(True)
                 attn(x).sum().backward()
                 self.assertIsNotNone(x.grad, msg=f"{name} chunk={chunk}")
@@ -93,43 +73,42 @@ class FalconBasicTests(unittest.TestCase):
     def test_invalid_hidden_raises(self):
         for name, cls in FALCON_CLASSES:
             with self.assertRaises(ValueError, msg=name):
-                cls(_cfg(hidden_size=50, num_heads=6))
+                cls(_cfg(dims={'hidden_size': 50, 'num_heads': 6}))
 
     def test_bitnet_projection_swap(self):
         from src.model.attention.common import BitLinear
 
         for name, cls in FALCON_CLASSES:
-            attn = cls(_cfg(use_bitnet=True))
+            attn = cls(_cfg(bitnet={'enabled': True}))
             self.assertIsInstance(attn.q_proj, BitLinear, msg=name)
             out = attn(_x())
             self.assertEqual(out.shape, (BSZ, SEQ, DIM), msg=name)
 
     def test_short_conv_toggle(self):
         for name, cls in FALCON_CLASSES:
-            attn = cls(_cfg(falcon_short_conv=True))
+            mixer = cls.MIXER_NAME
+            attn = cls(_cfg(attention={mixer: {"short_conv": True}}))
             self.assertIsNotNone(attn.short_conv, msg=name)
-            attn = cls(_cfg(falcon_short_conv=False))
+            attn = cls(_cfg(attention={mixer: {"short_conv": False}}))
             self.assertIsNone(attn.short_conv, msg=name)
             self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM), msg=name)
 
     def test_qk_norm_variants(self):
         for name, cls in FALCON_CLASSES:
             for norm in ("rms_norm", "l2_norm"):
-                attn = cls(_cfg(falcon_qk_norm=norm))
+                attn = cls(_cfg(attention={cls.MIXER_NAME: {"qk_norm": norm}}))
                 self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM),
                                 msg=f"{name}/{norm}")
 
     def test_gate_mode_combinations(self):
         combos = [
-            dict(falcon_beta_mode="static", falcon_beta=1.2,
-                 falcon_lambda_mode="static", falcon_lambda=0.3),
-            dict(falcon_beta_mode="ctx_beta", falcon_lambda_mode="static",
-                 falcon_lambda=0.1),
-            dict(falcon_beta_mode="ctx_eta", falcon_lambda_mode="ctx"),
+            {"beta_mode": "static", "beta": 1.2, "lambda_mode": "static", "lambda": 0.3},
+            {"beta_mode": "ctx_beta", "lambda_mode": "static", "lambda": 0.1},
+            {"beta_mode": "ctx_eta", "lambda_mode": "ctx"},
         ]
         for name, cls in FALCON_CLASSES:
             for combo in combos:
-                attn = cls(_cfg(**combo))
+                attn = cls(_cfg(attention={cls.MIXER_NAME: combo}))
                 out = attn(_x())
                 self.assertTrue(torch.isfinite(out).all(),
                                 msg=f"{name}/{combo}")
@@ -137,7 +116,7 @@ class FalconBasicTests(unittest.TestCase):
     def test_window_validation(self):
         for name, cls in FALCON_CLASSES:
             with self.assertRaises(ValueError, msg=name):
-                cls(_cfg(falcon_window=0))
+                cls(_cfg(attention={cls.MIXER_NAME: {"window": 0}}))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -150,7 +129,7 @@ class FalconChunkEquivalenceTests(unittest.TestCase):
         for name, cls in FALCON_CLASSES:
             for chunk in (3, 8, 64):
                 for window in ((3,) if name in ("falcon3", "falcon3a") else (4,)):
-                    attn = cls(_cfg(falcon_chunk_size=None, falcon_window=window))
+                    attn = cls(_cfg(attention={'falcon1': {'chunk_size': None, 'window': window}}))
                     attn.eval()
                     with torch.no_grad():
                         ref = attn(x)
@@ -167,13 +146,7 @@ class FalconChunkEquivalenceTests(unittest.TestCase):
         torch.manual_seed(1)
         x = _x()
         for name, cls in FALCON_CLASSES:
-            cfg = _cfg(
-                falcon_chunk_size=None,
-                falcon_beta_mode="static",
-                falcon_beta=1.5,
-                falcon_lambda_mode="static",
-                falcon_lambda=0.7,
-            )
+            cfg = _cfg(attention={'falcon1': {'chunk_size': None, 'beta_mode': 'static', 'beta': 1.5, 'lambda_mode': 'static', 'lambda': 0.7}})
             attn = cls(cfg)
             attn.eval()
             with torch.no_grad():
@@ -190,7 +163,7 @@ class FalconChunkEquivalenceTests(unittest.TestCase):
         """Multi-chunk processing with non-divisible lengths."""
         torch.manual_seed(2)
         for name, cls in FALCON_CLASSES:
-            attn = cls(_cfg(falcon_chunk_size=None))
+            attn = cls(_cfg(attention={'falcon1': {'chunk_size': None}}))
             attn.eval()
             x = torch.randn(2, 21, DIM)
             with torch.no_grad():
@@ -213,7 +186,7 @@ class FalconSemanticsTests(unittest.TestCase):
         torch.manual_seed(3)
         for name, cls in FALCON_CLASSES:
             for chunk in (None, 4):
-                attn = cls(_cfg(falcon_chunk_size=chunk)).eval()
+                attn = cls(_cfg(attention={'falcon1': {'chunk_size': chunk}})).eval()
                 x = _x()
                 with torch.no_grad():
                     a = attn(x.clone())
@@ -232,7 +205,7 @@ class FalconSemanticsTests(unittest.TestCase):
         torch.manual_seed(4)
         for name, cls in FALCON_CLASSES:
             for chunk in (None, 4):
-                attn = cls(_cfg(falcon_chunk_size=chunk)).eval()
+                attn = cls(_cfg(attention={'falcon1': {'chunk_size': chunk}})).eval()
                 with torch.no_grad():
                     q = attn.q_proj(_x()).view(BSZ, SEQ, 6, 8)
                     k = attn.k_proj(_x()).view(BSZ, SEQ, 6, 8)
@@ -260,9 +233,7 @@ class FalconSemanticsTests(unittest.TestCase):
         A manual reference scan must match the module output."""
         torch.manual_seed(5)
         attn = Falcon1AAttention(
-            _cfg(falcon_chunk_size=None, falcon_short_conv=False,
-                 falcon_beta_mode="static", falcon_beta=1.0,
-                 falcon_lambda_mode="static", falcon_lambda=0.0)
+            _cfg(attention={'falcon1': {'chunk_size': None, 'short_conv': False, 'beta_mode': 'static', 'beta': 1.0, 'lambda_mode': 'static', 'lambda': 0.0}})
         )
         attn.eval()
         x = _x()
@@ -301,33 +272,36 @@ class FalconConfigTests(unittest.TestCase):
     """Config-level validation of the falcon_* knobs."""
 
     def test_defaults(self):
+        from src.model.attention.params import mixer_params, use_pe_for
+
         cfg = _cfg()
-        self.assertEqual(cfg.falcon_chunk_size, 64)
-        self.assertEqual(cfg.falcon_qk_norm, "rms_norm")
-        self.assertEqual(cfg.falcon_beta_mode, "ctx_eta")
-        self.assertEqual(cfg.falcon_lambda_mode, "ctx")
-        self.assertEqual(cfg.falcon_beta, 1.0)
-        self.assertEqual(cfg.falcon_lambda, 0.0)
-        self.assertEqual(cfg.falcon_window, 4)
-        self.assertTrue(cfg.falcon_short_conv)
-        self.assertEqual(cfg.falcon_conv_kernel, 4)
-        self.assertEqual(cfg.falcon_eps, 1e-6)
-        self.assertEqual(cfg.falcon_eps_gamma, 1e-4)
-        self.assertFalse(cfg.falcon1_use_pe)
-        self.assertFalse(cfg.falcon3a_use_pe)
+        params = mixer_params(cfg, "falcon1")
+        self.assertEqual(params.chunk_size, 64)
+        self.assertEqual(params.qk_norm, "rms_norm")
+        self.assertEqual(params.beta_mode, "ctx_eta")
+        self.assertEqual(params.lambda_mode, "ctx")
+        self.assertEqual(params.beta, 1.0)
+        self.assertEqual(params["lambda"], 0.0)
+        self.assertEqual(params.window, 4)
+        self.assertTrue(params.short_conv)
+        self.assertEqual(params.conv_kernel, 4)
+        self.assertEqual(params.eps, 1e-6)
+        self.assertEqual(params.eps_gamma, 1e-4)
+        self.assertFalse(use_pe_for(cfg, "falcon1"))
+        self.assertFalse(use_pe_for(cfg, "falcon3a"))
 
     def test_invalid_values_raise(self):
         for kwargs, msg in [
-            (dict(falcon_chunk_size=0), "chunk_size"),
-            (dict(falcon_qk_norm="bogus"), "qk_norm"),
-            (dict(falcon_beta_mode="bogus"), "beta_mode"),
-            (dict(falcon_lambda_mode="bogus"), "lambda_mode"),
-            (dict(falcon_beta=2.5), "beta"),
-            (dict(falcon_lambda=-0.1), "lambda"),
-            (dict(falcon_window=0), "window"),
-            (dict(falcon_conv_kernel=0), "conv_kernel"),
-            (dict(falcon_eps=0.0), "eps"),
-            (dict(falcon_eps_gamma=1.5), "eps_gamma"),
+            (dict(attention={"falcon1": {"chunk_size": 0}}), "chunk_size"),
+            (dict(attention={"falcon1": {"qk_norm": "bogus"}}), "qk_norm"),
+            (dict(attention={"falcon1": {"beta_mode": "bogus"}}), "beta_mode"),
+            (dict(attention={"falcon1": {"lambda_mode": "bogus"}}), "lambda_mode"),
+            (dict(attention={"falcon1": {"beta": 2.5}}), "beta"),
+            (dict(attention={"falcon1": {"lambda": -0.1}}), "lambda"),
+            (dict(attention={"falcon1": {"window": 0}}), "window"),
+            (dict(attention={"falcon1": {"conv_kernel": 0}}), "conv_kernel"),
+            (dict(attention={"falcon1": {"eps": 0.0}}), "eps"),
+            (dict(attention={"falcon1": {"eps_gamma": 1.5}}), "eps_gamma"),
         ]:
             with self.assertRaises(ValueError, msg=msg):
                 _cfg(**kwargs)

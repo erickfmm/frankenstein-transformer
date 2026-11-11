@@ -145,8 +145,8 @@ class ContinuumAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "ca", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.scale = self.head_dim ** -0.5
 
@@ -155,7 +155,7 @@ class ContinuumAttention(nn.Module):
                 "hidden_size must be divisible by num_heads for ContinuumAttention"
             )
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.q_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.k_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
@@ -175,8 +175,8 @@ class ContinuumAttention(nn.Module):
         else:
             self.register_parameter("log_gain", None)
 
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(use_pe_for(config, "ca", True))

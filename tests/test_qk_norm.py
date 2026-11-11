@@ -23,7 +23,7 @@ if TORCH_AVAILABLE:
     from src.model.attention.grouped_query_attention import GroupedQueryAttention
     from src.model.attention.latent.mla import MLAAttention
     from src.model.attention.standard import StandardAttention
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.frankenstein_decoder import FrankensteinDecoder
     from src.model.norm import (
         QK_CLIP_MIXERS,
@@ -38,24 +38,9 @@ if TORCH_AVAILABLE:
 
 
 def _config(**overrides):
-    base = dict(
-        vocab_size=64,
-        hidden_size=32,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        retention_heads=4,
-        num_kv_heads=2,
-        dropout=0.0,
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        mode="decoder",
-        positional_encoding="rope",
-        norm_type="layer_norm",
-        ffn_hidden_size=64,
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 1, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'decoder'}, "attention": {"retnet": {"heads": 4}}, "bitnet": {"enabled": False}, "positional_encoding": 'rope', "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -115,11 +100,11 @@ class QKNormUnitTests(unittest.TestCase):
             QKNorm(4, method="qk_clip")
 
     def test_make_qk_norm_respects_config(self):
-        self.assertIsNone(make_qk_norm(_config(use_qk_norm=False), 8))
-        self.assertIsNone(make_qk_norm(_config(use_qk_norm=True, qk_norm_method="qk_clip"), 8))
-        self.assertIsNone(make_qk_norm(_config(use_qk_norm=True, qk_norm_method="quack"), 8))
+        self.assertIsNone(make_qk_norm(_config(norm={'qk_norm': {'enabled': False}}), 8))
+        self.assertIsNone(make_qk_norm(_config(norm={'qk_norm': {'enabled': True, 'method': 'qk_clip'}}), 8))
+        self.assertIsNone(make_qk_norm(_config(norm={'qk_norm': {'enabled': True, 'method': 'quack'}}), 8))
         self.assertIsInstance(
-            make_qk_norm(_config(use_qk_norm=True, qk_norm_method="l2_norm"), 8), QKNorm
+            make_qk_norm(_config(norm={'qk_norm': {'enabled': True, 'method': 'l2_norm'}}), 8), QKNorm
         )
 
 
@@ -130,33 +115,33 @@ class MixerIntegrationTests(unittest.TestCase):
             for method in ("rms_norm", "layer_norm", "l2_norm"):
                 with self.subTest(mixer=mixer_cls.__name__, method=method):
                     torch.manual_seed(0)
-                    config = _config(use_qk_norm=True, qk_norm_method=method)
+                    config = _config(norm={'qk_norm': {'enabled': True, 'method': method}})
                     mixer = mixer_cls(config)
                     self.assertIsInstance(mixer.qk_norm, QKNorm)
-                    x = torch.randn(2, 5, config.hidden_size)
+                    x = torch.randn(2, 5, config.dims.hidden_size)
                     out = mixer(x)
                     self.assertEqual(out.shape, x.shape)
 
     def test_disabled_attaches_no_module(self):
-        mixer = StandardAttention(_config(use_qk_norm=False))
+        mixer = StandardAttention(_config(norm={'qk_norm': {'enabled': False}}))
         self.assertIsNone(mixer.qk_norm)
 
     def test_qk_clip_records_per_head_max_logits(self):
-        config = _config(use_qk_norm=True, qk_norm_method="qk_clip")
+        config = _config(norm={'qk_norm': {'enabled': True, 'method': 'qk_clip'}})
         mixer = StandardAttention(config)
-        mixer(torch.randn(2, 6, config.hidden_size))
+        mixer(torch.randn(2, 6, config.dims.hidden_size))
         self.assertIsNotNone(mixer.last_qk_max_logits)
-        self.assertEqual(tuple(mixer.last_qk_max_logits.shape), (config.num_heads,))
+        self.assertEqual(tuple(mixer.last_qk_max_logits.shape), (config.dims.num_heads,))
 
     def test_forward_methods_do_not_record(self):
-        config = _config(use_qk_norm=True, qk_norm_method="rms_norm")
+        config = _config(norm={'qk_norm': {'enabled': True, 'method': 'rms_norm'}})
         mixer = StandardAttention(config)
-        mixer(torch.randn(2, 6, config.hidden_size))
+        mixer(torch.randn(2, 6, config.dims.hidden_size))
         self.assertIsNone(mixer.last_qk_max_logits)
 
     def test_attach_marks_capability(self):
         module = nn.Module()
-        attach_qk_norm(module, _config(use_qk_norm=True, qk_norm_method="quack"), 4)
+        attach_qk_norm(module, _config(norm={'qk_norm': {'enabled': True, 'method': 'quack'}}), 4)
         self.assertTrue(module.qk_norm_capable)
         self.assertIsNone(module.qk_norm)
         self.assertFalse(module._record_qk_max_logits)
@@ -166,9 +151,9 @@ class MixerIntegrationTests(unittest.TestCase):
 class QKClipTests(unittest.TestCase):
     def test_per_head_rescaling_matches_gamma(self):
         torch.manual_seed(0)
-        config = _config(use_qk_norm=True, qk_norm_method="qk_clip")
+        config = _config(norm={'qk_norm': {'enabled': True, 'method': 'qk_clip'}})
         mixer = StandardAttention(config)
-        mixer(torch.randn(2, 6, config.hidden_size))
+        mixer(torch.randn(2, 6, config.dims.hidden_size))
         tau = 0.5
         gamma = torch.clamp(tau / mixer.last_qk_max_logits, max=1.0)
         w_q = mixer.q_proj.weight.detach().clone()
@@ -182,9 +167,9 @@ class QKClipTests(unittest.TestCase):
 
     def test_alpha_split(self):
         torch.manual_seed(0)
-        config = _config(use_qk_norm=True, qk_norm_method="qk_clip")
+        config = _config(norm={'qk_norm': {'enabled': True, 'method': 'qk_clip'}})
         mixer = StandardAttention(config)
-        mixer(torch.randn(2, 6, config.hidden_size))
+        mixer(torch.randn(2, 6, config.dims.hidden_size))
         tau, alpha = 0.5, 0.25
         gamma = torch.clamp(tau / mixer.last_qk_max_logits, max=1.0)
         w_q = mixer.q_proj.weight.detach().clone()
@@ -198,35 +183,35 @@ class QKClipTests(unittest.TestCase):
 
     def test_heads_below_tau_are_untouched(self):
         torch.manual_seed(0)
-        config = _config(use_qk_norm=True, qk_norm_method="qk_clip")
+        config = _config(norm={'qk_norm': {'enabled': True, 'method': 'qk_clip'}})
         mixer = StandardAttention(config)
-        mixer(torch.randn(2, 6, config.hidden_size))
+        mixer(torch.randn(2, 6, config.dims.hidden_size))
         w_q = mixer.q_proj.weight.detach().clone()
         rescaled = apply_qk_clip(mixer, tau=1e9, alpha=0.5)
         self.assertEqual(rescaled, 0)
         torch.testing.assert_close(mixer.q_proj.weight, w_q)
 
     def test_max_logits_cleared_after_use(self):
-        mixer = StandardAttention(_config(use_qk_norm=True, qk_norm_method="qk_clip"))
+        mixer = StandardAttention(_config(norm={'qk_norm': {'enabled': True, 'method': 'qk_clip'}}))
         mixer(torch.randn(2, 6, 32))
         apply_qk_clip(mixer, tau=0.5)
         self.assertIsNone(mixer.last_qk_max_logits)
 
     def test_gqa_maps_query_heads_to_kv_heads(self):
-        config = _config(use_qk_norm=True, qk_norm_method="qk_clip", num_kv_heads=2)
+        config = _config(norm={'qk_norm': {'enabled': True, 'method': 'qk_clip'}}, dims={'num_kv_heads': 2})
         mixer = GroupedQueryAttention(config)
-        mixer(torch.randn(2, 6, config.hidden_size))
+        mixer(torch.randn(2, 6, config.dims.hidden_size))
         w_k = mixer.k_proj.weight.detach().clone()
         apply_qk_clip(mixer, tau=0.1, alpha=0.5)
         # Key projection has num_kv_heads row blocks; it must have changed.
         self.assertFalse(torch.allclose(w_k, mixer.k_proj.weight))
         self.assertEqual(
             mixer.k_proj.weight.shape[0],
-            config.num_kv_heads * mixer.head_dim,
+            config.dims.num_kv_heads * mixer.head_dim,
         )
 
     def test_invalid_parameters_rejected(self):
-        mixer = StandardAttention(_config(use_qk_norm=True, qk_norm_method="qk_clip"))
+        mixer = StandardAttention(_config(norm={'qk_norm': {'enabled': True, 'method': 'qk_clip'}}))
         with self.assertRaises(ValueError):
             apply_qk_clip(mixer, tau=0.0)
         with self.assertRaises(ValueError):
@@ -236,7 +221,7 @@ class QKClipTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class QuacKTests(unittest.TestCase):
     def _model(self):
-        return FrankensteinDecoder(_config(use_qk_norm=True, qk_norm_method="quack"))
+        return FrankensteinDecoder(_config(norm={'qk_norm': {'enabled': True, 'method': 'quack'}}))
 
     def test_splits_query_key_groups_and_caches_init_norms(self):
         from torch.optim import AdamW
@@ -282,12 +267,7 @@ class QuacKTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class QKNormCacheParityTests(unittest.TestCase):
     def _build(self, pattern, pe, method="rms_norm"):
-        config = _config(
-            layer_pattern=[pattern],
-            positional_encoding=pe,
-            use_qk_norm=True,
-            qk_norm_method=method,
-        )
+        config = _config(dims={'layer_pattern': [pattern]}, positional_encoding=pe, norm={'qk_norm': {'enabled': True, 'method': method}})
         torch.manual_seed(0)
         return FrankensteinDecoder(config).eval()
 
@@ -362,8 +342,8 @@ class QKNormConfigValidationTests(unittest.TestCase):
             path = pathlib.Path(tmp) / "config.yaml"
             path.write_text(yaml.safe_dump(document), encoding="utf-8")
             loaded = load_training_config(str(path))
-        self.assertTrue(loaded.model_config.use_qk_norm)
-        self.assertEqual(loaded.model_config.qk_norm_method, "rms_norm")
+        self.assertTrue(loaded.model_config.norm.qk_norm.enabled)
+        self.assertEqual(loaded.model_config.norm.qk_norm.method, "rms_norm")
 
     def test_loader_rejects_unsupported_mixer(self):
         import pathlib
@@ -437,15 +417,15 @@ class QKNormConfigValidationTests(unittest.TestCase):
 
     def test_dataclass_validates_parameters(self):
         with self.assertRaisesRegex(ValueError, "qk_norm_method"):
-            _config(qk_norm_method="bogus")
+            _config(norm={'qk_norm': {'method': 'bogus'}})
         with self.assertRaisesRegex(ValueError, "qk_clip_tau"):
-            _config(qk_clip_tau=0.0)
+            _config(norm={'qk_norm': {'clip_tau': 0.0}})
         with self.assertRaisesRegex(ValueError, "qk_clip_alpha"):
-            _config(qk_clip_alpha=1.5)
+            _config(norm={'qk_norm': {'clip_alpha': 1.5}})
         with self.assertRaisesRegex(ValueError, "quack_tau"):
-            _config(quack_tau=0.0)
+            _config(norm={'qk_norm': {'quack_tau': 0.0}})
         with self.assertRaisesRegex(ValueError, "qk_norm_eps"):
-            _config(qk_norm_eps=0.0)
+            _config(norm={'qk_norm': {'eps': 0.0}})
 
 
 if __name__ == "__main__":

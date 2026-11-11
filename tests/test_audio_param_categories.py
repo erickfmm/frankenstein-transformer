@@ -25,7 +25,7 @@ import pytest
 from src.utils.param_categories import BLOCK_CATEGORIES, categorize_param
 
 try:
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.frankenstein_audio import FrankensteinAudio
 
     TORCH_AVAILABLE = True
@@ -37,34 +37,9 @@ pytestmark = pytest.mark.skipif(not TORCH_AVAILABLE, reason="torch not available
 
 def _audio_config(**overrides) -> "FrankensteinModelConfig":
     """Return a tiny ``conformer`` audio config for fast CPU tests."""
-    params = dict(
-        vocab_size=48,
-        hidden_size=32,
-        num_layers=2,
-        num_loops=1,
-        num_heads=4,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=["conformer", "standard"],
-        use_moe=False,
-        ffn_hidden_size=64,
-        ffn_activation="silu",
-        positional_encoding="sinusoidal_absolute",
-        audio_n_mels=32,
-        audio_conv_channels=8,
-        audio_sample_rate=16000,
-        audio_window_ms=25.0,
-        audio_stride_ms=10.0,
-        audio_n_fft=400,
-        num_classes=3,
-        pooling_mode="gap",
-        asr_loss="ctc",
-        asr_decoder_dim=16,
-        asr_decoder_layers=1,
-    )
-    params.update(overrides)
-    return FrankensteinModelConfig.from_flat(**params)
+    params = {"dims": {"vocab_size": 48, "hidden_size": 32, "num_layers": 2, "num_loops": 1, "num_heads": 4, "dropout": 0.0, "layer_pattern": ['conformer', 'standard']}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "moe": {"enabled": False}, "ffn": {"hidden_size": 64, "activation": 'silu'}, "positional_encoding": 'sinusoidal_absolute', "audio": {"n_mels": 32, "conv_channels": 8, "sample_rate": 16000, "window_ms": 25.0, "stride_ms": 10.0, "n_fft": 400, "asr_loss": 'ctc', "asr_decoder_dim": 16, "asr_decoder_layers": 1}, "num_classes": 3, "pooling_mode": 'gap'}
+    params = merge_model_blocks(params, overrides)
+    return FrankensteinModelConfig.from_dict({**params})
 
 
 def _category_counts(model) -> dict:
@@ -106,7 +81,7 @@ def test_audio_categories_cover_every_parameter(variant):
 
 
 def test_audio_optimizer_groups_match_block_totals():
-    model = FrankensteinAudio(_audio_config(pooling_mode="cls", asr_loss="transducer"))
+    model = FrankensteinAudio(_audio_config(pooling_mode='cls', audio={'asr_loss': 'transducer'}))
     block_counts = _category_counts(model)
 
     groups = {group["name"]: group["params"] for group in model.configure_optimizers()}

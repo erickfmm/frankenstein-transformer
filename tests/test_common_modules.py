@@ -26,21 +26,7 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(norm_type="layer_norm", hidden_size=32):
-    return FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=hidden_size,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        retention_heads=4,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type=norm_type,
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        use_moe=False,
-    )
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": hidden_size, "num_layers": 1, "num_loops": 1, "num_heads": 4, "dropout": 0.0, "layer_pattern": ['standard']}, "attention": {"retnet": {"heads": 4}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": norm_type}, "bitnet": {"enabled": False}})
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -442,14 +428,14 @@ class GetNormTests(unittest.TestCase):
         norm = get_norm(cfg)
         self.assertIsInstance(norm, RMSNorm)
         self.assertEqual(norm.partial_ratio, 0.0)
-        self.assertEqual(norm.k, cfg.hidden_size)
+        self.assertEqual(norm.k, cfg.dims.hidden_size)
 
     def test_prms_norm_returns_correct_type(self):
         cfg = _cfg(norm_type="prms_norm")
         norm = get_norm(cfg)
         self.assertIsInstance(norm, RMSNorm)
         self.assertGreater(norm.partial_ratio, 0.0)
-        self.assertEqual(norm.partial_ratio, cfg.prms_partial_ratio)
+        self.assertEqual(norm.partial_ratio, cfg.norm.partial_ratio)
 
     def test_prms_norm_custom_ratio(self):
         cfg = _cfg(norm_type="prms_norm")
@@ -463,7 +449,7 @@ class GetNormTests(unittest.TestCase):
         norm = get_norm(cfg)
         self.assertIsInstance(norm, FlashNorm)
         self.assertEqual(norm.partial_ratio, 0.0)
-        self.assertEqual(norm.k, cfg.hidden_size)
+        self.assertEqual(norm.k, cfg.dims.hidden_size)
 
     def test_flash_norm_partial_ratio(self):
         cfg = _cfg(norm_type="flash_norm")
@@ -472,14 +458,14 @@ class GetNormTests(unittest.TestCase):
         self.assertIsInstance(norm, FlashNorm)
         self.assertAlmostEqual(norm.partial_ratio, 0.25)
         import math
-        self.assertEqual(norm.k, max(1, math.ceil(cfg.hidden_size * 0.25)))
+        self.assertEqual(norm.k, max(1, math.ceil(cfg.dims.hidden_size * 0.25)))
 
     def test_flash_norm_default_partial_ratio(self):
         cfg = _cfg(norm_type="flash_norm")
         norm = get_norm(cfg)
         # Default flashnorm_partial_ratio is 0.0 (full RMS, not partial).
         self.assertEqual(norm.partial_ratio, 0.0)
-        self.assertEqual(norm.k, cfg.hidden_size)
+        self.assertEqual(norm.k, cfg.dims.hidden_size)
 
     def test_fallback_returns_layer_norm(self):
         cfg = _cfg(norm_type="layer_norm")

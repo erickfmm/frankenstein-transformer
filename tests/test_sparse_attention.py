@@ -6,7 +6,7 @@ TORCH_AVAILABLE = find_spec("torch") is not None
 
 if TORCH_AVAILABLE:
     import torch
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.attention.sparse import (
         BigBirdAttention,
         FASAAttention,
@@ -24,29 +24,9 @@ if TORCH_AVAILABLE:
 
 
 def _cfg(**overrides):
-    base = dict(
-        vocab_size=64,
-        hidden_size=48,
-        num_layers=1,
-        num_loops=1,
-        num_heads=6,
-        retention_heads=6,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        use_moe=False,
-        ode_solver="rk4",
-        ode_steps=1,
-        ffn_hidden_size=96,
-        ffn_activation="gelu",
-        positional_encoding="hope",
-        mode="encoder",
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": 64, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}, "positional_encoding": 'hope'}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 BSZ, SEQ, DIM = 2, 8, 48
@@ -69,7 +49,7 @@ class SparseTransformerAttentionTests(unittest.TestCase):
         self.assertIsNotNone(x.grad)
 
     def test_decoder_mode(self):
-        attn = SparseTransformerAttention(_cfg(mode="decoder"))
+        attn = SparseTransformerAttention(_cfg(dims={'mode': 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
 
@@ -80,7 +60,7 @@ class LongformerAttentionTests(unittest.TestCase):
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_mode(self):
-        attn = LongformerAttention(_cfg(mode="decoder"))
+        attn = LongformerAttention(_cfg(dims={'mode': 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
@@ -110,11 +90,7 @@ class SlidingWindowAttentionTests(unittest.TestCase):
     """SWA(w, s) with attention sinks (arXiv:2608.28444)."""
 
     def _cfg_swa(self, mode="encoder", window=5, sinks=2):
-        return _cfg(
-            mode=mode,
-            swa_window_size=window,
-            swa_num_sinks=sinks,
-        )
+        return _cfg(dims={'mode': mode}, attention={'swa': {'window_size': window, 'num_sinks': sinks}})
 
     def test_output_shape(self):
         attn = SlidingWindowAttention(self._cfg_swa())
@@ -200,14 +176,17 @@ class FastConformerAttentionTests(unittest.TestCase):
     """Limited-context attention with a head-pinned global token (arXiv:2305.05084)."""
 
     def _fc_cfg(self, **overrides):
-        base = dict(
-            fastconformer_window_size=5,
-            fastconformer_global_tokens=2,
-            fastconformer_global_tokens_spacing=2,
-            fastconformer_global_attn_separate=False,
-        )
-        base.update(overrides)
-        return _cfg(**base)
+        base = {
+            "attention": {
+                "fastconformer": {
+                    "window_size": 5,
+                    "global_tokens": 2,
+                    "global_tokens_spacing": 2,
+                    "global_attn_separate": False,
+                }
+            }
+        }
+        return _cfg(**merge_model_blocks(base, overrides))
 
     def _fc(self, **overrides):
         return FastConformerAttention(self._fc_cfg(**overrides))
@@ -217,7 +196,7 @@ class FastConformerAttentionTests(unittest.TestCase):
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_output_shape_decoder(self):
-        attn = self._fc(mode="decoder")
+        attn = self._fc(dims={"mode": 'decoder'})
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
@@ -228,7 +207,7 @@ class FastConformerAttentionTests(unittest.TestCase):
 
     def test_no_nan_or_inf(self):
         for mode in ("encoder", "decoder"):
-            attn = self._fc(mode=mode)
+            attn = self._fc(dims={"mode": mode})
             out = attn(_x())
             self.assertTrue(torch.isfinite(out).all(), msg=mode)
 
@@ -261,13 +240,13 @@ class FastConformerAttentionTests(unittest.TestCase):
         )
 
     def test_decoder_has_no_future_leak(self):
-        attn = self._fc(mode="decoder")
+        attn = self._fc(dims={"mode": 'decoder'})
         mask = attn._build_mask(SEQ, torch.device("cpu"))
         upper = torch.triu(torch.ones(SEQ, SEQ, dtype=torch.bool), diagonal=1)
         self.assertFalse((mask & upper).any())
 
     def test_decoder_global_rows_are_causal_clipped(self):
-        attn = self._fc(mode="decoder")
+        attn = self._fc(dims={"mode": 'decoder'})
         mask = attn._build_mask(SEQ, torch.device("cpu"))
         # Row 0: only itself. Row 2 (global): every past position.
         self.assertEqual(
@@ -278,8 +257,7 @@ class FastConformerAttentionTests(unittest.TestCase):
         )
 
     def test_window_larger_than_sequence_is_full_causal(self):
-        attn = self._fc(mode="decoder", fastconformer_window_size=256,
-                        fastconformer_global_tokens=1)
+        attn = self._fc(dims={"mode": 'decoder'}, attention={"fastconformer": {"window_size": 256, "global_tokens": 1}})
         mask = attn._build_mask(SEQ, torch.device("cpu"))
         causal = torch.tril(torch.ones(SEQ, SEQ, dtype=torch.bool))
         self.assertTrue(torch.equal(mask, causal))
@@ -291,7 +269,7 @@ class FastConformerAttentionTests(unittest.TestCase):
         self.assertIsNone(attn.global_q_proj)
 
     def test_separate_projections_add_three_matrices(self):
-        attn = self._fc(fastconformer_global_attn_separate=True)
+        attn = self._fc(attention={"fastconformer": {"global_attn_separate": True}})
         params = sum(p.numel() for p in attn.parameters())
         self.assertEqual(params, 7 * DIM * DIM)
         for proj in (attn.global_q_proj, attn.global_k_proj, attn.global_v_proj):
@@ -299,7 +277,7 @@ class FastConformerAttentionTests(unittest.TestCase):
 
     def test_separate_variant_forward(self):
         for mode in ("encoder", "decoder"):
-            attn = self._fc(mode=mode, fastconformer_global_attn_separate=True)
+            attn = self._fc(dims={"mode": mode}, attention={"fastconformer": {"global_attn_separate": True}})
             out = attn(_x())
             self.assertEqual(out.shape, (BSZ, SEQ, DIM))
             self.assertTrue(torch.isfinite(out).all())
@@ -307,7 +285,7 @@ class FastConformerAttentionTests(unittest.TestCase):
     def test_bitnet_uses_bitlinear(self):
         from src.model.attention.common import BitLinear
 
-        attn = self._fc(use_bitnet=True, fastconformer_global_attn_separate=True)
+        attn = self._fc(bitnet={"enabled": True}, attention={"fastconformer": {"global_attn_separate": True}})
         for proj in (
             attn.q_proj, attn.k_proj, attn.v_proj, attn.out_proj,
             attn.global_q_proj, attn.global_k_proj, attn.global_v_proj,
@@ -316,15 +294,15 @@ class FastConformerAttentionTests(unittest.TestCase):
 
     def test_invalid_window_raises(self):
         with self.assertRaisesRegex(ValueError, "fastconformer_window_size"):
-            self._fc(fastconformer_window_size=1)
+            self._fc(attention={"fastconformer": {"window_size": 1}})
 
     def test_invalid_global_tokens_raises(self):
         with self.assertRaisesRegex(ValueError, "fastconformer_global_tokens must"):
-            self._fc(fastconformer_global_tokens=-1)
+            self._fc(attention={"fastconformer": {"global_tokens": -1}})
 
     def test_invalid_spacing_raises(self):
         with self.assertRaisesRegex(ValueError, "global_tokens_spacing"):
-            self._fc(fastconformer_global_tokens_spacing=0)
+            self._fc(attention={"fastconformer": {"global_tokens_spacing": 0}})
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
@@ -347,7 +325,7 @@ class SparseKAttentionTests(unittest.TestCase):
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_mode(self):
-        attn = SparseKAttention(_cfg(mode="decoder"))
+        attn = SparseKAttention(_cfg(dims={'mode': 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
@@ -379,7 +357,7 @@ class SpargeAttentionTests(unittest.TestCase):
             self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_mode_eval(self):
-        attn = SpargeAttention(_cfg(mode="decoder"))
+        attn = SpargeAttention(_cfg(dims={'mode': 'decoder'}))
         attn.eval()
         with torch.no_grad():
             self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
@@ -405,66 +383,69 @@ class FASAAttentionTests(unittest.TestCase):
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class MSAAttentionTests(unittest.TestCase):
     def test_output_shape(self):
-        attn = MSAAttention(_cfg(num_kv_heads=2, msa_block_size=4, msa_topk_blocks=2))
+        attn = MSAAttention(_cfg(dims={'num_kv_heads': 2}, attention={'msa': {'block_size': 4, 'topk_blocks': 2}}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_mode(self):
-        attn = MSAAttention(_cfg(num_kv_heads=2, msa_block_size=4, msa_topk_blocks=2, mode="decoder"))
+        attn = MSAAttention(_cfg(dims={'num_kv_heads': 2, 'mode': 'decoder'}, attention={'msa': {'block_size': 4, 'topk_blocks': 2}}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
-        attn = MSAAttention(_cfg(num_kv_heads=2, msa_block_size=4, msa_topk_blocks=2))
+        attn = MSAAttention(_cfg(dims={'num_kv_heads': 2}, attention={'msa': {'block_size': 4, 'topk_blocks': 2}}))
         x = _x().requires_grad_(True)
         attn(x).sum().backward()
         self.assertIsNotNone(x.grad)
 
     def test_invalid_kv_heads_raises(self):
         with self.assertRaises(ValueError):
-            MSAAttention(_cfg(num_kv_heads=4))  # 4 does not divide 6
+            MSAAttention(_cfg(dims={'num_kv_heads': 4}))  # 4 does not divide 6
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class SparDAAttentionTests(unittest.TestCase):
     def test_output_shape(self):
-        attn = SparDAAttention(_cfg(num_kv_heads=2, sparda_block_size=4, sparda_topk_blocks=2))
+        attn = SparDAAttention(_cfg(dims={'num_kv_heads': 2}, attention={'sparda': {'block_size': 4, 'topk_blocks': 2}}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_mode(self):
-        attn = SparDAAttention(_cfg(num_kv_heads=2, sparda_block_size=4, sparda_topk_blocks=2, mode="decoder"))
+        attn = SparDAAttention(_cfg(dims={'num_kv_heads': 2, 'mode': 'decoder'}, attention={'sparda': {'block_size': 4, 'topk_blocks': 2}}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
-        attn = SparDAAttention(_cfg(num_kv_heads=2, sparda_block_size=4, sparda_topk_blocks=2))
+        attn = SparDAAttention(_cfg(dims={'num_kv_heads': 2}, attention={'sparda': {'block_size': 4, 'topk_blocks': 2}}))
         x = _x().requires_grad_(True)
         attn(x).sum().backward()
         self.assertIsNotNone(x.grad)
 
     def test_invalid_kv_heads_raises(self):
         with self.assertRaises(ValueError):
-            SparDAAttention(_cfg(num_kv_heads=4))
+            SparDAAttention(_cfg(dims={'num_kv_heads': 4}))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class LSAAttentionTests(unittest.TestCase):
     def _lsa_cfg(self, **overrides):
-        base = dict(
-            num_kv_heads=1,
-            lsa_cluster_block=8,
-            lsa_pool_size=2,
-            lsa_keys_per_bucket=2,
-            lsa_num_buckets=2,
-            lsa_num_long_range=4,
-            lsa_num_sinks=1,
-        )
-        base.update(overrides)
-        return _cfg(**base)
+        base = {
+            "dims": {"num_kv_heads": 1},
+            "attention": {
+                "lsa": {
+                    "cluster_block": 8,
+                    "pool_size": 2,
+                    "keys_per_bucket": 2,
+                    "num_buckets": 2,
+                    "num_long_range": 4,
+                    "num_sinks": 1,
+                }
+            },
+        }
+        return _cfg(**merge_model_blocks(base, overrides))
 
     def test_output_shape(self):
         attn = LSAAttention(self._lsa_cfg())
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_mode(self):
-        attn = LSAAttention(self._lsa_cfg(mode="decoder"))
+        attn = LSAAttention(self._lsa_cfg(dims={"mode": 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_gradient_flows(self):
@@ -477,11 +458,11 @@ class LSAAttentionTests(unittest.TestCase):
 
     def test_invalid_kv_heads_raises(self):
         with self.assertRaises(ValueError):
-            LSAAttention(_cfg(num_kv_heads=4))  # 4 does not divide 6
+            LSAAttention(_cfg(dims={'num_kv_heads': 4}))  # 4 does not divide 6
 
     def test_short_sequence_uses_window_only(self):
         # SEQ=8 < default cluster_block=512 -> no complete block: J = sinks + window.
-        attn = LSAAttention(_cfg(num_kv_heads=1))
+        attn = LSAAttention(_cfg(dims={'num_kv_heads': 1}))
         out = attn(_x())
         self.assertEqual(attn.last_num_buckets, 0)
         self.assertTrue(torch.isfinite(out).all())
@@ -494,7 +475,7 @@ class LSAAttentionTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(out).all())
 
     def test_bitnet_on(self):
-        attn = LSAAttention(self._lsa_cfg(use_bitnet=True))
+        attn = LSAAttention(self._lsa_cfg(bitnet={"enabled": True}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
 

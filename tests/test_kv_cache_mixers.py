@@ -32,27 +32,7 @@ def _build(pattern, pe="rope"):
     # Fixed construction seed: greedy parity is exact, and a few seeds produce
     # near-tied logits where full and cached paths legitimately differ.
     torch.manual_seed(4)
-    cfg = FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=32,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        retention_heads=4,
-        num_kv_heads=2,
-        dropout=0.0,
-        use_bitnet=False,
-        # MoE top-k is discrete and can flip under the tiny numeric differences
-        # between full and cached forwards; these parity tests target mixers.
-        use_moe=False,
-        layer_pattern=[pattern],
-        mode="decoder",
-        positional_encoding=pe,
-        norm_type="layer_norm",
-        ffn_hidden_size=64,
-        ode_solver="euler",
-        ode_steps=1,
-    )
+    cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 1, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": [pattern], "mode": 'decoder'}, "attention": {"retnet": {"heads": 4}, "ode": {"solver": 'euler', "steps": 1}}, "bitnet": {"enabled": False}, "moe": {"enabled": False}, "positional_encoding": pe, "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}})
     model = FrankensteinDecoder(cfg).eval()
     # Prompt/step RNG starts from a fixed seed *after* construction.
     torch.manual_seed(0)
@@ -108,22 +88,10 @@ class MixerParityTests(unittest.TestCase):
         torch.manual_seed(42)
         pattern = ["standard", "mla", "gla", "fox"]
         m1 = FrankensteinDecoder(
-            FrankensteinModelConfig.from_flat(
-                vocab_size=64, hidden_size=32, num_layers=4, num_loops=1,
-                num_heads=4, retention_heads=4, num_kv_heads=2, dropout=0.0,
-                use_bitnet=False, layer_pattern=pattern, mode="decoder",
-                positional_encoding="rope", norm_type="layer_norm",
-                ffn_hidden_size=64,
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 4, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": pattern, "mode": 'decoder'}, "attention": {"retnet": {"heads": 4}}, "bitnet": {"enabled": False}, "positional_encoding": 'rope', "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}})
         ).eval()
         m2 = FrankensteinDecoder(
-            FrankensteinModelConfig.from_flat(
-                vocab_size=64, hidden_size=32, num_layers=4, num_loops=1,
-                num_heads=4, retention_heads=4, num_kv_heads=2, dropout=0.0,
-                use_bitnet=False, layer_pattern=pattern, mode="decoder",
-                positional_encoding="rope", norm_type="layer_norm",
-                ffn_hidden_size=64,
-            )
+            FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 4, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": pattern, "mode": 'decoder'}, "attention": {"retnet": {"heads": 4}}, "bitnet": {"enabled": False}, "positional_encoding": 'rope', "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}})
         ).eval()
         m2.load_state_dict(m1.state_dict())
         prompt = torch.randint(0, 64, (1, 5))
@@ -137,28 +105,7 @@ class MixerParityTests(unittest.TestCase):
 
 def _build_lsa_small(pe: str = "nope"):
     """Tiny ``lsa`` decoder whose 4-token blocks complete during the test."""
-    cfg = FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=32,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        retention_heads=4,
-        num_kv_heads=1,
-        dropout=0.0,
-        use_bitnet=False,
-        layer_pattern=["lsa"],
-        mode="decoder",
-        positional_encoding=pe,
-        norm_type="layer_norm",
-        ffn_hidden_size=64,
-        lsa_cluster_block=4,
-        lsa_pool_size=2,
-        lsa_keys_per_bucket=2,
-        lsa_num_buckets=2,
-        lsa_num_long_range=4,
-        lsa_num_sinks=1,
-    )
+    cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 1, "num_loops": 1, "num_heads": 4, "num_kv_heads": 1, "dropout": 0.0, "layer_pattern": ['lsa'], "mode": 'decoder'}, "attention": {"retnet": {"heads": 4}, "lsa": {"cluster_block": 4, "pool_size": 2, "keys_per_bucket": 2, "num_buckets": 2, "num_long_range": 4, "num_sinks": 1}}, "bitnet": {"enabled": False}, "positional_encoding": pe, "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}})
     torch.manual_seed(0)
     return FrankensteinDecoder(cfg).eval()
 

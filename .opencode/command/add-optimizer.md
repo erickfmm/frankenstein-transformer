@@ -12,9 +12,9 @@ subtask: false
 > enums, `by_optimizer` reference, `if/then` prefix rules, attention property
 > fragments, factory dispatch, Streamlit pickers and e2e listing are all
 > **generated from the spec** by `src/registry/schema_assembly.py` and the
-> family factories. `src/utils/config_flatten.py` no longer exists: the
-> runtime config is the nested YAML shape (`FrankensteinModelConfig.from_dict`),
-> and `from_flat` is only a legacy-checkpoint/test migration path.
+> family factories. `src/utils/config_flatten.py` no longer exists and the flat
+> constructor (`from_flat`) has been removed: the runtime config is the nested
+> YAML shape (`FrankensteinModelConfig.from_dict`) end-to-end.
 >
 > The file lists below are retained for the *paper/annex/census/website*
 > phases of a core research component; the implementation/schema/dispatch

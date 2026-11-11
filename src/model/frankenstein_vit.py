@@ -34,7 +34,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .config import FrankensteinModelConfig
+from .config import FrankensteinModelConfig, merge_model_blocks
 from .hybrid_layer import HybridLayer
 from .moe import aggregate_moe_aux_losses
 from .hyperloop import HyperloopConnections
@@ -62,15 +62,15 @@ class PatchEmbed(nn.Module):
     def __init__(self, config: FrankensteinModelConfig) -> None:
         super().__init__()
         self.proj = nn.Conv2d(
-            config.in_channels,
-            config.hidden_size,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
+            config.image.in_channels,
+            config.dims.hidden_size,
+            kernel_size=config.image.patch_size,
+            stride=config.image.patch_size,
         )
-        self.patch_size = config.patch_size
+        self.patch_size = config.image.patch_size
         self.num_patches = (
-            (config.image_height // config.patch_size)
-            * (config.image_width // config.patch_size)
+            (config.image.height // config.image.patch_size)
+            * (config.image.width // config.image.patch_size)
         )
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
@@ -103,15 +103,15 @@ class FrankensteinViT(nn.Module):
     Reuses all attention mixers, norms, residuals, and the optimizer
     infrastructure from the Frankenstein codebase.
 
-    The model forces ``config.mode = "encoder"`` (ViT is bidirectional).
+    The model forces ``config.dims.mode = "encoder"`` (ViT is bidirectional).
 
     Attributes:
         config: The :class:`FrankensteinModelConfig` used to build the model.
         patch_embed: :class:`PatchEmbed` module.
-        cls_token: Learnable [CLS] token (if ``config.cls_token`` and
+        cls_token: Learnable [CLS] token (if ``config.image.cls_token`` and
             ``config.pooling_mode == "cls"``).
         pos_encoder: Shared positional encoding module (if
-            ``config.pos_embedding_type`` resolves to a learned/sinusoidal
+            ``config.image.pos_embedding_type`` resolves to a learned/sinusoidal
             absolute PE), built via :func:`build_pos_encoder`.
         mask_token: Learnable mask token (for ``patch_prediction`` task).
         dropout: Embedding dropout.
@@ -126,28 +126,28 @@ class FrankensteinViT(nn.Module):
     def __init__(self, config: Optional[FrankensteinModelConfig] = None) -> None:
         super().__init__()
         self.config = config or self.build_vit_config()
-        self.use_fixed_softmax = bool(getattr(self.config, "fixed_softmax", False))
+        self.use_fixed_softmax = bool(getattr(self.config.numerics, "fixed_softmax", False))
         self.last_auxiliary_losses: Dict[str, Any] = {}
         self.last_mixture_of_depths_stats: Dict[str, Any] = {}
         self.last_moe_stats: Dict[str, Any] = {}
 
         # ViT is bidirectional — force encoder mode.
-        if self.config.mode != "encoder":
-            self.config.mode = "encoder"
+        if self.config.dims.mode != "encoder":
+            self.config.dims.mode = "encoder"
 
         cfg = self.config
         self.num_patches = (
-            (cfg.image_height // cfg.patch_size)
-            * (cfg.image_width // cfg.patch_size)
+            (cfg.image.height // cfg.image.patch_size)
+            * (cfg.image.width // cfg.image.patch_size)
         )
 
         # ---- Patch embedding ----
         self.patch_embed = PatchEmbed(cfg)
-        self.dropout = nn.Dropout(cfg.dropout)
+        self.dropout = nn.Dropout(cfg.dims.dropout)
 
         # ---- [CLS] token (for classification with cls pooling) ----
-        self.use_cls_token = bool(cfg.cls_token and cfg.pooling_mode == "cls")
-        if self.use_cls_token and "ssog" in (cfg.layer_pattern or []):
+        self.use_cls_token = bool(cfg.image.cls_token and cfg.pooling_mode == "cls")
+        if self.use_cls_token and "ssog" in (cfg.dims.layer_pattern or []):
             raise ValueError(
                 "ssog requires the raw patch grid: a prepended [CLS] "
                 "token breaks the grid_h x grid_w raster the Gaussian field "
@@ -155,7 +155,7 @@ class FrankensteinViT(nn.Module):
                 "image.pooling_mode='gap' for global average pooling)."
             )
         if self.use_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, cfg.hidden_size))
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, cfg.dims.hidden_size))
             _trunc_normal_(self.cls_token, std=0.02)
 
         # ---- Learnable 1D positional embedding ----
@@ -169,7 +169,7 @@ class FrankensteinViT(nn.Module):
         self.use_pos_embed = pe_type in ("learned_absolute", "sinusoidal_absolute")
 
         # ---- Mask token (for patch_prediction) ----
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, cfg.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, cfg.dims.hidden_size))
         _trunc_normal_(self.mask_token, std=0.02)
 
         # ---- HybridLayer stack (reused — every layer_pattern mixer) ----
@@ -177,11 +177,11 @@ class FrankensteinViT(nn.Module):
             [
                 HybridLayer(
                     cfg,
-                    layer_type=cfg.layer_pattern[i % len(cfg.layer_pattern)],
+                    layer_type=cfg.dims.layer_pattern[i % len(cfg.dims.layer_pattern)],
                     pos_encoder=self.pos_encoder,
                     layer_index=i,
                 )
-                for i in range(cfg.num_layers)
+                for i in range(cfg.dims.num_layers)
             ]
         )
 
@@ -190,28 +190,28 @@ class FrankensteinViT(nn.Module):
         self.residual: ResidualBase = build_residual(cfg)
 
         # ---- mHC / Hyperloop (reused) ----
-        self.use_mhc = bool(getattr(cfg, "use_mhc", False))
+        self.use_mhc = bool(getattr(cfg.mhc, "enabled", False))
         # Hyperloop (arXiv:2604.21254) replaces the learned in/out projections
         # with loop-level hyper-connections using copy/avg expand-collapse.
-        self.use_hyperloop = self.use_mhc and bool(getattr(cfg, "mhc_hyperloop", False))
+        self.use_hyperloop = self.use_mhc and bool(getattr(cfg.mhc, "hyperloop", False))
         if self.use_hyperloop:
             self.hyperloop = HyperloopConnections(
-                hidden_size=cfg.hidden_size,
-                num_loops=int(cfg.num_loops),
-                expansion_rate=cfg.mhc_expansion_rate,
-                gating_init=cfg.mhc_gating_init,
-                res_parameterization=cfg.mhc_hyperloop_res_parameterization,
-                sinkhorn_iters=cfg.mhc_sinkhorn_iters,
-                use_bitnet=cfg.use_bitnet,
-                full_prec_under_bitnet=cfg.mhc_full_prec_under_bitnet,
+                hidden_size=cfg.dims.hidden_size,
+                num_loops=int(cfg.dims.num_loops),
+                expansion_rate=cfg.mhc.expansion_rate,
+                gating_init=cfg.mhc.gating_init,
+                res_parameterization=cfg.mhc.hyperloop_res_parameterization,
+                sinkhorn_iters=cfg.mhc.sinkhorn_iters,
+                use_bitnet=cfg.bitnet.enabled,
+                full_prec_under_bitnet=cfg.mhc.full_prec_under_bitnet,
             )
         elif self.use_mhc:
-            n = int(cfg.mhc_expansion_rate)
-            self.mhc_in_proj = nn.Linear(cfg.hidden_size, n * cfg.hidden_size)
-            self.mhc_out_proj = nn.Linear(n * cfg.hidden_size, cfg.hidden_size)
+            n = int(cfg.mhc.expansion_rate)
+            self.mhc_in_proj = nn.Linear(cfg.dims.hidden_size, n * cfg.dims.hidden_size)
+            self.mhc_out_proj = nn.Linear(n * cfg.dims.hidden_size, cfg.dims.hidden_size)
 
         # ---- Task-specific head ----
-        proj_cls = BitLinear if cfg.use_bitnet else nn.Linear
+        proj_cls = BitLinear if cfg.bitnet.enabled else nn.Linear
         self._build_head(proj_cls)
 
     def _build_head(self, proj_cls) -> None:
@@ -221,20 +221,20 @@ class FrankensteinViT(nn.Module):
         # the trainer via ``self._active_task`` (default: classification).
         self._active_task: str = "classification"
         # Classification head: Linear(D, num_classes), zero-init for finetune.
-        self.classification_head = proj_cls(cfg.hidden_size, cfg.num_classes)
+        self.classification_head = proj_cls(cfg.dims.hidden_size, cfg.num_classes)
         nn.init.zeros_(self.classification_head.weight)
         if self.classification_head.bias is not None:
             nn.init.zeros_(self.classification_head.bias)
         # Patch prediction head: Linear(D, target_dim).
-        if cfg.prediction_target == "mean_color_3bit":
+        if cfg.image.prediction_target == "mean_color_3bit":
             pred_dim = 512  # 3-bit per channel (8^3 = 512)
-        elif cfg.prediction_target == "downsampled_3bit":
+        elif cfg.image.prediction_target == "downsampled_3bit":
             pred_dim = 16 * 512  # 4x4 downsampled, 3-bit per pixel
         else:  # full_patch_l2
-            pred_dim = cfg.patch_size * cfg.patch_size * cfg.in_channels
-        self.patch_pred_head = proj_cls(cfg.hidden_size, pred_dim)
+            pred_dim = cfg.image.patch_size * cfg.image.patch_size * cfg.image.in_channels
+        self.patch_pred_head = proj_cls(cfg.dims.hidden_size, pred_dim)
         # Segmentation (pixel head): Linear(D, num_seg_classes) + upsampler.
-        self.seg_head = proj_cls(cfg.hidden_size, cfg.num_seg_classes)
+        self.seg_head = proj_cls(cfg.dims.hidden_size, cfg.image.num_seg_classes)
         nn.init.zeros_(self.seg_head.weight)
         if self.seg_head.bias is not None:
             nn.init.zeros_(self.seg_head.bias)
@@ -245,15 +245,15 @@ class FrankensteinViT(nn.Module):
         """Build the ViTDet-style transposed-conv upsampler for segmentation."""
         cfg = self.config
         layers: List[nn.Module] = []
-        current_scale = cfg.patch_size
+        current_scale = cfg.image.patch_size
         while current_scale > 1:
             layers.append(nn.ConvTranspose2d(
-                cfg.hidden_size, cfg.hidden_size, kernel_size=2, stride=2,
+                cfg.dims.hidden_size, cfg.dims.hidden_size, kernel_size=2, stride=2,
             ))
             layers.append(nn.GELU())
             layers.append(nn.Conv2d(
-                cfg.hidden_size, cfg.hidden_size, kernel_size=3, padding=1,
-                groups=cfg.hidden_size,  # depthwise
+                cfg.dims.hidden_size, cfg.dims.hidden_size, kernel_size=3, padding=1,
+                groups=cfg.dims.hidden_size,  # depthwise
             ))
             current_scale //= 2
         return nn.Sequential(*layers)
@@ -286,40 +286,36 @@ class FrankensteinViT(nn.Module):
             use_bitnet: Whether to use BitNet. Default: False.
             layer_pattern: Custom layer pattern. If None, defaults to
                 ``["standard"] * 12`` (pure ViT).
-            **kwargs: Additional FrankensteinModelConfig fields.
+            **kwargs: Nested ``model:`` blocks (``dims``, ``image``, ``ffn``,
+                ...) merged over the preset defaults.
 
         Returns:
             A pre-configured :class:`FrankensteinModelConfig` with ViT defaults.
         """
         if layer_pattern is None:
             layer_pattern = ["standard"] * num_layers
-        # Remove any kwargs that duplicate explicit params to avoid conflicts.
-        explicit_keys = {
-            "hidden_size", "num_layers", "num_heads", "num_loops", "patch_size",
-            "image_height", "image_width", "in_channels", "use_bitnet",
-            "layer_pattern", "ffn_activation", "ffn_hidden_size", "use_moe",
-            "norm_type", "pos_embedding_type", "mode",
+        blocks = {
+            "dims": {
+                "hidden_size": hidden_size,
+                "num_layers": num_layers,
+                "num_heads": num_heads,
+                "num_loops": num_loops,
+                "layer_pattern": layer_pattern,
+                "mode": "encoder",
+            },
+            "image": {
+                "height": image_height,
+                "width": image_width,
+                "in_channels": in_channels,
+                "patch_size": patch_size,
+                "pos_embedding_type": "learned_1d",
+            },
+            "ffn": {"activation": "gelu", "hidden_size": hidden_size * 4},
+            "moe": {"enabled": False},
+            "norm": {"type": "layer_norm"},
+            "bitnet": {"enabled": use_bitnet},
         }
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in explicit_keys}
-        return FrankensteinModelConfig.from_flat(
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            num_loops=num_loops,
-            patch_size=patch_size,
-            image_height=image_height,
-            image_width=image_width,
-            in_channels=in_channels,
-            use_bitnet=use_bitnet,
-            layer_pattern=layer_pattern,
-            ffn_activation="gelu",
-            ffn_hidden_size=hidden_size * 4,  # 4*D like ViT
-            use_moe=False,
-            norm_type="layer_norm",
-            pos_embedding_type="learned_1d",
-            mode="encoder",
-            **filtered_kwargs,
-        )
+        return FrankensteinModelConfig.from_dict(merge_model_blocks(blocks, kwargs))
 
     def _apply_masking(
         self, patch_emb: torch.Tensor,
@@ -334,14 +330,14 @@ class FrankensteinViT(nn.Module):
             ``(B, N)`` boolean tensor indicating corrupted positions.
         """
         B, N, D = patch_emb.shape
-        num_mask = max(1, int(N * self.config.mask_ratio))
+        num_mask = max(1, int(N * self.config.image.mask_ratio))
         mask_bool = torch.zeros(B, N, dtype=torch.bool, device=patch_emb.device)
         for b in range(B):
             perm = torch.randperm(N, device=patch_emb.device)[:num_mask]
             mask_bool[b, perm] = True
 
         masked = patch_emb.clone()
-        strategy = self.config.mask_token_strategy
+        strategy = self.config.image.mask_token_strategy
         if strategy == "bert":
             # 80% mask token, 10% random, 10% keep
             rand = torch.rand(B, N, device=patch_emb.device)
@@ -377,23 +373,23 @@ class FrankensteinViT(nn.Module):
         """
         # ---- Middle-cycle partitioning (Hyperloop, arXiv:2604.21254) ----
         n_begin = (
-            int(getattr(self.config, "mhc_hyperloop_begin_layers", 0))
+            int(getattr(self.config.mhc, "hyperloop_begin_layers", 0))
             if self.use_hyperloop
             else 0
         )
         n_end = (
-            int(getattr(self.config, "mhc_hyperloop_end_layers", 0))
+            int(getattr(self.config.mhc, "hyperloop_end_layers", 0))
             if self.use_hyperloop
             else 0
         )
-        n_middle = self.config.num_layers - n_begin - n_end
+        n_middle = self.config.dims.num_layers - n_begin - n_end
 
         if self.use_mhc and not self.use_hyperloop:
-            n = int(self.config.mhc_expansion_rate)
+            n = int(self.config.mhc.expansion_rate)
             bsz, seq_len, dim = x.shape
             x = self.mhc_in_proj(x).view(bsz, seq_len, n, dim)
 
-        logical_depth = int(self.config.num_layers) * int(self.config.num_loops)
+        logical_depth = int(self.config.dims.num_layers) * int(self.config.dims.num_loops)
         self.residual.register_state(num_layers=logical_depth)
         self.residual.reset_state()
         if self.residual.is_attn_res:
@@ -433,7 +429,7 @@ class FrankensteinViT(nn.Module):
 
             # Looped middle block wrapped in loop-level hyper-connections.
             middle = self.layers[n_begin : n_begin + n_middle]
-            for loop_idx in range(self.config.num_loops):
+            for loop_idx in range(self.config.dims.num_loops):
                 h_pre, h_post, h_res = hl.mappings(x, loop_idx)
                 block_in = hl.apply_fpre(x, h_pre)
                 block_out, logical_layer_idx = _run_layers(
@@ -449,7 +445,7 @@ class FrankensteinViT(nn.Module):
                 x, self.layers[n_begin + n_middle :], logical_layer_idx
             )
         else:
-            for _ in range(self.config.num_loops):
+            for _ in range(self.config.dims.num_loops):
                 x, logical_layer_idx = _run_layers(x, self.layers, logical_layer_idx)
 
         x = self.residual.finalize(x)
@@ -538,9 +534,9 @@ class FrankensteinViT(nn.Module):
             if self.use_cls_token:
                 x = x[:, 1:]
             # Reshape patch tokens to spatial feature map (B, D, H/P, W/P).
-            h = self.config.image_height // self.config.patch_size
-            w = self.config.image_width // self.config.patch_size
-            feat = x.transpose(1, 2).reshape(B, self.config.hidden_size, h, w)
+            h = self.config.image.height // self.config.image.patch_size
+            w = self.config.image.width // self.config.image.patch_size
+            feat = x.transpose(1, 2).reshape(B, self.config.dims.hidden_size, h, w)
             # Upsample D-dim features to full resolution (B, D, H, W).
             feat = self.seg_upsampler(feat)
             # Apply seg head per-pixel: (B, D, H, W) -> (B, num_seg_classes, H, W).

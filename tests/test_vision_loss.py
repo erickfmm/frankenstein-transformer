@@ -45,7 +45,7 @@ class TestSegmentationLoss:
     def test_loss_and_accuracy(self):
         cfg = FrankensteinViT.build_vit_config(
             hidden_size=64, num_layers=2, num_heads=4, patch_size=8,
-            image_height=32, image_width=32, num_seg_classes=5,
+            image_height=32, image_width=32, image={"num_seg_classes": 5},
         )
         model = FrankensteinViT(cfg)
         trainer = _make_trainer(model, "segmentation")
@@ -61,7 +61,7 @@ class TestSegmentationLoss:
         """The fixed CE must handle (B, C, H, W) logits (class dim 1)."""
         cfg = FrankensteinViT.build_vit_config(
             hidden_size=64, num_layers=2, num_heads=4, patch_size=8,
-            image_height=32, image_width=32, num_seg_classes=5,
+            image_height=32, image_width=32, image={"num_seg_classes": 5},
         )
         cfg.numerics.fixed_cross_entropy = True
         cfg.numerics.fixed_softmax = True
@@ -101,7 +101,7 @@ class TestPatchPredictionLoss:
     def test_full_patch_l2_loss(self):
         cfg = FrankensteinViT.build_vit_config(
             hidden_size=64, num_layers=2, num_heads=4, patch_size=8,
-            image_height=32, image_width=32, prediction_target="full_patch_l2",
+            image_height=32, image_width=32, image={"prediction_target": "full_patch_l2"},
         )
         model = FrankensteinViT(cfg)
         trainer = _make_trainer(model, "patch_prediction")

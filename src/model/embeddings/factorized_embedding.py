@@ -41,20 +41,20 @@ class FactorizedEmbedding(nn.Module):
                 ``hidden_size``.
         """
         super().__init__()
-        self.low_dim = config.factorized_embedding_dim
-        self.use_conv = config.use_embedding_conv
-        self.embedding = nn.Embedding(config.vocab_size, self.low_dim)
-        kernel = max(int(config.embedding_conv_kernel), 1)
+        self.low_dim = config.embedding.factorized.dim
+        self.use_conv = config.embedding.conv.enabled
+        self.embedding = nn.Embedding(config.dims.vocab_size, self.low_dim)
+        kernel = max(int(config.embedding.conv.kernel), 1)
         padding = kernel // 2
-        use_bitconv = bool(getattr(config, "use_bitnet_conv", False))
-        conv_cls = BitConv1d if (config.use_bitnet and use_bitconv) else nn.Conv1d
+        use_bitconv = bool(getattr(config.bitnet, "conv", False))
+        conv_cls = BitConv1d if (config.bitnet.enabled and use_bitconv) else nn.Conv1d
         self.conv = (
             conv_cls(self.low_dim, self.low_dim, kernel_size=kernel, padding=padding)
             if self.use_conv
             else None
         )
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
-        self.proj = proj_cls(self.low_dim, config.hidden_size, bias=False)
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
+        self.proj = proj_cls(self.low_dim, config.dims.hidden_size, bias=False)
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         """Embed token IDs and optionally apply Conv1d + projection.

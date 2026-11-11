@@ -20,21 +20,7 @@ if TORCH_AVAILABLE:
 
 
 def _build():
-    cfg = FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=32,
-        num_layers=1,
-        num_loops=1,
-        num_heads=4,
-        num_kv_heads=2,
-        dropout=0.0,
-        use_bitnet=False,
-        layer_pattern=["fasa"],
-        mode="decoder",
-        positional_encoding="rope",
-        norm_type="layer_norm",
-        ffn_hidden_size=64,
-    )
+    cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 1, "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": ['fasa'], "mode": 'decoder'}, "bitnet": {"enabled": False}, "positional_encoding": 'rope', "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}})
     torch.manual_seed(0)
     return FrankensteinDecoder(cfg)
 

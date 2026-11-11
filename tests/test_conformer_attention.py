@@ -17,35 +17,14 @@ if TORCH_AVAILABLE:
 
     from src.model.attention.common import BitLinear
     from src.model.attention.conformer import ConformerAttention, ConformerConvModule
-    from src.model.config import FrankensteinModelConfig
+    from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.embeddings import RoPE
 
 
 def _cfg(**overrides):
-    base = dict(
-        vocab_size=64,
-        hidden_size=48,
-        num_layers=1,
-        num_loops=1,
-        num_heads=6,
-        num_kv_heads=2,
-        retention_heads=6,
-        num_experts=2,
-        top_k_experts=1,
-        dropout=0.0,
-        norm_type="layer_norm",
-        use_bitnet=False,
-        layer_pattern=["standard"],
-        use_moe=False,
-        ode_solver="rk4",
-        ode_steps=1,
-        ffn_hidden_size=96,
-        ffn_activation="gelu",
-        positional_encoding="rope",
-        mode="encoder",
-    )
-    base.update(overrides)
-    return FrankensteinModelConfig.from_flat(**base)
+    base = {"dims": {"vocab_size": 64, "hidden_size": 48, "num_layers": 1, "num_loops": 1, "num_heads": 6, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": ['standard'], "mode": 'encoder'}, "attention": {"retnet": {"heads": 6}, "ode": {"solver": 'rk4', "steps": 1}}, "moe": {"num_experts": 2, "top_k": 1, "enabled": False}, "norm": {"type": 'layer_norm'}, "bitnet": {"enabled": False}, "ffn": {"hidden_size": 96, "activation": 'gelu'}, "positional_encoding": 'rope'}
+    base = merge_model_blocks(base, overrides)
+    return FrankensteinModelConfig.from_dict({**base})
 
 
 BSZ, SEQ, DIM = 2, 8, 48
@@ -68,13 +47,13 @@ class ConformerAttentionTests(unittest.TestCase):
         self.assertIsNotNone(x.grad)
 
     def test_decoder_output_shape(self):
-        attn = ConformerAttention(_cfg(mode="decoder"))
+        attn = ConformerAttention(_cfg(dims={'mode': 'decoder'}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_decoder_causality(self):
         """Future tokens must not change past outputs in decoder mode."""
         attn = ConformerAttention(
-            _cfg(mode="decoder", conformer_conv_norm="layer")
+            _cfg(dims={'mode': 'decoder'}, attention={'conformer': {'conv_norm': 'layer'}})
         )
         attn.eval()
         x = _x()
@@ -87,7 +66,7 @@ class ConformerAttentionTests(unittest.TestCase):
 
     def test_encoder_is_bidirectional(self):
         """Encoder mode keeps the convolution symmetric (no causal trim)."""
-        attn = ConformerAttention(_cfg(conformer_conv_norm="layer"))
+        attn = ConformerAttention(_cfg(attention={'conformer': {'conv_norm': 'layer'}}))
         attn.eval()
         x = _x()
         x_future = x.clone()
@@ -98,8 +77,8 @@ class ConformerAttentionTests(unittest.TestCase):
         self.assertFalse(torch.allclose(y, y_future))
 
     def test_macaron_on_off(self):
-        on = ConformerAttention(_cfg(conformer_macaron=True))
-        off = ConformerAttention(_cfg(conformer_macaron=False))
+        on = ConformerAttention(_cfg(attention={'conformer': {'macaron': True}}))
+        off = ConformerAttention(_cfg(attention={'conformer': {'macaron': False}}))
         self.assertTrue(on.macaron)
         self.assertFalse(off.macaron)
 
@@ -119,7 +98,7 @@ class ConformerAttentionTests(unittest.TestCase):
         rope = RoPE(head_dim=DIM // 6)
         on = ConformerAttention(_cfg(), pos_encoder=rope)
         off = ConformerAttention(
-            _cfg(conformer_use_pe=False), pos_encoder=rope
+            _cfg(positional_encoding_parameters={'use_pe': {'conformer_use_pe': False}}), pos_encoder=rope
         )
         off.load_state_dict(on.state_dict())
         on.eval()
@@ -135,12 +114,12 @@ class ConformerAttentionTests(unittest.TestCase):
 
     def test_conv_norm_variants(self):
         for conv_norm in ("batch", "group", "layer"):
-            attn = ConformerAttention(_cfg(conformer_conv_norm=conv_norm))
+            attn = ConformerAttention(_cfg(attention={'conformer': {'conv_norm': conv_norm}}))
             self.assertEqual(attn.conv.conv_norm, conv_norm)
             self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
     def test_bitnet_projections(self):
-        attn = ConformerAttention(_cfg(use_bitnet=True))
+        attn = ConformerAttention(_cfg(bitnet={'enabled': True}))
         self.assertIsInstance(attn.q_proj, BitLinear)
         self.assertIsInstance(attn.k_proj, BitLinear)
         self.assertIsInstance(attn.v_proj, BitLinear)
@@ -190,18 +169,18 @@ class ConformerAttentionTests(unittest.TestCase):
 
     def test_invalid_kv_heads_raises(self):
         with self.assertRaises(ValueError):
-            ConformerAttention(_cfg(num_kv_heads=5))  # 5 does not divide 6
+            ConformerAttention(_cfg(dims={'num_kv_heads': 5}))  # 5 does not divide 6
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class ConformerConfigValidationTests(unittest.TestCase):
     def test_invalid_kernel_size_raises(self):
         with self.assertRaises(ValueError):
-            _cfg(conformer_kernel_size=0)
+            _cfg(attention={'conformer': {'kernel_size': 0}})
 
     def test_invalid_conv_norm_raises(self):
         with self.assertRaises(ValueError):
-            _cfg(conformer_conv_norm="instance")
+            _cfg(attention={'conformer': {'conv_norm': 'instance'}})
 
     def test_conv_module_rejects_bad_kernel(self):
         with self.assertRaises(ValueError):

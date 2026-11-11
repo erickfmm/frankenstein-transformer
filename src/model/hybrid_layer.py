@@ -112,10 +112,10 @@ class HybridLayer(nn.Module):
         # with loop-level hyper-connections owned by the encoder: layers run
         # the standard C-dimensional path, and MoD becomes compatible again
         # (the n-stream residual only exists between loop iterations).
-        self.use_mhc = bool(getattr(config, "use_mhc", False)) and not bool(
-            getattr(config, "mhc_hyperloop", False)
+        self.use_mhc = bool(getattr(config.mhc, "enabled", False)) and not bool(
+            getattr(config.mhc, "hyperloop", False)
         )
-        self.use_mixture_of_depths = bool(getattr(config, "use_mixture_of_depths", False))
+        self.use_mixture_of_depths = bool(getattr(config.mixture_of_depths, "enabled", False))
         if self.use_mhc and self.use_mixture_of_depths:
             raise ValueError(
                 "mHC (use_mhc) and Mixture-of-Depths (use_mixture_of_depths) "
@@ -128,27 +128,27 @@ class HybridLayer(nn.Module):
         self.use_moe = bool(config.is_moe_layer(self.layer_index))
         if self.use_moe:
             moe_rank = sum(config.moe_layer_mask()[: self.layer_index])
-            self.use_hash = moe_rank < int(getattr(config, "moe_hash_layers", 0))
+            self.use_hash = moe_rank < int(getattr(config.moe.routing, "hash_layers", 0))
         else:
             self.use_hash = False
         self.mixture_of_depths_capacity_ratio = float(
-            getattr(config, "mixture_of_depths_capacity_ratio", 1.0)
+            getattr(config.mixture_of_depths, "capacity_ratio", 1.0)
         )
         self.mixture_of_depths_router_aux_loss_weight = float(
-            getattr(config, "mixture_of_depths_router_aux_loss_weight", 0.0)
+            getattr(config.mixture_of_depths, "router_aux_loss_weight", 0.0)
         )
         self.last_mixture_of_depths_aux_loss: Optional[torch.Tensor] = None
         self.last_mixture_of_depths_selected_fraction: float = 1.0
         self.last_mixture_of_depths_capacity: Optional[int] = None
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
-        router_cls = BitLinear if (config.use_bitnet and getattr(config, "bitnet_routers", False)) else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
+        router_cls = BitLinear if (config.bitnet.enabled and getattr(config.bitnet, "routers", False)) else nn.Linear
 
         # Residual-connection strategy (arXiv:2603.15031). Decides whether
         # to add the layer output to the residual (standard / none / AttnRes
         # managed externally by the encoder).
         ensure_builtins()
-        self.residual_type = str(getattr(config, "residual_type", "standard")).lower()
+        self.residual_type = str(getattr(config.residuals, "type", "standard")).lower()
         if self.residual_type not in registry.names(ComponentFamily.RESIDUAL):
             raise ValueError(
                 f"Unknown residual_type {self.residual_type!r}; expected one of "
@@ -173,10 +173,10 @@ class HybridLayer(nn.Module):
         # Transversal fixed-numerics opt-in (arXiv:2610.31642): attached here so
         # every mixer (and the KV-cache hooks that receive it) can dispatch its
         # explicit softmax/log-softmax through ``numerics.module_softmax``.
-        self.mixer.use_fixed_softmax = bool(getattr(config, "fixed_softmax", False))
+        self.mixer.use_fixed_softmax = bool(getattr(config.numerics, "fixed_softmax", False))
 
         self.norm2 = get_norm(config)
-        is_glu = config.ffn_activation in GLU_VARIANTS
+        is_glu = config.ffn.activation in GLU_VARIANTS
 
         # FlashNorm fusion (Prop. 2 of arXiv:2407.09577): when norm_type is
         # flash_norm and the FFN is the simple elementwise non-MoE path,
@@ -187,7 +187,7 @@ class HybridLayer(nn.Module):
         fuse_ffn_input = (
             is_norm_fusable(config) and not is_glu and not self.use_moe
         )
-        flashnorm_partial_ratio = float(getattr(config, "flashnorm_partial_ratio", 0.0))
+        flashnorm_partial_ratio = float(getattr(config.norm, "flashnorm_partial_ratio", 0.0))
 
         def _build_ffn(
             intermediate_size: Optional[int] = None,
@@ -198,31 +198,31 @@ class HybridLayer(nn.Module):
 
             Args:
                 intermediate_size: FFN width; defaults to
-                    ``config.ffn_hidden_size``.
+                    ``config.ffn.hidden_size``.
                 in_out_size: Input/output width; defaults to
-                    ``config.hidden_size``. LatentMoE experts pass the latent
+                    ``config.dims.hidden_size``. LatentMoE experts pass the latent
                     width here.
                 clamp: Upper bound applied to the activation input; ``0``
                     disables it (``moe.experts.activation_clamp``).
             """
-            width = int(intermediate_size or config.ffn_hidden_size)
-            in_out = int(in_out_size or config.hidden_size)
+            width = int(intermediate_size or config.ffn.hidden_size)
+            in_out = int(in_out_size or config.dims.hidden_size)
             if is_glu:
                 # Gated FFN units own their projections; use the same
                 # proj_cls (BitLinear when BitNet is on) for BitNet parity.
                 return make_gated_ffn(
-                    config.ffn_activation,
+                    config.ffn.activation,
                     hidden_size=in_out,
                     intermediate_size=width,
                     bias=False,
-                    dropout=float(getattr(config, "dropout", 0.0) or 0.0),
+                    dropout=float(getattr(config.dims, "dropout", 0.0) or 0.0),
                     proj_factory=proj_cls,
                     clamp_value=(float(clamp) if clamp else None),
                 )
-            if fuse_ffn_input and in_out == config.hidden_size:
+            if fuse_ffn_input and in_out == config.dims.hidden_size:
                 # Fused first projection: FlashNorm + Linear in one module.
                 # The bias-free path applies Prop. 2 (deferred scalar RMS).
-                if config.use_bitnet:
+                if config.bitnet.enabled:
                     first_proj = FlashNormBitLinear(
                         in_out,
                         width,
@@ -251,7 +251,7 @@ class HybridLayer(nn.Module):
 
         self.moe_layer = None
         if self.use_moe:
-            self.top_k = int(config.top_k_experts)
+            self.top_k = int(config.moe.top_k)
             self.ffn = None
             # Router and latent projections share the MoE layer; the router
             # uses ``router_cls`` (BitLinear only with ``bitnet_routers``)
@@ -267,27 +267,27 @@ class HybridLayer(nn.Module):
             self.top_k = 0
             self.ffn = _build_ffn()
         self.depth_router = (
-            router_cls(config.hidden_size, 1, bias=False) if self.use_mixture_of_depths else None
+            router_cls(config.dims.hidden_size, 1, bias=False) if self.use_mixture_of_depths else None
         )
 
         # mHC: one module per layer function (attention, then FFN). The n-stream
         # residual is shared and read/written by both sub-functions.
         if self.use_mhc:
             self.mhc_attn = ManifoldHyperConnections(
-                hidden_size=config.hidden_size,
-                expansion_rate=config.mhc_expansion_rate,
-                sinkhorn_iters=config.mhc_sinkhorn_iters,
-                gating_init=config.mhc_gating_init,
-                use_bitnet=config.use_bitnet,
-                full_prec_under_bitnet=config.mhc_full_prec_under_bitnet,
+                hidden_size=config.dims.hidden_size,
+                expansion_rate=config.mhc.expansion_rate,
+                sinkhorn_iters=config.mhc.sinkhorn_iters,
+                gating_init=config.mhc.gating_init,
+                use_bitnet=config.bitnet.enabled,
+                full_prec_under_bitnet=config.mhc.full_prec_under_bitnet,
             )
             self.mhc_ffn = ManifoldHyperConnections(
-                hidden_size=config.hidden_size,
-                expansion_rate=config.mhc_expansion_rate,
-                sinkhorn_iters=config.mhc_sinkhorn_iters,
-                gating_init=config.mhc_gating_init,
-                use_bitnet=config.use_bitnet,
-                full_prec_under_bitnet=config.mhc_full_prec_under_bitnet,
+                hidden_size=config.dims.hidden_size,
+                expansion_rate=config.mhc.expansion_rate,
+                sinkhorn_iters=config.mhc.sinkhorn_iters,
+                gating_init=config.mhc.gating_init,
+                use_bitnet=config.bitnet.enabled,
+                full_prec_under_bitnet=config.mhc.full_prec_under_bitnet,
             )
         else:
             self.mhc_attn = None

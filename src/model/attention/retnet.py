@@ -67,12 +67,12 @@ class MultiScaleRetention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "retnet", params)
         super().__init__()
-        self.dim = config.hidden_size
+        self.dim = config.dims.hidden_size
         self.heads = params.heads
         self.head_dim = self.dim // self.heads
         self.scale = self.head_dim ** -0.5
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.q_proj = proj_cls(self.dim, self.dim, bias=False)
         self.k_proj = proj_cls(self.dim, self.dim, bias=False)
         self.v_proj = proj_cls(self.dim, self.dim, bias=False)
@@ -81,8 +81,8 @@ class MultiScaleRetention(nn.Module):
         self.swish = nn.SiLU()
         self.norm = get_norm(config)
 
-        self.register_buffer("decay_mask", self._build_decay_mask(config.hidden_size, 2048))
-        self.mode = getattr(config, "mode", "encoder")
+        self.register_buffer("decay_mask", self._build_decay_mask(config.dims.hidden_size, 2048))
+        self.mode = getattr(config.dims, "mode", "encoder")
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()

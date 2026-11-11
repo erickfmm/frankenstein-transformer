@@ -235,8 +235,8 @@ class CCAAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "cca", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for CCAAttention")
@@ -275,7 +275,7 @@ class CCAAttention(nn.Module):
 
         self.rope_base = float(getattr(config, "rope_base", 10000.0))
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         packed_dim = 2 * self.latent_dim
         self.linear_qk = proj_cls(self.hidden_size, packed_dim, bias=False)
 
@@ -306,8 +306,8 @@ class CCAAttention(nn.Module):
             self.conv_qk1 = None
 
         self.temp = nn.Parameter(torch.zeros(1))
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
         self.scale = self.latent_head_dim ** -0.5
         self.pos_encoder = pos_encoder
         # Rotary PEs rotate q/k inside the latent, so they need an encoder
@@ -477,8 +477,8 @@ class CCGQAAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "ccgqa", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for CCGQAAttention")
 
@@ -537,7 +537,7 @@ class CCGQAAttention(nn.Module):
 
         self.rope_base = float(getattr(config, "rope_base", 10000.0))
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         packed_dim = self.query_latent_dim + self.kv_latent_dim
         self.linear_qk = proj_cls(self.hidden_size, packed_dim, bias=False)
 
@@ -571,8 +571,8 @@ class CCGQAAttention(nn.Module):
             self.conv_qk1 = None
 
         self.temp = nn.Parameter(torch.zeros(1))
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
         self.scale = self.latent_head_dim ** -0.5
         self.pos_encoder = pos_encoder
         # Rotary PEs rotate q/k inside the latent, so they need an encoder

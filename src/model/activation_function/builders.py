@@ -61,7 +61,7 @@ def _feature_dim(config: Any, dim: Optional[int]) -> int:
     """Resolve the feature dimension an activation operates on."""
     if dim is not None:
         return int(dim)
-    return int(getattr(config, "hidden_size", 1))
+    return int(getattr(config.dims, "hidden_size", 1))
 
 
 def build_silu(

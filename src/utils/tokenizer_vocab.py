@@ -66,7 +66,7 @@ def inject_token_vocab(config: Any, tokenizer: Any) -> None:
         config: :class:`FrankensteinModelConfig` (or ``None``).
         tokenizer: Tokenizer instance used to encode the data.
     """
-    if config is None or not bool(getattr(config, "use_dynamic_embedding", False)):
+    if config is None or not bool(getattr(config.embedding.dynamic, "enabled", False)):
         return
     strings = token_strings(tokenizer)
     if strings is None:
@@ -79,4 +79,4 @@ def inject_token_vocab(config: Any, tokenizer: Any) -> None:
     # Keep the model vocabulary aligned with the ids the tokenizer can emit.
     # The HF paths already inject ``len(tokenizer)``, but the legacy SPM path
     # does not: its on-disk model may round the requested vocabulary size.
-    config.vocab_size = len(strings)
+    config.dims.vocab_size = len(strings)

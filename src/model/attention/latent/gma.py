@@ -142,8 +142,8 @@ class GaussianMixtureAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "gma", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError(
                 "hidden_size must be divisible by num_heads for "
@@ -151,7 +151,7 @@ class GaussianMixtureAttention(nn.Module):
             )
         self.head_dim = self.hidden_size // self.num_heads
 
-        # GMA knobs (flattened from model.attention.gma.* by config_flatten).
+        # GMA knobs (bound from model.attention.gma.* through the component spec).
         self.num_components = int(params.value("num_components", 8))
         if self.num_components < 1:
             raise ValueError(
@@ -177,8 +177,8 @@ class GaussianMixtureAttention(nn.Module):
             )
         self.init_mean_std = float(params.value("init_mean_std", 1.0))
 
-        self.mode = getattr(config, "mode", "encoder")
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.mode = getattr(config.dims, "mode", "encoder")
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
 
         # Q/K project into the *routing* space (d_r); V projects into the
         # value space (d_v = head_dim). out_proj maps the concatenated
@@ -187,7 +187,7 @@ class GaussianMixtureAttention(nn.Module):
         self.k_proj = proj_cls(self.hidden_size, self.num_heads * self.routing_dim, bias=False)
         self.v_proj = proj_cls(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.out_proj = proj_cls(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.dims.dropout)
 
         # Per-head Gaussian mixture parameters (arXiv:2606.18283, Sec. 3.7).
         #   mu    : component means          (H, K, d_r)

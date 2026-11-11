@@ -207,9 +207,9 @@ class ConformerAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None) -> None:
         params = mixer_params(config, "conformer", params)
         super().__init__()
-        self.hidden_size = int(config.hidden_size)
-        self.num_heads = int(config.num_heads)
-        self.num_kv_heads = int(getattr(config, "num_kv_heads", 1))
+        self.hidden_size = int(config.dims.hidden_size)
+        self.num_heads = int(config.dims.num_heads)
+        self.num_kv_heads = int(getattr(config.dims, "num_kv_heads", 1))
         self.head_dim = self.hidden_size // self.num_heads
         self.scale = self.head_dim ** -0.5
 
@@ -229,7 +229,7 @@ class ConformerAttention(nn.Module):
             )
         self.num_groups = self.num_heads // self.num_kv_heads
 
-        self.mode = getattr(config, "mode", "encoder")
+        self.mode = getattr(config.dims, "mode", "encoder")
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()
         self.use_pe = bool(use_pe_for(config, "conformer", True))
@@ -242,7 +242,7 @@ class ConformerAttention(nn.Module):
         self.kernel_size = int(params.value("kernel_size", 32))
         self.conv_norm = str(params.value("conv_norm", "batch")).lower()
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.q_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.k_proj = proj_cls(
             self.hidden_size, self.num_kv_heads * self.head_dim, bias=False
@@ -251,13 +251,13 @@ class ConformerAttention(nn.Module):
             self.hidden_size, self.num_kv_heads * self.head_dim, bias=False
         )
         self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.dims.dropout)
 
-        ffn_hidden = int(getattr(config, "ffn_hidden_size", self.hidden_size * 2))
+        ffn_hidden = int(getattr(config.ffn, "hidden_size", self.hidden_size * 2))
         self.ff_in = proj_cls(self.hidden_size, ffn_hidden)
         self.activation = get_activation(config, dim=ffn_hidden)
         self.ff_out = proj_cls(ffn_hidden, self.hidden_size)
-        self.ffn_dropout = nn.Dropout(config.dropout)
+        self.ffn_dropout = nn.Dropout(config.dims.dropout)
 
         self.norm_ffn1 = get_norm(config)
         self.norm_attn = get_norm(config)
@@ -268,7 +268,7 @@ class ConformerAttention(nn.Module):
             kernel_size=self.kernel_size,
             conv_norm=self.conv_norm,
             causal=self.mode == "decoder",
-            dropout=config.dropout,
+            dropout=config.dims.dropout,
         )
 
     def _macaron_ffn(self, x: torch.Tensor) -> torch.Tensor:

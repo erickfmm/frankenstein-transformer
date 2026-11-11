@@ -151,18 +151,18 @@ class SparseKAttention(nn.Module):
         """
         params = mixer_params(config, "sparsek", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.scale = self.head_dim ** -0.5
 
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for SparseKAttention")
 
-        self.k = max(1, int(getattr(config, "sparsek_k", 128)))
+        self.k = max(1, int(params.value("k", 128)))
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
-        router_cls = BitLinear if (config.use_bitnet and getattr(config, "bitnet_routers", False)) else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
+        router_cls = BitLinear if (config.bitnet.enabled and getattr(config.bitnet, "routers", False)) else nn.Linear
         self.q_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.k_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
@@ -173,8 +173,8 @@ class SparseKAttention(nn.Module):
             nn.ReLU(),
             router_cls(self.head_dim, 1),
         )
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
 
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()

@@ -91,7 +91,7 @@ class TestAudioTrainingDispatch:
             config_path_hint=str(tmp_path),
         )
         assert isinstance(result.model, FrankensteinAudio)
-        assert result.model.config.mode == "encoder"
+        assert result.model.config.dims.mode == "encoder"
         assert result.model.asr_loss == "ctc"
         assert result.final_epoch == 1
         assert result.best_loss is not None
@@ -131,7 +131,7 @@ class TestAsrLossOverride:
         path.write_text(yaml.safe_dump(config), encoding="utf-8")
         loaded = load_training_config(str(path))
         assert loaded.task == "asr"
-        assert loaded.model_config.asr_loss == "transducer"
+        assert loaded.model_config.audio.asr_loss == "transducer"
 
     def test_invalid_training_asr_loss_rejected(self, tmp_path):
         import yaml

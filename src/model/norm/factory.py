@@ -59,33 +59,33 @@ def is_norm_fusable(config: Any) -> bool:
 
 def _build_layer_norm(config: Any, params) -> nn.Module:
     """Build a standard :class:`nn.LayerNorm`."""
-    return nn.LayerNorm(config.hidden_size)
+    return nn.LayerNorm(config.dims.hidden_size)
 
 
 def _build_dynamic_tanh(config: Any, params) -> nn.Module:
     """Build a DynamicTanhNorm."""
-    return DynamicTanhNorm(config.hidden_size)
+    return DynamicTanhNorm(config.dims.hidden_size)
 
 
 def _build_derf(config: Any, params) -> nn.Module:
     """Build a Derf normalization."""
-    return Derf(config.hidden_size)
+    return Derf(config.dims.hidden_size)
 
 
 def _build_rms_norm(config: Any, params) -> nn.Module:
     """Build a full RMSNorm."""
-    return RMSNorm(config.hidden_size)
+    return RMSNorm(config.dims.hidden_size)
 
 
 def _build_prms_norm(config: Any, params) -> nn.Module:
     """Build a partial RMSNorm."""
-    return RMSNorm(config.hidden_size, partial_ratio=float(params.partial_ratio))
+    return RMSNorm(config.dims.hidden_size, partial_ratio=float(params.partial_ratio))
 
 
 def _build_flash_norm(config: Any, params) -> nn.Module:
     """Build a (possibly partial) FlashNorm."""
     return FlashNorm(
-        config.hidden_size, partial_ratio=float(params.flashnorm_partial_ratio)
+        config.dims.hidden_size, partial_ratio=float(params.flashnorm_partial_ratio)
     )
 
 
@@ -125,6 +125,6 @@ def get_norm(config: Any) -> nn.Module:
         logging.getLogger("frankenstein.config").warning(
             "Unknown norm type %r; falling back to layer_norm.", config.norm.type
         )
-        return nn.LayerNorm(config.hidden_size)
+        return nn.LayerNorm(config.dims.hidden_size)
     params = bind_params(spec, _declared_norm_params(spec, config))
     return resolve_builder(spec.builder)(config, params)

@@ -132,7 +132,9 @@ with $\mu(\Delta)=J_1/J_0$ the normalized retrieval position inside a segment. B
     \item \textbf{Weaknesses}: The quadratic attention arithmetic persists; source-code performance is the weakest of the five architectures (Stack-smol 3.3451 BPB); reduced robustness to byte deletion and ``antspeak'' perturbations.
 \end{itemize}
 
-\subsection{Token-Indexed Memory: Memory Attention}
+\subsection{Memory Attention}
+
+The memory family groups Titans (the attention window implemented here), Engram (Appendix~\ref{sec:annex-runtime}) and Memory Attention; this annex covers the attention-side members.
 
 \begin{figure}[H]
 \centering

@@ -36,27 +36,7 @@ def _build(pattern, pe="rope", **extra):
     # sequences exactly, and some seeds produce near-tied retnet/PE logits
     # where full and cached paths legitimately pick different tokens.
     torch.manual_seed(3)
-    cfg = FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=32,
-        num_layers=len(pattern),
-        num_loops=1,
-        num_heads=4,
-        retention_heads=4,
-        num_kv_heads=2,
-        dropout=0.0,
-        use_bitnet=False,
-        # The PE-fallback parity check targets positional encodings, not MoE.
-        use_moe=False,
-        layer_pattern=list(pattern),
-        mode="decoder",
-        positional_encoding=pe,
-        norm_type="layer_norm",
-        ffn_hidden_size=64,
-        ode_solver="euler",
-        ode_steps=1,
-        **extra,
-    )
+    cfg = FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": len(pattern), "num_loops": 1, "num_heads": 4, "num_kv_heads": 2, "dropout": 0.0, "layer_pattern": list(pattern), "mode": 'decoder'}, "attention": {"retnet": {"heads": 4}, "ode": {"solver": 'euler', "steps": 1}}, "bitnet": {"enabled": False}, "moe": {"enabled": False}, "positional_encoding": pe, "norm": {"type": 'layer_norm'}, "ffn": {"hidden_size": 64}, **extra})
     model = FrankensteinDecoder(cfg).eval()
     # Prompt/step RNG starts from a fixed seed *after* construction.
     torch.manual_seed(0)

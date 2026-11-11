@@ -90,8 +90,8 @@ class GQLAAttention(nn.Module):
     def __init__(self, config, pos_encoder=None, params=None):
         params = mixer_params(config, "gqla", params)
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_heads
+        self.hidden_size = config.dims.hidden_size
+        self.num_heads = config.dims.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for GQLAAttention")
@@ -107,14 +107,14 @@ class GQLAAttention(nn.Module):
         if self.decode_path not in {"mqa_absorb", "gqa"}:
             raise ValueError("gqla_decode_path must be 'mqa_absorb' or 'gqa'")
 
-        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        proj_cls = BitLinear if config.bitnet.enabled else nn.Linear
         self.dkv_proj = proj_cls(self.hidden_size, self.latent_rank, bias=False)
         self.uk_proj = proj_cls(self.latent_rank, self.num_heads * self.head_dim, bias=False)
         self.uv_proj = proj_cls(self.latent_rank, self.num_heads * self.head_dim, bias=False)
         self.q_proj = proj_cls(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.out_proj = proj_cls(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.dropout)
-        self.mode = getattr(config, "mode", "encoder")
+        self.dropout = nn.Dropout(config.dims.dropout)
+        self.mode = getattr(config.dims, "mode", "encoder")
         self.scale = self.head_dim ** -0.5
         self.pos_encoder = pos_encoder
         self.pe_type = str(getattr(config, "positional_encoding", "rope")).lower()

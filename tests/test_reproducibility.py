@@ -48,14 +48,7 @@ except ImportError:  # pragma: no cover - torch-free schema runs
 
 
 def _tiny_config() -> "FrankensteinModelConfig":
-    return FrankensteinModelConfig.from_flat(
-        vocab_size=64,
-        hidden_size=32,
-        num_layers=2,
-        num_loops=1,
-        num_heads=4,
-        layer_pattern=["standard", "standard"],
-    )
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 32, "num_layers": 2, "num_loops": 1, "num_heads": 4, "layer_pattern": ['standard', 'standard']}})
 
 
 def test_schema_seed_default_matches_training_config():

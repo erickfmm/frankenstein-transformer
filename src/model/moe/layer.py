@@ -74,31 +74,31 @@ class MoELayer(nn.Module):
     ):
         super().__init__()
         self.config = config
-        self.num_experts = int(config.num_experts)
-        self.top_k = int(config.top_k_experts)
-        self.hidden_size = int(config.hidden_size)
+        self.num_experts = int(config.moe.num_experts)
+        self.top_k = int(config.moe.top_k)
+        self.hidden_size = int(config.dims.hidden_size)
         self.expert_hidden_size = int(
-            config.moe_expert_hidden_size or config.ffn_hidden_size
+            config.moe.expert_hidden_size or config.ffn.hidden_size
         )
-        self.routing_type = str(config.moe_routing_type)
-        self.capacity_factor = float(config.moe_capacity_factor)
-        self.aux_loss_type = str(config.moe_aux_loss_type)
-        self.aux_loss_coeff = float(config.moe_aux_loss_coeff)
-        self.activation_clamp = float(config.moe_activation_clamp)
-        self.latent_enabled = bool(config.moe_latent_enabled)
+        self.routing_type = str(config.moe.routing.type)
+        self.capacity_factor = float(config.moe.routing.capacity_factor)
+        self.aux_loss_type = str(config.moe.balancing.aux_loss)
+        self.aux_loss_coeff = float(config.moe.balancing.aux_loss_coeff)
+        self.activation_clamp = float(config.moe.experts.activation_clamp)
+        self.latent_enabled = bool(config.moe.latent.enabled)
         self.latent_dim = (
-            int(config.moe_latent_dim) if config.moe_latent_dim else self.hidden_size
+            int(config.moe.latent.dim) if config.moe.latent.dim else self.hidden_size
         )
         self.latent_norm_before_up_proj = bool(
-            config.moe_latent_norm_before_up_proj
+            config.moe.latent.norm_before_up_proj
         )
-        self.shared_count = int(config.moe_shared_experts_count)
+        self.shared_count = int(config.moe.shared.count)
         self.shared_hidden_size = int(
-            config.moe_shared_expert_hidden_size or self.expert_hidden_size
+            config.moe.shared.hidden_size or self.expert_hidden_size
         )
-        self.shared_gate = str(config.moe_shared_expert_gate)
-        self.routed_scaling_factor = float(config.moe_routed_scaling_factor)
-        self.use_hash = bool(use_hash) and int(config.moe_hash_layers) > 0
+        self.shared_gate = str(config.moe.shared.gate)
+        self.routed_scaling_factor = float(config.moe.router.routed_scaling_factor)
+        self.use_hash = bool(use_hash) and int(config.moe.routing.hash_layers) > 0
 
         inner = self.latent_dim if self.latent_enabled else self.hidden_size
         self.inner_size = inner
@@ -108,17 +108,17 @@ class MoELayer(nn.Module):
             hidden_size=self.hidden_size,
             num_experts=self.num_experts,
             top_k=self.top_k,
-            scoring=str(config.moe_router_scoring),
-            pre_softmax=bool(config.moe_router_pre_softmax),
-            renormalize=bool(config.moe_router_renormalize),
+            scoring=str(config.moe.router.scoring),
+            pre_softmax=bool(config.moe.router.pre_softmax),
+            renormalize=bool(config.moe.router.renormalize),
             routed_scaling_factor=self.routed_scaling_factor,
-            dtype=str(config.moe_router_dtype),
-            jitter_eps=float(config.moe_router_jitter_eps),
-            z_loss_coeff=float(config.moe_router_z_loss_coeff),
+            dtype=str(config.moe.router.dtype),
+            jitter_eps=float(config.moe.router.jitter_eps),
+            z_loss_coeff=float(config.moe.router.z_loss_coeff),
             bias_update=(
-                "none" if self.use_hash else str(config.moe_bias_update)
+                "none" if self.use_hash else str(config.moe.balancing.bias_update)
             ),
-            bias_update_rate=float(config.moe_bias_update_rate),
+            bias_update_rate=float(config.moe.balancing.bias_update_rate),
             linear_factory=router_factory,
         )
 
@@ -185,15 +185,15 @@ class MoELayer(nn.Module):
         Returns:
             Long tensor mapping each token id to ``top_k`` expert indices.
         """
-        vocab = int(config.vocab_size)
+        vocab = int(config.dims.vocab_size)
         k = self.top_k
         e = self.num_experts
-        if str(config.moe_hash_table) == "round_robin":
+        if str(config.moe.routing.hash_table) == "round_robin":
             rows = torch.arange(vocab).unsqueeze(1)
             cols = torch.arange(k).unsqueeze(0)
             return ((rows + cols) % e).long()
 
-        generator = torch.Generator().manual_seed(int(config.moe_hash_seed))
+        generator = torch.Generator().manual_seed(int(config.moe.routing.hash_seed))
         chunks: List[torch.Tensor] = []
         chunk_size = 65_536
         for start in range(0, vocab, chunk_size):
@@ -316,7 +316,7 @@ class MoELayer(nn.Module):
             weight_sum.index_add_(0, tokens, weights.unsqueeze(-1))
             norms[expert_idx] += expert_out.norm(dim=-1).sum()
             norm_counts[expert_idx] += expert_out.shape[0]
-        if self.config.moe_router_renormalize:
+        if self.config.moe.router.renormalize:
             out = out / weight_sum.clamp_min(1e-12)
         self._last_expert_norms = (norms, norm_counts, num_tokens)
         self._last_expert_choice_counts = torch.full(

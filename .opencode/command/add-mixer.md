@@ -12,9 +12,9 @@ subtask: false
 > enums, `by_optimizer` reference, `if/then` prefix rules, attention property
 > fragments, factory dispatch, Streamlit pickers and e2e listing are all
 > **generated from the spec** by `src/registry/schema_assembly.py` and the
-> family factories. `src/utils/config_flatten.py` no longer exists: the
-> runtime config is the nested YAML shape (`FrankensteinModelConfig.from_dict`),
-> and `from_flat` is only a legacy-checkpoint/test migration path.
+> family factories. `src/utils/config_flatten.py` no longer exists and the flat
+> constructor (`from_flat`) has been removed: the runtime config is the nested
+> YAML shape (`FrankensteinModelConfig.from_dict`) end-to-end.
 >
 > The file lists below are retained for the *paper/annex/census/website*
 > phases of a core research component; the implementation/schema/dispatch
@@ -140,8 +140,8 @@ plan:
   `src/schema/_model.yaml` (`model.attention` `$ref` block + the mixer name lists
   in its bilingual descriptions), one `_attention_<mixer>.yaml` knob file as
   template (`_attention_swa.yaml`), `src/schema/_model/_positional_encoding.yaml`
-  `per_mixer_use_pe` map, `src/utils/config_flatten.py`
-  `_ATTENTION_MIXER_RENAMES`, `src/model/config.py` knob fields + validation.
+  `use_pe.<mixer>_use_pe` map, and the mixer's `ComponentSpec` in
+  `src/registry/builtin/attention.py` (knobs, defaults, validation).
 - Tests: `tests/test_schema_attention_layers.py` (expected enum set),
   `tests/test_schema_consistency.py` (`test_layer_pattern_enum_matches_documentation`,
   `test_schema_defaults_match_dataclass`, preset validation),
@@ -253,11 +253,11 @@ intent:
 
 | # | File | Planned change (be concrete) |
 |---|---|---|
-| 1 | `src/model/attention/<family>/<name>.py` | Module citing the paper in the docstring; `from __future__ import annotations`; Google-style docstrings; CPU-safe; `(config, pos_encoder=…)` constructor; equations mapped to code lines; `use_pe` via `getattr(config, "<name>_use_pe", <default>)`; honor `self.use_fixed_softmax`; decoder causal path; `forward` call shape S1/S2 per §7.13; `dense_forward` only if training-free. |
+| 1 | `src/model/attention/<family>/<name>.py` | Module citing the paper in the docstring; `from __future__ import annotations`; Google-style docstrings; CPU-safe; `(config, pos_encoder=…)` constructor; equations mapped to code lines; `use_pe` via `use_pe_for(config, "<name>", <default>)`; honor `self.use_fixed_softmax`; decoder causal path; `forward` call shape S1/S2 per §7.13; `dense_forward` only if training-free. |
 | 2 | `src/model/attention/<family>/__init__.py` + `attention/__init__.py` | Import + `__all__` entry (quote surrounding lines). |
 | 3 | `src/model/hybrid_layer.py` | `mixer_registry["<name>"] = <Class>` (+ `TRAINING_FREE_LAYERS` when eval-only). |
-| 4 | `src/model/config.py` | Flat knob fields with defaults + `<name>_use_pe: bool` + validation (quote the peer's field block). |
-| 5 | `src/utils/config_flatten.py` | `_ATTENTION_MIXER_RENAMES["<subkey>"] = {…}` (only if knobs). |
+| 4 | `src/registry/builtin/attention.py` | Register the `MixerSpec` (name, builder, `params_schema`, defaults, capabilities, bilingual docs); per-component knobs are read through `mixer_params`. |
+| 5 | *(removed)* | The config flattener is gone; no flat rename entry exists. |
 | 6 | `src/schema/_model/_dims.yaml` | Enum entry (position) + one row in **both** the EN and ES tables with `(paper: arxiv:<id>)`; ⚠️ wording if training-free. |
 | 7 | `src/schema/_model/_attention_<mixer>.yaml` | Knob block (only if knobs) — draft the full bilingual YAML (title/title_es, descriptions with examples + references, defaults matching the dataclass). |
 | 8 | `src/schema/_model.yaml` | Property-level `$ref` under `model.attention` + the new name appended to both attention description lists. |
