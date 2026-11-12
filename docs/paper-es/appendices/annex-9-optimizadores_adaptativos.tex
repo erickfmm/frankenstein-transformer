@@ -233,3 +233,63 @@ Cuando $\rho_t \leq 4$, RAdam retrocede a SGD con momentum: $\theta_{t+1} = \the
 \item Retrocede con elegancia a SGD con momentum mientras las estimaciones de varianza no son fiables, mejorando la robustez.
 \end{itemize}
 
+
+\paragraph{LaProp.}
+LaProp ataca un acoplamiento innecesario en Adam en lugar de un nuevo
+precondicionador~\citep{ziyin_laprop_2021}. Escribiendo la familia adaptativa
+como $\theta_{t+1} = \theta_t - \lambda_t G_t \nabla\ell(\theta_t) + \mu_t K_t(\theta_t - \theta_{t-1})$,
+el momentum en el espacio de parámetros de Adam queda multiplicado por
+$K_t = H_t^{-1}H_{t-1}$, es decir, el movimiento previo se reescala con el
+precondicionador actual. Un único gradiente patológicamente grande---ruido, un
+lote fuera de distribución o una explosión---puede por tanto borrar el momentum
+acumulado. LaProp simplemente fija $K_t = I$ y, en su lugar, acumula el momentum
+del gradiente \emph{precondicionado}:
+\begin{align}
+n_t &= \nu n_{t-1} + (1-\nu) g_t^2 \\
+m_t &= \mu m_{t-1} + (1-\mu)\,\frac{g_t}{\sqrt{n_t/(1-\nu^t)} + \epsilon} \\
+\theta_{t+1} &= \theta_t - \lambda\,\frac{m_t}{1-\mu^t}
+\end{align}
+con $g_t = \nabla\ell(\theta_t)$ y $0 \le \mu, \nu < 1$. El segundo momento
+$n_t$ es la varianza no centrada de Adam; el primer momento $m_t$ promedia la
+dirección ya normalizada, de modo que el momentum en el espacio de parámetros
+permanece aditivo como en SGD. La influencia de cualquier gradiente individual
+sobre el momentum acumulado está acotada por $(1-\mu)/\sqrt{1-\nu}$. LaProp
+tiene exactamente el estado (dos búferes), el costo por paso y el número de
+hiperparámetros de Adam, y los ajustes de Adam se transfieren sin cambios;
+$\nu \to 0$ recupera los métodos de gradiente con signo y $\mu = 0$ recupera
+RMSProp con corrección de sesgo (el artículo lo describe como RMSProp con
+momentum más ambos factores de corrección).
+
+\begin{algorithm}[H]
+\caption{LaProp}
+\label{alg:laprop}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta_1$, tasa de aprendizaje $\{\lambda_t\}_{t=1}^T$, parámetros de decaimiento $0 \le \mu, \nu < 1$
+\Require Épsilon $\epsilon \ll 1$, decadencia de peso $\lambda_{\mathrm{wd}}$
+\Ensure Parámetros actualizados $\theta_T$
+\State Inicializar: primer momento $m_0 \gets 0$, segundo momento $n_0 \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla_\theta \ell(\theta_t)$
+    \If{decadencia\_de\_peso $> 0$}
+        \State $g_t \gets g_t + \lambda_{\mathrm{wd}} \theta_t$ \Comment{Regularización L2}
+    \EndIf
+    \State $n_t \gets \nu n_{t-1} + (1-\nu) g_t^2$
+    \State $m_t \gets \mu m_{t-1} + (1-\mu) g_t / (\sqrt{n_t/(1-\nu^t)} + \epsilon)$
+    \State $\theta_{t+1} \gets \theta_t - \lambda_t\, m_t / (1-\mu^t)$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Contras.}
+\begin{itemize}[leftmargin=*]
+\item No domina a Adam en todas las tareas; sus mejoras se concentran en regímenes de optimización ruidosos o inestables.
+\item Acopla el decaimiento del momentum a la escala precondicionada, por lo que el tamaño de paso efectivo al inicio difiere del de Adam hasta que se estabiliza la corrección de sesgo.
+\end{itemize}
+
+\paragraph{Ventajas.}
+\begin{itemize}[leftmargin=*]
+\item Memoria ($m$, $v$), costo por paso y número de hiperparámetros idénticos a Adam; los ajustes existentes de Adam se transfieren directamente.
+\item Mantiene aditivo el momentum en el espacio de parámetros, evitando el reescalado $H_t^{-1}H_{t-1}$ que permite que un mal gradiente borre la dirección acumulada.
+\item Interpola de forma continua entre actualizaciones adaptativas y de gradiente con signo mediante $\nu$.
+\end{itemize}

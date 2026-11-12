@@ -244,6 +244,13 @@ OPTIMIZER_SPECS = (
         description_es="Entrenamiento con lotes grandes — Escalado por capa estilo LARS",
     ),
     OptimizerSpec(
+        name="laprop",
+        builder="src.model.optimizer.laprop:LaProp",
+        description="Decoupled momentum + adaptivity — Adam-shaped, but the first moment averages the *preconditioned* gradient (RMSProp-with-momentum view), so parameter-space momentum stays additive and is not erased by a single pathological gradient; same state and hyperparameters as Adam (paper: arxiv:2002.04839)",
+        description_es="Momentum y adaptividad desacoplados — Con forma de Adam, pero el primer momento promedia el gradiente *precondicionado* (vista de RMSProp con momentum), de modo que el momentum en el espacio de parámetros permanece aditivo y no lo borra un único gradiente patológico; mismo estado e hiperparámetros que Adam (paper: arxiv:2002.04839)",
+        references=("2002.04839",),
+    ),
+    OptimizerSpec(
         name="lion",
         builder="src.model.optimizer.lion:Lion",
         description="Memory-efficient — Sign-based updates, reduced state",

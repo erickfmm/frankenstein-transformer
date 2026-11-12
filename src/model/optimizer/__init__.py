@@ -16,6 +16,7 @@ from .eve import Eve
 from .factory import OPTIMIZER_REGISTRY, build_optimizer
 from .galore_adamw import GaLoreAdamW
 from .lamb import LAMB
+from .laprop import LaProp
 from .lion import Lion
 from .mars_adamw import MARSAdamW
 from .muon import Muon
@@ -55,6 +56,7 @@ __all__ = [
     "Eve",
     "GaLoreAdamW",
     "LAMB",
+    "LaProp",
     "Lion",
     "MARSAdamW",
     "Muon",

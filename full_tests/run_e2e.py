@@ -347,6 +347,7 @@ OPTIMIZERS = [
     "mars_adamw", "cautious_adamw", "lamb", "schedulefree_adamw", "shampoo",
     "soap", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm",
     "root", "muon2", "adam_pm", "nor_muon", "conda", "tuon", "namo", "namo_d",
+    "laprop",
 ]
 
 NORMS = ["layer_norm", "dynamic_tanh", "derf", "rms_norm", "prms_norm", "flash_norm"]

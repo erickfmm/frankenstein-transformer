@@ -729,7 +729,7 @@ It is selected by `training.task: sbert` and configured under `training.sbert`.
 | `query_prefix`, `document_prefix` | `null` | Instruction prefixes |
 | `output_dir` | — | Checkpoint destination |
 | `pooling_mode` | — | `mean`, `cls`, `max` |
-| `optimizer.optimizer_class` | — | Same 36-family enum (`$ref` to `_optimizer.yaml`) |
+| `optimizer.optimizer_class` | — | Same 39-family enum (`$ref` to `_optimizer.yaml`) |
 | `batch_size`, `num_epochs`, `learning_rate`, `warmup_steps` | — | Training schedule |
 | `evaluation_steps`, `checkpoint_save_steps`, `resume_from_checkpoint` | — | Checkpointing |
 | `use_amp`, `trust_remote_code`, `resample_balanced`, `standardize_scores` | — | Runtime options |
@@ -883,7 +883,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 
 ## 8. Training runtime
 
-### 8.1 Optimizers (38)
+### 8.1 Optimizers (39)
 
 `training.optimizer.optimizer_class` selects a family; SBERT uses
 `training.sbert.optimizer.optimizer_class` with the same enum.
@@ -894,7 +894,7 @@ The HuggingFace and GGUF exports reject audio artifacts explicitly;
 | AdamW | `adamw` | Default, decoupled weight decay |
 | Memory-efficient | `adafactor`, `lion`, `galore_adamw`, `apollo`, `apollo_mini`, `q_apollo`, `adam_pm` | Factored/low-rank/quantized state; `adam_pm` pools adjacent second-moment entries into group means, shrinking the V-state to `1/s` while keeping Adam's hyperparameters |
 | Auto-LR | `prodigy`, `schedulefree_adamw` | Remove LR tuning/scheduling |
-| Adaptive | `rmsprop`, `radam`, `adan`, `adopt`, `ademamix`, `mars_adamw`, `cautious_adamw`, `lamb` | Rectification, Nesterov, dual EMA, variance reduction, masking, layer-wise scaling; `rmsprop` is the classical squared-gradient running average (slides' 0.9/0.1 split), the Adam ancestor |
+| Adaptive | `rmsprop`, `radam`, `laprop`, `adan`, `adopt`, `ademamix`, `mars_adamw`, `cautious_adamw`, `lamb` | Rectification, Nesterov, dual EMA, variance reduction, masking, layer-wise scaling; `rmsprop` is the classical squared-gradient running average (slides' 0.9/0.1 split), the Adam ancestor; `laprop` accumulates the momentum of the preconditioned gradient so parameter-space momentum stays additive (Adam-identical state and hyperparameters) |
 | Second-order | `sophia`, `shampoo`, `soap` | Diagonal Hessian / Kronecker / eigenbasis |
 | Orthogonalized | `muon`, `turbo_muon`, `af_muon`, `ada_muon`, `dion3`, `root`, `muon2`, `nor_muon`, `conda`, `tuon`, `namo`, `namo_d` | Momentum orthogonalization; `muon`/`turbo_muon` follow the hybrid recipe (Newton-Schulz on hidden-layer 2-D matrices, decoupled AdamW on the `embeddings`/`pos`/`head` groups and on every non-2-D parameter, using the group `betas`/`eps`); `muon-per_head` + `muon-per_head_heads` orthogonalize each Q/K/V (and latent `uk_proj`/`uv_proj`) head block separately, and `muon-clip_value` adds K2-style element-wise weight clipping; `ada_muon` adds an element-wise second moment on the orthogonalized direction with RMS-aligned Adam-scale updates; `af_muon` adds a capped-row LMO for the vocabulary table and RMS updates for vectors (AdamW-free, a single first-moment buffer); `dion3` orthogonalizes only a fraction of the momentum rows with Gram Newton-Schulz and error feedback (single momentum buffer, optional NorMuon row moments); `root` calibrates the Newton-Schulz coefficients per matrix shape and soft-thresholds momentum outliers before orthogonalization (single momentum buffer, dynamic percentile threshold `quantile`); `muon2` preconditions the momentum with an Adam-style second-moment EMA before orthogonalization (β₁/β₂ from the shared per-group `betas`, `η√(m/n)` update scale, `factored` toggles the Muon²-F row/column moments); `nor_muon` normalizes the orthogonalized update neuron-wise (a per-row second-moment EMA of `O_t`, β₂ from the shared per-group `betas`, ε from the shared `eps`, update rescaled to RMS `0.2η` via `η̂ = 0.2η√(mn)/‖O_t‖_F`); `conda` runs a full Adam update inside the lazy SVD subspace of the first moment (second moment of the projected gradients, refreshed every `update_proj_gap` steps, `scale` multiplier; every 2-D parameter takes this path and only non-2-D parameters use the decoupled AdamW fallback); `tuon` stacks same-shape hidden matrices of a group, mixes them with a unitary layer transform (DecorQ: eigenvectors of the layer Gram matrix, refreshed every `refresh_interval` steps), polarizes each transformed slice with Newton-Schulz, inverts the transform and rescales the stack to RMS 1/√max(m,n) (`K=1` buckets reduce to `muon`; the AdamW fallback is unchanged); `namo` rescales the orthogonalized momentum by a single Adam-type scalar α_t = ‖M̂_t‖_F/(√v̂_t+ε) built from a scalar second-moment EMA of ‖G_t‖²_F (μ₁/μ₂ from `namo-betas`, ε from the shared `eps`, decoupled decay scaled by α_t, one scalar of extra state); `namo_d` right-multiplies the orthogonalized momentum by a clamped diagonal built from per-column second moments and column norms (`namo_d-clamp` c ∈ (0,1], default 0.1, `d̃ = clamp(d, c·d̄, d̄/c)`), giving neuron-wise adaptivity at the cost of strict orthogonality and one ℝⁿ vector of extra state |
 | Tunable | `anon` | `gamma` adaptivity |

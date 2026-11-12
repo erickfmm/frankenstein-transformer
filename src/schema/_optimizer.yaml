@@ -37,6 +37,7 @@ properties:
       | `sgd` | Pure SGD baseline | Mini-batch update, no momentum, zero optimizer state (source: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
       | `sgd_momentum` | Baselines, classic tasks | Simple, less adaptive |
       | `rmsprop` | Classical adaptive baseline | Divides the gradient by a running average of its recent squared magnitude; one state buffer, no bias correction (source: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
+      | `laprop` | Decoupled momentum + adaptivity | Adam-shaped, but the first moment averages the *preconditioned* gradient (RMSProp-with-momentum view); parameter-space momentum stays additive, more stable on noisy/unstable tasks; same state and hyperparameters as Adam (paper: arxiv:2002.04839) |
       | `adafactor` | Large models, low memory | Memory-efficient factored moments |
       | `galore_adamw` | Memory-constrained large models | Gradient low-rank projection |
       | `prodigy` | Minimal LR tuning | Adaptive, auto-LR |
@@ -92,7 +93,8 @@ properties:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
       `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
       arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
-      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)
+      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf);
+      `laprop` (paper: arxiv:2002.04839)
     description_es: |-
       Algoritmo optimizador. Resumen por caso de uso:
 
@@ -103,6 +105,7 @@ properties:
       | `sgd` | Línea base SGD pura | Actualización por mini-lotes, sin momentum, sin estado del optimizador (fuente: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
       | `sgd_momentum` | Líneas base, tareas clásicas | Simple, menos adaptativo |
       | `rmsprop` | Línea base adaptativa clásica | Divide el gradiente por un promedio móvil de su magnitud cuadrada reciente; un búfer de estado, sin corrección de sesgo (fuente: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
+      | `laprop` | Momentum y adaptividad desacoplados | Con forma de Adam, pero el primer momento promedia el gradiente *precondicionado* (vista de RMSProp con momentum); el momentum en el espacio de parámetros permanece aditivo, más estable en tareas ruidosas/inestables; mismo estado e hiperparámetros que Adam (paper: arxiv:2002.04839) |
       | `adafactor` | Modelos grandes, baja memoria | Eficiente en memoria |
       | `galore_adamw` | Modelos grandes con memoria limitada | Proyección de gradiente de bajo rango |
       | `prodigy` | Mínimo ajuste de LR | Adaptativo, LR automático |
@@ -159,7 +162,8 @@ properties:
       arxiv:2608.11612); `eve` (paper: arxiv:2609.35614); `ea4llm` (paper: arxiv:2510.10603);
       `root` (paper: arxiv:2511.20626); `muon2` (paper: arxiv:2604.09967); `adam_pm` (paper:
       arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
-      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)
+      `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf);
+      `laprop` (paper: arxiv:2002.04839)
     examples: [adamw]
   parameters:
     type: object

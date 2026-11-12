@@ -11561,6 +11561,8 @@ properties:
 
               | `rmsprop` | Classical adaptive baseline | Divides the gradient by a running average of its recent squared magnitude; one state buffer, no bias correction (source: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
 
+              | `laprop` | Decoupled momentum + adaptivity | Adam-shaped, but the first moment averages the *preconditioned* gradient (RMSProp-with-momentum view); parameter-space momentum stays additive, more stable on noisy/unstable tasks; same state and hyperparameters as Adam (paper: arxiv:2002.04839) |
+
               | `adafactor` | Large models, low memory | Memory-efficient factored moments |
 
               | `galore_adamw` | Memory-constrained large models | Gradient low-rank projection |
@@ -11669,7 +11671,9 @@ properties:
 
               arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
 
-              `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)'
+              `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf);
+
+              `laprop` (paper: arxiv:2002.04839)'
             description_es: 'Algoritmo optimizador. Resumen por caso de uso:
 
 
@@ -11686,6 +11690,8 @@ properties:
               | `sgd_momentum` | Líneas base, tareas clásicas | Simple, menos adaptativo |
 
               | `rmsprop` | Línea base adaptativa clásica | Divide el gradiente por un promedio móvil de su magnitud cuadrada reciente; un búfer de estado, sin corrección de sesgo (fuente: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
+
+              | `laprop` | Momentum y adaptividad desacoplados | Con forma de Adam, pero el primer momento promedia el gradiente *precondicionado* (vista de RMSProp con momentum); el momentum en el espacio de parámetros permanece aditivo, más estable en tareas ruidosas/inestables; mismo estado e hiperparámetros que Adam (paper: arxiv:2002.04839) |
 
               | `adafactor` | Modelos grandes, baja memoria | Eficiente en memoria |
 
@@ -11798,7 +11804,9 @@ properties:
 
               arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
 
-              `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)'
+              `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf);
+
+              `laprop` (paper: arxiv:2002.04839)'
             examples:
             - adamw
             enum:
@@ -11820,6 +11828,7 @@ properties:
             - eve
             - galore_adamw
             - lamb
+            - laprop
             - lion
             - mars_adamw
             - muon
@@ -12188,6 +12197,10 @@ properties:
                   - update_proj_gap
                 lamb:
                   prefix: lamb
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                laprop:
+                  prefix: laprop
                   supports_shared_per_group_suffixes: true
                   specific_global_suffixes: []
                 lion:
@@ -12903,6 +12916,8 @@ properties:
 
                   | `rmsprop` | Classical adaptive baseline | Divides the gradient by a running average of its recent squared magnitude; one state buffer, no bias correction (source: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
 
+                  | `laprop` | Decoupled momentum + adaptivity | Adam-shaped, but the first moment averages the *preconditioned* gradient (RMSProp-with-momentum view); parameter-space momentum stays additive, more stable on noisy/unstable tasks; same state and hyperparameters as Adam (paper: arxiv:2002.04839) |
+
                   | `adafactor` | Large models, low memory | Memory-efficient factored moments |
 
                   | `galore_adamw` | Memory-constrained large models | Gradient low-rank projection |
@@ -13011,7 +13026,9 @@ properties:
 
                   arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
 
-                  `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)'
+                  `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf);
+
+                  `laprop` (paper: arxiv:2002.04839)'
                 description_es: 'Algoritmo optimizador. Resumen por caso de uso:
 
 
@@ -13028,6 +13045,8 @@ properties:
                   | `sgd_momentum` | Líneas base, tareas clásicas | Simple, menos adaptativo |
 
                   | `rmsprop` | Línea base adaptativa clásica | Divide el gradiente por un promedio móvil de su magnitud cuadrada reciente; un búfer de estado, sin corrección de sesgo (fuente: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) |
+
+                  | `laprop` | Momentum y adaptividad desacoplados | Con forma de Adam, pero el primer momento promedia el gradiente *precondicionado* (vista de RMSProp con momentum); el momentum en el espacio de parámetros permanece aditivo, más estable en tareas ruidosas/inestables; mismo estado e hiperparámetros que Adam (paper: arxiv:2002.04839) |
 
                   | `adafactor` | Modelos grandes, baja memoria | Eficiente en memoria |
 
@@ -13140,7 +13159,9 @@ properties:
 
                   arxiv:2610.24598); `nor_muon` (paper: arxiv:2510.05491); `conda` (paper: arxiv:2509.24218);
 
-                  `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)'
+                  `tuon` (paper: arxiv:2610.35130); `namo`/`namo_d` (paper: arxiv:2602.17080); `sgd`/`rmsprop` (paper: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf);
+
+                  `laprop` (paper: arxiv:2002.04839)'
                 examples:
                 - adamw
                 enum:
@@ -13162,6 +13183,7 @@ properties:
                 - eve
                 - galore_adamw
                 - lamb
+                - laprop
                 - lion
                 - mars_adamw
                 - muon
@@ -13746,6 +13768,25 @@ properties:
                 additionalProperties: false
                 patternProperties:
                   ^lamb-:
+                    type:
+                    - number
+                    - boolean
+                    - array
+                    - string
+    - if:
+        properties:
+          optimizer:
+            properties:
+              optimizer_class:
+                const: laprop
+      then:
+        properties:
+          optimizer:
+            properties:
+              parameters:
+                additionalProperties: false
+                patternProperties:
+                  ^laprop-:
                     type:
                     - number
                     - boolean

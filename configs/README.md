@@ -155,6 +155,7 @@ training:
 - `ada_muon`
 - `radam`
 - `adan`
+- `laprop`
 - `adopt`
 - `ademamix`
 - `mars_adamw`
@@ -215,6 +216,7 @@ Optimizer-specific global parameter suffixes (also prefixed):
 - `ada_muon`: `momentum`, `ns_steps`, `ns_eps`
 - `radam`: none
 - `adan`: none
+- `laprop`: none (Adam-shaped shared suffixes only: `lr_*`, `wd_*` coupled into the gradient, `betas_*` for the (μ, ν) pair — default `[0.9, 0.999]`, Adam settings carry over — and `eps_*`; the first moment averages the preconditioned gradient `g_t / (sqrt(n_t / (1 - ν^t)) + ε)`, so parameter-space momentum is never rescaled by the current gradient)
 - `adopt`: none
 - `ademamix`: none
 - `mars_adamw`: none

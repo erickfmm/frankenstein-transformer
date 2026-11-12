@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 56 sequence mixers across nine families, 38 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 56 sequence mixers across nine families, 39 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -116,7 +116,7 @@ memory & Memory & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Token-ID memor
 
 \subsection{Optimizer Summary}
 
-Table~\ref{tab:all-optimizers} catalogs all 38 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
+Table~\ref{tab:all-optimizers} catalogs all 39 supported optimizers with their memory footprint, per-step computational cost, and key hyperparameters. State buffers are expressed as the number of optimizer-owned tensors per parameter; per-step cost focuses on the dominant term beyond gradient computation.
 
 \footnotesize
 \begin{longtable}{L{2.0cm}L{2.0cm}L{2.2cm}L{2.0cm}L{3.8cm}L{2.4cm}}
@@ -143,6 +143,7 @@ SGD+\allowbreak Momentum & Classical & 1 ($m$) & $\mathcal{O}(n)$ & lr, momentum
 RMSProp & Adaptive & 1 ($v$) & $\mathcal{O}(n)$ & lr, decay $\alpha$ (0.9), eps, wd & \citep{tieleman_hinton2012} \\
 AdamW & Adaptive & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{loshchilov_decoupled_2017} \\
 RAdam & Adaptive & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{liu_variance_2019} \\
+LaProp & Adaptive & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd & \citep{ziyin_laprop_2021} \\
 \midrule
 
 \multicolumn{6}{c}{\textbf{Variance Reduction \& Advanced Momentum}} \\

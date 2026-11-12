@@ -233,3 +233,62 @@ When $\rho_t \leq 4$, RAdam falls back to SGD with momentum: $\theta_{t+1} = \th
 \item Falls back gracefully to momentum SGD while variance estimates are unreliable, improving robustness.
 \end{itemize}
 
+
+\paragraph{LaProp.}
+LaProp targets an unnecessary coupling in Adam rather than a new
+preconditioner~\citep{ziyin_laprop_2021}. Writing the adaptive family as
+$\theta_{t+1} = \theta_t - \lambda_t G_t \nabla\ell(\theta_t) + \mu_t K_t(\theta_t - \theta_{t-1})$,
+Adam's parameter-space momentum is multiplied by $K_t = H_t^{-1}H_{t-1}$, i.e.
+the previous motion is rescaled by the current preconditioner. A single
+pathologically large gradient---noise, an out-of-distribution batch, or an
+explosion---can therefore erase the accumulated momentum. LaProp simply sets
+$K_t = I$ and instead accumulates the momentum of the \emph{preconditioned}
+gradient:
+\begin{align}
+n_t &= \nu n_{t-1} + (1-\nu) g_t^2 \\
+m_t &= \mu m_{t-1} + (1-\mu)\,\frac{g_t}{\sqrt{n_t/(1-\nu^t)} + \epsilon} \\
+\theta_{t+1} &= \theta_t - \lambda\,\frac{m_t}{1-\mu^t}
+\end{align}
+with $g_t = \nabla\ell(\theta_t)$ and $0 \le \mu, \nu < 1$. The second moment
+$n_t$ is Adam's uncentered variance; the first moment $m_t$ averages the
+already-normalized direction, so the parameter-space momentum stays additive
+like SGD. The influence of any single gradient on the accumulated momentum is
+bounded by $(1-\mu)/\sqrt{1-\nu}$. LaProp has exactly the state (two buffers),
+per-step cost and hyperparameter count of Adam, and Adam's settings carry over
+unchanged; $\nu \to 0$ recovers signed-gradient methods and $\mu = 0$ recovers
+RMSProp with bias correction (the paper describes it as RMSProp with momentum
+plus both correction factors).
+
+\begin{algorithm}[H]
+\caption{LaProp}
+\label{alg:laprop}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_1$, learning rate $\{\lambda_t\}_{t=1}^T$, decay parameters $0 \le \mu, \nu < 1$
+\Require Epsilon $\epsilon \ll 1$, weight decay $\lambda_{\mathrm{wd}}$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: first moment $m_0 \gets 0$, second moment $n_0 \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla_\theta \ell(\theta_t)$
+    \If{weight\_decay $> 0$}
+        \State $g_t \gets g_t + \lambda_{\mathrm{wd}} \theta_t$ \Comment{L2 regularization}
+    \EndIf
+    \State $n_t \gets \nu n_{t-1} + (1-\nu) g_t^2$
+    \State $m_t \gets \mu m_{t-1} + (1-\mu) g_t / (\sqrt{n_t/(1-\nu^t)} + \epsilon)$
+    \State $\theta_{t+1} \gets \theta_t - \lambda_t\, m_t / (1-\mu^t)$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cons.}
+\begin{itemize}[leftmargin=*]
+\item Does not dominate Adam on every task; its gains are concentrated in noisy or unstable optimization regimes.
+\item Couples the momentum decay to the preconditioned scale, so the effective step size at initialization differs from Adam until the bias correction settles.
+\end{itemize}
+
+\paragraph{Pros.}
+\begin{itemize}[leftmargin=*]
+\item Adam-identical memory ($m$, $v$), per-step cost and hyperparameter count; existing Adam settings transfer directly.
+\item Keeps parameter-space momentum additive, avoiding the $H_t^{-1}H_{t-1}$ reweighting that lets one bad gradient wipe the accumulated direction.
+\item Interpolates continuously between adaptive and signed-gradient updates through $\nu$.
+\end{itemize}

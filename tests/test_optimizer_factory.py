@@ -28,7 +28,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "adam_pm", "sgd", "sgd_momentum", "rmsprop", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon", "conda", "tuon", "namo", "namo_d"}
+        required = {"adamw", "adam_pm", "sgd", "sgd_momentum", "rmsprop", "lion", "muon", "muon2", "af_muon", "ada_muon", "lamb", "anon", "apollo", "apollo_mini", "q_apollo", "dion3", "eve", "ea4llm", "root", "nor_muon", "conda", "tuon", "namo", "namo_d", "laprop"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -1467,6 +1467,58 @@ class BuildOptimizerAdanTests(unittest.TestCase):
     def test_builds_without_error(self):
         opt = build_optimizer("adan", _param_groups(), {})
         self.assertIsNotNone(opt)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerLaPropTests(unittest.TestCase):
+    def test_builds_without_error(self):
+        opt = build_optimizer("laprop", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("laprop", groups, {})
+        loss = p.square().mean()
+        loss.backward()
+        opt.step()
+
+    def test_shared_suffix_parsed(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "attention"}]
+        opt = build_optimizer(
+            "laprop",
+            groups,
+            {
+                "laprop-betas_attention": [0.9, 0.999],
+                "laprop-eps_attention": 1e-6,
+                "laprop-wd_attention": 0.02,
+            },
+        )
+        group = opt.param_groups[0]
+        self.assertEqual(tuple(group["betas"]), (0.9, 0.999))
+        self.assertAlmostEqual(group["eps"], 1e-6)
+        self.assertAlmostEqual(group["weight_decay"], 0.02)
+
+    def test_unknown_key_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_optimizer("laprop", _param_groups(), {"laprop-gamma": 1.0})
+        self.assertIn("gamma", str(ctx.exception))
+
+    def test_first_step_is_signed_gradient(self):
+        # With eps -> 0, the first LaProp step reduces to theta - lr * sign(g):
+        # n_1 = g^2, m_1 = (1 - beta1) g / |g|, and the update divides by
+        # (1 - beta1^1) = 1 - beta1.
+        p = nn.Parameter(torch.tensor([[1.0, -2.0], [0.5, -0.25]]))
+        groups = [{"params": [p], "lr": 0.1, "name": "other"}]
+        opt = build_optimizer("laprop", groups, {"laprop-eps_other": 0.0})
+        loss = (p * torch.tensor([[2.0, -3.0], [0.5, -1.0]])).sum()
+        loss.backward()
+        before = p.detach().clone()
+        grad = p.grad.detach().clone()
+        opt.step()
+        expected = before - 0.1 * torch.sign(grad)
+        self.assertTrue(torch.allclose(p.detach(), expected, atol=1e-6))
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

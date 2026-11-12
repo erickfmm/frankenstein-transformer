@@ -33,7 +33,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 |-------|--------------|
 | **1. YAML config** | Describe the model, task and optimizer in one schema-first file |
 | **2. Schema validation** | Strict JSON Schema plus cross-field rules; invalid configs are rejected before any compute |
-| **3. Train** | 38 optimizer families, AMP, schedulers and a GPU thermal guard |
+| **3. Train** | 39 optimizer families, AMP, schedulers and a GPU thermal guard |
 | **4. Checkpoint** | Save rolling checkpoints for resuming or deployment |
 | **5. Deploy** | Quantize (`quantized`/`standard`) or export to HuggingFace safetensors (`q8_0`/`q4_0`/`i2_s`) / GGUF |
 | **6. Infer / Export** | Batch, interactive and benchmark inference; SBERT similarity/search/cluster/encode |
@@ -123,7 +123,7 @@ code as the built-ins.
 | Feature | Scale |
 |---------|-------|
 | Sequence mixer architectures | **55** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
-| Optimizer families | 38 across 8 categories |
+| Optimizer families | 39 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
 | FFN activations | 44 (40 elementwise + `swiglu`, `geglu`, `reglu`, `situ`) |
 | Residual connections | 6 exposed: `standard`, `none`, `full_attn`, `block_attn`, mHC, Hyperloop |
