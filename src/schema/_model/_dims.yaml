@@ -225,6 +225,7 @@ properties:
       | `sigmoid` | Sigmoid-gated attention (paper: arxiv:2409.04431) | ✅ | ✅ |
       | `ca` | Continuum Attention — exact normalized integration of exp(score) over piecewise-linear key/value trajectories (paper: arxiv:2610.20586) | ✅ | ✅ |
       | `xsa` | Exclusive Self Attention — post-SDPA orthogonalization against the self value vector (paper: arxiv:2603.09078) | ✅ | ✅ |
+      | `mta` | Multi-Token Attention — causal key-query (`cq`×`ck`) and head-group (`ch`) convolutions over the attention score map, pre and post softmax, with a gated group norm (paper: arxiv:2504.00927) | ✅ | ✅ |
       | `gated_softmax` | Gated softmax attention with post-SDPA sigmoid (paper: arxiv:2505.06708) | ✅ | ✅ |
       | `titan` | Titan attention with positional encoding (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
       | `retnet` | Retention Network (RNN+transformer hybrid) (paper: arxiv:2307.08621) | ✅ | ✅ |
@@ -288,6 +289,7 @@ properties:
       | `sigmoid` | Atención con compuerta sigmoide (paper: arxiv:2409.04431) | ✅ | ✅ |
       | `ca` | Atención Continua — integración normalizada exacta de exp(puntaje) sobre trayectorias clave/valor lineales por tramos (paper: arxiv:2610.20586) | ✅ | ✅ |
       | `xsa` | Atención Exclusiva — ortogonalización post-SDPA frente al vector de valor propio (paper: arxiv:2603.09078) | ✅ | ✅ |
+      | `mta` | Atención Multi-Token — convoluciones causales consulta-clave (`cq`×`ck`) y por grupos de cabezas (`ch`) sobre el mapa de puntajes, pre y post softmax, con normalización de grupo con compuerta (paper: arxiv:2504.00927) | ✅ | ✅ |
       | `gated_softmax` | Atención softmax con compuerta post-SDPA (paper: arxiv:2505.06708) | ✅ | ✅ |
       | `titan` | Atención Titan con codificación posicional (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
       | `retnet` | Retention Network (híbrido RNN+transformer) (paper: arxiv:2307.08621) | ✅ | ✅ |

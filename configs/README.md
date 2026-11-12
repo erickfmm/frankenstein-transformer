@@ -334,7 +334,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   `standard`, `sigmoid`, `gqa`, `mla`, `swa`,
   `longformer`, `bigbird`, `sparse_transformer`, `gta`,
   `iha`, `mtla`, `gma`, `nsa`, `sparsek`, `msa`,
-  `sparda`, `lsa`, `fastconformer`, `conformer`, `fox`, `fpa`, `gated_softmax`, `xsa`,
+  `sparda`, `lsa`, `fastconformer`, `conformer`, `fox`, `fpa`, `gated_softmax`, `xsa`, `mta`,
   `titan`, `gqla`, `mlra`, `memory`; `qk_clip` additionally excludes
   `gma`. Recurrent/state-space mixers (`retnet`, `gla`, `mamba`, …)
   are rejected at load time. Examples: `norm_qknorm_rms.yaml`,
@@ -366,7 +366,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 
 #### model.attention.<mixer>
 
-Per-mixer sub-objects: `ca`, `kda`, `mla`, `gmla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
+Per-mixer sub-objects: `ca`, `mta`, `kda`, `mla`, `gmla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
 `cca`, `ccgqa`, `msa`, `sparda`, `lsa`, `fastconformer`, `engram`, `gma`, `ssog`, `conformer`,
 `falcon`, `ode` (`solver`, `steps`), `retnet` (`heads`). Optional rank fields
 accept `null` (= derive from `hidden_size` / `num_heads`).
@@ -435,6 +435,25 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
   (arXiv:2610.20586); classic KV cache. Examples:
   `configs/examples/es_arch_ca_adamw.yaml` and the 101M reference preset
   `configs/ca.yaml`.
+
+### Multi-Token Attention (model.attention.mta)
+
+- `model.attention.mta.cq`: query-axis kernel size of the key-query
+  convolution (default `6`, the paper's 880M value). The window always looks
+  at the current query and the previous `cq − 1` queries.
+- `model.attention.mta.ck`: key-axis kernel size (default `11`); even values
+  are rounded up to the next odd number so the window is centred.
+- `model.attention.mta.ch`: head-mixing group size (default `16`); clamped at
+  build time to the largest divisor of `num_heads` not exceeding it, and
+  `ch = 1` disables head mixing.
+- `model.attention.mta.pre_softmax` / `post_softmax`: apply the key-query
+  convolution to the logits (Eq. 5) and/or the weights (Eq. 6); both default
+  to `true`.
+- `model.attention.mta.gated_group_norm`: grouped output normalization with a
+  per-head sigmoid gate (default `true`).
+- Kernels are identity-initialized and add `n_h(2·cq·ck + ch) + 2H + n_h`
+  parameters. Classic KV cache plus a `cq − 1` query tail for exact
+  incremental decoding. Example: `configs/examples/dense_mta_adamw.yaml`.
 
 ### First Passage Attention (model.attention.fpa)
 

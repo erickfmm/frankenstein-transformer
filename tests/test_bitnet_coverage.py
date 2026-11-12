@@ -20,7 +20,7 @@ if TORCH_AVAILABLE:
 
 
 def _make(bitnet_routers: bool, mode: str = "encoder"):
-    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 64, "num_layers": 8, "num_heads": 4, "dropout": 0.0, "mode": mode, "layer_pattern": ['standard', 'gla', 'deltanet', 'gated_deltanet', 'fox', 'fpa', 'hgrn2', 'gated_deltanet2', 'kda', 'mtla', 'msa', 'sparda', 'lsa', 'nsa', 'sparsek', 'titan', 'retnet', 'ode', 'gated_softmax', 'sigmoid', 'ca', 'xsa', 'gqa', 'memory', 'mla', 'gqla', 'mlra', 'tucker', 'kpa', 'iha', 'gta', 'gma', 'fastconformer']}, "moe": {"num_experts": 4, "top_k": 2, "enabled": True}, "bitnet": {"enabled": True, "routers": bitnet_routers}, "mixture_of_depths": {"enabled": True}, "ffn": {"hidden_size": 128}})
+    return FrankensteinModelConfig.from_dict({"dims": {"vocab_size": 64, "hidden_size": 64, "num_layers": 8, "num_heads": 4, "dropout": 0.0, "mode": mode, "layer_pattern": ['standard', 'gla', 'deltanet', 'gated_deltanet', 'fox', 'fpa', 'hgrn2', 'gated_deltanet2', 'kda', 'mtla', 'msa', 'sparda', 'lsa', 'nsa', 'sparsek', 'titan', 'retnet', 'ode', 'gated_softmax', 'sigmoid', 'ca', 'xsa', 'mta', 'gqa', 'memory', 'mla', 'gqla', 'mlra', 'tucker', 'kpa', 'iha', 'gta', 'gma', 'fastconformer']}, "moe": {"num_experts": 4, "top_k": 2, "enabled": True}, "bitnet": {"enabled": True, "routers": bitnet_routers}, "mixture_of_depths": {"enabled": True}, "ffn": {"hidden_size": 128}})
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch not installed")

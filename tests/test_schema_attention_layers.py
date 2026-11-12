@@ -67,6 +67,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "fastconformer",
             "fpa",
             "xsa",
+            "mta",
         }
 
         self.assertTrue(expected.issubset(set(enum_values)))
@@ -128,6 +129,10 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             },
             "swa": {"window_size", "num_sinks"},
             "ca": {"learned_gain", "gain_init"},
+            "mta": {
+                "cq", "ck", "ch", "pre_softmax", "post_softmax",
+                "gated_group_norm",
+            },
             "fastconformer": {
                 "window_size", "global_tokens", "global_tokens_spacing",
                 "global_attn_separate",
@@ -155,7 +160,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             )
 
     def test_cache_specs_match_layer_pattern_enum(self):
-        """T12: CACHE_SPECS covers every built-in mixer (51).
+        """T12: CACHE_SPECS covers every built-in mixer (53).
 
         The assembled enum may also contain plugin mixers (config-declared
         plugins are loaded by other tests in the same process), so assert
@@ -170,7 +175,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "layer_pattern"
             ]["items"]["enum"]
         )
-        self.assertEqual(len(CACHE_SPECS), 52)
+        self.assertEqual(len(CACHE_SPECS), 53)
         self.assertTrue(set(CACHE_SPECS).issubset(enum_values))
 
     def test_inference_schema_is_referenced(self):

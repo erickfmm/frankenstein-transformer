@@ -6,5 +6,6 @@ flowchart TD
     gqa["GQA<br/>shared K, V heads"]
     ca["Continuum<br/>∫ exp(γ·qᵀk(t)/√d)·v(t) dt / Z"]
     xsa["XSA<br/>Y − (Y·v̂)v̂"]
-    standard ~~~ sigmoid ~~~ gqa ~~~ ca ~~~ xsa
+    mta["MTA<br/>conv over (q,k,heads) → softmax → conv → gated group norm"]
+    standard ~~~ sigmoid ~~~ gqa ~~~ ca ~~~ xsa ~~~ mta
   end

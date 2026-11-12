@@ -3,7 +3,7 @@
 
 This annex synthesizes the dense, recurrent, and memory-augmented transformer families. The field has evolved toward several primary paradigms: dense global attention with variants, key-value head compression via grouped-query attention, recurrent state compression with decay, selective state-space models, continuous-depth numerical integration, token-indexed value memory, and memory-augmented architectures. Understanding this taxonomy illuminates fundamental tradeoffs between expressiveness, computational cost, memory footprint, and deployment simplicity.
 
-\subsection{Dense Attention Baselines: Standard, Sigmoid, Continuum, and Exclusive}
+\subsection{Dense Attention Baselines: Standard, Sigmoid, Continuum, Exclusive, and Multi-Token}
 
 \subsubsection{Standard Softmax Attention}
 
@@ -169,6 +169,52 @@ The step is parameter-free, row-local (it only consumes the current token's valu
     \item \textbf{Inference complexity}: $\mathcal{O}(n)$ per token with a plain KV cache; the exclusion reads only the newly computed $\mathbf{v}_i$, so incremental decoding is exact (class (i)).
     \item \textbf{Strengths}: Zero additional parameters; two-line change; consistent training/validation gains at 0.7B, 1.3B and 2.7B parameters on FineWeb-100BT (+0.26, +1.03 and +1.36 average downstream points over SA); the margin grows with sequence length (512 to 16k) and is stable across learning rates and attention-sink configurations.
     \item \textbf{Weaknesses}: Evidence is language-modeling only; the paper offers no theoretical grounding beyond the empirical motivation; per-token L2 normalization is an extra (small) kernel compared with vanilla SDPA; the encoder (bidirectional) variant used by this toolkit is a mask-agnostic extension of the paper's causal formulation.
+\end{itemize}
+
+\subsubsection{Multi-Token Attention (MTA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/mta.pdf}}
+\caption{Dataflow of Multi-Token Attention: causal key-query convolution over the score map (pre-softmax, Eq.~\ref{eq:mta-pre}), softmax, head-mixing convolution over groups of heads (Eq.~\ref{eq:mta-head}), a second post-softmax key-query convolution, and the gated group normalization before the output projection; the dotted path is the decode-time query tail.}
+\label{fig:mixer-mta}
+\end{figure}
+Multi-Token Attention \citep{golovneva_multi_token_2025} targets the \emph{single-token bottleneck} of soft attention: every weight $a_{ij}$ is decided by one query and one key vector, so a context region identified by several tokens (a sentence mentioning both ``Alice'' and ``rabbit'') must be compressed into a single vector. MTA keeps the quadratic attention skeleton and makes neighbouring queries, keys and heads interact through small learned convolutions over the score map. The key-query convolution mixes the logits of a window of $c_q$ queries and $c_k$ keys, per head:
+\begin{equation}
+a_{ij} = \operatorname{Softmax}\Big(\sum_{i'=0}^{c_q-1}\ \sum_{j'=-\lfloor c_k/2\rfloor}^{\lceil c_k/2\rceil-1}
+\mathbf{1}_{i\ge j-j'}\ \theta_{i',j'}\ \mathbf{q}_{i-i'}\mathbf{k}_{j-j'}^{\top}/\sqrt{d_h}\Big),
+\label{eq:mta-exact}
+\end{equation}
+and, because that indicator would require bespoke CUDA kernels, the default implementation applies the existing causal mask twice:
+\begin{equation}
+\mathbf{A} = \operatorname{Softmax}\Big(\operatorname{Mask}_{-\infty}\big(\operatorname{Conv2d}_{\theta}(\operatorname{Mask}_{0}(\hat{\mathbf{A}}))\big)\Big),
+\qquad
+\mathbf{A} = \operatorname{Mask}_{0}\Big(\operatorname{Conv2d}_{\theta}\big(\operatorname{Softmax}(\operatorname{Mask}_{-\infty}(\hat{\mathbf{A}}))\big)\Big),
+\label{eq:mta-pre}
+\end{equation}
+where the first expression is the pre-softmax variant (the paper's default) and the second the post-softmax variant (additive rather than multiplicative interaction); both are applied by default. Head mixing partitions the $n_h$ heads into $n_h/c_h$ non-overlapping groups and mixes each group with its own $c_h\times c_h$ kernel,
+\begin{equation}
+\mathbf{A}^{1}_{\text{new}} = w_{11}\mathbf{A}^{1}+w_{12}\mathbf{A}^{2}, \qquad
+\mathbf{A}^{2}_{\text{new}} = w_{21}\mathbf{A}^{1}+w_{22}\mathbf{A}^{2},
+\label{eq:mta-head}
+\end{equation}
+so attention maps can be combined across heads (a post-softmax $2\times2$ mixing is equivalent to doubling the rank of the value/output projections, Appendix~B of the paper). Finally a grouped normalization over each set of $c_h$ heads followed by a per-head sigmoid gate, $\operatorname{diag}(\sigma(\mathbf{g}))\operatorname{GroupNorm}(\mathbf{A}\mathbf{V})$, pushes back against the residual stream and lets the model switch heads on and off across layers; the paper reports 10.90 validation perplexity with scalar gating versus 11.03 without scaling and 11.41 with layer-norm scaling. Kernels are identity-initialized (the best-converging choice) and the mixer adds only about $0.001\%$ of the parameters at 880M scale: $n_h(2c_qc_k + c_h) + 2H + n_h$, i.e.\ one scalar per head for the gate, an affine group norm, and the kernels.
+
+\begin{algorithmic}[1]
+\State \textbf{Input:} $\mathbf{x}$; $\mathbf{W}_q,\mathbf{W}_k,\mathbf{W}_v,\mathbf{W}_o$; knobs $c_q,c_k,c_h$
+\State $\mathbf{Q}\gets\mathbf{x}\mathbf{W}_q$, $\mathbf{K}\gets\mathbf{x}\mathbf{W}_k$, $\mathbf{V}\gets\mathbf{x}\mathbf{W}_v$; $\hat{\mathbf{A}}\gets\mathbf{Q}\mathbf{K}^\top/\sqrt{d_h}$
+\State $\hat{\mathbf{A}}\gets\operatorname{Mask}_{0}(\hat{\mathbf{A}})$; \quad $\hat{\mathbf{A}}\gets\operatorname{Conv2d}_{\theta_{\text{pre}}}(\hat{\mathbf{A}})$
+\State $\mathbf{A}\gets\operatorname{Softmax}(\operatorname{Mask}_{-\infty}(\hat{\mathbf{A}}))$
+\State $\mathbf{A}\gets$ head conv $w$ over groups of $c_h$; \quad $\mathbf{A}\gets\operatorname{Mask}_{0}(\operatorname{Conv2d}_{\theta_{\text{post}}}(\mathbf{A}))$
+\State $\mathbf{O}\gets\operatorname{diag}(\sigma(\mathbf{g}))\operatorname{GroupNorm}(\mathbf{A}\mathbf{V})$
+\State \textbf{Output:} $\mathbf{O}\mathbf{W}_o$
+\end{algorithmic}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n^2 d_h n_h + n^2 c_q c_k n_h)$ -- still quadratic in the sequence length, with a small constant from the kernels; the score map must be materialised, so fused SDPA kernels are not compatible (the paper's stated limitation).
+    \item \textbf{Inference complexity}: $\mathcal{O}(n d_h n_h)$ per step with a KV cache plus an $\mathcal{O}(c_q c_k n_h)$ convolution correction; decode keeps the classic KV cache and a FIFO tail of the last $c_q-1$ queries, so the double-masked convolution is reproduced exactly (classes (i)+(v)).
+    \item \textbf{Strengths}: Consistent gains at 880M/105B SlimPajama tokens over Transformer, Diff Transformer and Talking-Heads baselines (average validation perplexity 10.91 versus 11.25, 11.15 and 11.04; 44.9 versus 43.7 average zero-shot points), large long-context retrieval gains (multi-needle, BabiLong, LAMBADA) with $+0.001\%$ parameters, and near-identity kernels that are learned to be diagonal ``sentence-matching'', priming or edge-detecting filters.
+    \item \textbf{Weaknesses}: Incompatible with optimized attention kernels (the score map is materialised); the key-query convolution is applied on every fourth layer in the reference run for efficiency, so the full-per-layer variant costs more arithmetic than reported; the encoder (bidirectional) form used by this toolkit drops both causal masks, an extension of the paper's causal-only formulation.
 \end{itemize}
 
 \subsection{Memory Attention}
@@ -383,6 +429,8 @@ The codebase selects a mixer per block from the configured \texttt{layer\_patter
     \State $H \gets \text{sigmoid-attention}(H)$
 \ElsIf{$m=\texttt{ca}$}
     \State $H \gets \text{continuum-attention}(H)$ \Comment{exact segment integration}
+\ElsIf{$m=\texttt{mta}$}
+    \State $H \gets \text{multi-token-attention}(H)$ \Comment{conv over (q,k,heads) + gated group norm}
 \ElsIf{$m=\texttt{memory}$}
     \State $H \gets \text{memory-attention}(H)$
 \ElsIf{$m=\texttt{retnet}$}

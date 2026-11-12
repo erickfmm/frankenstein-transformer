@@ -884,6 +884,8 @@ properties:
 
               | `xsa` | Exclusive Self Attention — post-SDPA orthogonalization against the self value vector (paper: arxiv:2603.09078) | ✅ | ✅ |
 
+              | `mta` | Multi-Token Attention — causal key-query (`cq`×`ck`) and head-group (`ch`) convolutions over the attention score map, pre and post softmax, with a gated group norm (paper: arxiv:2504.00927) | ✅ | ✅ |
+
               | `gated_softmax` | Gated softmax attention with post-SDPA sigmoid (paper: arxiv:2505.06708) | ✅ | ✅ |
 
               | `titan` | Titan attention with positional encoding (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
@@ -1009,6 +1011,8 @@ properties:
               | `ca` | Atención Continua — integración normalizada exacta de exp(puntaje) sobre trayectorias clave/valor lineales por tramos (paper: arxiv:2610.20586) | ✅ | ✅ |
 
               | `xsa` | Atención Exclusiva — ortogonalización post-SDPA frente al vector de valor propio (paper: arxiv:2603.09078) | ✅ | ✅ |
+
+              | `mta` | Atención Multi-Token — convoluciones causales consulta-clave (`cq`×`ck`) y por grupos de cabezas (`ch`) sobre el mapa de puntajes, pre y post softmax, con normalización de grupo con compuerta (paper: arxiv:2504.00927) | ✅ | ✅ |
 
               | `gated_softmax` | Atención softmax con compuerta post-SDPA (paper: arxiv:2505.06708) | ✅ | ✅ |
 
@@ -1160,6 +1164,7 @@ properties:
               - mla
               - mlra
               - msa
+              - mta
               - mtla
               - nsa
               - ode
@@ -2827,6 +2832,13 @@ properties:
                 title_es: Codificación posicional de msa
                 description: Whether `msa` consumes the model-wide positional encoding.
                 description_es: Si `msa` consume la codificación posicional global.
+              mta_use_pe:
+                type: boolean
+                default: true
+                title: mta positional encoding
+                title_es: Codificación posicional de mta
+                description: Whether `mta` consumes the model-wide positional encoding.
+                description_es: Si `mta` consume la codificación posicional global.
               mtla_use_pe:
                 type: boolean
                 default: false
@@ -6170,6 +6182,325 @@ properties:
                   **Referencias:** (paper: arxiv:2606.13392)'
                 examples:
                 - 0.0
+          mta:
+            type: object
+            additionalProperties: false
+            title: Multi-Token Attention
+            title_es: Atención Multi-Token
+            description: 'Hyperparameters for `mta` (Multi-Token Attention (paper: arxiv:2504.00927)).
+
+              Within every head a causal convolutional kernel of size `cq × ck`
+
+              mixes the attention scores of neighbouring queries and keys; a second
+
+              non-overlapping kernel of size `ch × ch` mixes heads inside groups of
+
+              `ch`. Both convolutions are applied before and after the softmax by
+
+              default, followed by a grouped normalization with a per-head sigmoid
+
+              gate before the output projection. Kernels are identity-initialized
+
+              (the paper''s best-converging initialization) and add only ~0.001% of
+
+              the model parameters at 880M scale. Only applies when `mta` appears in
+
+              `layer_pattern`.
+
+
+              **References:** (paper: arxiv:2504.00927)'
+            description_es: 'Hiperparámetros para `mta` (Atención Multi-Token (paper: arxiv:2504.00927)).
+
+              Dentro de cada cabeza, un núcleo convolucional causal de tamaño `cq × ck`
+
+              mezcla los puntajes de atención de consultas y claves vecinas; un segundo
+
+              núcleo sin solapamiento de tamaño `ch × ch` mezcla cabezas dentro de grupos
+
+              de `ch`. Ambas convoluciones se aplican antes y después del softmax por
+
+              defecto, seguidas de una normalización por grupos con una compuerta sigmoide
+
+              por cabeza antes de la proyección de salida. Los núcleos se inicializan en la
+
+              identidad (la inicialización que mejor converge según el paper) y añaden solo
+
+              ~0.001% de los parámetros a escala 880M. Solo aplica cuando `mta` está en
+
+              `layer_pattern`.
+
+
+              **Referencias:** (paper: arxiv:2504.00927)'
+            properties:
+              cq:
+                type: integer
+                minimum: 1
+                title: Query Kernel Size
+                title_es: Tamaño del Núcleo de Consulta
+                description: 'Query-axis kernel size `cq` of the key-query convolution of `mta`
+
+                  (paper: arxiv:2504.00927, Eq. 5). The paper uses `cq = 6` for the
+
+                  880M reference model (the toy task uses `cq = 2`, matching its two
+
+                  question letters). The kernel looks at the current query and the
+
+                  `cq - 1` previous queries; zero padding covers the start of the
+
+                  sequence. Identity initialization places the unit weight at the
+
+                  last row, so `cq = 1` recovers standard attention behaviour before
+
+                  training. Only applies when `mta` is in `layer_pattern`.
+
+
+                  **References:** (paper: arxiv:2504.00927)'
+                description_es: 'Tamaño de núcleo en el eje de consultas `cq` de la convolución
+
+                  consulta-clave de `mta` (paper: arxiv:2504.00927, Eq. 5). El paper
+
+                  usa `cq = 6` para el modelo de referencia de 880M (la tarea de
+
+                  juguete usa `cq = 2`, igual a sus dos letras de consulta). El núcleo
+
+                  mira la consulta actual y las `cq - 1` consultas previas; el relleno
+
+                  de ceros cubre el inicio de la secuencia. La inicialización en la
+
+                  identidad coloca el peso unitario en la última fila, de modo que
+
+                  `cq = 1` reproduce la atención estándar antes del entrenamiento.
+
+                  Solo aplica cuando `mta` está en `layer_pattern`.
+
+
+                  **Referencias:** (paper: arxiv:2504.00927)'
+                default: 6
+                examples:
+                - 2
+                - 4
+                - 6
+                - 8
+              ck:
+                type: integer
+                minimum: 1
+                title: Key Kernel Size
+                title_es: Tamaño del Núcleo de Clave
+                description: 'Key-axis kernel size `ck` of the key-query convolution of `mta`
+
+                  (paper: arxiv:2504.00927, Eq. 5). The paper uses `ck = 11` for the
+
+                  880M reference model; even values are rounded up to the next odd
+
+                  number so the window is centred, and future keys are zeroed by the
+
+                  double causal mask of Eq. 5. Identity initialization places the
+
+                  unit weight at the centre column. Only applies when `mta` is in
+
+                  `layer_pattern`.
+
+
+                  **References:** (paper: arxiv:2504.00927)'
+                description_es: 'Tamaño de núcleo en el eje de claves `ck` de la convolución
+
+                  consulta-clave de `mta` (paper: arxiv:2504.00927, Eq. 5). El paper
+
+                  usa `ck = 11` para el modelo de referencia de 880M; los valores
+
+                  pares se redondean al siguiente impar para centrar la ventana, y las
+
+                  claves futuras se anulan con el doble enmascaramiento causal de la
+
+                  Eq. 5. La inicialización en la identidad coloca el peso unitario en
+
+                  la columna central. Solo aplica cuando `mta` está en
+
+                  `layer_pattern`.
+
+
+                  **Referencias:** (paper: arxiv:2504.00927)'
+                default: 11
+                examples:
+                - 5
+                - 9
+                - 11
+                - 13
+              ch:
+                type: integer
+                minimum: 1
+                title: Head-Mixing Group Size
+                title_es: Tamaño del Grupo de Mezcla de Cabezas
+                description: 'Head-mixing kernel/group size `ch` of `mta` (paper: arxiv:2504.00927,
+
+                  Eq. 7). The heads are split into `num_heads / ch` non-overlapping
+
+                  groups and each group is mixed with its own `ch × ch` kernel, so
+
+                  attention maps can be combined across heads. The paper mixes groups
+
+                  of `ch = 16` heads at 880M scale; the value is clamped at build time
+
+                  to the largest divisor of `num_heads` not exceeding it, and
+
+                  `ch = 1` disables head mixing. Identity initialization keeps the
+
+                  mixer equal to standard attention at step zero. Only applies when
+
+                  `mta` is in `layer_pattern`.
+
+
+                  **References:** (paper: arxiv:2504.00927)'
+                description_es: 'Tamaño de grupo/núcleo de mezcla de cabezas `ch` de `mta` (paper:
+
+                  arxiv:2504.00927, Eq. 7). Las cabezas se dividen en
+
+                  `num_heads / ch` grupos sin solapamiento y cada grupo se mezcla con
+
+                  su propio núcleo `ch × ch`, de modo que los mapas de atención se
+
+                  combinan entre cabezas. El paper mezcla grupos de `ch = 16` cabezas
+
+                  a escala 880M; el valor se recorta en la construcción al mayor
+
+                  divisor de `num_heads` que no lo supere, y `ch = 1` desactiva la
+
+                  mezcla de cabezas. La inicialización en la identidad mantiene el
+
+                  mixer igual a la atención estándar en el paso cero. Solo aplica
+
+                  cuando `mta` está en `layer_pattern`.
+
+
+                  **Referencias:** (paper: arxiv:2504.00927)'
+                default: 16
+                examples:
+                - 1
+                - 2
+                - 4
+                - 16
+              pre_softmax:
+                type: boolean
+                title: Pre-Softmax Key-Query Convolution
+                title_es: Convolución Consulta-Clave Pre-Softmax
+                description: 'Apply the key-query convolution to the attention logits before the
+
+                  softmax with the paper''s default double causal masking (Eq. 5,
+
+                  `Mask_{-inf}` after `Conv2d`, `Mask_0` before it). Enabling both
+
+                  `pre_softmax` and `post_softmax` is the paper''s default ("we apply
+
+                  the MTA convolution both pre-softmax and post-softmax"); disabling
+
+                  both degrades the mixer to standard attention. Only applies when
+
+                  `mta` is in `layer_pattern`.
+
+
+                  **References:** (paper: arxiv:2504.00927)'
+                description_es: 'Aplica la convolución consulta-clave a los logits de atención antes
+
+                  del softmax con el doble enmascaramiento causal por defecto del
+
+                  paper (Eq. 5, `Mask_{-inf}` después de `Conv2d`, `Mask_0` antes).
+
+                  Habilitar `pre_softmax` y `post_softmax` a la vez es el valor por
+
+                  defecto del paper ("aplicamos la convolución MTA tanto antes como
+
+                  después del softmax"); deshabilitar ambas degrada el mixer a
+
+                  atención estándar. Solo aplica cuando `mta` está en `layer_pattern`.
+
+
+                  **Referencias:** (paper: arxiv:2504.00927)'
+                default: true
+                examples:
+                - true
+                - false
+              post_softmax:
+                type: boolean
+                title: Post-Softmax Key-Query Convolution
+                title_es: Convolución Consulta-Clave Post-Softmax
+                description: 'Apply the key-query convolution to the attention weights after the
+
+                  softmax (Eq. 6), which makes the interaction between neighbouring
+
+                  positions additive rather than multiplicative. The paper applies
+
+                  both variants by default and reports in Table 5 that changing the
+
+                  order with respect to the softmax costs only 0.01-0.04 perplexity
+
+                  points. Only applies when `mta` is in `layer_pattern`.
+
+
+                  **References:** (paper: arxiv:2504.00927)'
+                description_es: 'Aplica la convolución consulta-clave a los pesos de atención después
+
+                  del softmax (Eq. 6), lo que hace que la interacción entre posiciones
+
+                  vecinas sea aditiva en lugar de multiplicativa. El paper aplica
+
+                  ambas variantes por defecto y reporta en la Tabla 5 que cambiar el
+
+                  orden respecto al softmax cuesta solo 0.01-0.04 puntos de perplejidad.
+
+                  Solo aplica cuando `mta` está en `layer_pattern`.
+
+
+                  **Referencias:** (paper: arxiv:2504.00927)'
+                default: true
+                examples:
+                - true
+                - false
+              gated_group_norm:
+                type: boolean
+                title: Gated Group Normalization
+                title_es: Normalización de Grupo con Compuerta
+                description: 'Normalise the attention output across groups of `num_heads / ch`
+
+                  heads and scale every head by a learned sigmoid gate before the
+
+                  output projection (paper: arxiv:2504.00927, §3.3). The paper reports
+
+                  that this block drives the gain over vanilla MTA: scalar gating
+
+                  reaches 10.90 validation perplexity versus 11.03 with no scaling
+
+                  and 11.41 with square-root layer-norm scaling (Table 5). `false`
+
+                  removes the normalisation, the gate and their parameters, leaving
+
+                  plain attention output. Only applies when `mta` is in `layer_pattern`.
+
+
+                  **References:** (paper: arxiv:2504.00927)'
+                description_es: 'Normaliza la salida de atención entre grupos de `num_heads / ch`
+
+                  cabezas y escala cada cabeza con una compuerta sigmoide aprendida
+
+                  antes de la proyección de salida (paper: arxiv:2504.00927, §3.3). El
+
+                  paper reporta que este bloque aporta la mejora sobre MTA vanilla: la
+
+                  compuerta escalar alcanza 10.90 de perplejidad de validación frente a
+
+                  11.03 sin escalado y 11.41 con escalado layer-norm de raíz cuadrada
+
+                  (Tabla 5). `false` elimina la normalización, la compuerta y sus
+
+                  parámetros, dejando la salida de atención simple. Solo aplica cuando
+
+                  `mta` está en `layer_pattern`.
+
+
+                  **Referencias:** (paper: arxiv:2504.00927)'
+                default: true
+                examples:
+                - true
+                - false
           mtla:
             type: object
             additionalProperties: false

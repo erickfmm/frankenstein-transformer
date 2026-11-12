@@ -307,6 +307,12 @@ ATTENTIONS = [
     # natively in encoder and decoder modes; exact KV-cache incremental
     # decoding.
     "xsa",
+    # Multi-Token Attention (arXiv:2504.00927): causal key-query and
+    # head-group convolutions over the attention score map, pre and post
+    # softmax, with a gated group norm; trains natively in encoder and
+    # decoder modes; exact KV-cache incremental decoding with a cq-1 query
+    # tail.
+    "mta",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).

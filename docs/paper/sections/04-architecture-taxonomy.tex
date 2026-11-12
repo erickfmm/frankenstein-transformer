@@ -4,9 +4,9 @@
 \subsection{Attention and Sequence-Mixer Families}
 \label{sec:attention-families}
 
-The system implements fifty sequence mixers organized into nine functional categories that reflect how each method balances expressivity, computational cost, and memory.
+The system implements fifty-three sequence mixers organized into nine functional categories that reflect how each method balances expressivity, computational cost, and memory.
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Dense baselines} (5): standard softmax attention, sigmoid attention, Continuum Attention, Grouped-Query Attention (GQA), and Exclusive Self Attention (XSA) provide full global routing at quadratic cost. XSA keeps the standard softmax block and strips the component of each head's output along the token's own value vector \citep{zhai_exclusive_2026}, a parameter-free exclusion that sharpens the division of labor between attention and the feed-forward path.
+    \item \textbf{Dense baselines} (6): standard softmax attention, sigmoid attention, Continuum Attention, Grouped-Query Attention (GQA), Exclusive Self Attention (XSA), and Multi-Token Attention (MTA) provide full global routing at quadratic cost. XSA keeps the standard softmax block and strips the component of each head's output along the token's own value vector \citep{zhai_exclusive_2026}, a parameter-free exclusion that sharpens the division of labor between attention and the feed-forward path.
     \item \textbf{Recurrent and retentive} (3): RetNet, Mamba, and ODE-style blocks maintain state for constant-time inference through recurrence, selective state spaces, or continuous depth.
     \item \textbf{Sparse patterns} (11): Sparse Transformer, Longformer, SWA with attention sinks, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA, SparDA, and LSA reduce quadratic cost through structured sparsity, token selection, training-free pruning, or semantic key clustering.
     \item \textbf{Gated mechanisms} (9): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, KDA, and First Passage Attention (FPA) introduce data-dependent control over retention, forgetting, and update strength.
@@ -20,7 +20,7 @@ The system implements fifty sequence mixers organized into nine functional categ
 \begin{figure}[t]
 \centering
 \fitfigure{\includegraphics{figures/mixer-taxonomy.pdf}}
-\caption{Taxonomy of the fifty sequence mixers across nine functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; the memory family pairs a test-time associative memory (Titans), hash-based N-gram lookups (Engram), and token-indexed value capacity (Memory Attention); fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors; convolution-augmented methods add a local convolution branch beside attention.}
+\caption{Taxonomy of the fifty-three sequence mixers across nine functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; the memory family pairs a test-time associative memory (Titans), hash-based N-gram lookups (Engram), and token-indexed value capacity (Memory Attention); fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors; convolution-augmented methods add a local convolution branch beside attention.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 

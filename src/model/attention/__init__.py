@@ -20,6 +20,7 @@ from .conformer import ConformerAttention
 from .grouped_query_attention import GroupedQueryAttention
 from .ca import ContinuumAttention
 from .memory import MemoryAttention
+from .mta import MultiTokenAttention
 from .standard import StandardAttention
 from .xsa import ExclusiveSelfAttention
 from .ssog import SSOGAttention
@@ -64,6 +65,7 @@ __all__ = [
     "StandardAttention",
     "ExclusiveSelfAttention",
     "ContinuumAttention",
+    "MultiTokenAttention",
     "MemoryAttention",
     "SigmoidAttention",
     "ODEAttentionBlock",

@@ -8,6 +8,7 @@ Attention Package
    standard
    sigmoid
    xsa
+   mta
    ca
    memory
    retnet

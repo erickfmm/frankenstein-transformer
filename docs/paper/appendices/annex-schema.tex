@@ -255,6 +255,7 @@ standard & Classic multi-head self-attention (BERT-style) & \checkmark & \checkm
 sigmoid & Sigmoid-gated attention & \checkmark & \checkmark \\
 ca & Continuum Attention --- exact continuous integration over piecewise-linear memory trajectories & \checkmark & \checkmark \\
 xsa & Exclusive Self Attention --- post-SDPA orthogonalization against the self value vector & \checkmark & \checkmark \\
+mta & Multi-Token Attention --- causal key-query and head-group convolutions over the attention score map with a gated group norm & \checkmark & \checkmark \\
 memory & Memory Attention — token-ID memory values (V = K + Norm(E[s])) & \checkmark & \checkmark \\
 gated\_softmax & Gated softmax attention with post-SDPA sigmoid & \checkmark & \checkmark \\
 titan & Titan attention with positional encoding (HoPE/RoPE) & \checkmark & \checkmark \\

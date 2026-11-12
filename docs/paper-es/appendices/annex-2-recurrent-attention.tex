@@ -3,7 +3,7 @@
 
 Este anexo sintetiza las familias densas, recurrentes y aumentadas con memoria de transformers. El campo ha evolucionado hacia varios paradigmas principales: atención densa global con variantes, compresión de cabezas clave-valor mediante atención por consultas agrupadas, compresión de estado recurrente con decaimiento, modelos de espacio de estado selectivos, integración numérica de profundidad continua, memoria de valores indexada por token y arquitecturas aumentadas con memoria. Comprender esta taxonomía ilumina las compensaciones fundamentales entre expresividad, costo computacional, huella de memoria y simplicidad de despliegue.
 
-\subsection{Atención Densa de Referencia: Estándar, Sigmoide, Continua y Exclusiva}
+\subsection{Atención Densa de Referencia: Estándar, Sigmoide, Continua, Exclusiva y Multi-Token}
 
 \subsubsection{Atención Softmax Estándar}
 
@@ -169,6 +169,52 @@ El paso no tiene parámetros, es local a la fila (solo consume el valor del toke
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token con una caché KV simple; la exclusión solo lee $\mathbf{v}_i$ recién calculado, por lo que la decodificación incremental es exacta (clase (i)).
     \item \textbf{Fortalezas}: Cero parámetros adicionales; cambio de dos líneas; ganancias consistentes de entrenamiento/validación con 0.7B, 1.3B y 2.7B parámetros en FineWeb-100BT (+0.26, +1.03 y +1.36 puntos promedio en tareas posteriores frente a SA); el margen crece con la longitud de secuencia (512 a 16k) y es estable entre tasas de aprendizaje y configuraciones de sumideros de atención.
     \item \textbf{Debilidades}: La evidencia es solo de modelado de lenguaje; el artículo no ofrece fundamento teórico más allá de la motivación empírica; la normalización L2 por token es un kernel extra (pequeño) frente a SDPA vanilla; la variante de codificador (bidireccional) que usa este toolkit es una extensión agnóstica a la máscara de la formulación causal del artículo.
+\end{itemize}
+
+\subsubsection{Atención Multi-Token (MTA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/mta.pdf}}
+\caption{Flujo de datos de la Atención Multi-Token: convolución causal consulta-clave sobre el mapa de puntajes (pre-softmax, Eq.~\ref{eq:mta-pre-es}), softmax, convolución de mezcla de cabezas por grupos (Eq.~\ref{eq:mta-head-es}), una segunda convolución consulta-clave post-softmax y la normalización de grupo con compuerta antes de la proyección de salida; la ruta punteada es la cola de consultas en decodificación.}
+\label{fig:mixer-mta-es}
+\end{figure}
+La Atención Multi-Token \citep{golovneva_multi_token_2025} ataca el \emph{cuello de botella de un solo token} de la atención softmax: cada peso $a_{ij}$ se decide con una sola consulta y una sola clave, de modo que una región del contexto identificada por varios tokens (una oración que menciona a ``Alice'' y a ``rabbit'') debe comprimirse en un único vector. MTA conserva el esqueleto cuadrático de la atención y hace interactuar a consultas, claves y cabezas vecinas mediante pequeñas convoluciones aprendidas sobre el mapa de puntajes. La convolución consulta-clave mezcla los logits de una ventana de $c_q$ consultas y $c_k$ claves, por cabeza:
+\begin{equation}
+a_{ij} = \operatorname{Softmax}\Big(\sum_{i'=0}^{c_q-1}\ \sum_{j'=-\lfloor c_k/2\rfloor}^{\lceil c_k/2\rceil-1}
+\mathbf{1}_{i\ge j-j'}\ \theta_{i',j'}\ \mathbf{q}_{i-i'}\mathbf{k}_{j-j'}^{\top}/\sqrt{d_h}\Big),
+\label{eq:mta-exact-es}
+\end{equation}
+y, como ese indicador exigiría núcleos CUDA a medida, la implementación por defecto aplica dos veces la máscara causal existente:
+\begin{equation}
+\mathbf{A} = \operatorname{Softmax}\Big(\operatorname{Mask}_{-\infty}\big(\operatorname{Conv2d}_{\theta}(\operatorname{Mask}_{0}(\hat{\mathbf{A}}))\big)\Big),
+\qquad
+\mathbf{A} = \operatorname{Mask}_{0}\Big(\operatorname{Conv2d}_{\theta}\big(\operatorname{Softmax}(\operatorname{Mask}_{-\infty}(\hat{\mathbf{A}}))\big)\Big),
+\label{eq:mta-pre-es}
+\end{equation}
+donde la primera expresión es la variante pre-softmax (la predeterminada del paper) y la segunda la post-softmax (interacción aditiva en lugar de multiplicativa); por defecto se aplican ambas. La mezcla de cabezas divide las $n_h$ cabezas en $n_h/c_h$ grupos sin solapamiento y mezcla cada grupo con su propio núcleo $c_h\times c_h$,
+\begin{equation}
+\mathbf{A}^{1}_{\text{new}} = w_{11}\mathbf{A}^{1}+w_{12}\mathbf{A}^{2}, \qquad
+\mathbf{A}^{2}_{\text{new}} = w_{21}\mathbf{A}^{1}+w_{22}\mathbf{A}^{2},
+\label{eq:mta-head-es}
+\end{equation}
+de modo que los mapas de atención se combinan entre cabezas (una mezcla post-softmax $2\times2$ equivale a duplicar el rango de las proyecciones de valor/salida, Apéndice~B del paper). Finalmente, una normalización por grupos sobre cada conjunto de $c_h$ cabezas seguida de una compuerta sigmoide por cabeza, $\operatorname{diag}(\sigma(\mathbf{g}))\operatorname{GroupNorm}(\mathbf{A}\mathbf{V})$, contrarresta la corriente residual y permite encender o apagar cabezas según la capa; el paper reporta 10.90 de perplejidad de validación con compuerta escalar frente a 11.03 sin escalado y 11.41 con escalado layer-norm. Los núcleos se inicializan en la identidad (la opción que mejor converge) y el mixer añade solo cerca del $0.001\%$ de los parámetros a escala 880M: $n_h(2c_qc_k + c_h) + 2H + n_h$, es decir, un escalar por cabeza para la compuerta, una normalización de grupo afín y los núcleos.
+
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} $\mathbf{x}$; $\mathbf{W}_q,\mathbf{W}_k,\mathbf{W}_v,\mathbf{W}_o$; hiperparámetros $c_q,c_k,c_h$
+\State $\mathbf{Q}\gets\mathbf{x}\mathbf{W}_q$, $\mathbf{K}\gets\mathbf{x}\mathbf{W}_k$, $\mathbf{V}\gets\mathbf{x}\mathbf{W}_v$; $\hat{\mathbf{A}}\gets\mathbf{Q}\mathbf{K}^\top/\sqrt{d_h}$
+\State $\hat{\mathbf{A}}\gets\operatorname{Mask}_{0}(\hat{\mathbf{A}})$; \quad $\hat{\mathbf{A}}\gets\operatorname{Conv2d}_{\theta_{\text{pre}}}(\hat{\mathbf{A}})$
+\State $\mathbf{A}\gets\operatorname{Softmax}(\operatorname{Mask}_{-\infty}(\hat{\mathbf{A}}))$
+\State $\mathbf{A}\gets$ convolución de cabezas $w$ por grupos de $c_h$; \quad $\mathbf{A}\gets\operatorname{Mask}_{0}(\operatorname{Conv2d}_{\theta_{\text{post}}}(\mathbf{A}))$
+\State $\mathbf{O}\gets\operatorname{diag}(\sigma(\mathbf{g}))\operatorname{GroupNorm}(\mathbf{A}\mathbf{V})$
+\State \textbf{Salida:} $\mathbf{O}\mathbf{W}_o$
+\end{algorithmic}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 d_h n_h + n^2 c_q c_k n_h)$ --- sigue siendo cuadrática en la longitud de secuencia, con una constante pequeña aportada por los núcleos; el mapa de puntajes debe materializarse, así que los núcleos SDPA fusionados no son compatibles (limitación declarada por el paper).
+    \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n d_h n_h)$ por paso con caché KV más una corrección convolucional $\mathcal{O}(c_q c_k n_h)$; la decodificación conserva la caché KV clásica y una cola FIFO de las últimas $c_q-1$ consultas, de modo que la convolución con doble máscara se reproduce de forma exacta (clases (i)+(v)).
+    \item \textbf{Fortalezas}: mejoras consistentes a 880M/105B tokens de SlimPajama frente a las referencias Transformer, Diff Transformer y Talking-Heads (perplejidad media de validación 10.91 frente a 11.25, 11.15 y 11.04; 44.9 frente a 43.7 puntos zero-shot de media), grandes mejoras en recuperación de contexto largo (multi-aguja, BabiLong, LAMBADA) con $+0.001\%$ de parámetros, y núcleos casi identidad que aprenden a ser filtros diagonales de ``coincidencia de oraciones'', de cebado o de detección de bordes.
+    \item \textbf{Debilidades}: incompatible con núcleos de atención optimizados (el mapa de puntajes se materializa); la convolución consulta-clave se aplica en una de cada cuatro capas en la corrida de referencia por eficiencia, así que la variante en todas las capas cuesta más aritmética que lo reportado; la forma encoder (bidireccional) de este toolkit elimina ambas máscaras causales, una extensión de la formulación causal del paper.
 \end{itemize}
 
 \subsection{Memory Attention}

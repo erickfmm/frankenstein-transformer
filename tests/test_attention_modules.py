@@ -11,6 +11,7 @@ if TORCH_AVAILABLE:
     from src.model.attention.xsa import ExclusiveSelfAttention
     from src.model.attention.sigmoid import SigmoidAttention
     from src.model.attention.ca import ContinuumAttention, _exp_moments
+    from src.model.attention.mta import MultiTokenAttention
     from src.model.attention.titan import TitanAttention
     from src.model.attention.ode import ODEAttentionBlock, ODEFunc
     from src.model.attention.retnet import MultiScaleRetention
@@ -285,6 +286,83 @@ class ContinuumAttentionTests(unittest.TestCase):
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class MultiTokenAttentionTests(unittest.TestCase):
+    """Multi-Token Attention: convolutions over queries, keys and heads."""
+
+    def _make(self, **kw):
+        kw.setdefault("attention", {"mta": {"cq": 3, "ck": 5, "ch": 2}})
+        return MultiTokenAttention(_cfg(**kw))
+
+    def _x(self):
+        return torch.randn(BSZ, SEQ, DIM)
+
+    def test_encoder_output_shape(self):
+        attn = self._make()
+        self.assertEqual(attn(self._x()).shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_output_shape(self):
+        attn = self._make(dims={"mode": 'decoder'})
+        self.assertEqual(attn(self._x()).shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_is_causal(self):
+        attn = self._make(dims={"mode": 'decoder'}).eval()
+        x = self._x()
+        with torch.no_grad():
+            y = attn(x)
+            x2 = x.clone()
+            x2[:, -1, :] += 10.0
+            y2 = attn(x2)
+        self.assertTrue(torch.allclose(y[:, :-1, :], y2[:, :-1, :], atol=1e-5))
+
+    def test_knobs_are_bound(self):
+        attn = self._make(attention={"mta": {"cq": 4, "ck": 9, "ch": 3}})
+        self.assertEqual((attn.cq, attn.ck), (4, 9))
+        # ch is clamped to the largest divisor of num_heads (6) <= 3.
+        self.assertEqual(attn.ch, 3)
+        self.assertEqual(attn.head_groups, 2)
+
+    def test_even_key_kernel_is_rounded_up(self):
+        attn = self._make(attention={"mta": {"ck": 6}})
+        self.assertEqual(attn.ck, 7)
+
+    def test_identity_kernels_match_standard_attention(self):
+        cfg = _cfg(attention={"mta": {"cq": 3, "ck": 5, "ch": 2}})
+        std = StandardAttention(cfg).eval()
+        mta = MultiTokenAttention(cfg).eval()
+        mta.gated_group_norm = False
+        mta.load_state_dict(std.state_dict(), strict=False)
+        x = self._x()
+        with torch.no_grad():
+            self.assertTrue(torch.allclose(mta(x), std(x), atol=1e-6))
+
+    def test_no_nan_or_inf(self):
+        attn = self._make(dims={"mode": 'decoder'})
+        y = attn(self._x())
+        self.assertTrue(torch.isfinite(y).all())
+
+    def test_bitnet_enabled(self):
+        attn = self._make(bitnet={"enabled": True})
+        self.assertEqual(attn(self._x()).shape, (BSZ, SEQ, DIM))
+
+    def test_seq_len_one(self):
+        attn = self._make(dims={"mode": 'decoder'})
+        y = attn(torch.randn(BSZ, 1, DIM))
+        self.assertEqual(y.shape, (BSZ, 1, DIM))
+
+    def test_parameter_formula(self):
+        """Extra parameters follow nH*(2*cq*ck) + nH*ch + 2*H + nH."""
+        cfg = _cfg(attention={"mta": {"cq": 3, "ck": 5, "ch": 2}})
+        attn = MultiTokenAttention(cfg)
+        heads = attn.num_heads
+        expected = heads * (2 * 3 * 5) + heads * attn.ch + 2 * DIM + heads
+        extra = sum(
+            p.numel()
+            for name, p in attn.named_parameters()
+            if name not in {"q_proj.weight", "k_proj.weight", "v_proj.weight", "out_proj.weight"}
+        )
+        self.assertEqual(extra, expected)
+
+
 class MemoryAttentionTests(unittest.TestCase):
     """Memory Attention: V = K + Norm(E[s]) with a token-ID memory table."""
 
