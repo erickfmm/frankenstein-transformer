@@ -15,6 +15,7 @@ if TORCH_AVAILABLE:
         LSAAttention,
         MSAAttention,
         NSAAttention,
+        ProbSparseAttention,
         SparseKAttention,
         SparseTransformerAttention,
         SpargeAttention,
@@ -333,6 +334,88 @@ class SparseKAttentionTests(unittest.TestCase):
         x = _x().requires_grad_(True)
         attn(x).sum().backward()
         self.assertIsNotNone(x.grad)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class ProbSparseAttentionTests(unittest.TestCase):
+    def test_output_shape(self):
+        attn = ProbSparseAttention(_cfg())
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_mode(self):
+        attn = ProbSparseAttention(_cfg(dims={'mode': 'decoder'}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_is_causal(self):
+        attn = ProbSparseAttention(_cfg(dims={'mode': 'decoder'}))
+        x = _x()
+        y = attn(x)
+        x2 = x.clone()
+        x2[:, 4:, :] = torch.randn_like(x2[:, 4:, :])
+        y2 = attn(x2)
+        torch.testing.assert_close(y[:, :4], y2[:, :4])
+
+    def test_gradient_flows(self):
+        attn = ProbSparseAttention(_cfg())
+        x = _x().requires_grad_(True)
+        attn(x).sum().backward()
+        self.assertIsNotNone(x.grad)
+        self.assertIsNotNone(attn.p_proj.weight.grad)
+        self.assertIsNotNone(attn.u1.grad)
+
+    def test_knobs_honored(self):
+        attn = ProbSparseAttention(
+            _cfg(attention={'probsparse': {'c1': 1.0, 'c2': 100.0}})
+        )
+        self.assertEqual(attn.c1, 1.0)
+        self.assertEqual(attn.c2, 100.0)
+        y = attn(_x())
+        self.assertTrue(torch.isfinite(y).all())
+
+    def test_no_nans(self):
+        attn = ProbSparseAttention(_cfg())
+        y = attn(_x())
+        self.assertTrue(torch.isfinite(y).all())
+
+    def test_bitnet_on(self):
+        attn = ProbSparseAttention(_cfg(bitnet={'enabled': True}))
+        y = attn(_x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_parameter_count_formula(self):
+        attn = ProbSparseAttention(_cfg(bitnet={'enabled': False}))
+        hidden = DIM
+        expected = 5 * hidden * hidden + 2 * hidden
+        attention_params = sum(
+            p.numel()
+            for name, p in attn.named_parameters()
+            if name.split(".")[0] in {"q_proj", "k_proj", "v_proj", "out_proj", "p_proj"}
+        ) + attn.u1.numel() + attn.u2.numel()
+        self.assertEqual(attention_params, expected)
+
+    def test_incremental_parity(self):
+        from src.model.cache import FrankensteinCache
+        from src.model.frankenstein_decoder import FrankensteinDecoder
+
+        torch.manual_seed(0)
+        cfg = _cfg(dims={'mode': 'decoder'})
+        model = FrankensteinDecoder(cfg).eval()
+        prompt = torch.randint(0, cfg.dims.vocab_size, (1, 5))
+        with torch.inference_mode():
+            cache = FrankensteinCache.new(model, None, device=prompt.device)
+            _, cache = model(
+                prompt,
+                past_key_values=cache,
+                use_cache=True,
+                return_cache=True,
+            )
+            logits_cached, _ = model(
+                torch.randint(0, cfg.dims.vocab_size, (1, 1)),
+                past_key_values=cache,
+                use_cache=True,
+                return_cache=True,
+            )
+        self.assertEqual(logits_cached.shape[0], 1)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")

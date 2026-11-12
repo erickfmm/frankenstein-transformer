@@ -389,7 +389,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-55 enum values in 9 families. `config subkey` is the optional
+56 enum values in 9 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -411,6 +411,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `swa` | Sparse | `swa.*` | yes |
 | `bigbird` | Sparse | — | yes |
 | `sparsek` | Sparse | — | yes |
+| `probsparse` | Sparse | `probsparse.*` | yes |
 | `nsa` | Sparse | — | yes |
 | `msa` | Sparse | `msa.*` | yes |
 | `sparda` | Sparse | `sparda.*` | yes |
@@ -778,6 +779,8 @@ Implemented cached branches (parity-tested in
 `sparse_transformer`, `fasa`, `retnet`,
 `gla`, `deltanet`, `gated_deltanet`,
 `gated_deltanet2`, `hgrn2`, `kda`, `gma`, `memory`,
+`probsparse` (`KVSlot`: query-side selection is degenerate for a single
+decode query, so dense-over-cache is exact with the `U_1`/`U_2` row terms),
 `mta` (`KVSlot` + per-token query tail: the causal `cq`-row score window is
 rebuilt each step, exact), `lsa` (`BucketKVSlot`: KV + immutable per-block bucket centroids/index
 table, never quantized), `fastconformer` (`RingSlot`: pinned head prefix

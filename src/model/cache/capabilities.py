@@ -77,6 +77,7 @@ IMPLEMENTED_MIXERS = frozenset(
         "longformer",     # F1 (pattern over positions)
         "bigbird",        # F1 (seeded random links, R2)
         "sparse_transformer",  # F1 (position-based patterns)
+        "probsparse",     # F1 (query-side selection degenerate at decode; exact dense-over-cache)
         "fasa",           # F1 (row-local top-k over cached RoPE keys)
         "lsa",            # F2 (bucket cache over immutable complete cluster blocks)
         # ---- F2 recurrent / state family ----

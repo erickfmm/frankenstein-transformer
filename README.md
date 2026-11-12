@@ -23,9 +23,9 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Activations | Norms | Model Classes | Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-----------:|:-----:|:-------------:|:-----:|:-------:|:------------:|
-| **53** | **38** | **12** | **44** | **6** | **4** | **9** | **197** | **4** |
+| **56** | **38** | **12** | **44** | **6** | **4** | **9** | **197** | **4** |
 
-> **53 mixer architectures** — 52 mixer classes plus the `mamba` linear passthrough; the schema exposes all 53 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
+> **56 mixer architectures** — 55 mixer classes plus the `mamba` linear passthrough; the schema exposes all 56 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
 
 ## How It Works
 
@@ -122,7 +122,7 @@ code as the built-ins.
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | **52** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
+| Sequence mixer architectures | **55** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
 | Optimizer families | 38 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
 | FFN activations | 44 (40 elementwise + `swiglu`, `geglu`, `reglu`, `situ`) |
@@ -167,7 +167,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 |----------|------------|-------------|
 | **Dense** (6) | `standard`, `sigmoid`, `ca`, `gqa`, `xsa`, `mta` | Full quadratic attention variants: softmax, sigmoid gating, exact continuum integration, grouped-query attention with configurable KV heads, exclusive self attention with post-SDPA self-value exclusion, and multi-token attention with convolutions over queries, keys and heads |
 | **Recurrent** (3) | `retnet`, `mamba`, `ode` | Retention networks, state-space models, and continuous-depth ODE layers |
-| **Sparse** (11) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), and semantic key-clustering patterns |
+| **Sparse** (12) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa`, `probsparse` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), semantic key-clustering, and query-sparsity patterns |
 | **Gated** (9) | `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa`, `gated_softmax`, `kda` | Linear attention with multiplicative gates, delta rules, gated softmax, and path-extremum forgetting |
 | **Fast-Weight** (6) | `falcon1`, `falcon2`, `falcon3`, `falcon1a`, `falcon2a`, `falcon3a` | Fast-weight / online-learning attention with per-layer fast-weight update rules |
 | **Latent** (14) | `mla`, `gqla`, `gmla`, `mlra`, `tucker`, `kpa`, `tpa`, `mfa`, `iha`, `gta`, `mtla`, `cca`, `ccgqa`, `gma` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, Kronecker-product factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
@@ -177,7 +177,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 ⚠️ `sparge` and `fasa` are **inference-sparse**: they train as dense attention over their own projections, then activate their sparse heuristic in `eval()`. They are valid in training presets.
 
-Configure via `layer_pattern` in YAML. The schema accepts 55 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
+Configure via `layer_pattern` in YAML. The schema accepts 56 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
 
 ## Optimizer Categories
 

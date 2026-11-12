@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 55 mezcladores de secuencia en nueve familias, 38 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 56 mezcladores de secuencia en nueve familias, 38 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -44,13 +44,14 @@ mamba & Recurrente & $\mathcal{O}(n d)$ & $\mathcal{O}(1)$ & Modelo de espacio d
 ode & Recurrente & $\mathcal{O}(k \cdot n^2 d)$ & $\mathcal{O}(k n)$ & Integración RK4 de profundidad continua; solucionador de paso adaptativo & \citep{zhang_continuous_2021} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Disperso (11)}} \\
+\multicolumn{6}{c}{\textbf{Disperso (12)}} \\
 \midrule
 sparse\_transformer & Disperso & $\mathcal{O}(n \sqrt{n} \cdot d)$ & $\mathcal{O}(n)$ & Máscaras factorizadas estrideadas + fijas; patrón de dispersidad $\sqrt{n}$ & \citep{child_sparse_transformer_2019} \\
 longformer & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(n)$ & Ventana deslizante + dilatación + tokens globales; lineal en $n$ & \citep{beltagy_longformer_2020} \\
 swa & Disperso & $\mathcal{O}(n \cdot w \cdot d)$ & $\mathcal{O}(w)$ & Ventana deslizante + sumideros de atención; sin entrenamiento, caché KV fija & \citep{jolicoeur_sliding_window_2026} \\
 bigbird & Disperso & $\mathcal{O}(n)$ & $\mathcal{O}(n)$ & Aleatorio + local + global; atención Turing completa & \citep{zaheer_bigbird_2020} \\
 sparsek & Disperso & $\mathcal{O}(n \cdot d)$ & $\mathcal{O}(k)$ & Selección top-$k$ diferenciable; máscara de dispersidad aprendida & \citep{lou_sparsek_2024} \\
+probsparse & Disperso & $\mathcal{O}(L \log L \cdot d)$ & $\mathcal{O}(n_{\text{ctx}})$ & Top-$u$ por dispersidad de consultas con medida KL max--mean; decodificación exacta con caché KV & \citep{wu_deep_sparse_conformer_2022} \\
 nsa & Disperso & $\mathcal{O}((t/d + n_l + w)d)$ & $\mathcal{O}(n)$ & Diseño de 3 ramas alineado con hardware; token/vecino/ventana & \citep{yuan_nsa_2025} \\
 sparge & Disperso & $\mathcal{O}(n^2 \cdot s \cdot d)$ & $\mathcal{O}(n)$ & Filtrado de bloques en dos etapas; entrenamiento denso, inferencia dispersa & \citep{zhang_spargeattn_2025} \\
 fasa & Disperso & $\mathcal{O}(t \cdot N_{\text{tip}} + N_{\text{fac}} \cdot d)$ & $\mathcal{O}(n)$ & Dispersidad consciente de frecuencia RoPE; entrenamiento denso, inferencia dispersa & \citep{wang_fasa_2026} \\

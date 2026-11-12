@@ -296,7 +296,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 - `layer_pattern`: list of blocks.
 - `mode`: `encoder` or `decoder` (if omitted, defaults to encoder unless `model_class: frankenstein_text_decoder`, which forces decoder).
 - Legacy blocks: `retnet`, `mamba`, `ode`, `standard`, `sigmoid`, `xsa` (Exclusive Self Attention, arXiv:2603.09078).
-- Sparse blocks: `sparse_transformer`, `longformer`, `bigbird`, `sparsek`, `nsa`, `sparge`, `fasa`, `msa` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda` (SparDA, arXiv:2606.04511), `lsa` (Latent Sparse Attention, arXiv:2610.42147).
+- Sparse blocks: `sparse_transformer`, `longformer`, `bigbird`, `sparsek`, `nsa`, `sparge`, `fasa`, `msa` (MiniMax Sparse Attention, arXiv:2606.13392), `sparda` (SparDA, arXiv:2606.04511), `lsa` (Latent Sparse Attention, arXiv:2610.42147), `probsparse` (ProbSparse, arXiv:2209.00260).
 - Gated blocks: `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa` (First Passage Attention, arXiv:2610.22714), `gated_softmax`, `kda` (Kimi Delta Attention, arXiv:2510.26692).
 - Latent blocks (KV-compression / head-mixing, generalising GQA):
   - `mla` — Multi-Head Latent Attention + RoPE (arXiv:2506.09342).
@@ -337,6 +337,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   `longformer`, `bigbird`, `sparse_transformer`, `gta`,
   `iha`, `mtla`, `gma`, `nsa`, `sparsek`, `msa`,
   `sparda`, `lsa`, `fastconformer`, `conformer`, `fox`, `fpa`, `gated_softmax`, `xsa`, `mta`,
+  `probsparse`,
   `titan`, `gqla`, `mlra`, `memory`; `qk_clip` additionally excludes
   `gma`. Recurrent/state-space mixers (`retnet`, `gla`, `mamba`, …)
   are rejected at load time. Examples: `norm_qknorm_rms.yaml`,

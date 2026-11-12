@@ -3,7 +3,7 @@
 
 \subsection{Resumen Ejecutivo}
 
-Los mecanismos de atención dispersa abordan la prohibitiva complejidad computacional y de memoria $\mathcal{O}(n^2)$ de la atención de producto punto escalado estándar al restringir el conjunto de pares clave-valor atendidos. La atención dispersa moderna abarca un rico espacio de diseño distinguido por cuatro dimensiones ortogonales: (i) \textbf{patrón de dispersidad} (geométrico fijo, dependiente de datos o basado en frecuencia), (ii) \textbf{capacidad de entrenamiento} (entrenado de extremo a extremo o solo inferencia), (iii) \textbf{unidad de dispersidad} (tokens individuales, ventanas locales o bloques), y (iv) \textbf{mecanismo} (enmascaramiento, selección, filtrado o compresión). Este anexo sintetiza once métodos principales de atención dispersa---Sparse Transformer, Longformer, SWA con sumideros de atención, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, SparDA y LSA---proporcionando formulaciones matemáticas, pseudocódigo algorítmico y comparaciones arquitectónicas exhaustivas. Fast Conformer, la variante de contexto limitado del bloque Conformer aumentado con convolución, pertenece a la familia aumentada con convolución y se documenta junto al Conformer en el Anexo~\ref{sec:annex-conformer}.
+Los mecanismos de atención dispersa abordan la prohibitiva complejidad computacional y de memoria $\mathcal{O}(n^2)$ de la atención de producto punto escalado estándar al restringir el conjunto de pares clave-valor atendidos. La atención dispersa moderna abarca un rico espacio de diseño distinguido por cuatro dimensiones ortogonales: (i) \textbf{patrón de dispersidad} (geométrico fijo, dependiente de datos o basado en frecuencia), (ii) \textbf{capacidad de entrenamiento} (entrenado de extremo a extremo o solo inferencia), (iii) \textbf{unidad de dispersidad} (tokens individuales, ventanas locales o bloques), y (iv) \textbf{mecanismo} (enmascaramiento, selección, filtrado o compresión). Este anexo sintetiza doce métodos principales de atención dispersa---Sparse Transformer, Longformer, SWA con sumideros de atención, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, SparDA, LSA y ProbSparse---proporcionando formulaciones matemáticas, pseudocódigo algorítmico y comparaciones arquitectónicas exhaustivas. Fast Conformer, la variante de contexto limitado del bloque Conformer aumentado con convolución, pertenece a la familia aumentada con convolución y se documenta junto al Conformer en el Anexo~\ref{sec:annex-conformer}.
 
 \subsection{Sparse Transformer: Patrones Estrideados y Fijos Factorizados}
 
@@ -766,9 +766,76 @@ donde el softmax se renormaliza por cabeza sobre la selección compartida. N-LSA
     \item \textbf{Limitación}: El indexador plano sigue siendo cuadrático en la longitud de contexto (con una constante $1/\bar{n}_b$); la búsqueda en árbol queda para trabajo futuro. La lista de índices única del paper asume una sola cabeza KV compartida ($n_{kv}=1$), y N-LSA usa deliberadamente ausencia de codificación posicional.
 \end{itemize}
 
+\subsection{Atención ProbSparse: selección top-$u$ por dispersidad de consultas}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/probsparse.pdf}}
+\caption{Flujo de datos de ProbSparse: un subconjunto aleatorio de $c_1\lceil\ln L_K\rceil$ claves ordena las consultas con la medida de dispersidad max--mean; solo las $c_2\lceil\ln L_Q\rceil$ consultas dominantes se puntúan frente a todas las claves, con el término de posición relativa $P=X_PW_P$ añadido mediante $U_2$.}
+\label{fig:mixer-probsparse-es}
+\end{figure}
+
+\subsubsection{Formulación Matemática}
+
+La atención ProbSparse \citep{wu_deep_sparse_conformer_2022}, adaptada de Informer \citep{zhou_informer_2021}, ataca el costo cuadrático desde el lado de las \emph{consultas} en lugar del de las claves. Para una secuencia de longitud $L$ conserva un tensor $\bar{\mathbf{Q}}$ de la misma forma que contiene solo las $u$ consultas \emph{dominantes} bajo una medida de dispersidad $\mathcal{M}(\mathbf{q}, \mathbf{K})$, de modo que cada clave es atendida solo por esas consultas:
+\begin{equation}
+A(\mathbf{Q},\mathbf{K},\mathbf{V}) = \sum_j \left[\frac{k(\mathbf{Q},\mathbf{k}_j)}{\sum_l k(\mathbf{Q},\mathbf{k}_l)}\right]\mathbf{v}_j
+= \mathbb{E}_{p(\mathbf{k}_j\mid\mathbf{Q})}[\mathbf{v}_j]
+\approx \mathrm{Softmax}\!\left(\frac{\bar{\mathbf{Q}}\mathbf{K}^{\top}}{\sqrt{d}}\right)\mathbf{V},
+\end{equation}
+con kernel exponencial $k(\mathbf{q}_i,\mathbf{k}_j)=\exp(\mathbf{q}_i\mathbf{k}_j^{\top}/\sqrt{d})$. La medida se deduce de la divergencia de Kullback--Leibler entre la distribución de atención de la consulta y la distribución uniforme: una consulta es ``dominante'' cuando su distribución se aleja de la uniforme, y la aproximación max--mean
+\begin{equation}
+\bar{\mathcal{M}}(\mathbf{q}_i,\mathbf{K}) = \max_j\left\{\frac{\mathbf{q}_i\mathbf{k}_j^{\top}}{\sqrt{d}}\right\} - \frac{1}{L}\sum_{j=1}^{L}\frac{\mathbf{q}_i\mathbf{k}_j^{\top}}{\sqrt{d}}
+\end{equation}
+ordena las consultas. Calcularla sobre todas las claves sería a su vez cuadrático, así que el paper muestrea solo $L'_K = c_1\lceil\ln L_K\rceil$ claves para la medida y conserva $L'_Q = c_2\lceil\ln L_Q\rceil$ consultas, con $c_1=c_2=5.0$; esto es lo que produce $\mathcal{O}(L\log L)$ en tiempo y memoria. La atención multi-cabeza es la habitual
+\begin{equation}
+\mathrm{MHSA\text{-}Sparse}(\mathbf{X}) = \mathrm{Concat}(\mathrm{head}_1,\dots,\mathrm{head}_h)\mathbf{W}_O,
+\qquad
+\mathrm{head}_i = A(\mathbf{X}\mathbf{W}_Q^i,\mathbf{X}\mathbf{W}_K^i,\mathbf{X}\mathbf{W}_V^i).
+\end{equation}
+
+\paragraph{Términos de posición relativa}: El paper sigue a Transformer-XL y puntúa las consultas seleccionadas con dos vectores de sesgo por cabeza $\mathbf{U}_1,\mathbf{U}_2$ y un tensor de posición relativa proyectado $\mathbf{P}=\mathbf{X}_P\mathbf{W}_P$,
+\begin{equation}
+\mathbf{S} = \left(\bar{\mathbf{Q}}_{U_1}\mathbf{K}^{\top} + \bar{\mathbf{Q}}_{U_2}\mathbf{P}^{\top}\right)/\sqrt{d_q},
+\qquad
+\mathbf{Q}_{U_1} = \mathbf{Q}+\mathbf{U}_1,\;
+\mathbf{Q}_{U_2} = \mathbf{Q}+\mathbf{U}_2,
+\end{equation}
+donde $\mathbf{X}_P\in\mathbb{R}^{b\times L_K\times d}$ codifica las posiciones de las claves y $W_P\in\mathbb{R}^{d\times d}$ es entrenable. En este código la codificación es sinusoidal (como en Transformer-XL) y solo la proyección se aprende, de modo que la capa cuesta $5d^2+2d$ parámetros de atención por capa: cuatro proyecciones, $W_P$ y los dos vectores $\mathbf{U}_1,\mathbf{U}_2$ (forma $h\times d_q$ cada uno). Las filas restantes, es decir las consultas no dominantes, conservan la media por cabeza de $\mathbf{V}$, que es lo que hace el Algoritmo~1 del paper al sobrescribir solo las filas seleccionadas.
+
+\paragraph{Modo decoder}: La selección es una decisión global del bloque, y rellenar las filas descartadas con una estadística bidireccional filtraría tokens futuros. Por ello el modo decoder puntúa todas las consultas de forma causal con los mismos términos $\mathbf{U}_1$, $\mathbf{U}_2$ y $W_P$, y cachea K/V como la atención estándar; como la dispersidad es del lado de las consultas, la decodificación de una sola consulta hace degenerada la regla top-$u$, por lo que atender todo el prefijo cacheado es exacto.
+
+\subsubsection{Pseudocódigo Algorítmico}
+
+\begin{algorithm}[H]
+\caption{Atención auto-ProbSparse (forma de entrenamiento / paralela)}
+\begin{algorithmic}[1]
+\Require $\mathbf{X}$, codificaciones de posición relativa $\mathbf{X}_P$, factores $c_1,c_2$, máscara, dropout $p$
+\Ensure Salida $\mathbf{Y}$
+\State $\mathbf{Q}\gets\mathbf{X}\mathbf{W}_Q$, $\mathbf{K}\gets\mathbf{X}\mathbf{W}_K$, $\mathbf{V}\gets\mathbf{X}\mathbf{W}_V$, $\mathbf{P}\gets\mathbf{X}_P\mathbf{W}_P$
+\State reformar a $(b,h,L,d_q)$; $\mathbf{Q}_{U_1}\gets\mathbf{Q}+\mathbf{U}_1$, $\mathbf{Q}_{U_2}\gets\mathbf{Q}+\mathbf{U}_2$
+\State $L'_K \gets \min(c_1\lceil\ln L_K\rceil, L_K)$; muestrear $\mathbf{K}_{\text{part}}$ con $L'_K$ claves \Comment{semilla por capa}
+\State $\bar{\mathcal{M}} \gets \max_j(\mathbf{Q}_{U_1}\mathbf{K}_{\text{part}}^{\top}) - \frac{1}{L_K}\sum_j(\mathbf{Q}_{U_1}\mathbf{K}_{\text{part}}^{\top})$ \Comment{Ec.~8, sin $\sqrt{d}$}
+\State $L'_Q \gets \min(c_2\lceil\ln L_Q\rceil, L_Q)$; $\mathcal{T}\gets$ índices de las $L'_Q$ consultas mejores de $\bar{\mathcal{M}}$
+\State $\mathbf{S} \gets (\bar{\mathbf{Q}}_{U_1}\mathbf{K}^{\top} + \bar{\mathbf{Q}}_{U_2}\mathbf{P}^{\top})/\sqrt{d_q}$ \Comment{solo filas seleccionadas}
+\State $\mathbf{S} \gets \mathrm{Dropout}(\mathrm{Softmax}(\mathrm{Mask}(\mathbf{S})), p)$
+\State $\mathbf{Y}[\mathcal{T}] \gets \mathbf{S}\mathbf{V}$; \quad $\mathbf{Y}[\overline{\mathcal{T}}] \gets \mathrm{mean}_j(\mathbf{V})$ \Comment{solo cambian las filas seleccionadas}
+\State \Return $\mathbf{Y}\mathbf{W}_O$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Características Clave}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad}: $\mathcal{O}(L_Q L_K d)$ para la sonda max--mean sobre claves muestreadas más $\mathcal{O}(L'_Q L_K d)$ para las filas seleccionadas, es decir $\mathcal{O}(L\log L)$ en tiempo y memoria; $\mathcal{O}(n_{\text{ctx}})$ por token decodificado sobre la caché KV.
+    \item \textbf{Entrenable}: Sí, de forma nativa desde cero; los modelos CSJ se entrenan de extremo a extremo con la ruta dispersa activa. La selección no es diferenciable, así que los gradientes llegan a las proyecciones por las filas seleccionadas y por la media de valores de las descartadas.
+    \item \textbf{Fortaleza}: En CSJ-500h, el Conformer disperso profundo de 12 capas alcanza CER de 5.52/4.03/4.50 frente a 6.97/4.65/5.29 de Conformer-Large con los mismos 135M de parámetros, entrena en el 80\% del tiempo y decodifica $1.23\times$ más rápido; los mismos bloques escalan a 100 capas con DeepNorm.
+    \item \textbf{Limitación}: La dispersidad es del lado de las consultas, así que no reduce el costo del lado de las claves de una \emph{única} consulta---decodificar un token sigue atendiendo toda la caché. El paper define el mecanismo solo para encoders bidireccionales; su segundo ingrediente, DeepNorm ($\alpha_{1..4}=0.81(N^4M)^{1/16}$), es una estrategia de escalado de residuales que vive en la familia de residuales de este código, no en este mezclador.
+\end{itemize}
+
 \subsection{Espacio de Diseño y Criterios de Selección}
 
-Los once métodos de atención dispersa ocupan posiciones complementarias en un espacio de diseño multidimensional:
+Los doce métodos de atención dispersa ocupan posiciones complementarias en un espacio de diseño multidimensional:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Patrones geométricos/fijos} (Sparse Transformer, Longformer): Simples de implementar y analizar, pero los patrones no se adaptan al contenido.
@@ -777,6 +844,7 @@ Los once métodos de atención dispersa ocupan posiciones complementarias en un 
     \item \textbf{Aceleración sin entrenamiento} (FASA, SpargeAttn): Permiten aceleración directa de modelos existentes sin reentrenamiento, adecuados para sistemas desplegados.
     \item \textbf{Selección semántica} (LSA): Agrupa las claves por contenido y guarda un centroide por bucket, de modo que el indexador recorre un pequeño múltiplo de $T/\bar{n}_b$ en lugar de $T$; es el único miembro cuyas estadísticas por bloque son inmutables, lo que hace posible la decodificación exacta en caché.
     \item \textbf{Garantías teóricas} (BigBird): Proporcionan demostraciones formales de completitud expresiva, importantes para comprender los márgenes de seguridad.
+    \item \textbf{Dispersidad del lado de las consultas} (ProbSparse): Selecciona qué consultas merecen una fila completa de puntajes en lugar de qué claves ve cada consulta, de modo que el costo cae a $\mathcal{O}(L\log L)$ sin cambiar el conjunto atendido por ninguna consulta conservada; el encaje natural para encoders bidireccionales largos, no para decodificación.
 \end{itemize}
 
 \textbf{Orientación de selección:}

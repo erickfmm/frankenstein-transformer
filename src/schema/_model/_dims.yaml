@@ -244,6 +244,7 @@ properties:
       | `bigbird` | BigBird: local + random + global attention (paper: arxiv:2007.14062) | ✅ | ✅ |
       | `sparse_transformer` | Sparse Transformer: factorized patterns (paper: arxiv:1904.10509) | ✅ | ✅ |
       | `sparsek` | SparseK: differentiable top-k KV selection (paper: arxiv:2406.16747) | ✅ | ✅ |
+      | `probsparse` | ProbSparse: query-sparsity top-u selection via the max-mean KL measure, with relative-position W_P and U₁/U₂ terms (paper: arxiv:2209.00260) | ✅ | ✅ |
       | `sparge` ⚠️ | SpargeAttn — two-stage block pruning; **trains as dense attention**, sparse filter at inference (paper: arxiv:2502.18137) | ✅ (dense) | ✅ (sparse) |
       | `fasa` ⚠️ | FASA — frequency-aware token selection; **trains as dense attention**, sparse selection at inference (paper: arxiv:2602.03152) | ✅ (dense) | ✅ (sparse) |
       | `msa` | MiniMax Sparse Attention — block-sparse on GQA (paper: arxiv:2606.13392) | ✅ | ✅ |
@@ -310,6 +311,7 @@ properties:
       | `bigbird` | BigBird: local + aleatorio + global (paper: arxiv:2007.14062) | ✅ | ✅ |
       | `sparse_transformer` | Sparse Transformer: patrones factorizados (paper: arxiv:1904.10509) | ✅ | ✅ |
       | `sparsek` | SparseK: selección top-k diferenciable (paper: arxiv:2406.16747) | ✅ | ✅ |
+      | `probsparse` | ProbSparse: selección top-u por dispersidad de consultas mediante la medida max-mean de KL, con términos de posición relativa W_P y U₁/U₂ (paper: arxiv:2209.00260) | ✅ | ✅ |
       | `sparge` ⚠️ | SpargeAttn — poda de bloques en dos etapas; **entrena como atención densa**, filtro disperso en inferencia (paper: arxiv:2502.18137) | ✅ (densa) | ✅ (dispersa) |
       | `fasa` ⚠️ | FASA — selección de tokens consciente de frecuencia; **entrena como atención densa**, selección dispersa en inferencia (paper: arxiv:2602.03152) | ✅ (densa) | ✅ (dispersa) |
       | `msa` | MiniMax Sparse Attention — bloques dispersos sobre GQA (paper: arxiv:2606.13392) | ✅ | ✅ |

@@ -766,9 +766,76 @@ where the softmax is renormalised per head over the shared selection. N-LSA \tex
     \item \textbf{Limitation}: The flat indexer remains quadratic in context length (with a $1/\bar{n}_b$ constant); tree search is left to future work. The paper's single index list assumes a single shared KV head ($n_{kv}=1$), and N-LSA deliberately uses no positional encoding.
 \end{itemize}
 
+\subsection{ProbSparse Attention: Query-Sparsity Top-$u$ Selection}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/probsparse.pdf}}
+\caption{Dataflow of ProbSparse: a random subset of $c_1\lceil\ln L_K\rceil$ keys ranks the queries with the max--mean sparsity measure; only the top $c_2\lceil\ln L_Q\rceil$ dominant queries are scored against all keys, with the relative-position term $P=X_PW_P$ added through $U_2$.}
+\label{fig:mixer-probsparse}
+\end{figure}
+
+\subsubsection{Mathematical Formulation}
+
+ProbSparse self-attention \citep{wu_deep_sparse_conformer_2022}, adapted from Informer \citep{zhou_informer_2021}, attacks the quadratic cost from the \emph{query} side instead of the key side. For a sequence of length $L$ it keeps a same-shape tensor $\bar{\mathbf{Q}}$ containing only the top-$u$ \emph{dominant} queries under a sparsity measure $\mathcal{M}(\mathbf{q}, \mathbf{K})$, so that every key is attended to by only those queries:
+\begin{equation}
+A(\mathbf{Q},\mathbf{K},\mathbf{V}) = \sum_j \left[\frac{k(\mathbf{Q},\mathbf{k}_j)}{\sum_l k(\mathbf{Q},\mathbf{k}_l)}\right]\mathbf{v}_j
+= \mathbb{E}_{p(\mathbf{k}_j\mid\mathbf{Q})}[\mathbf{v}_j]
+\approx \mathrm{Softmax}\!\left(\frac{\bar{\mathbf{Q}}\mathbf{K}^{\top}}{\sqrt{d}}\right)\mathbf{V},
+\end{equation}
+with the exponential kernel $k(\mathbf{q}_i,\mathbf{k}_j)=\exp(\mathbf{q}_i\mathbf{k}_j^{\top}/\sqrt{d})$. The measure follows from the Kullback--Leibler divergence between the query's attention distribution and the uniform distribution: a query is ``dominant'' when its distribution is far from uniform, and the max--mean approximation
+\begin{equation}
+\bar{\mathcal{M}}(\mathbf{q}_i,\mathbf{K}) = \max_j\left\{\frac{\mathbf{q}_i\mathbf{k}_j^{\top}}{\sqrt{d}}\right\} - \frac{1}{L}\sum_{j=1}^{L}\frac{\mathbf{q}_i\mathbf{k}_j^{\top}}{\sqrt{d}}
+\end{equation}
+ranks the queries. Computing it over all keys would itself be quadratic, so the paper samples only $L'_K = c_1\lceil\ln L_K\rceil$ keys for the measure and keeps $L'_Q = c_2\lceil\ln L_Q\rceil$ queries, with $c_1=c_2=5.0$; this is what yields $\mathcal{O}(L\log L)$ time and memory. Multi-head attention is the usual
+\begin{equation}
+\mathrm{MHSA\text{-}Sparse}(\mathbf{X}) = \mathrm{Concat}(\mathrm{head}_1,\dots,\mathrm{head}_h)\mathbf{W}_O,
+\qquad
+\mathrm{head}_i = A(\mathbf{X}\mathbf{W}_Q^i,\mathbf{X}\mathbf{W}_K^i,\mathbf{X}\mathbf{W}_V^i).
+\end{equation}
+
+\paragraph{Relative position terms}: The paper follows Transformer-XL and scores the selected queries with two per-head bias vectors $\mathbf{U}_1,\mathbf{U}_2$ and a projected relative-position tensor $\mathbf{P}=\mathbf{X}_P\mathbf{W}_P$,
+\begin{equation}
+\mathbf{S} = \left(\bar{\mathbf{Q}}_{U_1}\mathbf{K}^{\top} + \bar{\mathbf{Q}}_{U_2}\mathbf{P}^{\top}\right)/\sqrt{d_q},
+\qquad
+\mathbf{Q}_{U_1} = \mathbf{Q}+\mathbf{U}_1,\;
+\mathbf{Q}_{U_2} = \mathbf{Q}+\mathbf{U}_2,
+\end{equation}
+where $\mathbf{X}_P\in\mathbb{R}^{b\times L_K\times d}$ encodes the keys' positions and $W_P\in\mathbb{R}^{d\times d}$ is trained. In this codebase the encoding is sinusoidal (as in Transformer-XL) and only the projection is learned, so the layer costs $5d^2+2d$ attention parameters per layer: four projections, $W_P$, and the two vectors $\mathbf{U}_1,\mathbf{U}_2$ (shape $h\times d_q$ each). The remaining rows, i.e.\ the non-dominant queries, keep the head-mean of $\mathbf{V}$, which is what Algorithm~1 of the paper does when it overwrites only the selected rows.
+
+\paragraph{Decoder mode}: The selection is a block-global decision, and filling discarded rows with a bidirectional statistic would leak future tokens. Decoder mode therefore scores every query causally with the same $\mathbf{U}_1$, $\mathbf{U}_2$ and $W_P$ terms, and caches K/V like standard attention; because sparsity is query-side, single-query decoding makes the top-$u$ rule degenerate, so attending the full cached prefix is exact.
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{ProbSparse self-attention (training / parallel form)}
+\begin{algorithmic}[1]
+\Require $\mathbf{X}$, relative-position encodings $\mathbf{X}_P$, factors $c_1,c_2$, mask, dropout $p$
+\Ensure Output $\mathbf{Y}$
+\State $\mathbf{Q}\gets\mathbf{X}\mathbf{W}_Q$, $\mathbf{K}\gets\mathbf{X}\mathbf{W}_K$, $\mathbf{V}\gets\mathbf{X}\mathbf{W}_V$, $\mathbf{P}\gets\mathbf{X}_P\mathbf{W}_P$
+\State reshape to $(b,h,L,d_q)$; $\mathbf{Q}_{U_1}\gets\mathbf{Q}+\mathbf{U}_1$, $\mathbf{Q}_{U_2}\gets\mathbf{Q}+\mathbf{U}_2$
+\State $L'_K \gets \min(c_1\lceil\ln L_K\rceil, L_K)$; sample $\mathbf{K}_{\text{part}}$ of $L'_K$ keys \Comment{seeded per layer}
+\State $\bar{\mathcal{M}} \gets \max_j(\mathbf{Q}_{U_1}\mathbf{K}_{\text{part}}^{\top}) - \frac{1}{L_K}\sum_j(\mathbf{Q}_{U_1}\mathbf{K}_{\text{part}}^{\top})$ \Comment{Eq.~8, no $\sqrt{d}$}
+\State $L'_Q \gets \min(c_2\lceil\ln L_Q\rceil, L_Q)$; $\mathcal{T}\gets$ top-$L'_Q$ query indices of $\bar{\mathcal{M}}$
+\State $\mathbf{S} \gets (\bar{\mathbf{Q}}_{U_1}\mathbf{K}^{\top} + \bar{\mathbf{Q}}_{U_2}\mathbf{P}^{\top})/\sqrt{d_q}$ \Comment{selected rows only}
+\State $\mathbf{S} \gets \mathrm{Dropout}(\mathrm{Softmax}(\mathrm{Mask}(\mathbf{S})), p)$
+\State $\mathbf{Y}[\mathcal{T}] \gets \mathbf{S}\mathbf{V}$; \quad $\mathbf{Y}[\overline{\mathcal{T}}] \gets \mathrm{mean}_j(\mathbf{V})$ \Comment{only the selected rows change}
+\State \Return $\mathbf{Y}\mathbf{W}_O$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: $\mathcal{O}(L_Q L_K d)$ for the max--mean probe over sampled keys plus $\mathcal{O}(L'_Q L_K d)$ for the selected rows, i.e.\ $\mathcal{O}(L\log L)$ time and memory; $\mathcal{O}(n_{\text{ctx}})$ per decoded token over the KV cache.
+    \item \textbf{Trainable}: Yes, natively from scratch; the CSJ models are trained end-to-end with the sparse path active. The selection itself is non-differentiable, so gradients reach the projections through the selected rows and through the value mean of the discarded ones.
+    \item \textbf{Strength}: On CSJ-500h, the 12-layer deep sparse Conformer reaches CERs of 5.52/4.03/4.50 against 6.97/4.65/5.29 for Conformer-Large at the same 135M parameters, trains in 80\% of the time and decodes $1.23\times$ faster; the same blocks scale to 100 layers with DeepNorm.
+    \item \textbf{Limitation}: The sparsity is query-side, so it does not reduce the key-side cost of a \emph{single} query---decoding a token still attends the whole cache. The paper defines the mechanism for bidirectional encoders only; the paper's second ingredient, DeepNorm ($\alpha_{1..4}=0.81(N^4M)^{1/16}$), is a residual-scaling strategy that lives in the residual family of this codebase, not in this mixer.
+\end{itemize}
+
 \subsection{Design Space and Selection Criteria}
 
-The eleven sparse attention methods occupy complementary positions in a multidimensional design space:
+The twelve sparse attention methods occupy complementary positions in a multidimensional design space:
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Geometric/fixed patterns} (Sparse Transformer, Longformer): Simple to implement and analyze, but patterns do not adapt to content.
@@ -777,6 +844,7 @@ The eleven sparse attention methods occupy complementary positions in a multidim
     \item \textbf{Training-free acceleration} (FASA, SpargeAttn): Enable drop-in speedup of existing models without retraining, suited for deployed systems.
     \item \textbf{Semantic selection} (LSA): Clusters keys by content and caches one centroid per bucket, so the indexer scans a small multiple of $T/\bar{n}_b$ instead of $T$; the only member whose per-block statistics are immutable, which makes exact cached decoding possible.
     \item \textbf{Theoretical guarantees} (BigBird): Provide formal proofs of expressive completeness, important for understanding safety margins.
+    \item \textbf{Query-side sparsity} (ProbSparse): Selects which queries deserve a full score row instead of which keys a query sees, so cost falls to $\mathcal{O}(L\log L)$ without changing the attended set of any kept query; the natural fit for long bidirectional encoders rather than for decoding.
 \end{itemize}
 
 \textbf{Selection guidance:}

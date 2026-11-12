@@ -932,6 +932,26 @@ ATTENTION_SPECS = (
         training_free=True,
     ),
     MixerSpec(
+        name="probsparse",
+        builder="src.model.attention.sparse.probsparse:ProbSparseAttention",
+        description="ProbSparse — query-sparsity top-u selection via the max-mean KL measure, with relative-position W_P and U₁/U₂ terms (paper: arxiv:2209.00260)",
+        description_es="ProbSparse — selección top-u por dispersidad de consultas mediante la medida max-mean de KL, con términos de posición relativa W_P y U₁/U₂ (paper: arxiv:2209.00260)",
+        references=("2209.00260", "2012.07436"),
+        params_schema="schema/_model/_attention_sparse.yaml#/properties/probsparse",
+        defaults={
+            "c1": 5.0,
+            "c2": 5.0,
+        },
+        cache=CacheSpec(
+            supported=True,
+            slot_type="kv",
+            notes="ProbSparse / Deep Sparse Conformer (arXiv:2209.00260, Informer arXiv:2012.07436); class (i) — sparsity is query-side, so single-query decode makes the top-u selection degenerate and attending the full cached KV prefix is exact.",
+        ),
+        cache_implemented=True,
+        qk_norm_supported=True,
+        qk_clip_supported=True,
+    ),
+    MixerSpec(
         name="sparse_transformer",
         builder="src.model.attention.sparse.sparse_transformer:SparseTransformerAttention",
         description="Sparse Transformer: factorized patterns (paper: arxiv:1904.10509)",

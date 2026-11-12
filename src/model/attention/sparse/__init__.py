@@ -5,6 +5,7 @@ from .longformer import LongformerAttention
 from .lsa import LSAAttention
 from .msa import MSAAttention
 from .nsa import NSAAttention
+from .probsparse import ProbSparseAttention
 from .sparse_transformer import SparseTransformerAttention
 from .sparsek import SparseKAttention
 from .sparge import SpargeAttention
@@ -16,6 +17,7 @@ __all__ = [
     "LongformerAttention",
     "BigBirdAttention",
     "SparseKAttention",
+    "ProbSparseAttention",
     "NSAAttention",
     "SpargeAttention",
     "FASAAttention",

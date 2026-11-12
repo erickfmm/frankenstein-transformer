@@ -319,6 +319,11 @@ ATTENTIONS = [
     # decoder modes; exact KV-cache incremental decoding with a cq-1 query
     # tail.
     "mta",
+    # ProbSparse / Deep Sparse Conformer (arXiv:2209.00260): max-mean
+    # query-sparsity top-u selection with relative-position W_P and U₁/U₂
+    # terms; trains natively (selection in encoder, causal dense decode);
+    # exact KV-cache incremental decoding.
+    "probsparse",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).

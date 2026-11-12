@@ -1,0 +1,98 @@
+# Deep Sparse Conformer / ProbSparse reference configuration
+# (arXiv:2209.00260, InterSpeech 2022).
+#
+# The paper's DSC-12en encoder: d=512, h=8, 12 Conformer blocks whose MHSA
+# module is replaced by ProbSparse self-attention (c1 = c2 = 5.0). The paper
+# trains it on Japanese CSJ-500h with a CTC + attention objective for ASR;
+# this repository trains the same mixer stack as a masked-LM text encoder
+# (the ASR task requires `frankenstein_audio`), so the preset keeps the
+# encoder hyperparameters and swaps the objective.
+#
+# The paper's DeepNorm residual scaling (Eq. 11-15) belongs to the residual
+# family and is NOT part of this mixer preset; it needs a separate
+# residual/norm component.
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 32000
+    hidden_size: 512
+    num_layers: 12
+    num_loops: 1
+    num_heads: 8
+    num_kv_heads: 8
+    dropout: 0.0
+    mode: encoder
+    layer_pattern:
+    - probsparse
+    - probsparse
+    - probsparse
+    - probsparse
+    - probsparse
+    - probsparse
+    - probsparse
+    - probsparse
+    - probsparse
+    - probsparse
+    - probsparse
+    - probsparse
+  norm:
+    type: rms_norm
+  embedding:
+    factorized:
+      enabled: false
+    conv:
+      enabled: false
+  positional_encoding: rope
+  attention:
+    probsparse:
+      c1: 5.0
+      c2: 5.0
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 2048
+    activation: silu
+training:
+  task: mlm
+  seed: 42
+  batch_size: 8
+  dataloader_workers: 2
+  max_length: 1024
+  mlm_probability: 0.15
+  max_samples: 20000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: ./temp_data/v2_dataset_cache
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-6
+      adamw-lr_norms: 5e-6
+      adamw-lr_attention: 3e-6
+      adamw-lr_other: 2e-6
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_embeddings:
+      - 0.9
+      - 0.95
+      adamw-betas_norms:
+      - 0.9
+      - 0.95
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-eps_embeddings: 1e-8
+      adamw-eps_norms: 1e-8
+      adamw-eps_attention: 1e-8
+      adamw-eps_other: 1e-8
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  gradient_log_interval: 10

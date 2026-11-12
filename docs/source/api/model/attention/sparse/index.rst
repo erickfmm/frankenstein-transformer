@@ -8,6 +8,7 @@ Sparse Attention
    longformer
    bigbird
    sparsek
+   probsparse
    nsa
    sparge
    fasa

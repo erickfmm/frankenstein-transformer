@@ -139,3 +139,64 @@ properties:
 
           **Referencias:** (paper: arxiv:2606.04511)
         examples: [64]
+  probsparse:
+    type: object
+    additionalProperties: false
+    description: |-
+      Hyperparameters for `probsparse` (ProbSparse self-attention): the key-sampling factor `c1` used by the max-mean sparsity probe and the query-selection factor `c2` that sets how many dominant queries are scored. Both follow the paper's `L' = c * ceil(ln L)` rule. Only applies when `probsparse` appears in `layer_pattern`.
+      **References:** (paper: arxiv:2209.00260) (paper: arxiv:2012.07436)
+    description_es: |-
+      Hiperparámetros para `probsparse` (atención ProbSparse): el factor de muestreo de claves `c1` usado por la sonda de dispersidad max-mean y el factor de selección de consultas `c2` que fija cuántas consultas dominantes se puntúan. Ambos siguen la regla del paper `L' = c * ceil(ln L)`. Solo aplica cuando `probsparse` aparece en `layer_pattern`.
+      **Referencias:** (paper: arxiv:2209.00260) (paper: arxiv:2012.07436)
+    properties:
+      c1:
+        type: number
+        exclusiveMinimum: 0.0
+        default: 5.0
+        title: "ProbSparse Key-Sampling Factor c₁"
+        title_es: "Factor de Muestreo de Claves c₁ de ProbSparse"
+        description: |-
+          Key-sampling factor `c1` for the max-mean sparsity probe of
+          `probsparse` (paper: arxiv:2209.00260). Only
+          `L'_K = c1 · ceil(ln L_K)` keys are read when ranking queries,
+          which is what keeps the layer at `O(L log L)`. Paper value: 5.0.
+          Clamped to the current sequence length.
+
+          **References:** (paper: arxiv:2209.00260) (paper: arxiv:2012.07436)
+        description_es: |-
+          Factor de muestreo de claves `c1` para la sonda de dispersidad
+          max-mean de `probsparse` (paper: arxiv:2209.00260). Solo se leen
+          `L'_K = c1 · ceil(ln L_K)` claves al ordenar las consultas, lo que
+          mantiene la capa en `O(L log L)`. Valor del paper: 5.0. Se recorta
+          a la longitud actual de la secuencia.
+
+          **Referencias:** (paper: arxiv:2209.00260) (paper: arxiv:2012.07436)
+        examples: [5.0]
+      c2:
+        type: number
+        exclusiveMinimum: 0.0
+        default: 5.0
+        title: "ProbSparse Query-Selection Factor c₂"
+        title_es: "Factor de Selección de Consultas c₂ de ProbSparse"
+        description: |-
+          Query-selection factor `c2` for `probsparse` (paper:
+          arxiv:2209.00260). The layer keeps the top
+          `L'_Q = c2 · ceil(ln L_Q)` dominant queries and scores only those
+          against every key; the remaining rows keep the head-mean of `V`.
+          Paper value: 5.0. Clamped to the query length (so short sequences
+          select every query and behave as dense attention). Ignored in
+          decoder mode, which always scores all queries causally.
+
+          **References:** (paper: arxiv:2209.00260) (paper: arxiv:2012.07436)
+        description_es: |-
+          Factor de selección de consultas `c2` para `probsparse` (paper:
+          arxiv:2209.00260). La capa conserva las `L'_Q = c2 · ceil(ln L_Q)`
+          consultas dominantes y solo las puntúa frente a todas las claves;
+          las filas restantes conservan la media por cabeza de `V`. Valor del
+          paper: 5.0. Se recorta a la longitud de consultas (las secuencias
+          cortas seleccionan todas y se comportan como atención densa). Se
+          ignora en modo decoder, que siempre puntúa todas las consultas de
+          forma causal.
+
+          **Referencias:** (paper: arxiv:2209.00260) (paper: arxiv:2012.07436)
+        examples: [5.0]
