@@ -305,6 +305,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   - `mlra` — Multi-Head Low-Rank Attention, partitionable latent (arXiv:2603.02188).
   - `tucker` — Tucker Attention, generalised low-rank factorisation (arXiv:2603.30033).
   - `kpa` — Kronecker Product Attention, sums of Kronecker products of contextual K/V factors with Kronecker-Separable RoPE (arXiv:2610.12657).
+  - `tpa` — Tensor Product Attention, CP sums of contextual vector-factor outer products with a factorized KV cache (arXiv:2501.06425).
   - `iha` — Interleaved Head Attention, cross-head pseudo-heads (arXiv:2602.21371).
   - `gta` — Grouped-head laTenT Attention, shared map + latent values (arXiv:2506.17286).
   - `mtla` — Multi-head Temporal Latent Attention, temporal KV merge (arXiv:2505.13544).

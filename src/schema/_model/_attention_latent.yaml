@@ -430,6 +430,104 @@ properties:
 
           **Referencias:** (paper: arxiv:2610.12657)
         examples: [2]
+  tpa:
+    type: object
+    additionalProperties: false
+    title: "Tensor Product Attention"
+    title_es: "Atención de Producto Tensorial"
+    description: |-
+      Hyperparameters for `tpa` (Tensor Product Attention (paper: arxiv:2501.06425)).
+      Each per-token query, key and value slice is a normalized sum of
+      rank-one outer products of two contextual vector factors,
+      `Q_t = (1/R_Q) Σ_r a_r(x_t) ⊗ b_r(x_t)` with `a_r ∈ R^num_heads` and
+      `b_r ∈ R^head_dim` (eq. 3.1). Only the K/V factor pairs are cached at
+      `(R_K+R_V)(num_heads+head_dim)` floats per token instead of
+      `2*num_heads*head_dim` for MHA. RoPE applies row-wise to the `b` factors
+      (Theorem 3.1), so keys can be pre-rotated before caching. With
+      `h1 = num_heads, d1 = 1, h2 = 1, d2 = head_dim` this is the vector
+      special case of `kpa`. Only applies when `tpa` appears in
+      `layer_pattern`.
+
+      **References:** (paper: arxiv:2501.06425)
+    description_es: |-
+      Hiperparámetros para `tpa` (Atención de Producto Tensorial (paper: arxiv:2501.06425)).
+      Cada rebanada de query, key y value por token es una suma normalizada de
+      productos externos de rango uno de dos factores vectoriales
+      contextuales, `Q_t = (1/R_Q) Σ_r a_r(x_t) ⊗ b_r(x_t)` con
+      `a_r ∈ R^num_heads` y `b_r ∈ R^head_dim` (ec. 3.1). Solo se cachean los
+      pares de factores K/V, a `(R_K+R_V)(num_heads+head_dim)` flotantes por
+      token en lugar de `2*num_heads*head_dim` para MHA. RoPE se aplica fila a
+      fila sobre los factores `b` (Teorema 3.1), por lo que las claves pueden
+      pre-rotarse antes de cachearlas. Con
+      `h1 = num_heads, d1 = 1, h2 = 1, d2 = head_dim` es el caso vectorial
+      especial de `kpa`. Solo aplica cuando `tpa` está en `layer_pattern`.
+
+      **Referencias:** (paper: arxiv:2501.06425)
+    properties:
+      query_rank:
+        type: integer
+        minimum: 1
+        default: 8
+        title: "TPA Query Rank (R_Q)"
+        title_es: "Rango de Query TPA (R_Q)"
+        description: |-
+          CP rank `R_Q` of the query factors of `tpa` (paper: arxiv:2501.06425,
+          §3.1 and Appendix G; the reference T6 configuration uses `R_Q = 8`).
+          The query factors are recomputed for the current token at decode and
+          are never cached, so this rank trades parameters and query-side FLOPs
+          only.
+
+          **References:** (paper: arxiv:2501.06425)
+        description_es: |-
+          Rango CP `R_Q` de los factores de query de `tpa`
+          (paper: arxiv:2501.06425, §3.1 y Apéndice G; la configuración de
+          referencia T6 usa `R_Q = 8`). Los factores de query se recalculan para
+          el token actual en decodificación y nunca se cachean, así que este
+          rango solo intercambia parámetros y FLOPs del lado de query.
+
+          **Referencias:** (paper: arxiv:2501.06425)
+        examples: [8]
+      key_rank:
+        type: integer
+        minimum: 1
+        default: 2
+        title: "TPA Key Rank (R_K)"
+        title_es: "Rango de Key TPA (R_K)"
+        description: |-
+          CP rank `R_K` of the key factors of `tpa` (paper: arxiv:2501.06425,
+          §3.2-3.3 uses `R_K = 2`, and `R_K = 1` at larger scale). Together
+          with `value_rank` it sets the cached per-token cost
+          `(R_K+R_V)(num_heads+head_dim)` and the KV-cache compression ratio
+          against MHA's `2*num_heads*head_dim`.
+
+          **References:** (paper: arxiv:2501.06425)
+        description_es: |-
+          Rango CP `R_K` de los factores de key de `tpa`
+          (paper: arxiv:2501.06425, §3.2-3.3 usa `R_K = 2`, y `R_K = 1` a mayor
+          escala). Junto con `value_rank` fija el coste cacheado por token
+          `(R_K+R_V)(num_heads+head_dim)` y la tasa de compresión del caché KV
+          frente a `2*num_heads*head_dim` de MHA.
+
+          **Referencias:** (paper: arxiv:2501.06425)
+        examples: [2]
+      value_rank:
+        type: integer
+        minimum: 1
+        default: 2
+        title: "TPA Value Rank (R_V)"
+        title_es: "Rango de Value TPA (R_V)"
+        description: |-
+          CP rank `R_V` of the value factors of `tpa` (paper: arxiv:2501.06425,
+          §3.2-3.3 uses `R_V = 2`). See `key_rank` for the cached-cost formula.
+
+          **References:** (paper: arxiv:2501.06425)
+        description_es: |-
+          Rango CP `R_V` de los factores de value de `tpa`
+          (paper: arxiv:2501.06425, §3.2-3.3 usa `R_V = 2`). Ver `key_rank`
+          para la fórmula del coste cacheado.
+
+          **Referencias:** (paper: arxiv:2501.06425)
+        examples: [2]
   iha:
     type: object
     additionalProperties: false

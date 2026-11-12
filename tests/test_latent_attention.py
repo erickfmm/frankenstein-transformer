@@ -1,9 +1,9 @@
 """Unit tests for the latent / KV-compression attention family.
 
 Covers the ten latent mixers introduced in the latent/ subpackage:
-MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA, KPA
+MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA, KPA, TPA
 (arXiv:2506.09342, 2605.15250, 2603.02188, 2603.30033, 2602.21371,
-2506.17286, 2505.13544, 2510.04476, 2610.12657).
+2506.17286, 2505.13544, 2510.04476, 2610.12657, 2501.06425).
 """
 import unittest
 from importlib.util import find_spec
@@ -24,6 +24,7 @@ if TORCH_AVAILABLE:
         CCAAttention,
         CCGQAAttention,
         KPAAttention,
+        TPAAttention,
     )
 
 
@@ -340,6 +341,71 @@ class KPAAttentionTests(unittest.TestCase):
 
     def test_bitnet_enabled_forward(self):
         attn = KPAAttention(_cfg(bitnet={'enabled': True}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class TPAAttentionTests(unittest.TestCase):
+    """Tensor Product Attention (arXiv:2501.06425)."""
+
+    def test_output_shape(self):
+        attn = TPAAttention(_cfg())
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_mode(self):
+        attn = TPAAttention(_cfg(dims={'mode': 'decoder'}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_explicit_knobs(self):
+        attn = TPAAttention(_cfg(attention={'tpa': {
+            'query_rank': 4, 'key_rank': 1, 'value_rank': 3,
+        }}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+        self.assertEqual(
+            (attn.query_rank, attn.key_rank, attn.value_rank), (4, 1, 3)
+        )
+
+    def test_default_ranks(self):
+        attn = TPAAttention(_cfg())
+        self.assertEqual(
+            (attn.query_rank, attn.key_rank, attn.value_rank), (8, 2, 2)
+        )
+
+    def test_invalid_rank_raises(self):
+        for knob in ("query_rank", "key_rank", "value_rank"):
+            with self.assertRaises(ValueError):
+                TPAAttention(_cfg(attention={'tpa': {knob: 0}}))
+
+    def test_invalid_hidden_raises(self):
+        with self.assertRaises(ValueError):
+            TPAAttention(_cfg(dims={'hidden_size': 50, 'num_heads': 6}))
+
+    def test_no_nan_inf(self):
+        attn = TPAAttention(_cfg(dims={'mode': 'decoder'}))
+        out = attn(_x())
+        self.assertTrue(torch.isfinite(out).all())
+
+    def test_gradient_flows(self):
+        attn = TPAAttention(_cfg())
+        x = _x().requires_grad_(True)
+        attn(x).sum().backward()
+        self.assertIsNotNone(x.grad)
+
+    def test_param_count_formula(self):
+        cfg = _cfg()
+        attn = TPAAttention(cfg)
+        h = cfg.dims.hidden_size
+        d = attn.head_dim
+        expected = (
+            h * (attn.query_rank + attn.key_rank + attn.value_rank)
+            * (attn.num_heads + d)
+            + h * attn.num_heads * d
+        )
+        actual = sum(p.numel() for p in attn.parameters())
+        self.assertEqual(actual, expected)
+
+    def test_bitnet_enabled_forward(self):
+        attn = TPAAttention(_cfg(bitnet={'enabled': True}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
 

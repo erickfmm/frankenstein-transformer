@@ -56,6 +56,11 @@ generalising Grouped-Query Attention (GQA) along complementary axes:
   Kronecker products of compact contextual factors, caches only the
   factors (6.4x-10x compression), and rotates only the ``B`` factor under
   Kronecker-Separable RoPE (no decoupled branch).
+* :class:`TPAAttention` -- Tensor Product Attention (TPA),
+  arXiv:2501.06425. CP-decomposes each per-token Q/K/V into a normalized
+  sum of rank-one outer products of contextual vector factors, caches the
+  four factor streams at ``(R_K+R_V)(h+d_h)`` floats per token, and is
+  RoPE-compatible (eq. 3.5 pre-rotates the ``B_K`` factor).
 
 All modules follow the project attention-mixer interface:
 ``forward(x: torch.Tensor, logical_layer_idx: Optional[int] = None) ->
@@ -75,6 +80,7 @@ from .mtla import MTLAAttention
 from .cca import CCAAttention, CCGQAAttention
 from .gma import GaussianMixtureAttention
 from .kpa import KPAAttention
+from .tpa import TPAAttention
 
 __all__ = [
     "MLAAttention",
@@ -88,4 +94,5 @@ __all__ = [
     "CCGQAAttention",
     "GaussianMixtureAttention",
     "KPAAttention",
+    "TPAAttention",
 ]

@@ -1,0 +1,29 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  aq["A^Q = W_Aq·x<br/>[R_Q,h]"]
+  bq["B^Q = W_Bq·x<br/>[R_Q,d_h]"]
+  ak["A^K, A^V = W_A·x<br/>[R_K/R_V,h]"]
+  bk["B^K, B^V = W_B·x<br/>[R_K/R_V,d_h]"]
+  rec["CP sum (1/R)Σ_r a_r⊗b_r<br/>Q,K,V [B,n,h,d_h]"]
+  rope["RoPE on B factors<br/>B̃ = B·T_t (row-wise)"]
+  s["scores = QKᵀ/√d_h"]
+  sm["softmax (causal in decoder)"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+  c["KV cache {A^K, B^K_rope, A^V, B^V}<br/>(R_K+R_V)(h+d_h) / token"]
+
+  x -- "R_Q" --> aq
+  x -- "R_Q" --> bq
+  x -- "R_K, R_V" --> ak
+  x -- "R_K, R_V" --> bk
+  aq -- "⊗, Σ" --> rec
+  bq -- "⊗, Σ" --> rec
+  ak -- "⊗, Σ" --> rec
+  bk -- "⊗, Σ" --> rec
+  rec -- "Q, K" --> rope
+  rope -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  rec -- "V" --> o
+  ak -. "factors" .-> c
+  bk -. "factors" .-> c

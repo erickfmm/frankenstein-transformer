@@ -8,3 +8,12 @@ flowchart TD
     attn["Attention<br/>softmax(QK′<sup>T</sup>)V′"]
     kv --> down --> lat --> up --> attn
   end
+  subgraph factor["CP factor streams (TPA)"]
+    fq["A^Q, B^Q (R_Q terms)"]
+    fk["A^K, B^K_rope (R_K terms)"]
+    fv["A^V, B^V (R_V terms)"]
+    cp["(1/R) Σ_r a_r ⊗ b_r<br/>→ Q, K, V"]
+    fq --> cp
+    fk --> cp
+    fv --> cp
+  end

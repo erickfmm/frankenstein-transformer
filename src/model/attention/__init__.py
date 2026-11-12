@@ -53,6 +53,7 @@ from .latent import (
     MLRAAttention,
     MTLAAttention,
     KPAAttention,
+    TPAAttention,
     TuckerAttention,
 )
 from ..embeddings import HoPE, RoPE
@@ -104,6 +105,7 @@ __all__ = [
     "MLRAAttention",
     "TuckerAttention",
     "KPAAttention",
+    "TPAAttention",
     "IHAAttention",
     "GTAAttention",
     "MTLAAttention",

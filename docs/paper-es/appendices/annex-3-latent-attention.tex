@@ -482,3 +482,64 @@ que aumenta con la asimetría de los factores.
     \item \textbf{Fortalezas}: generalización estricta de TPA con estructura de bloques más rica a igual presupuesto; compatible con RoPE sin la rama desacoplada de MLA; la partición de cabezas $h_1\times h_2$ es un control de compresión/precisión en tiempo de diseño sin cambios arquitectónicos.
     \item \textbf{Limitaciones}: el paper fija $d_1=d_2=8$ y evalúa solo modelos de lenguaje causales; un kernel de decodificación factorizada eficiente y la evaluación en contextos largos quedan como trabajo futuro; materializar las sumas de Kronecker es cuadrático en la longitud de secuencia, como la atención densa.
 \end{itemize}
+
+\subsection{Atención de Producto Tensorial (TPA)}
+\label{sec:tpa-es}
+
+\begin{figure}[t]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/tpa.pdf}}
+\caption{Atención de Producto Tensorial (TPA). Cada rebanada de consulta, clave y valor por token es una suma CP normalizada $\frac{1}{R}\sum_r a_r(x_t)\otimes b_r(x_t)$ de un vector del eje de cabezas $a_r\in\mathbb{R}^{h}$ y un vector del eje de características $b_r\in\mathbb{R}^{d_h}$. RoPE actúa fila a fila sobre los factores $B$, por lo que las claves cacheadas pueden almacenarse pre-rotadas; solo los cuatro flujos de factores entran al caché.}
+\label{fig:mixer-tpa-es}
+\end{figure}
+
+La Atención de Producto Tensorial (TPA) \citep{zhang_tpa_2025} es la descomposición tensorial canónica en el espacio de activaciones: en lugar de factorizar los pesos de proyección (como hace Tucker Attention), factoriza las propias activaciones de consulta, clave y valor por token en productos externos de rango uno de vectores contextuales. Es el caso vectorial (CP) especial de KPA \citep{nikpour_kpa_2026}, recuperado con $h_1=h$, $d_1=1$, $h_2=1$, $d_2=d_h$.
+
+\subsubsection{Fundamento Matemático}
+Con $h$ cabezas, ancho de cabeza $d_h$ y rangos CP $R_Q,R_K,R_V$, la rebanada de cada token es
+\[
+Q_t = \frac{1}{R_Q}\sum_{r=1}^{R_Q} a^Q_r(x_t)\otimes b^Q_r(x_t),\quad
+K_t = \frac{1}{R_K}\sum_{r=1}^{R_K} a^K_r(x_t)\otimes b^K_r(x_t),\quad
+V_t = \frac{1}{R_V}\sum_{r=1}^{R_V} a^V_r(x_t)\otimes b^V_r(x_t),
+\]
+con $a^\cdot_r(x_t)=W^{a^\cdot}_r x_t\in\mathbb{R}^{h}$ y $b^\cdot_r(x_t)=W^{b^\cdot}_r x_t\in\mathbb{R}^{d_h}$ producidos por mapas lineales sin sesgo. Fusionando el índice de rango en una proyección por lado del factor, $a_Q(x_t)=W^{aQ}x_t\in\mathbb{R}^{R_Q h}$ y $b_Q(x_t)=W^{bQ}x_t\in\mathbb{R}^{R_Q d_h}$, y reordenando en $A_Q(x_t)\in\mathbb{R}^{R_Q\times h}$, $B_Q(x_t)\in\mathbb{R}^{R_Q\times d_h}$, se obtiene la forma compacta
+\[
+Q_t = \frac{1}{R_Q}A_Q(x_t)^{\top}B_Q(x_t)\in\mathbb{R}^{h\times d_h},
+\]
+y la atención es el mapa estándar de producto escalar escalado
+\[
+\mathrm{cabeza}_i = \mathrm{Softmax}\!\left(\frac{Q_iK_i^{\top}}{\sqrt{d_h}}\right)V_i,\qquad
+\mathrm{TPA}(Q,K,V)=\mathrm{Concat}(\mathrm{cabeza}_1,\dots,\mathrm{cabeza}_h)\,W^O .
+\]
+Como RoPE rota solo el eje de ancho de cabeza, conmuta con la factorización (Teorema~3.1 del paper): $B^\cdot(x_t)\mapsto B^\cdot(x_t)T_t$ fila a fila y $\widetilde{Q}_t=Q_tT_t=\frac{1}{R_Q}A_Q(x_t)^{\top}\widetilde{B}_Q(x_t)$, preservando la identidad de posición relativa $\widetilde{Q}_t\widetilde{K}_s^{\top}=Q_tT_{t-s}K_s^{\top}$. El caché guarda $\{A^K,\widetilde{B}^K,A^V,B^V\}$ por token, es decir
+\[
+\mathrm{KV}_{\mathrm{TPA}}=(R_K+R_V)(h+d_h)\ \text{flotantes/token}
+\quad\text{frente a}\quad 2hd_h\ \text{para MHA},
+\]
+y el conteo de parámetros de la capa de atención (Tabla~1 del paper) es
+\[
+P_{\mathrm{TPA}} = d_{\text{model}}\,(R_Q+R_K+R_V)(h+d_h) + d_{\text{model}}\,h\,d_h .
+\]
+
+\subsubsection{Pseudocódigo Algorítmico}
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} estado oculto $X\in\mathbb{R}^{n\times d}$, $h$ cabezas, ancho $d_h$, rangos $R_Q,R_K,R_V$
+\State $A^Q\gets\texttt{reshape}(XW^{aQ}, n, R_Q, h)$, \quad $B^Q\gets\texttt{reshape}(XW^{bQ}, n, R_Q, d_h)$
+\State análogamente $(A^K,B^K)$ con $R_K$ y $(A^V,B^V)$ con $R_V$ \Comment{proyecciones de factores sin sesgo}
+\For{cada uno de $Q,K,V$}
+    \State $M\gets \frac{1}{R}\sum_{r} a_r\otimes b_r = \frac{1}{R}A^{\top}B$ \Comment{suma CP, ec.~(3.1)}
+\EndFor
+\State aplicar RoPE a $B^Q$ y $B^K$ fila a fila \Comment{pre-rotación, ec.~(3.5); solo el token actual al decodificar}
+\State $S\gets QK^{\top}/\sqrt{d_h}$; \quad $S\gets\texttt{mask}(S)$ si es causal
+\State $O\gets\texttt{softmax}(S)V$; \quad \textbf{Salida:} $Y=OW_O$
+\end{algorithmic}
+Una variante fusionada en el espacio de factores (FlashTPA, Apéndice~A del paper) calcula primero los productos en características compartidos por cabeza $P[b,q,k,r,s]=\langle B^Q_{q,r},B^K_{k,s}\rangle$, los mezcla con $A^Q,A^K$ para obtener los logits y agrega los valores mediante $A^V,B^V$ sin materializar $Q,K,V$; reduce FLOPs siempre que $R_QR_KD + hR_QR_K + hR_VE < 2hd_h$. Esta implementación usa la ruta materializada y deja la variante en espacio de factores como optimización de kernel.
+
+\subsubsection{Características Clave}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad de entrenamiento}: atención $\mathcal{O}(n^2 d)$ más proyecciones de factores $\mathcal{O}\big(n\,d\,(R_Q+R_K+R_V)(h+d_h)\big)$; la ruta especializada es $\mathcal{O}(n^2R_QR_Kd_h + n^2hR_QR_K + n^2hR_Vd_h)$.
+    \item \textbf{Complejidad de inferencia}: $\mathcal{O}(M R_QR_Kd_h + MhR_QR_K + MhR_Vd_h)$ por paso de decodificación con un caché de longitud $M$; $(R_K+R_V)(h+d_h)$ flotantes cacheados por token, un orden de magnitud por debajo de MHA con $R_K,R_V\le 2$.
+    \item \textbf{Entrenable}: entrenado desde cero; T6 compone TPA con bloques RMSNorm y SwiGLU y se preentrena con predicción del siguiente token.
+    \item \textbf{Fortalezas}: compatibilidad nativa con RoPE (y con cualquier codificación posicional) sin la rama desacoplada de MLA; mejor perplejidad de validación y métricas downstream que MHA, MQA, GQA y MLA a igual número de parámetros; MHA/MQA/GQA se recuperan como casos especiales no contextuales de rango $h$/rango 1/rango $G$, lo que convierte el rango en un único control de diseño.
+    \item \textbf{Limitaciones}: hiperparámetros de rango adicionales ($R_Q,R_K,R_V$) y un coste de factorización en la ruta materializada; la calidad depende de la elección de rango; el paper evalúa solo modelos de lenguaje causales; la aceleración completa requiere el kernel FlashTPA.
+\end{itemize}

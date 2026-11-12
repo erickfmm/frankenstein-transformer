@@ -12,4 +12,5 @@ Latent Attention
    mla
    mlra
    mtla
+   tpa
    tucker

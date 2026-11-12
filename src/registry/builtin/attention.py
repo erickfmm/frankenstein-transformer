@@ -619,6 +619,28 @@ ATTENTION_SPECS = (
         needs_pos_encoder=True,
     ),
     MixerSpec(
+        name="tpa",
+        builder="src.model.attention.latent.tpa:TPAAttention",
+        description="Tensor Product Attention — CP sums of contextual vector-factor outer products for Q/K/V, factorized KV cache, RoPE-compatible (paper: arxiv:2501.06425)",
+        description_es="Atención de Producto Tensorial — sumas CP de productos externos de factores vectoriales contextuales para Q/K/V, caché KV factorizada, compatible con RoPE (paper: arxiv:2501.06425)",
+        references=("2501.06425",),
+        params_schema="schema/_model/_attention_latent.yaml#/properties/tpa",
+        defaults={
+            "query_rank": 8,
+            "key_rank": 2,
+            "value_rank": 2,
+        },
+        cache=CacheSpec(
+            supported=True,
+            slot_type="latent_kv",
+            notes="TPA (arXiv:2501.06425); per-token CP factor cache {A^K, B^K(rotated), A^V, B^V} of (R_K+R_V)(h+d_h) floats; kpa-style latent slot, exact prefill/decode parity.",
+        ),
+        cache_implemented=True,
+        qk_norm_supported=True,
+        qk_clip_supported=True,
+        needs_pos_encoder=True,
+    ),
+    MixerSpec(
         name="longformer",
         builder="src.model.attention.sparse.longformer:LongformerAttention",
         description="Longformer: sliding windows + global tokens (paper: arxiv:2004.05150)",

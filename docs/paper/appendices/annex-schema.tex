@@ -105,6 +105,12 @@ attention.kpa.query\_rank & int $\ge 1$ & Number of Kronecker terms for the quer
 attention.kpa.key\_rank & int $\ge 1$ & Number of Kronecker terms for the key (cached). Default: 2. \\
 attention.kpa.value\_rank & int $\ge 1$ & Number of Kronecker terms for the value (cached). Default: 2. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.attention.tpa.*}} \\
+\midrule
+attention.tpa.query\_rank & int $\ge 1$ & CP rank $R_Q$ of the query factors (never cached). Default: 8. \\
+attention.tpa.key\_rank & int $\ge 1$ & CP rank $R_K$ of the key factors (cached). Default: 2. \\
+attention.tpa.value\_rank & int $\ge 1$ & CP rank $R_V$ of the value factors (cached). Default: 2. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.attention.iha.*}} \\
 \midrule
 attention.iha.num\_pseudo\_heads & int $\ge 1$ & Number of pseudo-heads per head for IHA. Default: \texttt{num\_heads}. \\
@@ -289,6 +295,7 @@ gqla & Group-Query Latent Attention --- two decoding paths & \checkmark & \check
 mlra & Multi-Head Low-Rank Attention --- partitionable latent & \checkmark & \checkmark \\
 tucker & Tucker Attention --- generalised low-rank factorisation & \checkmark & \checkmark \\
 kpa & Kronecker Product Attention --- Kronecker-sum K/V factors, Kronecker-Separable RoPE & \checkmark & \checkmark \\
+tpa & Tensor Product Attention --- CP vector-factor Q/K/V, factorized KV cache, RoPE-compatible & \checkmark & \checkmark \\
 iha & Interleaved Head Attention --- cross-head pseudo-heads & \checkmark & \checkmark \\
 gta & Grouped-head laTenT Attention --- shared map + latent values & \checkmark & \checkmark \\
 mtla & Multi-head Temporal Latent Attention --- temporal KV merge & \checkmark & \checkmark \\

@@ -4,13 +4,13 @@
 \subsection{Attention and Sequence-Mixer Families}
 \label{sec:attention-families}
 
-The system implements fifty-three sequence mixers organized into nine functional categories that reflect how each method balances expressivity, computational cost, and memory.
+The system implements fifty-four sequence mixers organized into nine functional categories that reflect how each method balances expressivity, computational cost, and memory.
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Dense baselines} (6): standard softmax attention, sigmoid attention, Continuum Attention, Grouped-Query Attention (GQA), Exclusive Self Attention (XSA), and Multi-Token Attention (MTA) provide full global routing at quadratic cost. XSA keeps the standard softmax block and strips the component of each head's output along the token's own value vector \citep{zhai_exclusive_2026}, a parameter-free exclusion that sharpens the division of labor between attention and the feed-forward path.
     \item \textbf{Recurrent and retentive} (3): RetNet, Mamba, and ODE-style blocks maintain state for constant-time inference through recurrence, selective state spaces, or continuous depth.
     \item \textbf{Sparse patterns} (11): Sparse Transformer, Longformer, SWA with attention sinks, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA, SparDA, and LSA reduce quadratic cost through structured sparsity, token selection, training-free pruning, or semantic key clustering.
     \item \textbf{Gated mechanisms} (9): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, KDA, and First Passage Attention (FPA) introduce data-dependent control over retention, forgetting, and update strength.
-    \item \textbf{Latent compression} (11): MLA, GQLA, MLRA, Tucker, KPA, IHA, GTA, MTLA, CCA, CCGQA, and GMA compress key--value state into low-rank bottlenecks or route through a Gaussian-mixture latent memory.
+    \item \textbf{Latent compression} (12): MLA, GQLA, MLRA, Tucker, KPA, TPA, IHA, GTA, MTLA, CCA, CCGQA, and GMA compress key--value state into low-rank bottlenecks or route through a Gaussian-mixture latent memory.
     \item \textbf{Memory} (3): Titans pairs a local attention window with a surprise-driven associative memory updated at test time, Engram provides test-time read/write memory through learned N-gram hash lookups, and Memory Attention replaces the dedicated value projection with a layer-specific token-ID table.
     \item \textbf{Fast-weight attention} (6): Falcon-1/2/3 and Falcon-1A/2A/3A treat the recurrent state transition as an online continual-learning rule \citep{zhang_falcon_2026}.
     \item \textbf{Geometric field} (1): SSOG applies a structured geometric prior over the attention matrix \citep{pisoni_ssog_2026}.
@@ -20,7 +20,7 @@ The system implements fifty-three sequence mixers organized into nine functional
 \begin{figure}[t]
 \centering
 \fitfigure{\includegraphics{figures/mixer-taxonomy.pdf}}
-\caption{Taxonomy of the fifty-three sequence mixers across nine functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; the memory family pairs a test-time associative memory (Titans), hash-based N-gram lookups (Engram), and token-indexed value capacity (Memory Attention); fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors; convolution-augmented methods add a local convolution branch beside attention.}
+\caption{Taxonomy of the fifty-four sequence mixers across nine functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; the memory family pairs a test-time associative memory (Titans), hash-based N-gram lookups (Engram), and token-indexed value capacity (Memory Attention); fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors; convolution-augmented methods add a local convolution branch beside attention.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -64,7 +64,7 @@ dense computation and retains a conventional KV cache at inference.
 \end{figure}
 
 \subsection{Latent and Low-Rank Attention Family}
-This family compresses per-token key--value state into a low-rank latent: MLA, GQLA, MLRA, Tucker, KPA, IHA, GTA, and MTLA unify grouped-query, latent, Kronecker-factorized, and temporal designs. CCA and CCGQA formulate attention in a compressed latent with decoupled grouping, while GMA replaces pairwise interaction with probabilistic routing through learned Gaussian-mixture components. Formulations, pseudocode, and a comparison table are collected in Appendix~\ref{sec:annex-latent}.
+This family compresses per-token key--value state into a low-rank latent: MLA, GQLA, MLRA, Tucker, KPA, TPA, IHA, GTA, and MTLA unify grouped-query, latent, Kronecker- and CP-factorized, and temporal designs. CCA and CCGQA formulate attention in a compressed latent with decoupled grouping, while GMA replaces pairwise interaction with probabilistic routing through learned Gaussian-mixture components. Formulations, pseudocode, and a comparison table are collected in Appendix~\ref{sec:annex-latent}.
 
 \begin{figure}[t]
 \centering

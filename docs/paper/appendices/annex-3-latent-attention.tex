@@ -513,3 +513,64 @@ which increases with factor asymmetry.
     \item \textbf{Strengths}: strict generalisation of TPA with richer block structure at matched parameters; RoPE-compatible without MLA's decoupled branch; the head split $h_1\times h_2$ is a design-time compression/accuracy knob with no architectural change.
     \item \textbf{Limitations}: the paper fixes $d_1=d_2=8$ and evaluates only causal language models; an efficient factored decoding kernel and long-context evaluation are left as future work; materialising the Kronecker sums is quadratic in the sequence length like dense attention.
 \end{itemize}
+
+\subsection{Tensor Product Attention (TPA)}
+\label{sec:tpa}
+
+\begin{figure}[t]
+\centering
+\fitfigure{\includegraphics{figures/mixers/tpa.pdf}}
+\caption{Tensor Product Attention (TPA). Each per-token query, key and value slice is a normalized CP sum $\frac{1}{R}\sum_r a_r(x_t)\otimes b_r(x_t)$ of a head-axis vector $a_r\in\mathbb{R}^{h}$ and a feature-axis vector $b_r\in\mathbb{R}^{d_h}$. RoPE acts row-wise on the $B$ factors, so cached keys can be stored pre-rotated; only the four factor streams enter the cache.}
+\label{fig:mixer-tpa}
+\end{figure}
+
+Tensor Product Attention (TPA) \citep{zhang_tpa_2025} is the canonical activation-space tensor decomposition for attention: rather than factorising the projection weights (as Tucker Attention does), it factorises the per-token query, key and value activations themselves into rank-one outer products of contextual vectors. It is the vector (CP) special case of KPA \citep{nikpour_kpa_2026}, recovered at $h_1=h$, $d_1=1$, $h_2=1$, $d_2=d_h$.
+
+\subsubsection{Mathematical Foundation}
+With $h$ heads, head width $d_h$ and CP ranks $R_Q,R_K,R_V$, each token's slice is
+\[
+Q_t = \frac{1}{R_Q}\sum_{r=1}^{R_Q} a^Q_r(x_t)\otimes b^Q_r(x_t),\quad
+K_t = \frac{1}{R_K}\sum_{r=1}^{R_K} a^K_r(x_t)\otimes b^K_r(x_t),\quad
+V_t = \frac{1}{R_V}\sum_{r=1}^{R_V} a^V_r(x_t)\otimes b^V_r(x_t),
+\]
+with $a^\cdot_r(x_t)=W^{a^\cdot}_r x_t\in\mathbb{R}^{h}$ and $b^\cdot_r(x_t)=W^{b^\cdot}_r x_t\in\mathbb{R}^{d_h}$ produced by bias-free linear maps. Merging the rank index into one projection per factor side, $a_Q(x_t)=W^{aQ}x_t\in\mathbb{R}^{R_Q h}$ and $b_Q(x_t)=W^{bQ}x_t\in\mathbb{R}^{R_Q d_h}$, and reshaping into $A_Q(x_t)\in\mathbb{R}^{R_Q\times h}$, $B_Q(x_t)\in\mathbb{R}^{R_Q\times d_h}$ gives the compact form
+\[
+Q_t = \frac{1}{R_Q}A_Q(x_t)^{\top}B_Q(x_t)\in\mathbb{R}^{h\times d_h},
+\]
+and attention is the ordinary scaled dot-product map
+\[
+\mathrm{head}_i = \mathrm{Softmax}\!\left(\frac{Q_iK_i^{\top}}{\sqrt{d_h}}\right)V_i,\qquad
+\mathrm{TPA}(Q,K,V)=\mathrm{Concat}(\mathrm{head}_1,\dots,\mathrm{head}_h)\,W^O .
+\]
+Because RoPE rotates only the head-width axis it commutes with the factorisation (Theorem~3.1 of the paper): $B^\cdot(x_t)\mapsto B^\cdot(x_t)T_t$ row-wise and $\widetilde{Q}_t=Q_tT_t=\frac{1}{R_Q}A_Q(x_t)^{\top}\widetilde{B}_Q(x_t)$, preserving the relative-position identity $\widetilde{Q}_t\widetilde{K}_s^{\top}=Q_tT_{t-s}K_s^{\top}$. The cache holds $\{A^K,\widetilde{B}^K,A^V,B^V\}$ per token, i.e.
+\[
+\mathrm{KV}_{\mathrm{TPA}}=(R_K+R_V)(h+d_h)\ \text{floats/token}
+\quad\text{vs.}\quad 2hd_h\ \text{for MHA},
+\]
+and the attention-layer parameter count (Table~1 of the paper) is
+\[
+P_{\mathrm{TPA}} = d_{\text{model}}\,(R_Q+R_K+R_V)(h+d_h) + d_{\text{model}}\,h\,d_h .
+\]
+
+\subsubsection{Algorithmic Pseudocode}
+\begin{algorithmic}[1]
+\State \textbf{Input:} hidden state $X\in\mathbb{R}^{n\times d}$, $h$ heads, head width $d_h$, ranks $R_Q,R_K,R_V$
+\State $A^Q\gets\texttt{reshape}(XW^{aQ}, n, R_Q, h)$, \quad $B^Q\gets\texttt{reshape}(XW^{bQ}, n, R_Q, d_h)$
+\State likewise $(A^K,B^K)$ with $R_K$ and $(A^V,B^V)$ with $R_V$ \Comment{bias-free factor projections}
+\For{each of $Q,K,V$}
+    \State $M\gets \frac{1}{R}\sum_{r} a_r\otimes b_r = \frac{1}{R}A^{\top}B$ \Comment{CP sum, eq.~(3.1)}
+\EndFor
+\State apply RoPE to $B^Q$ and $B^K$ row-wise \Comment{pre-rotation, eq.~(3.5); current-step only at decode}
+\State $S\gets QK^{\top}/\sqrt{d_h}$; \quad $S\gets\texttt{mask}(S)$ if causal
+\State $O\gets\texttt{softmax}(S)V$; \quad \textbf{Output:} $Y=OW_O$
+\end{algorithmic}
+A fused factor-space variant (FlashTPA, Appendix~A of the paper) computes the head-shared feature dots $P[b,q,k,r,s]=\langle B^Q_{q,r},B^K_{k,s}\rangle$ first, mixes them with $A^Q,A^K$ into the logits, and aggregates values through $A^V,B^V$ without ever materialising $Q,K,V$; it reduces FLOPs whenever $R_QR_KD + hR_QR_K + hR_VE < 2hd_h$. This implementation uses the materialised path and keeps the factor-space variant as a kernel-level optimisation.
+
+\subsubsection{Key Characteristics}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n^2 d)$ attention plus $\mathcal{O}\big(n\,d\,(R_Q+R_K+R_V)(h+d_h)\big)$ factor projections; the specialised path is $\mathcal{O}(n^2R_QR_Kd_h + n^2hR_QR_K + n^2hR_Vd_h)$.
+    \item \textbf{Inference complexity}: $\mathcal{O}(M R_QR_Kd_h + MhR_QR_K + MhR_Vd_h)$ per decode step against a cache of length $M$; $(R_K+R_V)(h+d_h)$ cached floats per token, an order of magnitude below MHA at $R_K,R_V\le 2$.
+    \item \textbf{Trainable}: trained from scratch; T6 composes TPA with RMSNorm and SwiGLU blocks and is pretrained with next-token prediction.
+    \item \textbf{Strengths}: native RoPE (and generic position-encoding) compatibility without MLA's decoupled branch; better validation perplexity and downstream scores than MHA, MQA, GQA and MLA at matched parameter counts; MHA/MQA/GQA are recovered as non-contextual rank-$h$/rank-1/rank-$G$ special cases, which makes the rank a single design knob.
+    \item \textbf{Limitations}: extra rank hyperparameters ($R_Q,R_K,R_V$) and a factorisation cost on the materialised path; quality depends on rank choice; the paper evaluates causal language models only; the full speed-up requires the FlashTPA kernel.
+\end{itemize}

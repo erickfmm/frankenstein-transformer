@@ -274,6 +274,9 @@ ATTENTIONS = [
     # Kronecker Product Attention (arXiv:2610.12657): Kronecker-factored K/V
     # with a per-token latent factor cache; trains densely in both modes.
     "kpa",
+    # Tensor Product Attention (arXiv:2501.06425): CP vector-factor Q/K/V
+    # with a per-token latent factor cache; trains densely in both modes.
+    "tpa",
     "msa", "sparda", "kda", "gma", "ssog",
     "falcon1", "falcon2", "falcon3", "falcon1a",
     "falcon2a", "falcon3a",
