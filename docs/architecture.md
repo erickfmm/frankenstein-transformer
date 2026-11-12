@@ -389,7 +389,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-50 enum values in 9 families. `config subkey` is the optional
+51 enum values in 9 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -397,6 +397,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `standard` | Dense | — | yes |
 | `sigmoid` | Dense | — | yes |
 | `ca` | Dense | `ca.*` | yes |
+| `xsa` | Dense | — | yes |
 | `gqa` | Dense | `dims.num_kv_heads` | yes |
 | `retnet` | Recurrent | `retnet.heads` | yes |
 | `mamba` | Recurrent | — (linear placeholder) | yes |

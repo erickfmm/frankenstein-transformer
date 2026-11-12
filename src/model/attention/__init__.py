@@ -21,6 +21,7 @@ from .grouped_query_attention import GroupedQueryAttention
 from .ca import ContinuumAttention
 from .memory import MemoryAttention
 from .standard import StandardAttention
+from .xsa import ExclusiveSelfAttention
 from .ssog import SSOGAttention
 from .titan import TitanAttention
 from .gated import (
@@ -60,6 +61,7 @@ __all__ = [
     "GroupedQueryAttention",
     "TitanAttention",
     "StandardAttention",
+    "ExclusiveSelfAttention",
     "ContinuumAttention",
     "MemoryAttention",
     "SigmoidAttention",

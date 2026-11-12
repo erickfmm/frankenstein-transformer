@@ -48,6 +48,7 @@ QK_NORM_MIXERS = frozenset(
         "standard",
         "sigmoid",
         "ca",
+        "xsa",
         "gqa",
         "mla",
         "swa",

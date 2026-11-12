@@ -1,0 +1,28 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  k["K = Wk·x<br/>[B,n,H]"]
+  v["V = Wv·x<br/>[B,n,H]"]
+  s["scores = QKᵀ/√d<br/>[B,nh,n,n]"]
+  a["A = softmax(scores)<br/>[B,nh,n,n]"]
+  y["Y = A·V<br/>[B,nh,n,dh]"]
+  u["v̂ = V/‖V‖₂<br/>[B,nh,n,dh]"]
+  p["p = (Y·v̂)<br/>[B,nh,n,1]"]
+  z["Z = Y − p·v̂<br/>[B,nh,n,dh]"]
+  o["out = Z·Wo<br/>[B,n,H]"]
+
+  x -- "Wq" --> q
+  x -- "Wk" --> k
+  x -- "Wv" --> v
+  q -- "QKᵀ" --> s
+  k -- "QKᵀ" --> s
+  s -- "softmax" --> a
+  a -- "A·V" --> y
+  v -- "A·V" --> y
+  v -. "normalize" .-> u
+  y -- "dot" --> p
+  u -- "dot" --> p
+  p -- "project" --> z
+  y -- "subtract" --> z
+  z -- "Wo" --> o

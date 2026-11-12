@@ -3,7 +3,7 @@
 
 Este anexo sintetiza las familias densas, recurrentes y aumentadas con memoria de transformers. El campo ha evolucionado hacia varios paradigmas principales: atención densa global con variantes, compresión de cabezas clave-valor mediante atención por consultas agrupadas, compresión de estado recurrente con decaimiento, modelos de espacio de estado selectivos, integración numérica de profundidad continua, memoria de valores indexada por token y arquitecturas aumentadas con memoria. Comprender esta taxonomía ilumina las compensaciones fundamentales entre expresividad, costo computacional, huella de memoria y simplicidad de despliegue.
 
-\subsection{Atención Densa de Referencia: Estándar, Sigmoide y Continua}
+\subsection{Atención Densa de Referencia: Estándar, Sigmoide, Continua y Exclusiva}
 
 \subsubsection{Atención Softmax Estándar}
 
@@ -130,6 +130,45 @@ con $\mu(\Delta)=J_1/J_0$ la posición de recuperación normalizada dentro de un
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token con caché KV; los pesos efectivos se recalculan localmente por fila sobre el prefijo cacheado en cada paso (exacto).
     \item \textbf{Fortalezas}: Recuperación continua exacta con pesos efectivos normalizados no negativos; cero parámetros más allá de las proyecciones en la forma de ganancia fija; resultados multilingües y zero-shot sólidos (macro FLORES 1.8915 BPB, una reducción del 5.8\% frente al mejor baseline y el mejor puntaje en todos los idiomas; HellaSwag y ARC-Challenge los mejores entre los baselines); 42\% menos bytes de entrenamiento para alcanzar el umbral de 1.10 BPB que un Transformer emparejado.
     \item \textbf{Debilidades}: La aritmética cuadrática de atención persiste; el desempeño en código fuente es el más débil de las cinco arquitecturas (Stack-smol 3.3451 BPB); robustez reducida a la eliminación de bytes y a perturbaciones ``antspeak''.
+\end{itemize}
+
+\subsubsection{Atención Exclusiva (XSA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/xsa.pdf}}
+\caption{Flujo de datos de la Atención Exclusiva: la salida estándar de atención softmax $Y$, la normalización del vector de valor propio del token y la resta de la proyección $p=(Y\cdot\hat v)$, de modo que la salida de la cabeza no conserva componente alguna en la dirección del valor propio.}
+\label{fig:mixer-xsa-es}
+\end{figure}
+La Atención Exclusiva (XSA, \emph{Exclusive Self Attention}) \citep{zhai_exclusive_2026} parte de la observación de que, en Transformers entrenados, la salida de atención $\mathbf{y}_i$ conserva una alta similitud coseno con el vector de valor propio del token $\mathbf{v}_i$ ---el \emph{sesgo de similitud de atención}--- y que esa similitud crece con la profundidad. Dado que la ruta residual y la FFN posterior ya transportan la información puntual de la posición $i$, esa componente es redundante y compite con el trabajo real de la capa: modelar contexto. XSA la elimina explícitamente. La primera línea es atención softmax causal estándar:
+\begin{equation}
+\mathbf{q}_i = \mathbf{W}_q\mathbf{x}_i, \quad
+\mathbf{k}_j = \mathbf{W}_k\mathbf{x}_j, \quad
+\mathbf{v}_j = \mathbf{W}_v\mathbf{x}_j, \quad
+a_{i,j} = \frac{\exp(\mathbf{q}_i^\top\mathbf{k}_j)}{\sum_{j'=1}^{i}\exp(\mathbf{q}_i^\top\mathbf{k}_{j'})}, \quad
+\mathbf{y}_i = \sum_{j=1}^{i} a_{i,j}\mathbf{v}_j,
+\end{equation}
+y el paso exclusivo proyecta la salida ortogonalmente fuera de la dirección del valor propio:
+\begin{equation}
+\hat{\mathbf{v}}_i = \frac{\mathbf{v}_i}{\|\mathbf{v}_i\|_2}, \qquad
+\mathbf{z}_i = \mathbf{y}_i - \big(\mathbf{y}_i^\top \hat{\mathbf{v}}_i\big)\,\hat{\mathbf{v}}_i .
+\end{equation}
+El paso no tiene parámetros, es local a la fila (solo consume el valor del token actual) y es diferenciable, por lo que se entrena de extremo a extremo con las cuatro proyecciones habituales $\mathbf{W}_q,\mathbf{W}_k,\mathbf{W}_v,\mathbf{W}_o \in \mathbb{R}^{H\times H}$; el conteo de parámetros es exactamente $4H^2$, idéntico al de la atención estándar. Eliminar la dirección propia puede leerse como un sumidero de atención implícito: la masa no deseada se estaciona en la diagonal $a_{i,i}$ y luego se descarta, lo que es coherente con la robustez observada frente a tokens sumidero explícitos.
+
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} $\mathbf{x}$; $\mathbf{W}_q,\mathbf{W}_k,\mathbf{W}_v,\mathbf{W}_o$; $n_h$ cabezas de ancho $d_h$
+\State $\mathbf{Q}\gets\mathbf{x}\mathbf{W}_q$, $\mathbf{K}\gets\mathbf{x}\mathbf{W}_k$, $\mathbf{V}\gets\mathbf{x}\mathbf{W}_v$ \Comment{reformar por cabeza}
+\State $\mathbf{Y} \gets \texttt{softmax}(\mathbf{Q}\mathbf{K}^\top/\sqrt{d_h} + \text{máscara causal})\,\mathbf{V}$ \Comment{SDPA estándar}
+\State $\hat{\mathbf{V}} \gets \mathbf{V} / \|\mathbf{V}\|_2$ \Comment{por fila y por cabeza}
+\State $\mathbf{Z} \gets \mathbf{Y} - (\mathbf{Y}\odot\hat{\mathbf{V}})\text{-suma}_{d_h}\cdot\hat{\mathbf{V}}$ \Comment{paso XSA, Eq. (2)}
+\State \textbf{Salida:} $\mathbf{Z}\mathbf{W}_o$
+\end{algorithmic}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 d)$ --- domina la atención softmax; la exclusión es $\mathcal{O}(nd)$ y se mide como sobrecosto mínimo (las curvas de velocidad y memoria se solapan con la línea base en distintas longitudes de secuencia y anchos de modelo).
+    \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token con una caché KV simple; la exclusión solo lee $\mathbf{v}_i$ recién calculado, por lo que la decodificación incremental es exacta (clase (i)).
+    \item \textbf{Fortalezas}: Cero parámetros adicionales; cambio de dos líneas; ganancias consistentes de entrenamiento/validación con 0.7B, 1.3B y 2.7B parámetros en FineWeb-100BT (+0.26, +1.03 y +1.36 puntos promedio en tareas posteriores frente a SA); el margen crece con la longitud de secuencia (512 a 16k) y es estable entre tasas de aprendizaje y configuraciones de sumideros de atención.
+    \item \textbf{Debilidades}: La evidencia es solo de modelado de lenguaje; el artículo no ofrece fundamento teórico más allá de la motivación empírica; la normalización L2 por token es un kernel extra (pequeño) frente a SDPA vanilla; la variante de codificador (bidireccional) que usa este toolkit es una extensión agnóstica a la máscara de la formulación causal del artículo.
 \end{itemize}
 
 \subsection{Memory Attention}

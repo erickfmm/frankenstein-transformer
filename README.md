@@ -25,7 +25,7 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 |:------:|:----------:|:--------------:|:-----------:|:-----:|:-------------:|:-----:|:-------:|:------------:|
 | **50** | **38** | **12** | **44** | **6** | **4** | **9** | **189** | **4** |
 
-> **50 mixer architectures** — 49 mixer classes plus the `mamba` linear passthrough; the schema exposes all 50 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
+> **51 mixer architectures** — 50 mixer classes plus the `mamba` linear passthrough; the schema exposes all 51 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
 
 ## How It Works
 
@@ -122,7 +122,7 @@ code as the built-ins.
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | **50** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
+| Sequence mixer architectures | **51** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
 | Optimizer families | 38 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
 | FFN activations | 44 (40 elementwise + `swiglu`, `geglu`, `reglu`, `situ`) |
@@ -142,7 +142,7 @@ code as the built-ins.
 
 | Model Class | Mode | Use Case |
 |-------------|------|----------|
-| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 50 mixer architectures |
+| `frankenstein_text_encoder` | Encoder | Full-featured MLM pre-training with mixed attention, MoE, and all 51 mixer architectures |
 | `frankenstein_text_decoder` | Decoder | Autoregressive causal decoder for LLM-style generation; forces `mode: decoder` |
 | `frankenstein_vit` | Encoder (vision) | Vision Transformer (arXiv:2010.11929) for image understanding: patch prediction, classification, segmentation (arXiv:2503.19108); forces `mode: encoder`, requires `image:` + `vision_dataset:` blocks |
 | `frankenstein_audio` | Encoder (audio) | Audio Transformer for ASR and audio/signal classification; log-mel/spectrogram/raw frontend, conv subsampling, CTC/RNN-T or classification heads; forces `mode: encoder`, requires `audio:` + `audio_dataset:` blocks |
@@ -165,7 +165,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 | Category | Code Names | Description |
 |----------|------------|-------------|
-| **Dense** (4) | `standard`, `sigmoid`, `ca`, `gqa` | Full quadratic attention variants: softmax, sigmoid gating, exact continuum integration, and grouped-query attention with configurable KV heads |
+| **Dense** (5) | `standard`, `sigmoid`, `ca`, `gqa`, `xsa` | Full quadratic attention variants: softmax, sigmoid gating, exact continuum integration, grouped-query attention with configurable KV heads, and exclusive self attention with post-SDPA self-value exclusion |
 | **Recurrent** (3) | `retnet`, `mamba`, `ode` | Retention networks, state-space models, and continuous-depth ODE layers |
 | **Sparse** (11) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), and semantic key-clustering patterns |
 | **Gated** (9) | `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa`, `gated_softmax`, `kda` | Linear attention with multiplicative gates, delta rules, gated softmax, and path-extremum forgetting |
@@ -177,7 +177,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 
 ⚠️ `sparge` and `fasa` are **inference-sparse**: they train as dense attention over their own projections, then activate their sparse heuristic in `eval()`. They are valid in training presets.
 
-Configure via `layer_pattern` in YAML. The schema accepts 50 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
+Configure via `layer_pattern` in YAML. The schema accepts 51 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
 
 ## Optimizer Categories
 

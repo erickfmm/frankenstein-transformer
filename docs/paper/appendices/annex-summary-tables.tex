@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 49 sequence mixers across nine families, 38 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 50 sequence mixers across nine families, 38 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -25,12 +25,13 @@ Table~\ref{tab:all-mixers} enumerates every sequence mixer supported by the \tex
 \label{tab:all-mixers}
 \endlastfoot
 
-\multicolumn{6}{c}{\textbf{Dense and convolution-augmented (6)}} \\
+\multicolumn{6}{c}{\textbf{Dense and convolution-augmented (7)}} \\
 \midrule
 standard & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Full global context; KV bottleneck at long sequences & \citep{vaswani_attention_2017} \\
 sigmoid & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Element-wise gating; hardware-efficient replacement for softmax & \citep{ramapuram_theory_2024} \\
 gqa & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Tunable KV compression; $G\times$ cache reduction via shared heads & \citep{ainslie_gqa_2023} \\
 ca & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Exact integration over piecewise-linear key/value trajectories; half-token caps; nonnegative normalized effective weights & \citep{khadangi_continuum_2026} \\
+xsa & Dense & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(n)$ cache & Post-SDPA orthogonalization against the self value vector; zero extra parameters; implicit attention sink & \citep{zhai_exclusive_2026} \\
 conformer & Conv-augmented & $\mathcal{O}(n^2 d + n K d)$ & $\mathcal{O}(n)$ (full recompute) & Macaron FFNs around relative-sinusoidal MHSA and a depthwise-conv module ($K=32$); local and global context in one block & \citep{Gulati2020} \\
 fastconformer & Conv-augmented & $\mathcal{O}(n \cdot (w + g) \cdot d)$ & $\mathcal{O}(w + g)$ & Limited-context window + head-pinned global token; optional separate global projections; linear-memory long-form & \citep{rekesh_fastconformer_2023} \\
 \midrule

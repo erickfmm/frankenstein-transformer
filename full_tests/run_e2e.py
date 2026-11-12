@@ -299,6 +299,11 @@ ATTENTIONS = [
     # (range-min) forget bias; trains natively in encoder and decoder modes;
     # exact KV-cache incremental decoding (two per-key/head scalars).
     "fpa",
+    # Exclusive Self Attention (arXiv:2603.09078): standard softmax attention
+    # + post-SDPA orthogonalization against the self value vector; trains
+    # natively in encoder and decoder modes; exact KV-cache incremental
+    # decoding.
+    "xsa",
 ]
 
 # Model-wide positional encodings (src/schema/_model/_positional_encoding.yaml).

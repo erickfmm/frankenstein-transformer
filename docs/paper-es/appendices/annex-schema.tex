@@ -244,6 +244,7 @@ El array \texttt{model.dims.layer\_pattern} acepta los siguientes 48 códigos de
 standard & Atención multi-cabeza clásica (estilo BERT) & \checkmark & \checkmark \\
 sigmoid & Atención con compuerta sigmoide & \checkmark & \checkmark \\
 ca & Atención Continua --- integración continua exacta sobre trayectorias de memoria lineales por tramos & \checkmark & \checkmark \\
+xsa & Atención Exclusiva --- ortogonalización post-SDPA frente al vector de valor propio & \checkmark & \checkmark \\
 memory & Atención con memoria — valores por ID de token (V = K + Norm(E[s])) & \checkmark & \checkmark \\
 gated\_softmax & Atención softmax con compuerta sigmoide post-SDPA & \checkmark & \checkmark \\
 titan & Atención Titan con codificación posicional (HoPE/RoPE) & \checkmark & \checkmark \\

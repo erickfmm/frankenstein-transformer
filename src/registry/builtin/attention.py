@@ -982,6 +982,21 @@ ATTENTION_SPECS = (
         cache_implemented=True,
     ),
     MixerSpec(
+        name="xsa",
+        builder="src.model.attention.xsa:ExclusiveSelfAttention",
+        description="Exclusive Self Attention — post-SDPA orthogonalization against the self value vector (paper: arxiv:2603.09078)",
+        description_es="Atención Exclusiva — ortogonalización post-SDPA frente al vector de valor propio (paper: arxiv:2603.09078)",
+        references=("2603.09078",),
+        cache=CacheSpec(
+            supported=True,
+            slot_type="kv",
+            notes="XSA (arXiv:2603.09078); class (i) — the exclusion z_i = y_i - (y_i·v̂_i)v̂_i depends only on the current token's value, so a plain KV slot carries everything (gated_softmax precedent); exact parity.",
+        ),
+        cache_implemented=True,
+        qk_norm_supported=True,
+        qk_clip_supported=True,
+    ),
+    MixerSpec(
         name="mamba",
         builder="src.model.attention.mamba_placeholder:build_mamba",
         description="Selective state-space model (SSM) (paper: arxiv:2312.00752)",

@@ -3,7 +3,7 @@
 
 This annex synthesizes the dense, recurrent, and memory-augmented transformer families. The field has evolved toward several primary paradigms: dense global attention with variants, key-value head compression via grouped-query attention, recurrent state compression with decay, selective state-space models, continuous-depth numerical integration, token-indexed value memory, and memory-augmented architectures. Understanding this taxonomy illuminates fundamental tradeoffs between expressiveness, computational cost, memory footprint, and deployment simplicity.
 
-\subsection{Dense Attention Baselines: Standard, Sigmoid, and Continuum}
+\subsection{Dense Attention Baselines: Standard, Sigmoid, Continuum, and Exclusive}
 
 \subsubsection{Standard Softmax Attention}
 
@@ -130,6 +130,45 @@ with $\mu(\Delta)=J_1/J_0$ the normalized retrieval position inside a segment. B
     \item \textbf{Inference complexity}: $\mathcal{O}(n)$ per token with a KV cache; the effective weights are recomputed row-locally over the cached prefix each step (exact).
     \item \textbf{Strengths}: Exact continuous retrieval with normalized nonnegative effective weights; zero parameters beyond the projections in the fixed-gain form; strong multilingual and zero-shot results (FLORES macro 1.8915 BPB, a 5.8\% reduction versus the strongest baseline and the best score in every language; HellaSwag and ARC-Challenge best among the baselines); 42\% fewer training bytes to a matched 1.10 BPB threshold than a matched Transformer.
     \item \textbf{Weaknesses}: The quadratic attention arithmetic persists; source-code performance is the weakest of the five architectures (Stack-smol 3.3451 BPB); reduced robustness to byte deletion and ``antspeak'' perturbations.
+\end{itemize}
+
+\subsubsection{Exclusive Self Attention (XSA)}
+
+\begin{figure}[H]
+\centering
+\fitfigure{\includegraphics{figures/mixers/xsa.pdf}}
+\caption{Dataflow of Exclusive Self Attention: standard softmax attention output $Y$, normalization of the token's own value vector, and subtraction of the projection $p=(Y\cdot\hat v)$ so the head output carries no component along the self value direction.}
+\label{fig:mixer-xsa}
+\end{figure}
+Exclusive Self Attention \citep{zhai_exclusive_2026} starts from the observation that in trained Transformers the attention output $\mathbf{y}_i$ keeps a large cosine similarity with the token's own value vector $\mathbf{v}_i$---the \emph{attention similarity bias}---and that this similarity grows with depth. Since the residual path and the following FFN already carry the point-wise information of position $i$, that component is redundant and competes with the layer's actual job, context modeling. XSA therefore subtracts it explicitly. The first line is standard causal softmax attention:
+\begin{equation}
+\mathbf{q}_i = \mathbf{W}_q\mathbf{x}_i, \quad
+\mathbf{k}_j = \mathbf{W}_k\mathbf{x}_j, \quad
+\mathbf{v}_j = \mathbf{W}_v\mathbf{x}_j, \quad
+a_{i,j} = \frac{\exp(\mathbf{q}_i^\top\mathbf{k}_j)}{\sum_{j'=1}^{i}\exp(\mathbf{q}_i^\top\mathbf{k}_{j'})}, \quad
+\mathbf{y}_i = \sum_{j=1}^{i} a_{i,j}\mathbf{v}_j,
+\end{equation}
+and the exclusive step projects the output orthogonally out of the self value direction:
+\begin{equation}
+\hat{\mathbf{v}}_i = \frac{\mathbf{v}_i}{\|\mathbf{v}_i\|_2}, \qquad
+\mathbf{z}_i = \mathbf{y}_i - \big(\mathbf{y}_i^\top \hat{\mathbf{v}}_i\big)\,\hat{\mathbf{v}}_i .
+\end{equation}
+The step is parameter-free, row-local (it only consumes the current token's value) and differentiable, so it trains end-to-end with the usual four projections $\mathbf{W}_q,\mathbf{W}_k,\mathbf{W}_v,\mathbf{W}_o \in \mathbb{R}^{H\times H}$; the parameter count is exactly $4H^2$, identical to standard attention. Removing the self direction can be read as an implicit attention sink: undesired mass is parked on the diagonal $a_{i,i}$ and then discarded, which is consistent with the observed robustness to explicit sink tokens.
+
+\begin{algorithmic}[1]
+\State \textbf{Input:} $\mathbf{x}$; $\mathbf{W}_q,\mathbf{W}_k,\mathbf{W}_v,\mathbf{W}_o$; $n_h$ heads of width $d_h$
+\State $\mathbf{Q}\gets\mathbf{x}\mathbf{W}_q$, $\mathbf{K}\gets\mathbf{x}\mathbf{W}_k$, $\mathbf{V}\gets\mathbf{x}\mathbf{W}_v$ \Comment{per-head reshape}
+\State $\mathbf{Y} \gets \texttt{softmax}(\mathbf{Q}\mathbf{K}^\top/\sqrt{d_h} + \text{causal mask})\,\mathbf{V}$ \Comment{standard SDPA}
+\State $\hat{\mathbf{V}} \gets \mathbf{V} / \|\mathbf{V}\|_2$ \Comment{row-wise, per head}
+\State $\mathbf{Z} \gets \mathbf{Y} - (\mathbf{Y}\odot\hat{\mathbf{V}})\text{-sum}_{d_h}\cdot\hat{\mathbf{V}}$ \Comment{XSA step, Eq. (2)}
+\State \textbf{Output:} $\mathbf{Z}\mathbf{W}_o$
+\end{algorithmic}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n^2 d)$ -- the softmax attention dominates; the exclusion is $\mathcal{O}(nd)$ and measured as minimal overhead (speed and memory curves overlap the baseline across sequence lengths and model widths).
+    \item \textbf{Inference complexity}: $\mathcal{O}(n)$ per token with a plain KV cache; the exclusion reads only the newly computed $\mathbf{v}_i$, so incremental decoding is exact (class (i)).
+    \item \textbf{Strengths}: Zero additional parameters; two-line change; consistent training/validation gains at 0.7B, 1.3B and 2.7B parameters on FineWeb-100BT (+0.26, +1.03 and +1.36 average downstream points over SA); the margin grows with sequence length (512 to 16k) and is stable across learning rates and attention-sink configurations.
+    \item \textbf{Weaknesses}: Evidence is language-modeling only; the paper offers no theoretical grounding beyond the empirical motivation; per-token L2 normalization is an extra (small) kernel compared with vanilla SDPA; the encoder (bidirectional) variant used by this toolkit is a mask-agnostic extension of the paper's causal formulation.
 \end{itemize}
 
 \subsection{Memory Attention}

@@ -54,6 +54,7 @@ IMPLEMENTED_MIXERS = frozenset(
         "sigmoid",        # F1 (L1 normalizer re-summed over the cache)
         "ca",             # F1 (row-local moment normalizer, re-summed over the cache)
         "gated_softmax",  # F1
+        "xsa",            # F1 (row-local exclusion over the current-step value)
         "memory",         # F1 (standard KV; values built at append time)
         "titan",          # F1
         "fox",            # F1 (cumulative log-forget extras)

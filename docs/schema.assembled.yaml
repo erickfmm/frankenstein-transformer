@@ -882,6 +882,8 @@ properties:
 
               | `ca` | Continuum Attention — exact normalized integration of exp(score) over piecewise-linear key/value trajectories (paper: arxiv:2610.20586) | ✅ | ✅ |
 
+              | `xsa` | Exclusive Self Attention — post-SDPA orthogonalization against the self value vector (paper: arxiv:2603.09078) | ✅ | ✅ |
+
               | `gated_softmax` | Gated softmax attention with post-SDPA sigmoid (paper: arxiv:2505.06708) | ✅ | ✅ |
 
               | `titan` | Titan attention with positional encoding (`hope`/`rope`) (paper: arxiv:2501.00663) | ✅ | ✅ |
@@ -1003,6 +1005,8 @@ properties:
               | `sigmoid` | Atención con compuerta sigmoide (paper: arxiv:2409.04431) | ✅ | ✅ |
 
               | `ca` | Atención Continua — integración normalizada exacta de exp(puntaje) sobre trayectorias clave/valor lineales por tramos (paper: arxiv:2610.20586) | ✅ | ✅ |
+
+              | `xsa` | Atención Exclusiva — ortogonalización post-SDPA frente al vector de valor propio (paper: arxiv:2603.09078) | ✅ | ✅ |
 
               | `gated_softmax` | Atención softmax con compuerta post-SDPA (paper: arxiv:2505.06708) | ✅ | ✅ |
 
@@ -1165,6 +1169,7 @@ properties:
               - swa
               - titan
               - tucker
+              - xsa
             examples:
             - - retnet
               - titan
@@ -2908,6 +2913,13 @@ properties:
                 title_es: Codificación posicional de tucker
                 description: Whether `tucker` consumes the model-wide positional encoding.
                 description_es: Si `tucker` consume la codificación posicional global.
+              xsa_use_pe:
+                type: boolean
+                default: true
+                title: xsa positional encoding
+                title_es: Codificación posicional de xsa
+                description: Whether `xsa` consumes the model-wide positional encoding.
+                description_es: Si `xsa` consume la codificación posicional global.
       attention:
         type: object
         description: 'Per-mixer configuration sub-objects. Each mixer with dedicated hyperparameters has

@@ -8,6 +8,7 @@ if TORCH_AVAILABLE:
     import torch
     from src.model.config import FrankensteinModelConfig, merge_model_blocks
     from src.model.attention.standard import StandardAttention
+    from src.model.attention.xsa import ExclusiveSelfAttention
     from src.model.attention.sigmoid import SigmoidAttention
     from src.model.attention.ca import ContinuumAttention, _exp_moments
     from src.model.attention.titan import TitanAttention
@@ -104,6 +105,62 @@ class SigmoidAttentionTests(unittest.TestCase):
         x = self._x().requires_grad_(True)
         attn(x).sum().backward()
         self.assertIsNotNone(x.grad)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class ExclusiveSelfAttentionTests(unittest.TestCase):
+    """XSA: softmax attention minus the self-value direction (arXiv:2603.09078)."""
+
+    def _make(self, **kw):
+        return ExclusiveSelfAttention(_cfg(**kw))
+
+    def _x(self):
+        return torch.randn(BSZ, SEQ, DIM)
+
+    def test_encoder_output_shape(self):
+        attn = self._make()
+        y = attn(self._x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_output_shape(self):
+        attn = self._make(dims={"mode": 'decoder'})
+        y = attn(self._x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+
+    def test_invalid_hidden_size_raises(self):
+        with self.assertRaises(ValueError):
+            ExclusiveSelfAttention(_cfg(dims={'hidden_size': 50, 'num_heads': 6}))
+
+    def test_gradient_flows(self):
+        attn = self._make()
+        x = self._x().requires_grad_(True)
+        attn(x).sum().backward()
+        self.assertIsNotNone(x.grad)
+
+    def test_with_bitnet(self):
+        attn = ExclusiveSelfAttention(_cfg(bitnet={'enabled': True}))
+        y = attn(self._x())
+        self.assertEqual(y.shape, (BSZ, SEQ, DIM))
+        self.assertFalse(torch.isnan(y).any())
+
+    def test_exclusion_is_orthogonal_to_self_value(self):
+        """Eq. 2: z has zero projection on the normalized self value."""
+        value = torch.randn(3, 4, 5, 8)
+        y = torch.randn(3, 4, 5, 8)
+        z = ExclusiveSelfAttention._exclude_self(value, y)
+        unit = torch.nn.functional.normalize(value, dim=-1)
+        residual = (z * unit).sum(dim=-1)
+        self.assertLess(float(residual.abs().max()), 1e-5)
+
+    def test_decoder_prefix_is_causal(self):
+        """Future tokens never change earlier decoder positions."""
+        attn = self._make(dims={"mode": 'decoder'})
+        x = self._x()
+        y1 = attn(x)
+        x2 = x.clone()
+        x2[:, 3:] += torch.randn_like(x2[:, 3:])
+        y2 = attn(x2)
+        torch.testing.assert_close(y1[:, :3], y2[:, :3], rtol=1e-5, atol=1e-5)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
