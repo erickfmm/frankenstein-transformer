@@ -267,7 +267,8 @@ question tool to ask the user whenever a decision is genuinely ambiguous
 - census bumps: the *actual* old numbers read from the repo (do not hardcode 49
   or 9) — global mixer count, per-family count, taxonomy labels. Today: 50
   mixers in 9 families (49 concrete classes + the `mamba` placeholder), 36
-  optimizers, 84 test files, 99 `.mmd` diagrams / 142 `.svg` renders.
+  optimizers, 84 test files, 204 `.mmd` diagrams (102 EN + 102 ES) / 284
+  `.svg` + 284 `.pdf` renders.
 
 Print the **file-by-file plan table** (file → change) in the chat response
 before writing the plan document, so the user can veto a decision before the
@@ -315,15 +316,15 @@ intent:
 | 15 | Family test (`tests/test_<family>_attention.py` or `test_attention_modules.py`) | Test class: builds on a tiny config, forward in encoder + decoder modes, output shape, knobs honored, no NaN/Inf, BitNet on; name the methods. |
 | 16 | `tests/test_bitnet_coverage.py` | Add the name to the mixer list. |
 | 17 | `tests/test_kv_cache_mixers.py` | **No hand edit**: the parity suite parametrizes itself from `IMPLEMENTED_MIXERS`; only the incremental branch + membership are real edits (KV-cache decision 1). |
-| 18 | `docs/paper/figures/mixers/<short>.mmd` | Draft the full mermaid diagram in house style (init header, flowchart TD, tensor-shaped labels, labelled edges, dotted recurrence). |
-| 19 | `docs/paper/figures/mixer-taxonomy.mmd` | Extend the family chain + bump its count label. |
-| 20 | *(family-dependent)* `docs/paper/figures/<family>-map.mmd` | Add the node when a family map exists. |
+| 18 | `docs/paper/figures/mixers/<short>.mmd` + `<short>-es.mmd` | Draft the full mermaid diagram in house style (init header, flowchart TD, tensor-shaped labels, labelled edges, dotted recurrence) and its Spanish twin: identical header/ids/edges/formulas, only the human-readable labels translated. |
+| 19 | `docs/paper/figures/mixer-taxonomy.mmd` + `-es.mmd` | Extend the family chain + bump its count label, in both languages. |
+| 20 | *(family-dependent)* `docs/paper/figures/<family>-map.mmd` + `-es.mmd` | Add the node when a family map exists, in both languages. |
 | 21 | `docs/bibliography/attention_types.bib` | Entry keyed `<firstauthor>_<shortname>_<year>`. Draft it. |
 | 22 | `docs/paper/appendices/annex-<n>-<family>.tex` | `\subsection{N. <Name>}` numbered after the annex's last; figure `\fitfigure{figures/mixers/<short>.pdf}` + label; Mathematical Foundation with the paper's equations; algorithm float; Empirical Performance and Trade-offs + strength/limitation table; `\citep{<key>}`; extend the annex's closing unified-principle list if present. Locate the annex by grepping the peer. Draft the subsection. |
 | 23 | `docs/paper/sections/04-architecture-taxonomy.tex` | Family paragraph sentence + counts. Quote the lines holding the old count. |
 | 24 | `docs/paper/appendices/annex-summary-tables.tex` | `tab:all-mixers` row + family count header + intro census. Draft the row. |
 | 25 | `docs/paper/appendices/annex-schema.tex` | Mixer row. Draft it. |
-| 26 | `docs/paper-es/appendices/annex-<n>-<family>.tex` | Faithful Spanish translation of #22 (figures from `../paper/figures/`). |
+| 26 | `docs/paper-es/appendices/annex-<n>-<family>.tex` | Faithful Spanish translation of #22 (figures from `../paper/figures/`, including the `-es` variants). |
 | 27 | `docs/paper-es/sections/01-*.tex`, `04-*.tex`, `annex-summary-tables.tex`, `annex-schema.tex` | Spanish counterparts of #23–#25 (+ the global census in section 01). |
 | 28 | `README.md`, `docs/architecture.md`, `configs/README.md` | Census pass: README Mixer Categories row + counts (+ ⚠️ note when eval-only); architecture §7.4 census + row (+ §7.13 cache list, + TRAINING_FREE note); configs/README family list. List every occurrence of the old counts found by grepping them. |
 | 29 | `docs/source/api/model/attention/<family>/<name>.rst` + `<family>/index.rst` | `automodule` page + toctree entry (top-level `attention/` for families without a subdir). |

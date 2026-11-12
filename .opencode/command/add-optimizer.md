@@ -138,7 +138,8 @@ Read before planning anything, and cite concrete anchors (path + line) in the pl
 - Doc targets: `docs/paper/appendices/annex-9-optimizers_<bucket>.tex`
   (`adaptive`, `evolutionary`, `geometry`, `memory`, `momentum`, plus
   `tutorialintro` and `summary`), figures under
-  `docs/paper/figures/optimizers/<name>.{mmd,pdf,svg}`,
+  `docs/paper/figures/optimizers/<name>.{mmd,pdf,svg}` plus the `<name>-es.*`
+  twins (same header/ids/formulas, translated labels),
   `docs/paper/appendices/annex-summary-tables.tex` (`tab:all-optimizers` ~line 130,
   intro census "all 36" ~line 113), `docs/paper/sections/05-optimizer-families.tex`
   and the `paper-es` counterparts (`annex-9-optimizadores_<bucket>.tex`,
@@ -211,10 +212,10 @@ One row per file, in execution order, with the *intended content*, not just the 
 | 9 | `full_tests/run_e2e.py` | Append to the `OPTIMIZERS` list (~line 289) and, only when the optimizer needs safe non-default globals, add a block in `_with_optimizer` (~line 661). Keys are auto-filtered by `OPTIMIZER_ALLOWED_KEYS`, so an unsupported key can never break the run. |
 | 10 | `tests/test_optimizer_factory.py` | Add `<name>` to `test_registry_contains_all_required` plus a test class: builds without error, `step()` runs on a tiny tensor, custom suffix parsed. Name the test methods. |
 | 11 | `docs/bibliography/optimizers.bib` | Entry keyed `<firstauthor>_<shortname>_<year>`, matching the existing Zotero arXiv style. Draft the entry. |
-| 12 | `docs/paper/appendices/annex-9-optimizers_<bucket>.tex` | `\paragraph{<Name>.}` in the right category file (`adaptive`/`evolutionary`/`geometry`/`memory`/`momentum`): figure (only if `docs/paper/figures/optimizers/<name>.pdf` in the same vector style can be produced — otherwise omit), equations from the paper, `algorithm` float, Pros/Cons, `\citep{<key>}`. Draft the paragraph. |
+| 12 | `docs/paper/appendices/annex-9-optimizers_<bucket>.tex` | `\paragraph{<Name>.}` in the right category file (`adaptive`/`evolutionary`/`geometry`/`memory`/`momentum`): figure (only if `docs/paper/figures/optimizers/<name>.pdf` in the same vector style can be produced — otherwise omit) from `<name>.mmd` + `<name>-es.mmd`, equations from the paper, `algorithm` float, Pros/Cons, `\citep{<key>}`. Draft the paragraph. |
 | 13 | `docs/paper/appendices/annex-summary-tables.tex` | Row in `tab:all-optimizers` under the correct category header: family, state buffers, per-step cost, key hyperparams, `\citep{<key>}`. Draft the row. |
 | 14 | `docs/paper/sections/05-optimizer-families.tex` | Family sentence + counts. Quote the exact lines currently holding the old count. |
-| 15 | `docs/paper-es/appendices/annex-9-optimizadores_<bucket>.tex` | Faithful Spanish translation of #12 (figures live in `../paper/figures/optimizers/`). |
+| 15 | `docs/paper-es/appendices/annex-9-optimizadores_<bucket>.tex` | Faithful Spanish translation of #12 (figures live in `../paper/figures/optimizers/`, using the `-es` variants). |
 | 16 | `docs/paper-es/appendices/annex-summary-tables.tex` | Spanish summary row + counts. |
 | 17 | `docs/paper-es/sections/05-familias-optimizadores.tex` | Family sentence + counts. |
 | 18 | `docs/architecture.md`, `README.md`, `configs/README.md` | Census pass across all three (§1 table, §8.1 heading + family table, mermaid diagram, suffix docs). List every occurrence of the census number/sentence to edit, as found by grepping the old count. |

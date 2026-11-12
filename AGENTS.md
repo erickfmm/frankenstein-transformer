@@ -53,6 +53,7 @@
 | Tests | `tests/` (80 files; see gates below) |
 | End-to-end harness | `full_tests/run_e2e.py` |
 | Theory / citations | `docs/paper*/`, `docs/bibliography/` |
+| Paper figures (bilingual) | `docs/paper/figures/**` — `<name>.mmd`/`-es.mmd` + PDF/SVG per language |
 | Website mirror sync | `.opencode/command/sync-website.md` |
 
 > `src/model/frankenstein_model.py` **does not exist** (split into the files above; a regression test fails if it is recreated).
