@@ -1,0 +1,13 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":24,"rankSpacing":24,"wrappingWidth":230}}}%%
+flowchart TD
+  tokens["Secuencia de tokens"]
+
+  subgraph strategies["Estrategias de diseño disperso: localidad, dispersión estructurada en grafo y selección aprendida o predicha"]
+    local["Local / ventana<br/>Longformer / SWA con sumideros"]
+    hybrid["Grafo disperso híbrido<br/>BigBird / Sparse Transformer"]
+    select["Poda selectiva<br/>SparseK / NSA / FASA<br/>SpargeAttn / LSA"]
+  end
+
+  tokens --> local
+  tokens --> hybrid
+  tokens --> select

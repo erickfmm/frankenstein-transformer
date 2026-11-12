@@ -1,0 +1,30 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":14,"rankSpacing":20}}}%%
+flowchart TD
+  subgraph latent["Factor de compresión: r ≪ d"]
+    kv["K, V (n × d)"]
+    down["Proyección hacia abajo<br/>d → r"]
+    lat["K′, V′ latentes<br/>(n × r)"]
+    up["Proyección hacia arriba<br/>r → d"]
+    attn["Atención<br/>softmax(QK′<sup>T</sup>)V′"]
+    kv --> down --> lat --> up --> attn
+  end
+  subgraph factor["Flujos de factores CP (TPA)"]
+    fq["A^Q, B^Q (términos R_Q)"]
+    fk["A^K, B^K_rope (términos R_K)"]
+    fv["A^V, B^V (términos R_V)"]
+    cp["(1/R) Σ_r a_r ⊗ b_r<br/>→ Q, K, V"]
+    fq --> cp
+    fk --> cp
+    fv --> cp
+  end
+
+  subgraph mfa["QK factorizado, una única cabeza K/V compartida (MFA)"]
+    mq["q_c = (x S_q) Q_c<br/>m cabezas de ancho C"]
+    mk["k = x S_k, v = x S_v<br/>(una cabeza, C)"]
+    mkr["MFA-KR: v = k(I+diag(α)N)<br/>α = 0 al inicializar"]
+    matt["Atención<br/>softmax(q_c kᵀ/√C)v"]
+    mq --> matt
+    mk --> matt
+    mk -. "reutiliza clave" .-> mkr
+    mkr -. "v" .-> matt
+  end

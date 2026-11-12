@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V<br/>[B,n,H]"]
+  bs["puntuación<br/>por bloque"]
+  bsel["selección<br/>de bloques"]
+  s["puntajes dispersos<br/>= QKᵀ"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  qkv -- "puntúa" --> bs
+  bs -- "selecciona" --> bsel
+  qkv -- "QKᵀ" --> s
+  bsel -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  qkv -- "V" --> o

@@ -1,0 +1,21 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V = W·x<br/>[B,n,H]"]
+  gates["compuerta de lectura,<br/>compuerta de escritura"]
+  ctx["contexto recuperado<br/>ctx ← M"]
+  mem["memoria M<br/>[slots, dim]"]
+  wr["M ← escritura(V)"]
+  att["atención sobre<br/>M + ctx"]
+  o["O = Wo·salida<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "compuertas" --> gates
+  mem -- "lectura" --> ctx
+  gates -- "lectura" --> ctx
+  qkv -- "escritura" --> wr
+  gates -- "escritura" --> wr
+  wr -. "siguiente" .-> mem
+  qkv -- "QKᵀ" --> att
+  ctx -- "QKᵀ" --> att
+  att -- "Wo" --> o

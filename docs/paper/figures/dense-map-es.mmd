@@ -1,0 +1,12 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":24,"useMaxWidth":false,"wrappingWidth":240}}}%%
+flowchart TD
+  subgraph dense["Atención densa: interacciones por pares completas, coste O(n²)"]
+    direction LR
+    standard["Estándar<br/>softmax(QK<sup>T</sup>/√d)V"]
+    sigmoid["Sigmoide<br/>σ(QK<sup>T</sup>)V"]
+    gqa["GQA<br/>cabezas K, V compartidas"]
+    ca["Continuum<br/>∫ exp(γ·qᵀk(t)/√d)·v(t) dt / Z"]
+    xsa["XSA<br/>Y − (Y·v̂)v̂"]
+    mta["MTA<br/>convolución sobre (q,k,cabezas) → softmax → convolución → group norm con compuerta"]
+    standard ~~~ sigmoid ~~~ gqa ~~~ ca ~~~ xsa ~~~ mta
+  end

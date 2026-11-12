@@ -1,0 +1,17 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  conv["conv en profundidad causal<br/>k = kernel_size"]
+  ngram["contextos de N-gramas<br/>órdenes 2…N"]
+  lookup["búsqueda hash<br/>H cabezas por orden"]
+  mem["tablas hash<br/>(por orden, por cabeza)"]
+  sum["Σ búsquedas<br/>+ conv"]
+  o["y<br/>[B,n,H]"]
+
+  x -- "conv" --> conv
+  conv -- "ventanas" --> ngram
+  ngram -- "hash" --> lookup
+  mem -- "recupera" --> lookup
+  lookup -- "combina" --> sum
+  conv -- "corto alcance" --> sum
+  sum --> o

@@ -9,7 +9,7 @@ Los mecanismos de atención dispersa abordan la prohibitiva complejidad computac
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/sparse-transformer.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/sparse-transformer-es.pdf}}
 \caption{Flujo de datos del Sparse Transformer: un patrón factorial con zancada enmascara la matriz de puntuaciones antes del softmax.}
 \label{fig:mixer-sparse-transformer}
 \end{figure}
@@ -78,7 +78,7 @@ La idea clave es que con las dos cabezas factorizadas operando en paralelo a tra
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/longformer.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/longformer-es.pdf}}
 \caption{Flujo de datos de Longformer: las máscaras de ventana deslizante y de tokens globales se aplican a la matriz de puntuaciones antes del softmax.}
 \label{fig:mixer-longformer}
 \end{figure}
@@ -144,7 +144,7 @@ Los tres patrones se aplican mediante proyecciones separadas. La atención local
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/swa.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/swa-es.pdf}}
 \caption{Flujo de datos de SWA con sumideros de atención: los primeros $s$ tokens sumidero y una ventana deslizante causal de $w-s$ se unen en una máscara aplicada a la matriz de puntuaciones antes del softmax.}
 \label{fig:mixer-swa}
 \end{figure}
@@ -196,7 +196,7 @@ Como la intervención es un cambio puro de máscara de atención, no requiere pa
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/bigbird.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/bigbird-es.pdf}}
 \caption{Flujo de datos de BigBird: la adyacencia local, aleatoria y global enmascara la matriz de puntuaciones antes del softmax.}
 \label{fig:mixer-bigbird}
 \end{figure}
@@ -273,7 +273,7 @@ Los autores demuestran que con $O(1)$ conexiones aleatorias y tokens globales, e
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/sparsek.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/sparsek-es.pdf}}
 \caption{Flujo de datos de SparseK: un selector top-$k$ diferenciable conserva solo las claves con mayor puntuación antes del softmax.}
 \label{fig:mixer-sparsek}
 \end{figure}
@@ -341,7 +341,7 @@ donde $K_{\text{sel}}, V_{\text{sel}}$ contienen solo las entradas top-$k$ (aque
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/nsa.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/nsa-es.pdf}}
 \caption{Flujo de datos de NSA: la puntuación y selección jerárquica de bloques restringen la matriz de puntuaciones a los bloques elegidos.}
 \label{fig:mixer-nsa}
 \end{figure}
@@ -421,7 +421,7 @@ y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \ti
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/fasa.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/fasa-es.pdf}}
 \caption{Flujo de datos de FASA: una etapa de poda sensible a la frecuencia (solo evaluación) descarta bloques de claves de bajo valor antes del softmax.}
 \label{fig:mixer-fasa}
 \end{figure}
@@ -496,7 +496,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/sparge.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/sparge-es.pdf}}
 \caption{Flujo de datos de SpargeAttn: un predictor disperso (solo evaluación) poda bloques de claves antes del softmax.}
 \label{fig:mixer-sparge}
 \end{figure}
@@ -571,7 +571,7 @@ donde $m_{\text{antiguo}}, m_{\text{nuevo}}$ son máximos del softmax en línea 
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/msa.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/msa-es.pdf}}
 \caption{Flujo de datos de MSA: una máscara de bloques dispersos restringe la matriz de puntuaciones antes del softmax.}
 \label{fig:mixer-msa}
 \end{figure}
@@ -632,7 +632,7 @@ donde $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ reúnen los tenso
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/sparda.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/sparda-es.pdf}}
 \caption{Flujo de datos de SparDA: una proyección de pronóstico guía la selección anticipada de bloques antes del softmax.}
 \label{fig:mixer-sparda}
 \end{figure}
@@ -690,7 +690,7 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/lsa.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/lsa-es.pdf}}
 \caption{Flujo de datos de N-LSA: las claves agrupadas se clusterizan con Ward en buckets; cada consulta puntúa los centroides, expande los mejores buckets en un conjunto top-$k$ de claves de largo alcance y atiende a sumideros + selección + ventana.}
 \label{fig:mixer-lsa}
 \end{figure}
@@ -770,7 +770,7 @@ donde el softmax se renormaliza por cabeza sobre la selección compartida. N-LSA
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/probsparse.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/probsparse-es.pdf}}
 \caption{Flujo de datos de ProbSparse: un subconjunto aleatorio de $c_1\lceil\ln L_K\rceil$ claves ordena las consultas con la medida de dispersidad max--mean; solo las $c_2\lceil\ln L_Q\rceil$ consultas dominantes se puntúan frente a todas las claves, con el término de posición relativa $P=X_PW_P$ añadido mediante $U_2$.}
 \label{fig:mixer-probsparse-es}
 \end{figure}

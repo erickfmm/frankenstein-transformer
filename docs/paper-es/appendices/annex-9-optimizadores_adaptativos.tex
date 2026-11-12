@@ -2,7 +2,7 @@
 \paragraph{SGD Vainilla (Descenso de Gradiente por Mini-lotes).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/sgd.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/sgd-es.pdf}}
 \caption{Flujo por paso de SGD por mini-lotes: decaimiento L2 opcional y la actualización por gradiente escalado, sin estado del optimizador entre pasos.}
 \label{fig:opt-sgd}
 \end{figure}
@@ -45,7 +45,7 @@ donde $\eta$ es el único hiperparámetro del método. La receta de ajuste de la
 \paragraph{SGD con Momentum.}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/sgd-momentum.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/sgd-momentum-es.pdf}}
 \caption{Flujo por paso de SGD con momentum: decaimiento L2 opcional, acumulación exponencial de momentum y actualización de parámetros con paso fijo.}
 \label{fig:opt-sgd-momentum}
 \end{figure}
@@ -90,7 +90,7 @@ donde $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controla la decadencia
 \paragraph{RMSProp.}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/rmsprop.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/rmsprop-es.pdf}}
 \caption{Flujo por paso de RMSProp: decaimiento L2 opcional, el promedio móvil $v_t$ de gradientes al cuadrado y la división por coordenada por $\sqrt{v_t}$.}
 \label{fig:opt-rmsprop}
 \end{figure}
@@ -135,7 +135,7 @@ donde $g_t = \partial E/\partial w(t)$, la división $0.9/0.1$ es el decaimiento
 \paragraph{Adam y AdamW.}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/adamw.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/adamw-es.pdf}}
 \caption{Flujo por paso de AdamW: decaimiento de pesos desacoplado, EMAs de primer y segundo momento, corrección de sesgo y actualización adaptativa elemento a elemento.}
 \label{fig:opt-adamw}
 \end{figure}
@@ -183,7 +183,7 @@ AdamW introduce una modificación crucial: la decadencia de peso se aplica direc
 \paragraph{RAdam (Adam Rectificado).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/radam.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/radam-es.pdf}}
 \caption{Flujo por paso de RAdam: rectificación por ventana SMA con retroceso a SGD con momentum en los primeros pasos.}
 \label{fig:opt-radam}
 \end{figure}

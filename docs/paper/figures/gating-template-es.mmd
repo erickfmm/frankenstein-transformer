@@ -1,0 +1,11 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":20,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  state["Estado previo<br/>S<sub>t−1</sub>"]
+  gate["Compuerta(s)<br/>α<sub>t</sub>, β<sub>t</sub>, G<sub>t</sub>, f<sub>t</sub>"]
+  write["Nueva clave/valor<br/>o salida SDPA"]
+  next["Memoria / salida actualizada<br/>S<sub>t</sub> o O<sub>t</sub>"]
+
+  state --> gate
+  gate --> write
+  state --> next
+  write --> next

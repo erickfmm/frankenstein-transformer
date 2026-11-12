@@ -1,0 +1,11 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  G["G = ∇f(W)"]
+  mom["M = μM + G"]
+  thr["ε = Cuantil(|M|, p)<br/>O = sign(M)·max(|M|−ε, 0)"]
+  base["B = M − O"]
+  norm["X₀ = B/(‖B‖_F + ε)"]
+  ns["repite k = 0…K−1:<br/>A = XₖXₖᵀ<br/>Bₖ = b·A + c·A²  (b, c por forma)<br/>Xₖ₊₁ = a·Xₖ + BₖXₖ  (a por forma)"]
+  upd["W ← W − ηX_K"]
+
+  G --> mom --> thr --> base --> norm --> ns --> upd

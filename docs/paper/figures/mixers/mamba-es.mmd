@@ -1,0 +1,17 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  conv["conv1d<br/>(causal)"]
+  sel["selecciona<br/>Δ, B, C"]
+  disc["discretiza<br/>Ā, B̄ (ZOH)"]
+  hp["hₜ₋₁<br/>[d,N]"]
+  ht["hₜ = Ā·hₜ₋₁ + B̄·x"]
+  o["O = C·hₜ<br/>[B,n,H]"]
+
+  x -- "conv" --> conv
+  conv -- "selecciona" --> sel
+  sel -- "ZOH" --> disc
+  disc -- "barrido" --> ht
+  hp -- "arrastra" --> ht
+  ht -. "siguiente" .-> hp
+  ht -- "lectura" --> o

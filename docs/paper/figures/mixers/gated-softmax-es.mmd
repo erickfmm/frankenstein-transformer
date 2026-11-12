@@ -1,0 +1,21 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  k["K = Wk·x<br/>[B,n,H]"]
+  v["V = Wv·x<br/>[B,n,H]"]
+  s["puntajes = QKᵀ/√d"]
+  sm["softmax<br/>(puntajes)"]
+  g["compuerta g = σ(Wg·x)"]
+  o["O = g · (Wo·softmax·V)"]
+
+  x -- "Wq" --> q
+  x -- "Wk" --> k
+  x -- "Wv" --> v
+  q -- "QKᵀ" --> s
+  k -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "compuerta · salida" --> o
+  v -- "compuerta · salida" --> o
+  x -- "Wg" --> g
+  g -- "compuerta · salida" --> o

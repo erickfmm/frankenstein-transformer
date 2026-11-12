@@ -54,8 +54,9 @@ FIGURES = [
             t,
             "loss_final",
             "crest_r",
-            "Final loss for every A\\u00d7B hybrid pair",
-            "final loss (nats)",
+            mc.tr("Final loss for every A×B hybrid pair",
+                  "Pérdida final de cada par híbrido A×B"),
+            mc.tr("final loss (nats)", "pérdida final (nats)"),
             fmt=".2f",
             annot=False,
         ),
@@ -73,7 +74,7 @@ FIGURES = [
             t,
             "opt",
             "loss_final",
-            "Twenty-three optimizer families on the same architecture",
+            mc.tr("Twenty-three optimizer families on the same architecture", "Veintitrés familias de optimizador en la misma arquitectura"),
             color="#3fb950",
             sort_asc=True,
         ),
@@ -83,14 +84,14 @@ FIGURES = [
     (
         "norm_loss",
         lambda t: mc.group_bar(
-            t, "norm", "loss_final", "Six normalization strategies", color="#ffa657"
+            t, "norm", "loss_final", mc.tr("Six normalization strategies", "Seis estrategias de normalización"), color="#ffa657"
         ),
         DEFAULT_SCALE,
     ),
     (
         "pe_loss",
         lambda t: mc.group_bar(
-            t, "pe", "loss_final", "Twelve positional encodings", color="#ff7b72"
+            t, "pe", "loss_final", mc.tr("Twelve positional encodings", "Doce codificaciones posicionales"), color="#ff7b72"
         ),
         DEFAULT_SCALE,
     ),
@@ -100,7 +101,7 @@ FIGURES = [
             t,
             "trans",
             "loss_final",
-            "Twenty architecture switches (BitNet, MoE, mHC, ...)",
+            mc.tr("Twenty architecture switches (BitNet, MoE, mHC, ...)", "Veinte interruptores de arquitectura (BitNet, MoE, mHC, ...)"),
             color="#d2991d",
             rotate=55,
         ),
@@ -121,27 +122,35 @@ FIGURES = [
 
 
 def main() -> None:
-    """Render every selected figure once, in the light theme, as PDF."""
+    """Render every selected figure in the light theme, in both languages.
+
+    ``<name>.pdf/.svg`` is the English figure used by ``docs/paper`` and
+    ``<name>-es.pdf/.svg`` the Spanish one used by ``docs/paper-es``; only the
+    strings change, the canvas, theme and scale are shared.
+    """
     DST.mkdir(parents=True, exist_ok=True)
     plt.rcParams["pdf.fonttype"] = 42
     plt.rcParams["ps.fonttype"] = 42
-    for name, builder, scale in FIGURES:
-        theme = mc.apply_theme("light")
-        figure = builder(theme)
-        width, height = figure.get_size_inches()
-        figure.set_size_inches(width * scale, height * scale)
-        target = DST / f"{name}.pdf"
-        options = dict(
-            facecolor=theme["face"],
-            bbox_inches="tight",
-            pad_inches=0.05,
-            dpi=300,
-        )
-        figure.savefig(target, **options)
-        figure.savefig(DST / f"{name}.svg", **options)
-        plt.close(figure)
-        print(f"  ok {target.relative_to(ROOT)} (+ .svg)")
-    print(f"\n{len(FIGURES)} paper figures -> {DST.relative_to(ROOT)}")
+    for lang in ("en", "es"):
+        mc.set_lang(lang)
+        suffix = "" if lang == "en" else "-es"
+        for name, builder, scale in FIGURES:
+            theme = mc.apply_theme("light")
+            figure = builder(theme)
+            width, height = figure.get_size_inches()
+            figure.set_size_inches(width * scale, height * scale)
+            target = DST / f"{name}{suffix}.pdf"
+            options = dict(
+                facecolor=theme["face"],
+                bbox_inches="tight",
+                pad_inches=0.05,
+                dpi=300,
+            )
+            figure.savefig(target, **options)
+            figure.savefig(DST / f"{name}{suffix}.svg", **options)
+            plt.close(figure)
+            print(f"  ok {target.relative_to(ROOT)} (+ .svg)")
+    print(f"\n{len(FIGURES)} paper figures x 2 languages -> {DST.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

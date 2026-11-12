@@ -3,7 +3,7 @@
 \paragraph{EvE (Evolutionary Explorer).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/eve.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/eve-es.pdf}}
 \caption{Flujo de paso de EvE: una población en régimen estable de cuatro candidatos desafía una ranura por iteración (round-robin) con un hijo de evolución diferencial; una ráfaga de Adam con estado persistente rescata al hijo solo cuando no mejora, y la selección voraz con números aleatorios comunes mantiene el mejor-observado monótono.}
 \label{fig:opt-eve}
 \end{figure}
@@ -87,7 +87,7 @@ con $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$. Cada ranura de la 
 \paragraph{EA4LLM (Estrategias Evolutivas para Modelos de Lenguaje Grandes).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/ea4llm.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/ea4llm-es.pdf}}
 \caption{Flujo de un paso de EA4LLM: cada iteración evalúa $N$ perturbaciones gaussianas de los parámetros sobre un minilote compartido por todos los miembros, las puntúa por la log-verosimilitud por token negada, convierte las recompensas en pesos z-score o de rango centrado y reproduce el mismo ruido sembrado para acumular la dirección ES --- sin gradientes ni estado del optimizador por parámetro.}
 \label{fig:opt-ea4llm}
 \end{figure}

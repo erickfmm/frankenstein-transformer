@@ -15,14 +15,14 @@ El gráfico de composición (Figura~\ref{fig:r2-params-composition}) es el diagn
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/params_composition.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/params_composition-es.pdf}}
 \caption{Dónde viven los parámetros, por familia. Los embeddings y la cabeza son costes fijos; el bloque de atención y la FFN cargan las diferencias arquitectónicas.}
 \label{fig:r2-params-composition}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/params_family_box.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/params_family_box-es.pdf}}
 \caption{Presupuesto de parámetros por familia de experimentos (escala log). La familia ViT es la más cara; las familias de ablación comparten un esqueleto.}
 \label{fig:r2-params-family}
 \end{figure}
@@ -81,21 +81,21 @@ Par (A + B) & Paráms. & Pérdida final & Top-1 & Top-5 & Entreno (min) \\
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/loss_family_box.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/loss_family_box-es.pdf}}
 \caption{Pérdida final de entrenamiento por familia (escala log). Las familias de visión y datos reales no son comparables con las pérdidas MLM; las familias se mantienen separadas.}
 \label{fig:r2-loss-family}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/acc_family_box.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/acc_family_box-es.pdf}}
 \caption{Métrica de validación por familia. Las tareas de visión puntúan un orden de magnitud por encima del MLM porque la tarea es más fácil, no porque el mezclador importe más.}
 \label{fig:r2-acc-family}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/loss_acc_scatter.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/loss_acc_scatter-es.pdf}}
 \caption{Pérdida final frente a métrica de validación. La relación es débil dentro de los pares: el mejor par por pérdida marca 0,0\% de top-1 y el mejor por precisión tiene peor pérdida.}
 \label{fig:r2-loss-acc}
 \end{figure}
@@ -108,21 +108,21 @@ Las estadísticas de optimización son tranquilas. Las normas de gradiente son e
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/curves_quantiles.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/curves_quantiles-es.pdf}}
 \caption{Curvas de la población con banda P10--P90. Las curvas siguen bajando en la época~100, así que la tanda mide velocidad de aprendizaje y no calidad convergida.}
 \label{fig:r2-curves-quantiles}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/curves_top10.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/curves_top10-es.pdf}}
 \caption{Los diez mejores pares a lo largo del tiempo. El orden se establece pronto y rara vez cambia después de la época~50.}
 \label{fig:r2-curves-top10}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/grad_groups.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/grad_groups-es.pdf}}
 \caption{Presión de gradiente por grupo de parámetros. La cabeza soporta el gradiente mayor y la FFN el menor; el recorte actúa rara vez porque la razón mediana es 0,90.}
 \label{fig:r2-grad-groups}
 \end{figure}
@@ -135,14 +135,14 @@ La cobertura es casi completa: se entrenaron 667 de los 861 pares posibles. Los 
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/matrix_loss.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/matrix_loss-es.pdf}}
 \caption{El atlas A$\times$B de pérdida final. Las filas son el primer mezclador y las columnas el segundo; las celdas vacías son pares que nunca entrenaron.}
 \label{fig:r2-matrix-loss}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/coverage.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/coverage-es.pdf}}
 \caption{Cobertura de la rejilla A$\times$B. Las celdas ausentes son los 158 pares que contienen uno de los cuatro mezcladores que nunca entrenan.}
 \label{fig:r2-coverage}
 \end{figure}
@@ -213,28 +213,28 @@ Par & Pérdida del par & Esperada & Sinergia & Top-1 \\
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/synergy.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/synergy-es.pdf}}
 \caption{Mejores y peores interacciones entre mixers. La cola positiva empareja un primer mezclador barato y estable con un segundo de memoria pesada; la cola negativa está dominada por segundos mezcladores que chocan tras un A fuerte.}
 \label{fig:r2-synergy}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/pareto_speed_loss.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/pareto_speed_loss-es.pdf}}
 \caption{Frontera de Pareto velocidad--calidad de los pares híbridos. Un par está en la frontera cuando ningún otro es a la vez más rápido y mejor; la frontera la pueblan pares cuyo segundo mezclador tiene memoria pesada pero cuyo primero es barato.}
 \label{fig:r2-pareto}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/top5_by_b.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/top5_by_b-es.pdf}}
 \caption{Top-5 por segundo mezclador. Con cuatro muestras por configuración, el intervalo entre barras adyacentes es una muestra, así que el orden es indicativo.}
 \label{fig:r2-top5-b}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/top5_vs_loss.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/top5_vs_loss-es.pdf}}
 \caption{Calidad de inferencia frente a pérdida de entrenamiento. La correlación es débil ($r = 0{,}14$): la pérdida de entrenamiento no sustituye a la evaluación en validación.}
 \label{fig:r2-top5-loss}
 \end{figure}
@@ -282,14 +282,14 @@ Optimizador & Pérdida final & Top-1 & Tok/s \\
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/opt_loss.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/opt_loss-es.pdf}}
 \caption{Ablación de optimizadores: pérdida final. Una docena converge al mismo valor, lo que mide más la brevedad de la corrida que la calidad del optimizador.}
 \label{fig:r2-opt-loss}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/opt_speed.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/opt_speed-es.pdf}}
 \caption{Ablación de optimizadores: tiempo por paso medio. La dispersión es de un 30\%; los métodos de segundo orden y ortogonalizados pagan el sobrecoste visible.}
 \label{fig:r2-opt-speed}
 \end{figure}
@@ -343,14 +343,14 @@ Codificación & Pérdida final & Top-1 & Paráms. \\
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/norm_loss.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/norm_loss-es.pdf}}
 \caption{Ablación de normalización: \texttt{flash\_norm} se separa del resto por medio nat.}
 \label{fig:r2-norm}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/pe_loss.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/pe_loss-es.pdf}}
 \caption{Ablación de codificación posicional: la familia PAPE lidera y RoPE clásico queda a media tabla a esta escala.}
 \label{fig:r2-pe}
 \end{figure}
@@ -393,7 +393,7 @@ Conmutador & Pérdida final & Top-1 & Paráms. \\
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/trans_loss.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/trans_loss-es.pdf}}
 \caption{Conmutadores estructurales. Los embeddings factorizados, SwiGLU y Hyperloop son las tres victorias; Mixture-of-Depths es el peor conmutador.}
 \label{fig:r2-trans}
 \end{figure}
@@ -403,14 +403,14 @@ El bloque de visión funciona. La segmentación alcanza 90,7\% de precisión med
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/vit_split.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/vit_split-es.pdf}}
 \caption{Tareas de visión por objetivo. La segmentación es la más fácil y la predicción de parches la más difícil.}
 \label{fig:r2-vit}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/tokenizer_task.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/tokenizer_task-es.pdf}}
 \caption{Ablaciones de tokenizer y tarea. Ambas cambian la escala de la pérdida, así que no son comparables con la barrida de mezcladores.}
 \label{fig:r2-tokenizer-task}
 \end{figure}
@@ -425,28 +425,28 @@ La mejor configuración de inferencia no es la de mejor pérdida. \texttt{mamba\
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/inference_format.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/inference_format-es.pdf}}
 \caption{Inferencia estándar frente a cuantizada. Las distribuciones se solapan casi por completo.}
 \label{fig:r2-inference-format}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/quant_delta_dist.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/quant_delta_dist-es.pdf}}
 \caption{Distribución del delta de cuantización. Ochocientas de 810 configuraciones tienen un delta exactamente cero.}
 \label{fig:r2-quant-delta}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/quant_scatter.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/quant_scatter-es.pdf}}
 \caption{Top-5 estándar frente a cuantizado. Cada punto en la diagonal es una configuración que la cuantización no cambió.}
 \label{fig:r2-quant-scatter}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/deploy_duration.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/deploy_duration-es.pdf}}
 \caption{Coste por etapa del pipeline. El despliegue y la evaluación cuestan segundos; el entrenamiento cuesta horas.}
 \label{fig:r2-deploy-duration}
 \end{figure}
@@ -482,14 +482,14 @@ Dos hallazgos de calidad de datos condicionan la interpretación del atlas. Prim
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/stage_status.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/stage_status-es.pdf}}
 \caption{Fiabilidad del pipeline. El 95\% de los registros de etapa tuvo éxito; entrenamiento y despliegue explican todos los fallos.}
 \label{fig:r2-stage-status}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/failures_family.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/failures_family-es.pdf}}
 \caption{Dónde cayeron los 275 fallos. Los fallos de entrenamiento se concentran en las familias cuyos mezcladores nunca entrenan; los de despliegue son simétricos entre formatos.}
 \label{fig:r2-failures}
 \end{figure}
@@ -502,7 +502,7 @@ La matriz de correlación de la Figura~\ref{fig:r2-correlation} se calcula sobre
 
 \begin{figure}[tbp]
 \centering
-\fitfigure{\includegraphics{../paper/figures/experiments/round2/correlation.pdf}}
+\fitfigure{\includegraphics{../paper/figures/experiments/round2/correlation-es.pdf}}
 \caption{Matriz de correlación sobre las 868 configuraciones. Las fuertes correlaciones parámetros--calidad son una confusión de familias; dentro de los pares híbridos caen a $-0{,}20$ y $-0{,}07$.}
 \label{fig:r2-correlation}
 \end{figure}

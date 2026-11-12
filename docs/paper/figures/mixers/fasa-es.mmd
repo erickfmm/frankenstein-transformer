@@ -1,0 +1,16 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V<br/>[B,n,H]"]
+  pr["poda según frecuencia<br/>(eval)"]
+  s["puntajes dispersos"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  qkv -- "frecuencia" --> pr
+  qkv -- "QKᵀ" --> s
+  pr -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  qkv -- "V" --> o

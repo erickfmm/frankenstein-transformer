@@ -1,0 +1,19 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,gh·gw,H] en rejilla"]
+  v["V = Wv·x<br/>[B,gh,gw,nh,hd]"]
+  atoms["átomos μ, σ, λ<br/>[nh,R,5]"]
+  probes["sondas<br/>Δμ, Δσ, λ = W·x"]
+  row["pasada por filas<br/>Σ gauss(col)"]
+  col["pasada por columnas<br/>Σ gauss(fila)"]
+  y["y = campo·V<br/>[B,n,nh,hd]"]
+  o["O = Wo·y<br/>[B,n,H]"]
+
+  x -- "Wv" --> v
+  x -- "consulta" --> probes
+  v -- "filtro 1D" --> row
+  atoms -- "filtro 1D" --> row
+  probes -- "filtro 1D" --> row
+  row -- "filtro 1D" --> col
+  col -- "soft(λ,T)" --> y
+  y -- "Wo" --> o

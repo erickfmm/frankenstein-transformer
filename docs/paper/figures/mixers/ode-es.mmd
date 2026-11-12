@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x0["x₀<br/>[B,n,H]"]
+  f1["f(θ)<br/>paso 1"]
+  f2["f(θ)<br/>paso 2 …"]
+  xt["xₜ<br/>[B,n,H]"]
+
+  x0 -- "euler / rk4" --> f1
+  f1 -- "paso" --> f2
+  f2 -- "integra" --> xt

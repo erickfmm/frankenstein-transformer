@@ -1,0 +1,31 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,nH,n,hd]"]
+  k["K = Wk·x<br/>[B,nH,n,hd]"]
+  v["V = Wv·x<br/>[B,nH,n,hd]"]
+  s["Â = QKᵀ/√hd<br/>[B,nH,n,n]"]
+  m0["Mask₀ (futuro → 0)"]
+  c1["Conv2d θpre, cq×ck por cabeza<br/>[B,nH,n,n]"]
+  sm["Softmax(Mask₋∞)"]
+  hc["conv entre cabezas w, grupos de ch<br/>[B,nH,n,n]"]
+  c2["Conv2d θpost, cq×ck por cabeza<br/>+ Mask₀"]
+  g["group norm con compuerta + sigmoid(g)"]
+  o["O = Wo·(A·V)<br/>[B,n,H]"]
+  t[["decode: últimas cq−1 consultas<br/>(extras 'q' del slot)"]]
+
+  x -- "Wq" --> q
+  x -- "Wk" --> k
+  x -- "Wv" --> v
+  q -- "QKᵀ/√hd" --> s
+  k -- "QKᵀ/√hd" --> s
+  s -- "Ec. 5" --> m0
+  m0 -- "θpre" --> c1
+  c1 -- "Ec. 5" --> sm
+  sm -- "Ec. 7" --> hc
+  hc -- "Ec. 6" --> c2
+  c2 -- "§3.3" --> g
+  v -- "A·V" --> o
+  g -- "A·V" --> o
+  t -. "ventana de consultas" .-> c1
+  t -. "ventana de consultas" .-> c2

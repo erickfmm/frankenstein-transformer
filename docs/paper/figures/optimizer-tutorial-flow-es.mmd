@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":22,"rankSpacing":30,"wrappingWidth":230}}}%%
+flowchart LR
+  data["lote de datos → pérdida L(θ)"] --> grad["retropropagación<br/>gradiente g"]
+  grad --> rule["todo optimizador<br/>θ ← θ − η · u(g, estado)"]
+  rule --> k1["¿recordar el pasado?<br/>momentum · reducción de varianza"]
+  rule --> k2["¿reescalar cada coordenada?<br/>adaptativo · pasos por parámetro"]
+  rule --> k3["¿usar curvatura o<br/>estructura matricial?<br/>segundo orden · geométrico"]
+  rule --> k4["¿estado demasiado grande?<br/>eficiente en memoria · bajo rango"]
+  rule --> k5["¿ajustar el schedule es penoso?<br/>schedule-free · sin parámetros"]
+  rule --> k6["¿paisaje demasiado irregular?<br/>evolutivo · población"]

@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":20,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  ckpt["Checkpoint entrenado"]
+  quant["Empaquetado de pesos<br/>ternario / low-bit"]
+  act["Escalado de activaciones<br/>ruta INT8"]
+  artifact["Artefacto desplegable<br/>menor huella de almacenamiento"]
+
+  ckpt --> quant
+  quant --> act
+  act --> artifact

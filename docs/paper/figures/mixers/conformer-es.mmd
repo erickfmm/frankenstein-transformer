@@ -1,0 +1,36 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  f1["½·FFN₁<br/>x̃ = x + ½FFN₁(x)"]
+  a1["MHSA<br/>PE sinusoidal relativa<br/>x′ = x̃ + MHSA(·)"]
+  a2["x″ = x′ + Conv(LN(x′))"]
+  f2["FFN₂<br/>paso completo, FFN compartida"]
+  ln["LayerNorm final"]
+  o["y<br/>[B,n,H]"]
+  note["integración en el repo:<br/>FFN de HybridLayer = FFN₂"]
+
+  subgraph conv["módulo de convolución"]
+    direction LR
+    cl["LN"]
+    c1["Conv1d puntual<br/>d → 2d"]
+    c2["GLU<br/>2d → d"]
+    c3["Conv1d en profundidad<br/>k = 32<br/>(causal en el decoder)"]
+    c4["BatchNorm1d"]
+    c5["Swish"]
+    c6["Conv1d puntual<br/>d → d"]
+    cl -- "puntual" --> c1
+    c1 -- "GLU" --> c2
+    c2 -- "profundidad" --> c3
+    c3 -- "BN" --> c4
+    c4 -- "Swish" --> c5
+    c5 -- "puntual" --> c6
+  end
+
+  x -- "pre-norm" --> f1
+  f1 -- "residual" --> a1
+  a1 -- "LN" --> conv
+  conv -- "dropout" --> a2
+  a2 -- "FFN₂" --> f2
+  f2 -- "residual" --> ln
+  ln -- "salida" --> o
+  f2 -. "desviación" .-> note

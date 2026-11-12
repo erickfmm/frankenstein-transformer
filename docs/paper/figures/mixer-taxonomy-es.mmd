@@ -1,0 +1,34 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26}}}%%
+flowchart TD
+  root["Registro de mixers de secuencia (55 variantes)"]
+
+  d["Densa (6)"] --> d1["standard"] --> d2["sigmoid"] --> d2b["ca"] --> d3["gqa"] --> d4["xsa"] --> d5["mta"]
+
+  r["Recurrente (3)"] --> r1["retnet"] --> r2["mamba"] --> r3["ode"]
+
+  s["Dispersa (11)"] --> s1["sparse_transformer"] --> s2["longformer"] --> s3["bigbird"] --> s4["sparsek"] --> s5["nsa"] --> s6["sparge"] --> s7["fasa"] --> s8["msa"] --> s9["sparda"] --> s10["swa"] --> s11["lsa"]
+
+  g["Con compuerta (9)"] --> g1["gla"] --> g2["deltanet"] --> g3["gated_deltanet"] --> g4["gated_deltanet2"] --> g5["hgrn2"] --> g6["fox"] --> g7["gated_softmax"] --> g8["kda"] --> g9["fpa"]
+
+  l["Latente (14)"] --> l1["mla"] --> l1b["gmla"] --> l2["gqla"] --> l3["mlra"] --> l4["tucker"] --> l5["kpa"] --> l5b["tpa"] --> l5c["mfa"] --> l6["iha"] --> l7["gta"] --> l8["mtla"] --> l9["cca"] --> l10["ccgqa"] --> l11["gma"]
+
+  m["Memoria (3)"] --> m1["titan"] --> m2["engram"] --> m3["memory"]
+
+  f["Pesos rápidos (6)"] --> f1["falcon1"] --> f2["falcon2"] --> f3["falcon3"] --> f4["falcon1a"] --> f5["falcon2a"] --> f6["falcon3a"]
+
+  x["Geométrica (1)"] --> x1["ssog"]
+
+  c["Aumentada con convolución (2)"] --> c1["conformer"] --> c2["fastconformer"]
+
+  root --> d
+  root --> r
+  root --> s
+  root --> g
+  root --> l
+  root --> m
+  root --> f
+  root --> x
+  root --> c
+
+  classDef category fill:#e6eef7,stroke:#7f9bbf,font-weight:bold
+  class d,r,s,g,l,m,f,x,c category

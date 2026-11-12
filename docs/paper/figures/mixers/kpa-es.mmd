@@ -1,0 +1,29 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  aq["A^Q = W_Aq·x<br/>[R_Q,h₁,d₁]"]
+  bq["B^Q = W_Bq·x<br/>[R_Q,h₂,d₂]"]
+  ak["A^K, A^V = W_A·x<br/>[R_K/R_V,h₁,d₁]"]
+  bk["B^K, B^V = W_B·x<br/>[R_K/R_V,h₂,d₂]"]
+  rec["suma de Kronecker (1/R)Σ_r A_r⊗B_r<br/>Q,K,V [B,n,h₁h₂,d₁d₂]"]
+  rope["RoPE separables por Kronecker<br/>rotar sólo B: I_d₁⊗R_θ^(2)"]
+  s["puntajes = QKᵀ/√d_h"]
+  sm["softmax (causal en el decoder)"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+  c["caché KV {A^K, B^K_rope, A^V, B^V}<br/>(R_K+R_V)(h₁d₁+h₂d₂) / token"]
+
+  x -- "R_Q" --> aq
+  x -- "R_Q" --> bq
+  x -- "R_K, R_V" --> ak
+  x -- "R_K, R_V" --> bk
+  aq -- "⊗, Σ" --> rec
+  bq -- "⊗, Σ" --> rec
+  ak -- "⊗, Σ" --> rec
+  bk -- "⊗, Σ" --> rec
+  rec -- "Q, K" --> rope
+  rope -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  rec -- "V" --> o
+  ak -. "factores" .-> c
+  bk -. "factores" .-> c

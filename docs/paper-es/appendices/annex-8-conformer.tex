@@ -11,7 +11,7 @@ Los mezcladores están disponibles en todas las clases de modelo: encoder de tex
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/conformer.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/conformer-es.pdf}}
 \caption{Flujo de datos del bloque Conformer: una capa feed-forward de medio paso Macaron, atención multi-cabeza con codificación posicional sinusoidal relativa, el módulo de convolución (pointwise $\to$ GLU $\to$ depthwise $\to$ BatchNorm $\to$ Swish $\to$ pointwise) y la segunda capa feed-forward seguida de la LayerNorm final. En este conjunto de herramientas la FFN compartida de \texttt{HybridLayer} ocupa la ranura $\mathrm{FFN}_2$ con un paso residual completo (anotación punteada).}
 \label{fig:mixer-conformer}
 \end{figure}
@@ -164,7 +164,7 @@ Como \texttt{ConformerAttention} devuelve un delta y hereda el constructor \text
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/fastconformer.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/fastconformer-es.pdf}}
 \caption{Flujo de datos de la atención de contexto limitado Fast Conformer: cada consulta atiende a una ventana local simétrica, mientras que un pequeño conjunto de tokens de atención globales anclados a la cabecera de la secuencia atiende a todas las posiciones y es atendido por todas ellas; el token global puede usar sus propias proyecciones query/key/value (paper \S2.2).}
 \label{fig:mixer-fastconformer}
 \end{figure}

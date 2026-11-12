@@ -4,7 +4,9 @@
 Every chart is self-contained: no data files, fixed random seeds, and a light
 print theme that matches ``experimentos/2/report/make_charts.py``. Each figure
 is written twice -- a vector PDF for LaTeX and an SVG for the website render,
-which indexes figures by stem (see ``paper/flatten_tex.py``).
+which indexes figures by stem (see ``paper/flatten_tex.py``) -- and in two
+languages: ``<name>`` for ``docs/paper`` and ``<name>-es`` for
+``docs/paper-es`` (only the strings change; canvases and theme are shared).
 
 Usage:
     uv run --with matplotlib --with seaborn --with numpy \\
@@ -45,6 +47,11 @@ PURPLE = "#8250df"
 GREY = "#6e7781"
 
 ACCENT = BLUE
+
+
+def tr(lang: str, en: str, es: str) -> str:
+    """Pick the string for ``lang`` (``en`` or ``es``)."""
+    return en if lang == "en" else es
 
 #: Light-to-blue ramp used for every loss bowl, so the figures read as a set.
 BOWL = LinearSegmentedColormap.from_list(
@@ -172,21 +179,27 @@ def marker(
 
 
 # --------------------------------------------------------------------------- 1. GD
-def tut_gd_landscape() -> plt.Figure:
+def tut_gd_landscape(lang: str = "en") -> plt.Figure:
     """Three bowls: round, elongated, and unstable step size."""
     fig, axes = plt.subplots(1, 3, figsize=(6.6, 2.35))
 
     cases = [
-        (np.diag([1.0, 1.0]), 0.45, "(a) round bowl: straight down", 2.0),
-        (np.diag([0.05, 1.0]), 0.90, "(b) long valley: crawl the floor", 2.4),
-        (np.diag([0.05, 1.0]), 1.90, r"(c) $\eta\to 2/L$: sloshing", 2.4),
+        (np.diag([1.0, 1.0]), 0.45,
+         tr(lang, "(a) round bowl: straight down",
+            "(a) cuenco redondo: baja recto"), 2.0),
+        (np.diag([0.05, 1.0]), 0.90,
+         tr(lang, "(b) long valley: crawl the floor",
+            "(b) valle alargado: se arrastra por el fondo"), 2.4),
+        (np.diag([0.05, 1.0]), 1.90,
+         tr(lang, r"(c) $\eta\to 2/L$: sloshing",
+            r"(c) $\eta\to 2/L$: oscilación"), 2.4),
     ]
     for ax, (a_mat, eta, title, lim) in zip(axes, cases):
         bowl(ax, a_mat[0, 0], a_mat[1, 1], lim)
         pts = gd_path(a_mat, (-1.7, 1.4), eta, 26)
         path(ax, pts, ACCENT, f"$\\eta={eta:.2f}$", every=1)
-        marker(ax, (0, 0), "minimum", MUTED, offset=(6, -4))
-        marker(ax, tuple(pts[0]), "start", TEXT, offset=(-2, 6))
+        marker(ax, (0, 0), tr(lang, "minimum", "mínimo"), MUTED, offset=(6, -4))
+        marker(ax, tuple(pts[0]), tr(lang, "start", "inicio"), TEXT, offset=(-2, 6))
         ax.set_title(title, fontsize=8.6, pad=3)
         ax.legend(loc="lower left", handlelength=1.0, borderpad=0.3,
                   labelspacing=0.25).set_zorder(9)
@@ -197,29 +210,31 @@ def tut_gd_landscape() -> plt.Figure:
 
 
 # ------------------------------------------------------------------- 2. step size
-def tut_learning_rate() -> plt.Figure:
+def tut_learning_rate(lang: str = "en") -> plt.Figure:
     """The same valley, three step sizes, loss against iteration."""
     a_mat = np.diag([0.05, 1.0])
     fig, ax = plt.subplots(figsize=(4.3, 2.6))
 
     for eta, color, label in [
-        (0.02, GREY, r"$\eta=0.02$: too small"),
-        (0.90, ACCENT, r"$\eta=0.90$: good"),
-        (2.10, RED, r"$\eta=2.10$: diverges"),
+        (0.02, GREY, r"$\eta=0.02$: " + tr(lang, "too small", "demasiado pequeño")),
+        (0.90, ACCENT, r"$\eta=0.90$: " + tr(lang, "good", "bueno")),
+        (2.10, RED, r"$\eta=2.10$: " + tr(lang, "diverges", "diverge")),
     ]:
         pts = gd_path(a_mat, (-2.0, 1.6), eta, 120)
         loss = 0.5 * np.einsum("ij,jk,ik->i", pts, a_mat, pts)
         ax.plot(np.arange(len(loss)), loss, color=color, lw=1.5, label=label)
 
-    ax.annotate(r"the hard edge is $\eta=2/L$", xy=(38, 6e2), xytext=(10, 2.0),
+    ax.annotate(tr(lang, r"the hard edge is $\eta=2/L$",
+                   r"el límite duro es $\eta=2/L$"), xy=(38, 6e2), xytext=(10, 2.0),
                  fontsize=7, color=RED,
                  arrowprops=dict(arrowstyle="->", color=RED, lw=0.8))
     ax.set_yscale("log")
     ax.set_ylim(1e-7, 6e3)
     ax.set_xlim(0, 120)
-    ax.set_xlabel("iteration")
+    ax.set_xlabel(tr(lang, "iteration", "iteración"))
     ax.set_ylabel(r"loss $f(\theta_t)$")
-    ax.set_title("One knob decides everything: the step size")
+    ax.set_title(tr(lang, "One knob decides everything: the step size",
+                    "Una sola perilla lo decide todo: el tamaño del paso"))
     ax.legend(loc="lower left", borderpad=0.3, labelspacing=0.25,
               framealpha=0.95, fontsize=7.2)
     fig.tight_layout(pad=0.3)
@@ -227,7 +242,7 @@ def tut_learning_rate() -> plt.Figure:
 
 
 # ---------------------------------------------------------------- 3. diagnostics
-def tut_loss_diagnostics() -> plt.Figure:
+def tut_loss_diagnostics(lang: str = "en") -> plt.Figure:
     """Four loss-curve shapes and the sentence each one is telling you."""
     rng = np.random.default_rng(3)
     t = np.arange(160)
@@ -239,10 +254,15 @@ def tut_loss_diagnostics() -> plt.Figure:
     noisy = 0.18 + 1.1 * np.exp(-t / 22) + 0.07 * rng.standard_normal(t.size)
 
     data = [
-        (axes[0, 0], healthy, GREEN, "(a) healthy", "smooth, keeps falling."),
-        (axes[0, 1], high, RED, r"(b) $\eta$ too high", "spikes, then climbs: cut the rate."),
-        (axes[1, 0], low, ORANGE, r"(c) $\eta$ too small", "still high: buy speed."),
-        (axes[1, 1], noisy, PURPLE, "(d) batch too small", "noisy band, no progress."),
+        (axes[0, 0], healthy, GREEN, tr(lang, "(a) healthy", "(a) sana"),
+         tr(lang, "smooth, keeps falling.", "suave, sigue bajando.")),
+        (axes[0, 1], high, RED, tr(lang, r"(b) $\eta$ too high", r"(b) $\eta$ demasiado alto"),
+         tr(lang, "spikes, then climbs: cut the rate.",
+            "picos y luego sube: baja la tasa.")),
+        (axes[1, 0], low, ORANGE, tr(lang, r"(c) $\eta$ too small", r"(c) $\eta$ demasiado pequeño"),
+         tr(lang, "still high: buy speed.", "sigue alta: compra velocidad.")),
+        (axes[1, 1], noisy, PURPLE, tr(lang, "(d) batch too small", "(d) lote demasiado pequeño"),
+         tr(lang, "noisy band, no progress.", "banda ruidosa, sin avance.")),
     ]
     for ax, curve, color, title, note in data:
         ax.plot(t, curve, color=color, lw=1.4)
@@ -251,9 +271,9 @@ def tut_loss_diagnostics() -> plt.Figure:
         ax.text(0.97, 0.86, note, transform=ax.transAxes, ha="right", va="top",
                 fontsize=7, color=MUTED, style="italic")
     for ax in axes[1]:
-        ax.set_xlabel("iteration")
+        ax.set_xlabel(tr(lang, "iteration", "iteración"))
     for ax in axes[:, 0]:
-        ax.set_ylabel("loss")
+        ax.set_ylabel(tr(lang, "loss", "pérdida"))
     fig.tight_layout(pad=0.35, h_pad=0.6, w_pad=0.6)
     return fig
 
@@ -274,7 +294,7 @@ def _mse_grad(x, y, w):
     return x.T @ r / len(x)
 
 
-def tut_batch_noise() -> plt.Figure:
+def tut_batch_noise(lang: str = "en") -> plt.Figure:
     """Full batch versus mini-batch versus one sample, on real data."""
     x, y, w_true = _regression_data()
     hess = x.T @ x / len(x)
@@ -315,7 +335,8 @@ def tut_batch_noise() -> plt.Figure:
             w = w - eta * _mse_grad(x[idx], y[idx], w)
             pts.append(w.copy())
         path(ax, keep(np.array(pts)), color,
-             "single sample" if batch == 1 else f"mini-batch $b={batch}$",
+             tr(lang, "single sample", "una muestra") if batch == 1
+             else tr(lang, f"mini-batch $b={batch}$", f"minilote $b={batch}$"),
              lw=1.1, every=3)
 
     w = w_start.copy()
@@ -323,9 +344,10 @@ def tut_batch_noise() -> plt.Figure:
     for _ in range(45):
         w = w - eta * _mse_grad(x, y, w)
         full.append(w.copy())
-    path(ax, keep(np.array(full)), ACCENT, "full batch", lw=1.9, zorder=5)
+    path(ax, keep(np.array(full)), ACCENT,
+         tr(lang, "full batch", "lote completo"), lw=1.9, zorder=5)
     ax.plot(*w_star, "x", ms=6, color=TEXT, mew=1.5, zorder=8)
-    marker(ax, tuple(w_start), "start", TEXT, offset=(6, -10))
+    marker(ax, tuple(w_start), tr(lang, "start", "inicio"), TEXT, offset=(6, -10))
     ax.annotate(r"$w^\star$", w_star, textcoords="offset points", xytext=(7, -3),
                 fontsize=8, color=TEXT, zorder=9)
     ax.set_aspect("equal")
@@ -334,7 +356,9 @@ def tut_batch_noise() -> plt.Figure:
     ax.grid(False)
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_title("(a) 45 steps each, same step size", fontsize=8.6, pad=3)
+    ax.set_title(tr(lang, "(a) 45 steps each, same step size",
+                    "(a) 45 pasos cada uno, mismo tamaño de paso"),
+                 fontsize=8.6, pad=3)
     ax.legend(loc="upper left", borderpad=0.3, labelspacing=0.25,
               handlelength=1.2, fontsize=7).set_zorder(9)
 
@@ -353,20 +377,21 @@ def tut_batch_noise() -> plt.Figure:
         rel.append(np.mean(errs))
     rel = np.array(rel)
     ax2.loglog(batches, rel, "o-", color=ACCENT, ms=3.2, lw=1.3,
-               label="measured noise")
+               label=tr(lang, "measured noise", "ruido medido"))
     ref = rel[0] / np.sqrt(batches)
     ax2.loglog(batches, ref, "--", color=ORANGE, lw=1.1,
                label=r"reference $\propto 1/\sqrt{b}$")
-    ax2.set_xlabel("batch size $b$")
+    ax2.set_xlabel(tr(lang, "batch size $b$", "tamaño de lote $b$"))
     ax2.set_ylabel(r"$\|\hat g_b-g\|/\|g\|$")
-    ax2.set_title("(b) more data per step, less noise", fontsize=8.6, pad=3)
+    ax2.set_title(tr(lang, "(b) more data per step, less noise",
+                    "(b) más datos por paso, menos ruido"), fontsize=8.6, pad=3)
     ax2.legend(loc="lower left", borderpad=0.3, labelspacing=0.25)
     fig.tight_layout(pad=0.35, w_pad=0.9)
     return fig
 
 
 # --------------------------------------------------------------- 5. convergence
-def tut_convergence() -> plt.Figure:
+def tut_convergence(lang: str = "en") -> plt.Figure:
     """Rates from the tutorial: GD 1/t, SGD 1/sqrt(t), fixed step stalls."""
     t = np.arange(1, 4001)
     gd = 1.0 / t
@@ -379,14 +404,17 @@ def tut_convergence() -> plt.Figure:
     ax.loglog(t, gd, color=ACCENT, lw=1.5, label=r"GD: $O(1/t)$")
     ax.loglog(t, sgd, color=GREEN, lw=1.5, label=r"SGD: $O(1/\sqrt{t})$")
     ax.loglog(t, fixed, color=RED, lw=1.5, ls="--",
-              label=r"fixed $\eta$: stalls at $O(\eta)$")
+              label=tr(lang, r"fixed $\eta$: stalls at $O(\eta)$",
+                       r"$\eta$ fijo: se estanca en $O(\eta)$"))
     ax.axhline(0.06, color=RED, lw=0.8, ls=":", alpha=0.8)
-    ax.annotate(r"plateau $\approx\eta$", xy=(1500, 0.06), xytext=(300, 0.22),
+    ax.annotate(tr(lang, r"plateau $\approx\eta$", r"meseta $\approx\eta$"),
+                xy=(1500, 0.06), xytext=(300, 0.22),
                 fontsize=7, color=RED,
                 arrowprops=dict(arrowstyle="->", color=RED, lw=0.8))
-    ax.set_xlabel("iteration $t$")
+    ax.set_xlabel(tr(lang, "iteration $t$", "iteración $t$"))
     ax.set_ylabel(r"$f(\theta_t)-f^\star$")
-    ax.set_title("(a) per iteration", fontsize=8.6, pad=3)
+    ax.set_title(tr(lang, "(a) per iteration", "(a) por iteración"),
+                 fontsize=8.6, pad=3)
     ax.legend(loc="lower left", borderpad=0.3, labelspacing=0.25,
               framealpha=0.95)
     ax.set_ylim(1e-4, 2)
@@ -397,13 +425,17 @@ def tut_convergence() -> plt.Figure:
     ax.loglog(cost, 100.0 / cost, color=ACCENT, lw=1.5, label="GD")
     ax.loglog(cost, 1.0 / np.sqrt(cost), color=GREEN, lw=1.5, label="SGD")
     ax.loglog(cost, 100.0 / cost + 0.06, color=RED, lw=1.5, ls="--",
-              label="SGD, fixed step")
+              label=tr(lang, "SGD, fixed step", "SGD, paso fijo"))
     ax.axvline(1e4, color=MUTED, lw=0.7, ls=":")
-    ax.annotate("SGD ahead", xy=(60, 0.02), fontsize=7, color=GREEN)
-    ax.annotate("GD ahead", xy=(2.2e4, 1.1e-4), fontsize=7, color=ACCENT)
-    ax.set_xlabel("wall-clock (one GD step = 100 units)")
+    ax.annotate(tr(lang, "SGD ahead", "SGD va delante"), xy=(60, 0.02),
+                fontsize=7, color=GREEN)
+    ax.annotate(tr(lang, "GD ahead", "GD va delante"), xy=(2.2e4, 1.1e-4),
+                fontsize=7, color=ACCENT)
+    ax.set_xlabel(tr(lang, "wall-clock (one GD step = 100 units)",
+                     "tiempo real (un paso GD = 100 unidades)"))
     ax.set_ylabel(r"$f(\theta_t)-f^\star$")
-    ax.set_title("(b) per unit of time", fontsize=8.6, pad=3)
+    ax.set_title(tr(lang, "(b) per unit of time", "(b) por unidad de tiempo"),
+                 fontsize=8.6, pad=3)
     ax.legend(loc="lower left", borderpad=0.3, labelspacing=0.25,
               framealpha=0.95)
     ax.set_ylim(1e-4, 2)
@@ -412,7 +444,7 @@ def tut_convergence() -> plt.Figure:
 
 
 # ------------------------------------------------------------------ 6. backprop
-def tut_backprop() -> plt.Figure:
+def tut_backprop(lang: str = "en") -> plt.Figure:
     """A tiny network: what travels forward, what travels back, and the cost."""
     x = np.array([1.0, -0.5])
     w1 = np.array([[0.6, -0.4], [-0.5, 0.8], [0.3, 0.5]])
@@ -444,8 +476,9 @@ def tut_backprop() -> plt.Figure:
         for (cx, cy) in nodes:
             ax.add_patch(plt.Circle((cx, cy), 0.22, fc="white", ec=SPINE,
                                     lw=1.0, zorder=3))
-        ax.text(nodes[0][0], 2.42, ["input", "hidden", "output"][li],
-                ha="center", fontsize=7.4, color=MUTED)
+        names = (tr(lang, ["input", "hidden", "output"],
+                    ["entrada", "oculta", "salida"]))
+        ax.text(nodes[0][0], 2.42, names[li], ha="center", fontsize=7.4, color=MUTED)
 
     for i, (cx, cy) in enumerate(layers[0]):
         ax.text(cx, cy, f"{x[i]:.2f}", ha="center", va="center", fontsize=7,
@@ -461,24 +494,28 @@ def tut_backprop() -> plt.Figure:
     for (cx, cy), d in zip(reds, deltas):
         ax.text(cx, cy - 0.42, f"\u03b4={d:+.2f}", ha="center", fontsize=6.6,
                 color=RED)
-    ax.text(1.0, -0.42, "black: forward value  \u2022  red: backward gradient",
+    ax.text(1.0, -0.42,
+            tr(lang, "black: forward value  \u2022  red: backward gradient",
+               "negro: valor hacia delante  \u2022  rojo: gradiente hacia atrás"),
             ha="center", fontsize=7, color=MUTED)
-    ax.set_title("(a) one graph, two passes", fontsize=8.6, pad=2)
+    ax.set_title(tr(lang, "(a) one graph, two passes", "(a) un grafo, dos pasadas"),
+                 fontsize=8.6, pad=2)
 
     ax2 = fig.add_axes([0.79, 0.3, 0.19, 0.5])
-    bars = ax2.bar(["fwd", "bwd"], [1.0, 2.0], color=[ACCENT, ORANGE], width=0.6)
+    bars = ax2.bar(tr(lang, ["fwd", "bwd"], ["ida", "vuelta"]), [1.0, 2.0],
+                   color=[ACCENT, ORANGE], width=0.6)
     for rect, val in zip(bars, [1.0, 2.0]):
         ax2.text(rect.get_x() + rect.get_width() / 2, val + 0.06, f"{val:.0f}\u00d7",
                  ha="center", fontsize=7.6, color=TEXT)
     ax2.set_ylim(0, 2.5)
-    ax2.set_ylabel("step cost", fontsize=7.2)
-    ax2.set_title("(b) two passes", fontsize=8, pad=2)
+    ax2.set_ylabel(tr(lang, "step cost", "coste del paso"), fontsize=7.2)
+    ax2.set_title(tr(lang, "(b) two passes", "(b) dos pasadas"), fontsize=8, pad=2)
     ax2.tick_params(axis="x", labelsize=7)
     return fig
 
 
 # ------------------------------------------------------------------ 7. momentum
-def tut_momentum() -> plt.Figure:
+def tut_momentum(lang: str = "en") -> plt.Figure:
     """A running average of past steps, and what it buys."""
     a_mat = np.diag([0.05, 1.0])
     eta, beta, steps = 0.08, 0.9, 120
@@ -492,10 +529,13 @@ def tut_momentum() -> plt.Figure:
 
     ax = axes[0]
     bowl(ax, 0.05, 1.0, 2.4)
-    path(ax, gd, GREY, "plain GD, same $\\eta$", ls="--", lw=1.2, every=12)
+    path(ax, gd, GREY, tr(lang, "plain GD, same $\\eta$",
+                          "GD simple, mismo $\\eta$"), ls="--", lw=1.2, every=12)
     path(ax, mo, ACCENT, r"momentum $\beta=0.9$", lw=1.7, every=12)
-    path(ax, na, ORANGE, "Nesterov look-ahead", lw=1.2)
-    ax.set_title("(a) the zig-zag is filtered out", fontsize=8.4, pad=3)
+    path(ax, na, ORANGE, tr(lang, "Nesterov look-ahead", "adelanto de Nesterov"),
+         lw=1.2)
+    ax.set_title(tr(lang, "(a) the zig-zag is filtered out",
+                    "(a) se filtra el zigzag"), fontsize=8.4, pad=3)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.legend(loc="lower left", borderpad=0.3, labelspacing=0.25,
@@ -503,17 +543,18 @@ def tut_momentum() -> plt.Figure:
 
     ax = axes[1]
     for pts, color, label, ls in [
-        (gd, GREY, "plain GD", "--"),
+        (gd, GREY, tr(lang, "plain GD", "GD simple"), "--"),
         (mo, ACCENT, r"momentum $\beta=0.9$", "-"),
         (na, ORANGE, "Nesterov", "-"),
     ]:
         loss = 0.5 * np.einsum("ij,jk,ik->i", pts, a_mat, pts)
         ax.semilogy(np.arange(len(loss)), np.maximum(loss, 1e-6), color=color,
                     lw=1.5, ls=ls, label=label)
-    ax.set_xlabel("iteration")
+    ax.set_xlabel(tr(lang, "iteration", "iteración"))
     ax.set_ylabel(r"loss $f(\theta_t)$")
     ax.set_ylim(1e-6, 3)
-    ax.set_title("(b) same step size: speed along the floor", fontsize=8.4, pad=3)
+    ax.set_title(tr(lang, "(b) same step size: speed along the floor",
+                    "(b) mismo paso: velocidad por el fondo"), fontsize=8.4, pad=3)
     ax.legend(loc="upper right", borderpad=0.3, labelspacing=0.25, fontsize=6.8)
 
     # the rule itself, drawn once, in a clean frame
@@ -543,7 +584,7 @@ def tut_momentum() -> plt.Figure:
 
 
 # ------------------------------------------------------------------ 8. adaptive
-def tut_adaptive() -> plt.Figure:
+def tut_adaptive(lang: str = "en") -> plt.Figure:
     """One shared step size versus one step size per coordinate."""
     a_mat = np.diag([0.01, 1.0])
     fig, axes = plt.subplots(1, 2, figsize=(6.5, 2.7))
@@ -553,10 +594,13 @@ def tut_adaptive() -> plt.Figure:
     p0 = (-2.2, 1.4)
     plain = gd_path(a_mat, p0, 0.9, 90)
     rms = rms_path(a_mat, p0, 0.3, 0.9, 90)
-    path(ax, plain, GREY, r"one $\eta$ for all", ls="--", lw=1.3, every=6)
-    path(ax, rms, ACCENT, "one $\\eta$ per coordinate", lw=1.6, every=4)
+    path(ax, plain, GREY, tr(lang, r"one $\eta$ for all", r"un $\eta$ para todo"),
+         ls="--", lw=1.3, every=6)
+    path(ax, rms, ACCENT, tr(lang, "one $\\eta$ per coordinate",
+                             "un $\\eta$ por coordenada"), lw=1.6, every=4)
     ax.plot(0, 0, "o", ms=4.6, mfc="white", mec=MUTED, mew=1.3, zorder=6)
-    ax.set_title("(a) 100:1 curvature, 90 steps each", fontsize=8.6, pad=3)
+    ax.set_title(tr(lang, "(a) 100:1 curvature, 90 steps each",
+                    "(a) curvatura 100:1, 90 pasos cada uno"), fontsize=8.6, pad=3)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.legend(loc="upper right", borderpad=0.3, labelspacing=0.25,
@@ -567,18 +611,21 @@ def tut_adaptive() -> plt.Figure:
     v = g0**2
     step_plain = 0.9 * np.abs(g0)
     step_rms = 0.3 * np.abs(g0) / (np.sqrt(v) + 1e-8)
-    labels = [r"flat direction ($x$)", r"steep direction ($y$)"]
+    labels = tr(lang, [r"flat direction ($x$)", r"steep direction ($y$)"],
+                [r"dirección plana ($x$)", r"dirección empinada ($y$)"])
     yy = np.arange(2)
     ax.barh(yy - 0.19, step_plain, height=0.34, color=GREY,
-            label="one shared $\\eta$")
+            label=tr(lang, "one shared $\\eta$", "un $\\eta$ compartido"))
     ax.barh(yy + 0.19, step_rms, height=0.34, color=ACCENT,
-            label="per-coordinate")
+            label=tr(lang, "per-coordinate", "por coordenada"))
     ax.set_xscale("log")
     ax.set_yticks(yy)
     ax.set_yticklabels(labels, fontsize=7.6)
     ax.set_xlim(1e-2, 5)
-    ax.set_xlabel("first-step displacement (log)")
-    ax.set_title("(b) the 100\u00d7 imbalance disappears", fontsize=8.6, pad=3)
+    ax.set_xlabel(tr(lang, "first-step displacement (log)",
+                     "desplazamiento del primer paso (log)"))
+    ax.set_title(tr(lang, "(b) the 100\u00d7 imbalance disappears",
+                    "(b) desaparece el desbalance 100\u00d7"), fontsize=8.6, pad=3)
     for yi, (a_val, b_val) in enumerate(zip(step_plain, step_rms)):
         ax.text(a_val * 1.15, yi - 0.19, f"{a_val:.2g}", va="center", fontsize=6.8,
                 color=MUTED)
@@ -591,9 +638,9 @@ def tut_adaptive() -> plt.Figure:
 
 
 # ------------------------------------------------------------------- 9. families
-def tut_families() -> plt.Figure:
+def tut_families(lang: str = "en") -> plt.Figure:
     """A fingerprint of the eight families: which ingredients each one uses."""
-    rows = [
+    rows = tr(lang, [
         "first-order baseline",
         "momentum + variance reduction",
         "memory-efficient / low-rank",
@@ -602,9 +649,20 @@ def tut_families() -> plt.Figure:
         "geometric / orthogonality",
         "adaptivity-tunable",
         "evolutionary / population",
-    ]
-    cols = ["gradient", "1st moment", "2nd moment", "grad. history",
-            "curvature", "matrix shape", "population", "state < Adam"]
+    ], [
+        "base de primer orden",
+        "momentum + reducción de varianza",
+        "eficiente en memoria / bajo rango",
+        "schedule-free / sin parámetros",
+        "curvatura / segundo orden",
+        "geométrico / ortogonalidad",
+        "adaptatividad ajustable",
+        "evolutivo / población",
+    ])
+    cols = tr(lang, ["gradient", "1st moment", "2nd moment", "grad. history",
+                     "curvature", "matrix shape", "population", "state < Adam"],
+              ["gradiente", "1.er momento", "2.º momento", "historial de grad.",
+               "curvatura", "forma matricial", "población", "estado < Adam"])
     grid = np.array([
         [1, 1, 1, 0, 0, 0, 0, 0],
         [1, 1, 1, 1, 0, 0, 0, 0],
@@ -634,8 +692,10 @@ def tut_families() -> plt.Figure:
             glyph = "\u2713" if val == 1 else ("~" if val == .5 else "")
             ax.text(j, i, glyph, ha="center", va="center", fontsize=9,
                     color=ACCENT if val == 1 else MUTED)
-    ax.set_title("Which ingredient each family turns on  (\u2713 used, ~ only some members)",
-                 fontsize=8.4, pad=5)
+    ax.set_title(tr(lang,
+        "Which ingredient each family turns on  (\u2713 used, ~ only some members)",
+        "Qué ingrediente activa cada familia  (\u2713 usado, ~ sólo algunos miembros)"),
+        fontsize=8.4, pad=5)
     for spine in ax.spines.values():
         spine.set_visible(False)
     fig.tight_layout(pad=0.25)
@@ -653,6 +713,16 @@ FIGURES = [
     ("tut-momentum", tut_momentum),
     ("tut-adaptive", tut_adaptive),
     ("tut-families", tut_families),
+    # Spanish render used by docs/paper-es (same canvases and theme).
+    ("tut-gd-landscape-es", lambda: tut_gd_landscape("es")),
+    ("tut-learning-rate-es", lambda: tut_learning_rate("es")),
+    ("tut-loss-diagnostics-es", lambda: tut_loss_diagnostics("es")),
+    ("tut-batch-noise-es", lambda: tut_batch_noise("es")),
+    ("tut-convergence-es", lambda: tut_convergence("es")),
+    ("tut-backprop-es", lambda: tut_backprop("es")),
+    ("tut-momentum-es", lambda: tut_momentum("es")),
+    ("tut-adaptive-es", lambda: tut_adaptive("es")),
+    ("tut-families-es", lambda: tut_families("es")),
 ]
 
 

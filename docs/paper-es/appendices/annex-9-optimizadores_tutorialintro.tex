@@ -44,7 +44,7 @@ preguntas en el mapa de las familias que siguen.
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizer-tutorial-flow.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizer-tutorial-flow-es.pdf}}
 \caption{Todo el apéndice en una página. Los datos producen una pérdida, la
 retropropagación convierte la pérdida en un gradiente y todo optimizador aplica
 la misma regla de actualización con una respuesta distinta a una de seis
@@ -87,7 +87,7 @@ la Figura~\ref{fig:opt-tut-lr} muestra cómo se ven como curva de pérdida.
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-gd-landscape.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-gd-landscape-es.pdf}}
 \caption{Descenso de gradiente sobre un cuenco cuadrático, mismo punto de
 partida, 26 pasos. (a) Un cuenco isótropo: el gradiente apunta al mínimo y el
 recorrido es una línea recta. (b) Un valle cuya curvatura difiere en un factor
@@ -103,7 +103,7 @@ este apéndice~\citep{hinton_csc321_2012}.}
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-learning-rate.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-learning-rate-es.pdf}}
 \caption{El mismo valle, una sola perilla. Con $\eta$ muy por debajo de $1/L$
 la pérdida apenas se mueve; en $\eta\approx1/L$ cae geométricamente; más allá de
 $\eta=2/L$ cada iteración multiplica el error por un factor mayor que uno y la
@@ -159,7 +159,7 @@ memoria hasta que se usan~\citep{ghojogh_ghodsi_2024,rumelhart1986learning}.
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-backprop.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-backprop-es.pdf}}
 \caption{Un paso de entrenamiento sobre una red con dos capas ocultas y valores
 exactos. Los números en negro son las activaciones hacia adelante $z$; los
 números en rojo son las cantidades hacia atrás $\delta=\partial e/\partial a$.
@@ -227,7 +227,7 @@ $1/\sqrt{b}$.
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-batch-noise.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-batch-noise-es.pdf}}
 \caption{(a) Una superficie de mínimos cuadrados real en dos pesos (rasgos
 correlacionados, así que el valle es genuino), con 45 pasos desde el mismo
 punto de partida y el mismo tamaño de paso. El lote completo desciende de forma
@@ -253,7 +253,7 @@ es la comparación que de verdad importa cuando un paso cuesta $n/b$ veces menos
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-convergence.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-convergence-es.pdf}}
 \caption{(a) Por iteración, el descenso de gradiente decae como $O(1/t)$
 mientras que SGD decae como $O(1/\sqrt t)$ y, con un paso fijo, se aplana en una
 meseta de altura $O(\eta)$~\citep{ghojogh_ghodsi_2024}. La meseta es la razón por
@@ -293,7 +293,7 @@ y su efecto sobre el valle.
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-momentum.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-momentum-es.pdf}}
 \caption{Momentum como memoria. (a) Sobre el valle de la
 Figura~\ref{fig:opt-tut-gd}(b), con el mismo tamaño de paso, el descenso de
 gradiente simple sigue avanzando a rastras por el fondo tras 120 pasos mientras
@@ -329,7 +329,7 @@ decrecientes o sin programación.
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-adaptive.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-adaptive-es.pdf}}
 \caption{Un tamaño de paso por coordenada. (a) Sobre un valle con una razón de
 curvatura de cien a uno, un tamaño de paso compartido o sobrepasa el eje abrupto
 o ignora el plano; normalizar cada coordenada por la raíz del promedio de sus
@@ -424,7 +424,7 @@ Evolutivos, población & ¿Sin gradientes? & $P\times$ & prohibitivo a escala \\
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-families.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-families-es.pdf}}
 \caption{Huella de las ocho familias. Una marca indica un ingrediente que la
 familia usa y una tilde uno que solo usan algunos miembros. La primera columna
 está marcada en todas partes---toda familia de este apéndice es un método de
@@ -491,7 +491,7 @@ de pasos (Figura~\ref{fig:opt-tut-diag}).
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-loss-diagnostics.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/tutorial/tut-loss-diagnostics-es.pdf}}
 \caption{Cuatro curvas de pérdida y la frase que pronuncia cada una. Una curva
 suave que sigue bajando es sana; los picos seguidos de una subida significan que
 el tamaño de paso cruzó $2/L$; una curva suave pero demasiado alta significa que

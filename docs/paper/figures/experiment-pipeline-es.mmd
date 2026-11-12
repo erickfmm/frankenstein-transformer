@@ -1,0 +1,11 @@
+flowchart LR
+  A["configs/*.yaml"] --> T["entrenamiento<br/>100 épocas"]
+  T --> ED["exportar checkpoint + desplegar<br/>estándar | cuantizado"]
+  ED --> V["evaluación<br/>4 prompts × 2 formatos"]
+  V --> H["exportación HF"]
+
+  T -.-> R1["log de entrenamiento<br/>por paso"]
+  ED -.-> R2["censo de<br/>parámetros"]
+  ED -.-> R3["registro del<br/>pipeline"]
+  V -.-> R3
+  H -.-> R3

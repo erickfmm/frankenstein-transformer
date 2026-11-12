@@ -25,6 +25,22 @@ from matplotlib.ticker import FuncFormatter
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+# --------------------------------------------------------------------------- i18n
+#: Language used by :func:`tr`; ``make_paper_figures.py`` flips it to render the
+#: Spanish variants of the paper charts. Every user-visible string goes through
+#: ``tr("english", "español")`` so the two languages cannot drift apart.
+_LANG = {"code": "en"}
+
+
+def set_lang(lang: str) -> None:
+    """Select the language for every string emitted after this call."""
+    _LANG["code"] = lang
+
+
+def tr(en: str, es: str) -> str:
+    """Return ``es`` when the render language is Spanish, else ``en``."""
+    return en if _LANG["code"] == "en" else es
+
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "out"
 IMG = OUT / "img"
@@ -125,7 +141,41 @@ PAIRS = PAIRS.drop_duplicates(subset=["mixer_a", "mixer_b"], keep="first").copy(
 PAIRS["label"] = PAIRS["mixer_a"] + " + " + PAIRS["mixer_b"]
 
 FAM_ORDER = [f for f in FAMILY_COLORS if f in set(M.family)]
-FAM_LABEL = lambda f: FAMILY_LABELS.get(f, f)
+#: Spanish names for the same families; ``FAM_LABEL`` resolves at call time so
+#: ``set_lang`` changes the labels of every figure rendered afterwards.
+FAMILY_LABELS_ES = {
+    "pair": "Pares híbridos",
+    "single": "Individuales",
+    "vit": "ViT",
+    "opt": "Optimizadores",
+    "trans": "Estructural",
+    "pe": "Codificación pos.",
+    "norm": "Normalización",
+    "realdata": "Datos reales",
+    "task": "Tareas",
+    "tokenizer": "Tokenizador",
+    "batch": "Tamaño de lote",
+    "audio": "Audio",
+    "bitnet": "BitNet/GGUF",
+}
+#: Metric column -> (English, Spanish) axis label.
+METRIC_LABELS = {
+    "loss_final": ("Final loss", "Pérdida final"),
+    "test_acc": ("Held-out accuracy", "Exactitud en validación"),
+    "loss": ("Loss", "Pérdida"),
+    "step_ms_avg": ("Mean step time (ms)", "Tiempo medio por paso (ms)"),
+    "tok_s_avg": ("Throughput (tokens/s)", "Rendimiento (tokens/s)"),
+    "total": ("Total parameters", "Parámetros totales"),
+}
+
+
+def metric_label(col: str) -> str:
+    """Human label for a metric column, in the active language."""
+    en, es = METRIC_LABELS.get(col, (col.replace("_", " "), col.replace("_", " ")))
+    return tr(en, es)
+
+
+FAM_LABEL = lambda f: tr(FAMILY_LABELS.get(f, f), FAMILY_LABELS_ES.get(f, f))
 
 
 def ordered_families(frame: pd.DataFrame) -> list[str]:
@@ -140,9 +190,9 @@ def params_hist(t):
     med = data.median()
     ax.axvline(med, color="#f85149", lw=1.6, ls="--")
     ax.text(med, ax.get_ylim()[1] * 0.92, f" median {med:.0f}k", color="#f85149", fontsize=9)
-    ax.set_xlabel("Total parameters (thousands)")
-    ax.set_ylabel("Configurations")
-    ax.set_title("Parameter budget across all 868 configurations")
+    ax.set_xlabel(tr("Total parameters (thousands)", "Parámetros totales (miles)"))
+    ax.set_ylabel(tr("Configurations", "Configuraciones"))
+    ax.set_title(tr("Parameter budget across all 868 configurations", "Presupuesto de parámetros en las 868 configuraciones"))
     ax.xaxis.set_major_formatter(FuncFormatter(kfmt))
     return fig_
 
@@ -160,8 +210,8 @@ def params_family_box(t):
                 saturation=0.9, zorder=3)
     ax.set_yscale("log")
     ax.set_xlabel("")
-    ax.set_ylabel("Total parameters (log)")
-    ax.set_title("Parameter budget by experiment family")
+    ax.set_ylabel(tr("Total parameters (log)", "Parámetros totales (log)"))
+    ax.set_title(tr("Parameter budget by experiment family", "Presupuesto de parámetros por familia de experimento"))
     ax.tick_params(axis="x", rotation=30)
     return fig_
 
@@ -180,8 +230,8 @@ def params_composition(t):
         bottom += share[c].values
     ax.invert_yaxis()
     ax.set_xlim(0, 100)
-    ax.set_xlabel("Share of total parameters (%)")
-    ax.set_title("Where the parameters live, by family")
+    ax.set_xlabel(tr("Share of total parameters (%)", "Proporción del total de parámetros (%)"))
+    ax.set_title(tr("Where the parameters live, by family", "Dónde viven los parámetros, por familia"))
     ax.legend(ncol=5, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.18))
     return fig_
 
@@ -192,7 +242,7 @@ def params_extremes(t, largest=True):
     fig_, ax = plt.subplots(figsize=(10, 6.4))
     colors = [FAMILY_COLORS.get(f, "#8b949e") for f in sub.family]
     ax.barh(sub.combo_id.str.replace("attn_", "", regex=False), sub.total / 1000, color=colors)
-    ax.set_xlabel("Total parameters (thousands)")
+    ax.set_xlabel(tr("Total parameters (thousands)", "Parámetros totales (miles)"))
     ax.set_title(("The 20 largest" if largest else "The 20 smallest") + " configurations")
     ax.tick_params(axis="y", labelsize=7.5)
     ax.xaxis.set_major_formatter(FuncFormatter(kfmt))
@@ -214,8 +264,8 @@ def loss_family_box(t):
     ax.set_yscale("log")
     ax.set_ylim(0.18, 13)
     ax.set_xlabel("")
-    ax.set_ylabel("Final training loss (log)")
-    ax.set_title("Final loss by family — MLM vs vision vs ablations")
+    ax.set_ylabel(tr("Final training loss (log)", "Pérdida final de entrenamiento (log)"))
+    ax.set_title(tr("Final loss by family — MLM vs vision vs ablations", "Pérdida final por familia — MLM vs visión vs ablaciones"))
     ax.tick_params(axis="x", rotation=30)
     return fig_
 
@@ -233,8 +283,8 @@ def acc_family_box(t):
                 saturation=0.9, zorder=3)
     ax.yaxis.set_major_formatter(FuncFormatter(pct))
     ax.set_xlabel("")
-    ax.set_ylabel("Held-out metric")
-    ax.set_title("Held-out score by family (MLM top-1, vision accuracy)")
+    ax.set_ylabel(tr("Held-out metric", "Métrica de validación"))
+    ax.set_title(tr("Held-out score by family (MLM top-1, vision accuracy)", "Puntaje de validación por familia (top-1 MLM, exactitud de visión)"))
     ax.tick_params(axis="x", rotation=30)
     return fig_
 
@@ -247,9 +297,9 @@ def loss_acc_scatter(t):
                    color=FAMILY_COLORS[fam], label=FAM_LABEL(fam), edgecolor="none")
     ax.set_xscale("log")
     ax.yaxis.set_major_formatter(FuncFormatter(pct))
-    ax.set_xlabel("Final training loss (log)")
-    ax.set_ylabel("Held-out metric")
-    ax.set_title("Loss vs held-out score — families separate cleanly")
+    ax.set_xlabel(tr("Final training loss (log)", "Pérdida final de entrenamiento (log)"))
+    ax.set_ylabel(tr("Held-out metric", "Métrica de validación"))
+    ax.set_title(tr("Loss vs held-out score — families separate cleanly", "Pérdida vs puntaje de validación — las familias se separan limpiamente"))
     ax.legend(ncol=2, fontsize=8)
     return fig_
 
@@ -260,9 +310,9 @@ def loss_hist_pairs(t):
     for q, c in ((0.05, "#3fb950"), (0.5, "#d2991d"), (0.95, "#f85149")):
         v = PAIRS.loss_final.quantile(q)
         ax.axvline(v, color=c, lw=1.3, ls="--")
-    ax.set_xlabel("Final training loss")
-    ax.set_ylabel("Hybrid pairs")
-    ax.set_title("Loss distribution of the 667 unique hybrid pairs")
+    ax.set_xlabel(tr("Final training loss", "Pérdida final de entrenamiento"))
+    ax.set_ylabel(tr("Hybrid pairs", "Pares híbridos"))
+    ax.set_title(tr("Loss distribution of the 667 unique hybrid pairs", "Distribución de pérdida de los 667 pares híbridos únicos"))
     return fig_
 
 
@@ -270,9 +320,9 @@ def acc_hist_pairs(t):
     fig_, ax = plt.subplots(figsize=(10, 5.2))
     sns.histplot(PAIRS.test_acc, bins=40, color="#3fb950", edgecolor=t["face"], ax=ax)
     ax.xaxis.set_major_formatter(FuncFormatter(pct))
-    ax.set_xlabel("Held-out MLM top-1")
-    ax.set_ylabel("Hybrid pairs")
-    ax.set_title("Held-out accuracy distribution — a heavy tail at zero")
+    ax.set_xlabel(tr("Held-out MLM top-1", "Top-1 MLM en validación"))
+    ax.set_ylabel(tr("Hybrid pairs", "Pares híbridos"))
+    ax.set_title(tr("Held-out accuracy distribution — a heavy tail at zero", "Distribución de exactitud en validación — una cola pesada en cero"))
     return fig_
 
 
@@ -285,8 +335,8 @@ def params_loss_pairs(t):
     xs = np.linspace(x.min(), x.max(), 50)
     ax.plot(xs, np.polyval(z, xs), color="#f85149", lw=1.6,
             label=f"slope {z[0]:+.4f} / k-param")
-    ax.set_xlabel("Total parameters (thousands)")
-    ax.set_ylabel("Final training loss")
+    ax.set_xlabel(tr("Total parameters (thousands)", "Parámetros totales (miles)"))
+    ax.set_ylabel(tr("Final training loss", "Pérdida final de entrenamiento"))
     ax.set_title(f"Bigger is (slightly) better: r = {np.corrcoef(x, y)[0,1]:.2f}")
     ax.legend()
     return fig_
@@ -302,9 +352,9 @@ def params_acc_pairs(t):
     ax.plot(xs, np.polyval(z, xs), color="#f85149", lw=1.6,
             label=f"r = {np.corrcoef(x, y)[0,1]:+.2f}")
     ax.yaxis.set_major_formatter(FuncFormatter(pct))
-    ax.set_xlabel("Total parameters (thousands)")
-    ax.set_ylabel("Held-out MLM top-1")
-    ax.set_title("Parameter count barely predicts held-out accuracy")
+    ax.set_xlabel(tr("Total parameters (thousands)", "Parámetros totales (miles)"))
+    ax.set_ylabel(tr("Held-out MLM top-1", "Top-1 MLM en validación"))
+    ax.set_title(tr("Parameter count barely predicts held-out accuracy", "El número de parámetros apenas predice la exactitud en validación"))
     ax.legend()
     return fig_
 
@@ -317,7 +367,7 @@ def ranking_bar(t, col, n, best, title, fmt=None):
     ax.barh(sub.label, vals, color=t["accent"] if best else "#f85149")
     for i, v in enumerate(vals):
         ax.text(v, i, f" {v:.3f}" if fmt is None else fmt(v), va="center", fontsize=7.5)
-    ax.set_xlabel(col.replace("_", " "))
+    ax.set_xlabel(metric_label(col))
     ax.set_title(title)
     ax.tick_params(axis="y", labelsize=7.5)
     return fig_
@@ -327,7 +377,8 @@ def marginal_bar(t, key, col, best, title, n=10):
     g = PAIRS.groupby(key)[col].mean().sort_values(ascending=not best).head(n)
     fig_, ax = plt.subplots(figsize=(9.4, 5.4))
     ax.barh(g.index[::-1], g.values[::-1], color=t["accent"] if best else "#f85149")
-    ax.set_xlabel(f"Mean {col.replace('_', ' ')}")
+    ax.set_xlabel(tr(f"Mean {metric_label(col).lower()}",
+                     f"Media de {metric_label(col).lower()}"))
     ax.set_title(title)
     for i, v in enumerate(g.values[::-1]):
         ax.text(v, i, f" {v:.3f}", va="center", fontsize=8)
@@ -346,9 +397,9 @@ def curves_family(t):
         ax.plot(g.epoch, g["mean"], lw=1.8, color=FAMILY_COLORS[fam], label=FAM_LABEL(fam))
         ax.fill_between(g.epoch, g["mean"] - g["std"] * 0.25, g["mean"] + g["std"] * 0.25,
                         color=FAMILY_COLORS[fam], alpha=0.12, linewidth=0)
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Training loss (epoch mean)")
-    ax.set_title("Learning curves by family — the MLM pairs are still descending")
+    ax.set_xlabel(tr("Epoch", "Época"))
+    ax.set_ylabel(tr("Training loss (epoch mean)", "Pérdida de entrenamiento (media por época)"))
+    ax.set_title(tr("Learning curves by family — the MLM pairs are still descending", "Curvas de aprendizaje por familia — los pares MLM aún descienden"))
     ax.legend(ncol=3, fontsize=8)
     return fig_
 
@@ -361,9 +412,9 @@ def curves_top10(t):
     for (cid, label), col in zip(top.itertuples(index=False), palette):
         s = pe[pe.combo_id == cid].sort_values("epoch")
         ax.plot(s.epoch, s.loss, lw=1.7, color=col, label=label.replace(" + ", "+"))
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Training loss (epoch mean)")
-    ax.set_title("The ten best hybrid pairs, epoch by epoch")
+    ax.set_xlabel(tr("Epoch", "Época"))
+    ax.set_ylabel(tr("Training loss (epoch mean)", "Pérdida de entrenamiento (media por época)"))
+    ax.set_title(tr("The ten best hybrid pairs, epoch by epoch", "Los diez mejores pares híbridos, época por época"))
     ax.legend(fontsize=7.5, ncol=2)
     return fig_
 
@@ -375,12 +426,12 @@ def curves_quantiles(t):
         p90=lambda s: s.quantile(0.90), mean="mean")
     fig_, ax = plt.subplots(figsize=(10.5, 5.4))
     ax.fill_between(g.index, g.p10, g.p90, color=t["accent"], alpha=0.18,
-                    label="P10–P90")
-    ax.plot(g.index, g.p50, color=t["accent"], lw=2, label="Median")
-    ax.plot(g.index, g["mean"], color="#f85149", lw=1.4, ls="--", label="Mean")
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Training loss")
-    ax.set_title("Where the pair population sits at each epoch")
+                    label=tr("P10–P90", "P10–P90"))
+    ax.plot(g.index, g.p50, color=t["accent"], lw=2, label=tr("Median", "Mediana"))
+    ax.plot(g.index, g["mean"], color="#f85149", lw=1.4, ls="--", label=tr("Mean", "Media"))
+    ax.set_xlabel(tr("Epoch", "Época"))
+    ax.set_ylabel(tr("Training loss", "Pérdida de entrenamiento"))
+    ax.set_title(tr("Where the pair population sits at each epoch", "Dónde está la población de pares en cada época"))
     ax.legend()
     return fig_
 
@@ -399,8 +450,8 @@ def grad_groups(t):
                   edgecolor=t["face"], linewidth=1)
     for b, v in zip(bars, means):
         ax.text(b.get_x() + b.get_width() / 2, v * 1.02, f"{v:.2f}", ha="center", fontsize=9)
-    ax.set_ylabel("Mean gradient norm across runs")
-    ax.set_title("Gradient pressure by parameter group")
+    ax.set_ylabel(tr("Mean gradient norm across runs", "Norma del gradiente media entre corridas"))
+    ax.set_title(tr("Gradient pressure by parameter group", "Presión del gradiente por grupo de parámetros"))
     return fig_
 
 
@@ -411,7 +462,7 @@ def grad_heatmap(t):
     fig_, ax = plt.subplots(figsize=(9.2, 6.2))
     sns.heatmap(d, annot=True, fmt=".1f", cmap="rocket_r", ax=ax,
                 cbar_kws={"label": "grad norm"}, linewidths=0.6, linecolor=t["face"])
-    ax.set_title("Gradient norm by family and parameter group")
+    ax.set_title(tr("Gradient norm by family and parameter group", "Norma del gradiente por familia y grupo de parámetros"))
     ax.set_xlabel("")
     ax.set_ylabel("")
     return fig_
@@ -422,9 +473,9 @@ def clip_hist(t):
     sns.histplot(M.clip_avg.clip(0, 3), bins=45, color="#d2991d", edgecolor=t["face"], ax=ax)
     ax.axvline(1.0, color="#f85149", lw=1.4, ls="--")
     ax.text(1.02, ax.get_ylim()[1] * 0.9, "clip threshold", color="#f85149", fontsize=9)
-    ax.set_xlabel("Mean clip ratio (clipped / unclipped)")
-    ax.set_ylabel("Configurations")
-    ax.set_title("Gradient clipping: most runs sit right at the threshold")
+    ax.set_xlabel(tr("Mean clip ratio (clipped / unclipped)", "Ratio de recorte medio (recortado / sin recortar)"))
+    ax.set_ylabel(tr("Configurations", "Configuraciones"))
+    ax.set_title(tr("Gradient clipping: most runs sit right at the threshold", "Recorte de gradiente: casi todas las corridas quedan en el umbral"))
     return fig_
 
 
@@ -438,9 +489,9 @@ def lr_curve(t):
         g = s.groupby("epoch").learning_rate.mean()
         ax.plot(g.index, g.values, lw=1.8, color=FAMILY_COLORS[fam], label=FAM_LABEL(fam))
     ax.set_yscale("log")
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Learning rate (log)")
-    ax.set_title("Warm-up and cosine decay used in every run")
+    ax.set_xlabel(tr("Epoch", "Época"))
+    ax.set_ylabel(tr("Learning rate (log)", "Tasa de aprendizaje (log)"))
+    ax.set_title(tr("Warm-up and cosine decay used in every run", "Warm-up y decaimiento coseno en todas las corridas"))
     ax.legend()
     return fig_
 
@@ -458,8 +509,8 @@ def speed_family_box(t):
                 saturation=0.9, zorder=3)
     ax.set_yscale("log")
     ax.set_xlabel("")
-    ax.set_ylabel("Training throughput (tokens/s, log)")
-    ax.set_title("Throughput by family — the cheapest models are not the fastest")
+    ax.set_ylabel(tr("Training throughput (tokens/s, log)", "Rendimiento de entrenamiento (tokens/s, log)"))
+    ax.set_title(tr("Throughput by family — the cheapest models are not the fastest", "Rendimiento por familia — los modelos más baratos no son los más rápidos"))
     ax.tick_params(axis="x", rotation=30)
     return fig_
 
@@ -472,8 +523,8 @@ def step_vs_params(t):
     z = np.polyfit(x, y, 1)
     xs = np.linspace(x.min(), x.max(), 50)
     ax.plot(xs, np.polyval(z, xs), color="#f85149", lw=1.5)
-    ax.set_xlabel("Total parameters (thousands)")
-    ax.set_ylabel("Mean step time (ms)")
+    ax.set_xlabel(tr("Total parameters (thousands)", "Parámetros totales (miles)"))
+    ax.set_ylabel(tr("Mean step time (ms)", "Tiempo medio por paso (ms)"))
     ax.set_title(f"Step time tracks parameter count (r = {np.corrcoef(x, y)[0,1]:.2f})")
     return fig_
 
@@ -481,9 +532,9 @@ def step_vs_params(t):
 def duration_hist(t):
     fig_, ax = plt.subplots(figsize=(9.6, 5.0))
     sns.histplot(M.train_dur / 60, bins=34, color="#d2a8ff", edgecolor=t["face"], ax=ax)
-    ax.set_xlabel("Training wall-clock (minutes)")
-    ax.set_ylabel("Configurations")
-    ax.set_title("How long a 100-epoch run took on the shared GPU")
+    ax.set_xlabel(tr("Training wall-clock (minutes)", "Tiempo real de entrenamiento (minutos)"))
+    ax.set_ylabel(tr("Configurations", "Configuraciones"))
+    ax.set_title(tr("How long a 100-epoch run took on the shared GPU", "Cuánto tardó una corrida de 100 épocas en la GPU compartida"))
     return fig_
 
 
@@ -499,8 +550,8 @@ def pair_matrix(t, value, cmap, title, cbar, fmt=".2f", annot=True, log=False, c
                 cbar_kws={"label": cbar, "shrink": 0.55},
                 center=center, norm=None)
     ax.set_title(title, fontsize=15)
-    ax.set_xlabel("Second mixer (B)")
-    ax.set_ylabel("First mixer (A)")
+    ax.set_xlabel(tr("Second mixer (B)", "Segundo mixer (B)"))
+    ax.set_ylabel(tr("First mixer (A)", "Primer mixer (A)"))
     ax.tick_params(axis="x", rotation=90, labelsize=8)
     ax.tick_params(axis="y", labelsize=8)
     return fig_
@@ -518,8 +569,8 @@ def synergy(t):
     fig_, ax = plt.subplots(figsize=(10, 7.4))
     ax.barh(s.label, s.synergy, color=colors)
     ax.axvline(0, color=t["muted"], lw=0.9)
-    ax.set_xlabel("Synergy (nats better than the two marginal means)")
-    ax.set_title("Best and worst interactions between mixers")
+    ax.set_xlabel(tr("Synergy (nats better than the two marginal means)", "Sinergia (nats mejor que las dos medias marginales)"))
+    ax.set_title(tr("Best and worst interactions between mixers", "Mejores y peores interacciones entre mixers"))
     ax.tick_params(axis="y", labelsize=7.5)
     return fig_
 
@@ -529,9 +580,9 @@ def coverage(t):
     fig_, ax = plt.subplots(figsize=(16, 10))
     sns.heatmap(piv.notna().astype(int), cmap=sns.color_palette(["#21262d", "#58a6ff"], as_cmap=True),
                 ax=ax, cbar=False, linewidths=0.4, linecolor=t["face"])
-    ax.set_title("Pair coverage: which A×B cells were actually trained")
-    ax.set_xlabel("Second mixer (B)")
-    ax.set_ylabel("First mixer (A)")
+    ax.set_title(tr("Pair coverage: which A×B cells were actually trained", "Cobertura de pares: qué celdas A×B se entrenaron realmente"))
+    ax.set_xlabel(tr("Second mixer (B)", "Segundo mixer (B)"))
+    ax.set_ylabel(tr("First mixer (A)", "Primer mixer (A)"))
     ax.tick_params(axis="x", rotation=90, labelsize=8)
     ax.tick_params(axis="y", labelsize=8)
     return fig_
@@ -550,13 +601,13 @@ def pareto_speed_loss(t):
             best = r.loss_final
             xs.append(r.tok_s_median)
             ys.append(r.loss_final)
-    ax.step(xs, ys, where="post", color="#3fb950", lw=1.6, label="Pareto front")
+    ax.step(xs, ys, where="post", color="#3fb950", lw=1.6, label=tr("Pareto front", "Frente de Pareto"))
     for x, y, lab in zip(xs[:5], ys[:5], s[s.loss_final.isin(ys)].label.head(5)):
         ax.annotate(lab.replace(" + ", "+"), (x, y), fontsize=7, color=t["muted"],
                     xytext=(4, 4), textcoords="offset points")
-    ax.set_xlabel("Throughput (tokens/s)")
-    ax.set_ylabel("Final training loss")
-    ax.set_title("Speed–quality Pareto front of the hybrid pairs")
+    ax.set_xlabel(tr("Throughput (tokens/s)", "Rendimiento (tokens/s)"))
+    ax.set_ylabel(tr("Final training loss", "Pérdida final de entrenamiento"))
+    ax.set_title(tr("Speed–quality Pareto front of the hybrid pairs", "Frente de Pareto velocidad–calidad de los pares híbridos"))
     ax.legend()
     return fig_
 
@@ -567,8 +618,8 @@ def top5_by_b(t):
     fig_, ax = plt.subplots(figsize=(9.8, 5.6))
     ax.barh(g.index[::-1], g["mean"].values[::-1], color="#3fb950")
     ax.xaxis.set_major_formatter(FuncFormatter(pct))
-    ax.set_xlabel("Top-5 hit rate (MLM, 4 samples)")
-    ax.set_title("Which second mixer puts the answer in the top 5")
+    ax.set_xlabel(tr("Top-5 hit rate (MLM, 4 samples)", "Tasa de acierto top-5 (MLM, 4 muestras)"))
+    ax.set_title(tr("Which second mixer puts the answer in the top 5", "Qué segundo mixer pone la respuesta en el top 5"))
     return fig_
 
 
@@ -577,8 +628,8 @@ def top5_vs_loss(t):
     p = PAIRS.dropna(subset=["inf_top5_std"])
     ax.scatter(p.loss_final, p.inf_top5_std, s=26, alpha=0.7, color="#d2a8ff", edgecolor="none")
     ax.yaxis.set_major_formatter(FuncFormatter(pct))
-    ax.set_xlabel("Final training loss")
-    ax.set_ylabel("Top-5 hit rate")
+    ax.set_xlabel(tr("Final training loss", "Pérdida final de entrenamiento"))
+    ax.set_ylabel(tr("Top-5 hit rate", "Tasa de acierto top-5"))
     ax.set_title(f"Training loss barely predicts inference quality (r = {p[['loss_final','inf_top5_std']].corr().iloc[0,1]:+.2f})")
     return fig_
 
@@ -594,7 +645,7 @@ def group_bar(t, family, col, title, fmt=".3f", sort_asc=True, color="#58a6ff", 
                        ha="right" if len(sub) > 12 else "center", fontsize=8)
     for i, v in enumerate(sub[col]):
         ax.text(i, v, f"{v:{fmt}}", ha="center", va="bottom", fontsize=7)
-    ax.set_ylabel(col.replace("_", " "))
+    ax.set_ylabel(metric_label(col))
     ax.set_title(title)
     ax.margins(y=0.12)
     return fig_
@@ -604,8 +655,8 @@ def opt_speed(t):
     sub = M[M.family == "opt"].sort_values("step_ms_avg")
     fig_, ax = plt.subplots(figsize=(11, 5.6))
     ax.barh([c.replace("opt_", "") for c in sub.combo_id], sub.step_ms_avg, color="#3fb950")
-    ax.set_xlabel("Mean step time (ms)")
-    ax.set_title("Optimizer overhead — under 30% between fastest and slowest")
+    ax.set_xlabel(tr("Mean step time (ms)", "Tiempo medio por paso (ms)"))
+    ax.set_title(tr("Optimizer overhead — under 30% between fastest and slowest", "Sobrecoste del optimizador — menos del 30% entre el más rápido y el más lento"))
     ax.tick_params(axis="y", labelsize=8)
     return fig_
 
@@ -618,8 +669,8 @@ def vit_split(t):
     sns.stripplot(data=sub, x="grp", y="test_acc", color=t["text"], size=3.4, alpha=0.55, ax=ax)
     ax.yaxis.set_major_formatter(FuncFormatter(pct))
     ax.set_xlabel("")
-    ax.set_ylabel("Held-out accuracy")
-    ax.set_title("Vision tasks: segmentation is the easiest, classification the noisiest")
+    ax.set_ylabel(tr("Held-out accuracy", "Exactitud en validación"))
+    ax.set_title(tr("Vision tasks: segmentation is the easiest, classification the noisiest", "Tareas de visión: la segmentación es la más fácil, la clasificación la más ruidosa"))
     return fig_
 
 
@@ -629,7 +680,7 @@ def tokenizer_task(t):
         sub = M[M.family == fam].sort_values("loss_final")
         ax.barh([c.replace(fam + "_", "") for c in sub.combo_id], sub.loss_final, color="#7ee787")
         ax.set_title(title)
-        ax.set_xlabel("Final loss")
+        ax.set_xlabel(tr("Final loss", "Pérdida final"))
         ax.tick_params(axis="y", labelsize=8)
     fig_.tight_layout()
     return fig_
@@ -638,7 +689,7 @@ def tokenizer_task(t):
 # ========================================================================= deploy
 def inference_format(t):
     fig_, axes = plt.subplots(1, 2, figsize=(10.4, 4.8))
-    for ax, col, title in zip(axes, ("inf_top1", "inf_top5"), ("Top-1 accuracy", "Top-5 hit rate")):
+    for ax, col, title in zip(axes, ("inf_top1", "inf_top5"), ("Top-1 accuracy", tr("Top-5 hit rate", "Tasa de acierto top-5"))):
         means = [M[f"{col}_std"].mean(), M[f"{col}_q"].mean()]
         ax.bar(["standard", "quantized"], means, color=["#58a6ff", "#d2991d"])
         for i, v in enumerate(means):
@@ -657,8 +708,8 @@ def quant_delta_dist(t):
     vals = d.value_counts().sort_index()
     ax.bar(vals.index * 100, vals.values, width=8, color="#d2991d")
     ax.axvline(0, color=t["muted"], lw=1)
-    ax.set_xlabel("Top-5 delta (quantized − standard, percentage points)")
-    ax.set_ylabel("Configurations")
+    ax.set_xlabel(tr("Top-5 delta (quantized − standard, percentage points)", "Delta top-5 (cuantizado − estándar, puntos porcentuales)"))
+    ax.set_ylabel(tr("Configurations", "Configuraciones"))
     ax.set_title(f"Quantization delta: mean {d.mean()*100:+.2f} pp, {int((d==0).sum())} of {len(d)} exactly zero")
     return fig_
 
@@ -669,12 +720,12 @@ def quant_scatter(t):
     jitter = lambda s: s + np.random.default_rng(0).normal(0, 0.008, len(s))
     ax.scatter(jitter(p.inf_top5_std), jitter(p.inf_top5_q), s=22, alpha=0.6,
                color="#58a6ff", edgecolor="none")
-    ax.plot([0, 1], [0, 1], color="#f85149", lw=1.2, ls="--", label="identity")
+    ax.plot([0, 1], [0, 1], color="#f85149", lw=1.2, ls="--", label=tr("identity", "identidad"))
     ax.xaxis.set_major_formatter(FuncFormatter(pct))
     ax.yaxis.set_major_formatter(FuncFormatter(pct))
-    ax.set_xlabel("Standard top-5 hit rate")
-    ax.set_ylabel("Quantized top-5 hit rate")
-    ax.set_title("Standard vs quantized, configuration by configuration")
+    ax.set_xlabel(tr("Standard top-5 hit rate", "Tasa de acierto top-5 estándar"))
+    ax.set_ylabel(tr("Quantized top-5 hit rate", "Tasa de acierto top-5 cuantizada"))
+    ax.set_title(tr("Standard vs quantized, configuration by configuration", "Estándar vs cuantizado, configuración por configuración"))
     ax.legend()
     return fig_
 
@@ -691,8 +742,8 @@ def deploy_duration(t):
     sns.boxplot(data=d, x="stage", y="sec", hue="stage", palette="crest", legend=False, ax=ax)
     ax.set_yscale("log")
     ax.set_xlabel("")
-    ax.set_ylabel("Wall-clock (s, log)")
-    ax.set_title("Pipeline stage cost per configuration")
+    ax.set_ylabel(tr("Wall-clock (s, log)", "Tiempo real (s, log)"))
+    ax.set_title(tr("Pipeline stage cost per configuration", "Coste por etapa del pipeline y por configuración"))
     ax.tick_params(axis="x", rotation=15)
     return fig_
 
@@ -703,8 +754,8 @@ def top5_by_family(t):
     fig_, ax = plt.subplots(figsize=(9.2, 5.0))
     ax.barh([FAM_LABEL(f) for f in g.index], g.values, color=[FAMILY_COLORS[f] for f in g.index])
     ax.xaxis.set_major_formatter(FuncFormatter(pct))
-    ax.set_xlabel("Mean top-5 hit rate")
-    ax.set_title("Inference quality by family")
+    ax.set_xlabel(tr("Mean top-5 hit rate", "Tasa de acierto top-5 media"))
+    ax.set_title(tr("Inference quality by family", "Calidad de inferencia por familia"))
     return fig_
 
 
@@ -722,8 +773,8 @@ def stage_status(t):
         bottom += tab[status].values
     for i, (ok, bad) in enumerate(zip(tab["OK"], tab["FAILED"])):
         ax.text(ok + bad + 8, i, f"{ok} ok / {bad} failed", va="center", fontsize=8.5)
-    ax.set_xlabel("Pipeline records")
-    ax.set_title("Pipeline reliability — 95% of stage records succeeded")
+    ax.set_xlabel(tr("Pipeline records", "Registros del pipeline"))
+    ax.set_title(tr("Pipeline reliability — 95% of stage records succeeded", "Fiabilidad del pipeline — el 95% de los registros de etapa tuvo éxito"))
     ax.legend()
     return fig_
 
@@ -736,8 +787,8 @@ def stage_duration_box(t):
     sns.boxplot(data=r, x="stage", y="duration_sec", hue="stage", palette="flare", legend=False, ax=ax)
     ax.set_yscale("log")
     ax.set_xlabel("")
-    ax.set_ylabel("Duration (s, log)")
-    ax.set_title("Stage durations — training dwarfs everything else")
+    ax.set_ylabel(tr("Duration (s, log)", "Duración (s, log)"))
+    ax.set_title(tr("Stage durations — training dwarfs everything else", "Duraciones por etapa — el entrenamiento eclipsa todo lo demás"))
     ax.tick_params(axis="x", rotation=15)
     return fig_
 
@@ -748,8 +799,8 @@ def failures_family(t):
     ax.barh([FAM_LABEL(x) if x in FAMILY_LABELS else x for x in f.index], f.values, color="#f85149")
     for i, v in enumerate(f.values):
         ax.text(v, i, f" {v}", va="center", fontsize=8)
-    ax.set_xlabel("Failed stage records")
-    ax.set_title("Where the 275 failures landed")
+    ax.set_xlabel(tr("Failed stage records", "Registros de etapa fallidos"))
+    ax.set_title(tr("Where the 275 failures landed", "Dónde cayeron los 275 fallos"))
     return fig_
 
 
@@ -759,8 +810,8 @@ def duplicate_fingerprints(t):
     fig_, ax = plt.subplots(figsize=(8.2, 4.4))
     ax.bar(sub.index, sub["mean"], color=["#f85149", "#d2991d", "#58a6ff", "#3fb950"])
     ax.set_ylim(sub["mean"].min() - 0.2, sub["mean"].max() + 0.2)
-    ax.set_ylabel("Mean final loss")
-    ax.set_title("Four 'different' first mixers produce identical models")
+    ax.set_ylabel(tr("Mean final loss", "Pérdida final media"))
+    ax.set_title(tr("Four 'different' first mixers produce identical models", "Cuatro primeros mixers 'distintos' producen modelos idénticos"))
     for i, v in enumerate(sub["mean"]):
         ax.text(i, v, f"{v:.4f}", ha="center", va="bottom", fontsize=8)
     return fig_
@@ -775,7 +826,7 @@ def correlation(t):
     sns.heatmap(d, annot=True, fmt=".2f", cmap="vlag", center=0, vmin=-1, vmax=1,
                 ax=ax, square=True, linewidths=0.6, linecolor=t["face"],
                 cbar_kws={"shrink": 0.7})
-    ax.set_title("Correlation matrix of the experiment features")
+    ax.set_title(tr("Correlation matrix of the experiment features", "Matriz de correlación de las variables del experimento"))
     return fig_
 
 
@@ -786,9 +837,9 @@ def main() -> None:
 
     fig("params_hist", "params", "Parameter budget across all configurations",
         "Presupuesto de parámetros de todas las configuraciones", params_hist)
-    fig("params_family_box", "params", "Parameter budget by experiment family",
+    fig("params_family_box", "params", tr("Parameter budget by experiment family", "Presupuesto de parámetros por familia de experimento"),
         "Parámetros por familia de experimentos", params_family_box)
-    fig("params_composition", "params", "Where the parameters live, by family",
+    fig("params_composition", "params", tr("Where the parameters live, by family", "Dónde viven los parámetros, por familia"),
         "Dónde viven los parámetros, por familia", params_composition)
     fig("params_top20", "params", "The 20 largest configurations",
         "Las 20 configuraciones más grandes", lambda t: params_extremes(t, True))
@@ -834,7 +885,7 @@ def main() -> None:
         "Los diez mejores pares a lo largo del tiempo", curves_top10)
     fig("curves_quantiles", "dynamics", "Population curves with P10–P90 band",
         "Curvas de la población con banda P10–P90", curves_quantiles)
-    fig("grad_groups", "dynamics", "Gradient pressure by parameter group",
+    fig("grad_groups", "dynamics", tr("Gradient pressure by parameter group", "Presión del gradiente por grupo de parámetros"),
         "Presión de gradiente por grupo", grad_groups)
     fig("grad_heatmap", "dynamics", "Gradient norms by family and group",
         "Normas de gradiente por familia y grupo", grad_heatmap)
@@ -908,7 +959,7 @@ def main() -> None:
         "Top-5 estándar vs cuantizado", quant_scatter)
     fig("deploy_duration", "deploy", "Pipeline stage cost",
         "Coste por etapa del pipeline", deploy_duration)
-    fig("top5_by_family", "deploy", "Inference quality by family",
+    fig("top5_by_family", "deploy", tr("Inference quality by family", "Calidad de inferencia por familia"),
         "Calidad de inferencia por familia", top5_by_family)
 
     fig("stage_status", "reliability", "Pipeline reliability",

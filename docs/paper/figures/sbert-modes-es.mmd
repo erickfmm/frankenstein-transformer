@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":20,"rankSpacing":26}}}%%
+flowchart TD
+  encoder["Codificador compartido"]
+  sim["Similitud<br/>puntaje coseno"]
+  search["Búsqueda<br/>recuperación top-k"]
+  cluster["Agrupar / codificar<br/>análisis offline"]
+
+  encoder --> sim
+  encoder --> search
+  encoder --> cluster

@@ -2,7 +2,7 @@
 \paragraph{LAMB (Layer-wise Adaptive Moments optimizer for Batch training).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/lamb.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/lamb-es.pdf}}
 \caption{Flujo por paso de LAMB: paso Adam por capas reescalado por la razón de confianza entre las normas de pesos y actualización.}
 \label{fig:opt-lamb}
 \end{figure}
@@ -55,7 +55,7 @@ La \textbf{razón de confianza} $\phi^L = \|\theta^L\|_2 / \|u_{\text{adam}}^L\|
 \paragraph{Schedule-Free AdamW.}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/schedulefree.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/schedulefree-es.pdf}}
 \caption{Flujo por paso de Schedule-Free AdamW: flujo de exploración $z$, promedio de iteraciones $x$ y punto de interpolación $y$, con promediado implícito $1/(t+1)$.}
 \label{fig:opt-schedulefree}
 \end{figure}
@@ -104,7 +104,7 @@ El coeficiente de promediado $c_t = 1/(t+1)$ implementa una programación de tas
 \paragraph{Adafactor.}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/adafactor.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/adafactor-es.pdf}}
 \caption{Flujo por paso de Adafactor: acumuladores factorizados de segundo momento por filas y columnas, reconstrucción mediante producto exterior y recorte RMS.}
 \label{fig:opt-adafactor}
 \end{figure}
@@ -152,7 +152,7 @@ U_t &= \frac{G_t}{\sqrt{\hat{V}_t}+\epsilon} \quad\text{(paso adaptativo normali
 \paragraph{GaLore (Gradient Low-Rank Projection).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/galore.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/galore-es.pdf}}
 \caption{Flujo por paso de GaLore: proyección SVD periódica del gradiente a un subespacio de bajo rango, Adam en ese subespacio y reconstrucción.}
 \label{fig:opt-galore}
 \end{figure}
@@ -203,7 +203,7 @@ Al proyectar en un subespacio de rango $r$ (típicamente $r \ll \min(m,n)$), el 
 \paragraph{APOLLO, APOLLO-Mini, y Q-APOLLO.}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/apollo.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/apollo-es.pdf}}
 \caption{Flujo por paso de la familia APOLLO: momentos proyectados gaussianos, escalado estructurado del gradiente (por canales en APOLLO, escalar en APOLLO-Mini) y estado cuantizado en Q-APOLLO.}
 \label{fig:opt-apollo}
 \end{figure}
@@ -391,7 +391,7 @@ correcciones de sesgo y el denominador.
 \paragraph{Anon (Adaptivity Non-restricted Optimizer with Novel convergence technique).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/anon.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/anon-es.pdf}}
 \caption{Flujo por paso de Anon: el precondicionador IDU refrescado en potencias de dos, con adaptividad ajustable $\gamma$ y una actualización de momentum con corrección de sesgo.}
 \label{fig:opt-anon}
 \end{figure}
@@ -452,7 +452,7 @@ A diferencia de los optimizadores adaptativos estándar, IDU actualiza el precon
 \paragraph{Prodigy (Approximating the Distance Estimate).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/prodigy.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/prodigy-es.pdf}}
 \caption{Flujo por paso de Prodigy: una estimación de distancia signada acumulativa que escala el paso adaptativo sin programación de tasa de aprendizaje.}
 \label{fig:opt-prodigy}
 \end{figure}

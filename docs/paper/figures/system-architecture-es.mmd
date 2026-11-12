@@ -1,0 +1,30 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":26,"rankSpacing":34}}}%%
+flowchart TD
+  yaml["Configuración YAML"]
+  validation["Validación<br/>esquema + reglas"]
+  web["Web<br/>Streamlit"]
+  cli["CLI<br/>train / deploy / infer / web-server"]
+  model["Modelo<br/>49 mixers"]
+  train["Entrenamiento<br/>AMP + scheduler"]
+  opt["Optimizador<br/>23 familias"]
+  modelout["Construcción del modelo<br/>patrón + bucles"]
+  trainout["Bucle de entrenamiento<br/>chequeos + logs"]
+  optout["Paso del optimizador<br/>enrutado por grupo"]
+  deploy["Despliegue<br/>cuantización"]
+  sbert["SBERT<br/>búsqueda / agrupamiento"]
+  export["Exportación<br/>transformers / gguf"]
+
+  yaml --> validation
+  validation --> web
+  validation --> cli
+  validation --> model
+  validation --> train
+  validation --> opt
+  model --> modelout
+  train --> trainout
+  opt --> optout
+  trainout --> deploy
+  optout --> sbert
+  modelout -.-> trainout
+  optout -.-> deploy
+  cli --> export

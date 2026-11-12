@@ -29,7 +29,7 @@ que es $L_t$-suave con $L_t = \|x_t\|^2 + \lambda_t$.
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/falcon1.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon1-es.pdf}}
 \caption{Flujo de datos de Falcon-1: el par clave/valor alineado al prefijo impulsa una actualización escalar NLMS por regla delta del estado de pesos rápidos.}
 \label{fig:mixer-falcon1}
 \end{figure}
@@ -46,7 +46,7 @@ Con $\varepsilon = 0$, $\lambda_t = 0$ y la asignación sin desplazar $x_t = \ph
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/falcon2.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon2-es.pdf}}
 \caption{Flujo de datos de Falcon-2: tamaños de paso NLMS por columna actualizan el estado de pesos rápidos canal a canal.}
 \label{fig:mixer-falcon2}
 \end{figure}
@@ -63,7 +63,7 @@ El kernel chunk-parallel forma el Gram de claves compartido $G = X^\top X$ y res
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/falcon3.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon3-es.pdf}}
 \caption{Flujo de datos de Falcon-3: una ventana deslizante de pares alineados al prefijo aporta el estadístico espectral y la escritura por minilote.}
 \label{fig:mixer-falcon3}
 \end{figure}
@@ -92,14 +92,14 @@ produce escrituras puramente aditivas (hebbianas) con ganancias normalizadas por
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/falcon1a.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon1a-es.pdf}}
 \caption{Flujo de datos de Falcon-1A: una escritura aditiva (hebbiana) normalizada por energía con decaimiento derivado.}
 \label{fig:mixer-falcon1a}
 \end{figure}
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/falcon2a.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon2a-es.pdf}}
 \caption{Flujo de datos de Falcon-2A: escrituras aditivas por columna con decaimiento por canal.}
 \label{fig:mixer-falcon2a}
 \end{figure}
@@ -119,7 +119,7 @@ Con $\lambda_t = 0$ y la asignación sin desplazar esto es exactamente la atenci
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/mixers/falcon3a.pdf}}
+\fitfigure{\includegraphics{../paper/figures/mixers/falcon3a-es.pdf}}
 \caption{Flujo de datos de Falcon-3A: un estadístico de energía media en ventana deslizante normaliza la escritura aditiva de la ventana.}
 \label{fig:mixer-falcon3a}
 \end{figure}

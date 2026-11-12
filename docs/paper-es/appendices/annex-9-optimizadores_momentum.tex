@@ -2,7 +2,7 @@
 \paragraph{Adan (Momentum Nesterov Adaptativo).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/adan.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/adan-es.pdf}}
 \caption{Flujo por paso de Adan: estimación de momentum de Nesterov a partir de la diferencia de gradientes, con tres búferes de estado y un paso de momentum combinado.}
 \label{fig:opt-adan}
 \end{figure}
@@ -52,7 +52,7 @@ El término de \textbf{Estimación de Momentum Nesterov} (NME) $\bar{g}_t = g_t 
 \paragraph{ADOPT (Adam con Ajuste Óptimo Podado).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/adopt.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/adopt-es.pdf}}
 \caption{Flujo por paso de ADOPT: el segundo momento del paso anterior normaliza el gradiente actual antes de actualizar el primer momento.}
 \label{fig:opt-adopt}
 \end{figure}
@@ -99,7 +99,7 @@ m_t &= \beta_1 m_{t-1} + (1-\beta_1)\frac{g_t}{\sqrt{v_{t-1}}+\epsilon} \quad\te
 \paragraph{AdEMAMix (Mezcla de Promedios Móviles Exponenciales).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/ademamix.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/ademamix-es.pdf}}
 \caption{Flujo por paso de AdEMAMix: EMAs rápida y lenta en paralelo, mezcladas con un peso programado $\alpha_t$ antes de la actualización adaptativa.}
 \label{fig:opt-ademamix}
 \end{figure}
@@ -151,7 +151,7 @@ El peso de la mezcla $\alpha_t$ típicamente aumenta durante el entrenamiento, p
 \paragraph{MARS (Haciendo Brillar las Tasas de Aprendizaje Adaptativas).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/mars.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/mars-es.pdf}}
 \caption{Flujo por paso de MARS: una estimación recursiva de gradiente con varianza reducida que alimenta los momentos de primer y segundo orden estilo Adam.}
 \label{fig:opt-mars}
 \end{figure}
@@ -202,7 +202,7 @@ donde $\gamma \in [0.01, 0.1]$ controla cuánta información de gradiente histó
 \paragraph{Optimizadores Cautelosos (Cautious AdamW, Cautious Lion).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/cautious.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/cautious-es.pdf}}
 \caption{Flujo por paso de Cautious AdamW: una máscara de consenso conserva solo las coordenadas donde momentum y gradiente coinciden.}
 \label{fig:opt-cautious}
 \end{figure}

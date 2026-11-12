@@ -2,7 +2,7 @@
 \paragraph{Shampoo (Precondicionamiento Matricial mediante Productos de Kronecker).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/shampoo.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/shampoo-es.pdf}}
 \caption{Flujo por paso de Shampoo: matrices de Gram factorizadas por Kronecker, eigendescomposición periódica y precondicionamiento del gradiente con raíz cuarta.}
 \label{fig:opt-shampoo}
 \end{figure}
@@ -54,7 +54,7 @@ Shampoo aproxima el precondicionador de matriz completa de Adagrad $H^{-1/2}$ (d
 \paragraph{SOAP (Shampoo with Adam in eigenbasis).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/soap.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/soap-es.pdf}}
 \caption{Flujo por paso de SOAP: momentos de Adam en la base de eigenvectores de Shampoo, rotados de vuelta al espacio de parámetros.}
 \label{fig:opt-soap}
 \end{figure}
@@ -108,7 +108,7 @@ La idea clave: todo el seguimiento de momento ocurre en la base de eigenvectores
 \paragraph{Lion (EvoLved Sign Momentum).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/lion.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/lion-es.pdf}}
 \caption{Flujo por paso de Lion: actualización por signo del momentum con acumulación de momentum desacoplada y decaimiento de pesos.}
 \label{fig:opt-lion}
 \end{figure}
@@ -152,7 +152,7 @@ Todas las operaciones de escalado elemento a elemento se reemplazan con \texttt{
 \paragraph{Sophia (Second-Order Hessian Information with Optimized Approximation).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/sophia.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/sophia-es.pdf}}
 \caption{Flujo por paso de Sophia: estimación diagonal del Hessiano mediante Hutchinson con pasos recortados conscientes de la curvatura.}
 \label{fig:opt-sophia}
 \end{figure}
@@ -202,7 +202,7 @@ donde $\hat{h}_t$ es una estimación diagonal (e.g., estimador de traza de Hutch
 \paragraph{Muon (Ortogonalización de Newton-Schulz).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/muon.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/muon-es.pdf}}
 \caption{Flujo por paso de Muon: normalización de Frobenius seguida de iteraciones de Newton-Schulz que ortogonalizan la dirección de actualización.}
 \label{fig:opt-muon}
 \end{figure}
@@ -257,7 +257,7 @@ Siguiendo la receta híbrida de \citet{shen_convergence_2025}, la actualización
 \paragraph{Turbo-Muon (Ortogonalización Precondicionada con AOL).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/turbo-muon.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/turbo-muon-es.pdf}}
 \caption{Flujo por paso de Turbo-Muon: precondicionamiento casi ortogonal (AOL) antes de las iteraciones de Newton-Schulz, reduciendo su número.}
 \label{fig:opt-turbo-muon}
 \end{figure}
@@ -305,7 +305,7 @@ Turbo-Muon añade un paso de \textbf{precondicionamiento casi-ortogonal} (AOL) a
 \paragraph{AF-Muon (Muon sin AdamW para Vocabulario Atado).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/af-muon.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/af-muon-es.pdf}}
 \caption{Flujo por paso de AF-Muon: actualización espectral de Muon para matrices ocultas, LMO por fila con tope finito y conciencia de soporte para la tabla de vocabulario atada, y actualizaciones normalizadas por RMS para parámetros auxiliares unidimensionales, todo con un único búfer de primer momento.}
 \label{fig:opt-af-muon}
 \end{figure}
@@ -466,7 +466,7 @@ y devuelve $Q_T X$. Un \emph{reinicio} tras la iteración~2 ($X \gets Q_2 X$, $R
 \paragraph{ROOT (Optimizador Ortogonalizado Robusto).}
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/optimizers/root.pdf}}
+\fitfigure{\includegraphics{../paper/figures/optimizers/root-es.pdf}}
 \caption{Flujo por paso de ROOT: acumulación de momentum, separación de atípicos por soft-threshold y ortogonalización Newton--Schulz calibrada por forma.}
 \label{fig:opt-root}
 \end{figure}

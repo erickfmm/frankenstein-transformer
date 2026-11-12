@@ -1,0 +1,21 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  k["K = Wk·x<br/>[B,n,H]"]
+  v["V = Wv·x<br/>[B,n,H]"]
+  rep["repeat_kv(K, V)<br/>→ [B,n,H]"]
+  s["puntajes = QKᵀ/√d"]
+  sm["softmax<br/>(puntajes)"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "Wq" --> q
+  x -- "Wk (compartida)" --> k
+  x -- "Wv (compartida)" --> v
+  k -- "repite" --> rep
+  v -- "repite" --> rep
+  q -- "QKᵀ" --> s
+  rep -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  rep -- "V" --> o

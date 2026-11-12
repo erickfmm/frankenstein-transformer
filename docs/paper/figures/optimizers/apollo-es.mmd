@@ -1,0 +1,28 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  G["Gₜ = ∇φ(Wₜ)"]
+  cond{"¿t mod T = 0?"}
+  samp["remuestrea Pₜ ~ N(0, 1/r)"]
+  R["Rₜ = PₜGₜ"]
+  MR["Mᴿ ← β₁Mᴿ + (1−β₁)Rₜ"]
+  VR["Vᴿ ← β₂Vᴿ + (1−β₂)Rₜ²"]
+  Rn["R̃ = Mᴿ/(√Vᴿ + ε)"]
+  var{"¿variante?"}
+  srow["S = diag(‖R̃[i,:]‖/‖R[i,:]‖)<br/>APOLLO: por canal"]
+  ssc["S = ‖R̃‖/‖R‖<br/>APOLLO-Mini: por tensor"]
+  upd["Wₜ ← (1−ηλ)W − ηα(Gₜ ⊙ S)"]
+  q["Q-APOLLO: momentos guardados cuantizados<br/>(escala y desplazamiento por tensor)"]
+
+  G --> cond
+  cond -- "sí" --> samp --> R
+  cond -- "no" --> R
+  R --> MR
+  R --> VR
+  MR --> Rn
+  VR --> Rn
+  Rn --> var
+  var -- "APOLLO" --> srow --> upd
+  var -- "Mini" --> ssc --> upd
+  MR -. "cuantiza / descuantiza" .-> q
+  VR -. "cuantiza / descuantiza" .-> q
+  q -.-> upd

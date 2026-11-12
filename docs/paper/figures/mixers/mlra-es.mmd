@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  c["c_KV = W_down·x<br/>[B,n,r]"]
+  part["divide en<br/>L subcabezas"]
+  kv["Kᵢ, Vᵢ = W_up^(i)·cᵢ"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  s["puntajes = QKᵀ/√d"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "W_down" --> c
+  c -- "divide" --> part
+  part -- "W_up" --> kv
+  x -- "Wq" --> q
+  q -- "QKᵀ" --> s
+  kv -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  kv -- "V" --> o

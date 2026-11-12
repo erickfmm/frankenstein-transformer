@@ -1,0 +1,22 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  i["iteración t: toma el minilote Dₜ (compartido por todos los miembros)"]
+  s["sortea una semilla entera sⱼ por miembro (N, o N/2 antitéticas)"]
+  p1["pasada 1: θ ← θ ± σ·εⱼ, εⱼ = randn(sⱼ)"]
+  fit["rⱼ ← −f(θ; Dₜ) — aptitud por log-verosimilitud de tokens"]
+  back["restaura θ ∓ σ·εⱼ; repite para cada miembro"]
+  shape{"¿rank_shaping?"}
+  z["z-score: wⱼ = (rⱼ − r̄) / std(r)"]
+  rk["rangos centrados: wⱼ = rank(rⱼ) − (N−1)/2"]
+  p2["pasada 2: reproduce εⱼ desde sⱼ; ĝ ← (1/N) Σ wⱼ εⱼ"]
+  nes{"¿nes_scaling?"}
+  ua["θ ← θ + α·ĝ/N"]
+  un["θ ← θ + α·ĝ/(Nσ)"]
+  out["sin buffers de momento: ε y los pesos nunca se almacenan"]
+
+  i --> s --> p1 --> fit --> back --> shape
+  shape -- "no" --> z --> p2
+  shape -- "sí" --> rk --> p2
+  p2 --> nes
+  nes -- "no" --> ua --> out
+  nes -- "sí" --> un --> out

@@ -1,0 +1,8 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":24,"useMaxWidth":false,"wrappingWidth":240}}}%%
+flowchart TD
+  subgraph recurrent["Recurrente / retentiva: con estado, inferencia O(1) por paso"]
+    retnet["RetNet<br/>forma paralela / recurrente"]
+    mamba["Mamba<br/>SSM selectivo"]
+    ode["ODE<br/>profundidad continua"]
+    retnet ~~~ mamba ~~~ ode
+  end

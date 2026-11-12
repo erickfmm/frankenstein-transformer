@@ -1,0 +1,10 @@
+%%{init: {"theme":"neutral","flowchart":{"nodeSpacing":22,"rankSpacing":26,"wrappingWidth":260}}}%%
+flowchart TD
+  g["gₜ = ∇f(θₜ)"]
+  wd{"¿weight decay λ > 0?"}
+  gwd["gₜ ← gₜ + λθₜ"]
+  upd["θₜ₊₁ ← θₜ − η·gₜ"]
+
+  g --> wd
+  wd -- "sí" --> gwd --> upd
+  wd -- "no" --> upd

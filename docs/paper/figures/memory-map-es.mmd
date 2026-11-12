@@ -1,0 +1,8 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":24,"useMaxWidth":false,"wrappingWidth":240}}}%%
+flowchart TD
+  subgraph memory["Familia de memoria: almacenamiento persistente junto a la atención"]
+    titans["Titans<br/>ventana de atención + memoria<br/>asociativa guiada por sorpresa"]
+    engram["Engram<br/>búsquedas hash de N-gramas"]
+    ma["Memory Attention<br/>V = K + RMSNorm(E[s])"]
+    titans ~~~ engram ~~~ ma
+  end

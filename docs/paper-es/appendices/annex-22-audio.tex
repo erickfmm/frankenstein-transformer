@@ -11,7 +11,7 @@ La receta de referencia es el frontend Conformer de \citet{Gulati2020}: bancos d
 
 \begin{figure}[H]
 \centering
-\fitfigure{\includegraphics{../paper/figures/audio_frontend.pdf}}
+\fitfigure{\includegraphics{../paper/figures/audio_frontend-es.pdf}}
 \caption{Flujo de datos del frontend de audio: waveform $\to$ enmarcado 25\,ms/10\,ms $\to$ log-mel de 80 bins (o espectrograma, o tramas multicanal crudas) $\to$ SpecAugment (solo entrenamiento) $\to$ dos etapas Conv2d con stride 2 ($4\times$) $\to$ proyección lineal $\to$ pila \texttt{HybridLayer} $\to$ cabeza CTC, RNN-T o de clasificación.}
 \label{fig:audio-frontend}
 \end{figure}

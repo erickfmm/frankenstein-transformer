@@ -1,0 +1,20 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V = W·x<br/>[B,n,H]"]
+  alpha["decaimiento<br/>αₜ = f(Wα·x)"]
+  beta["escritura<br/>βₜ = σ(Wβ·x)"]
+  sp["Sₜ₋₁<br/>[dk,dv]"]
+  st["Sₜ = αₜ·Sₜ₋₁(I − βₜkₜkₜᵀ)<br/>+ βₜvₜkₜᵀ"]
+  o["O = Q·Sₜ<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "Wα" --> alpha
+  x -- "Wβ" --> beta
+  qkv -- "actualiza" --> st
+  alpha -- "actualiza" --> st
+  beta -- "actualiza" --> st
+  sp -- "arrastra" --> st
+  st -. "siguiente" .-> sp
+  st -- "lectura" --> o
+  qkv -- "Q" --> o

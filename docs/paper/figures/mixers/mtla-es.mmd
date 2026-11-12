@@ -1,0 +1,18 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  tc["compresión<br/>temporal"]
+  lat["K, V<br/>latentes"]
+  q["Q = Wq·x<br/>[B,n,H]"]
+  s["puntajes = QKᵀ/√d"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "temporal" --> tc
+  tc -- "latente" --> lat
+  x -- "Wq" --> q
+  q -- "QKᵀ" --> s
+  lat -- "QKᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  lat -- "V" --> o

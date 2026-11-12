@@ -107,9 +107,14 @@ render() { # render relative_mmd_path pdf|svg
 
 mapfile -t SOURCES < <(find . -name '*.mmd' -not -name 'test.mmd' | sed 's|^\./||' | sort)
 if [[ -n "$ONLY" ]]; then
+  # The patterns must not be glob-expanded against the working directory, so
+  # disable pathname expansion while they are split into words.
+  set -f
+  patterns=($ONLY)
+  set +f
   filtered=()
   for src in "${SOURCES[@]}"; do
-    for pattern in $ONLY; do
+    for pattern in "${patterns[@]}"; do
       # shellcheck disable=SC2053 # globs are the intent here
       if [[ "$src" == $pattern ]]; then
         filtered+=("$src")

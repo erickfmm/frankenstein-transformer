@@ -1,0 +1,29 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":20,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  wav["forma de onda<br/>[B, T·sample_rate]"]
+  raw["característica: cruda<br/>[B, C, T]<br/>EEG / EMG / sensores"]
+  fr["trama + ventana de Hann<br/>25 ms / 10 ms"]
+  mel["banco de filtros log-mel<br/>80 bandas"]
+  spec["espectrograma<br/>log|STFT|²"]
+  aug["SpecAugment<br/>(solo entrenamiento)"]
+  s1["Conv2d 3×3<br/>paso 2"]
+  s2["Conv2d 3×3<br/>paso 2"]
+  lin["lineal → d<br/>+ dropout"]
+  stack["HybridLayer × L<br/>4× tramas: 10 → 40 ms"]
+  ctc["cabeza CTC<br/>Lineal(d, vocab+1)"]
+  rnnt["cabeza RNN-T<br/>predictor LSTM + joint"]
+  cls["cabeza de clasificación<br/>GAP / CLS → K logits"]
+
+  wav -- "STFT" --> fr
+  fr -- "mel" --> mel
+  fr -- "magnitud" --> spec
+  mel -- "log" --> aug
+  spec -- "log" --> aug
+  raw -. "sin mel" .-> s1
+  aug -- "características 2-D" --> s1
+  s1 -- "÷2" --> s2
+  s2 -- "÷2" --> lin
+  lin -- "tokens" --> stack
+  stack -- "asr · ctc" --> ctc
+  stack -- "asr · transducer" --> rnnt
+  stack -- "audio_classification" --> cls

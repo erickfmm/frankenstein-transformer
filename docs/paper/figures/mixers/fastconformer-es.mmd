@@ -1,0 +1,22 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  qkv["Q, K, V<br/>[B,n,H]"]
+  gproj["Qg, Kg, Vg<br/>[B,n,H]<br/>(opcional)"]
+  win["local<br/>ventana w"]
+  glo["tokens de cabeza 0,s,…<br/>g globales"]
+  s["puntajes enmascarados =<br/>(w+g)⊗QKᵀ"]
+  sm["softmax"]
+  o["O = Wo·(softmax·V)<br/>[B,n,H]"]
+
+  x -- "Wqkv" --> qkv
+  x -- "Wg (aparte)" --> gproj
+  x -- "ventana" --> win
+  x -- "filas/cols globales" --> glo
+  qkv -- "máscara" --> s
+  gproj -- "filas/cols globales" --> s
+  win -- "máscara" --> s
+  glo -- "máscara" --> s
+  s -- "softmax" --> sm
+  sm -- "Wo" --> o
+  qkv -- "V" --> o
