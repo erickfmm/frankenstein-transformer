@@ -74,9 +74,22 @@ pin a specific browser, use:
 PUPPETEER_EXECUTABLE=/path/to/chrome ./build-figures.sh svg
 ```
 
-The Mermaid CLI is pinned to `@mermaid-js/mermaid-cli@11.4.2` (`--width` +
-`--pdfFit`): 12.x regresses `useMaxWidth:false` diagrams by wrapping every
-label into a ~168px column.
+### Why two Mermaid CLIs
+
+`build-figures.sh` pins a different Mermaid CLI per format on purpose:
+
+- **PDF (LaTeX): `@mermaid-js/mermaid-cli@12.2.0 --size <width>`.** This is the
+  figure style the paper was designed around: node gradients and the drop
+  shadow are rasterised at 300 dpi inside the PDF, and the page is fitted to
+  the diagram. `11.4.2` with `--width`/`--pdfFit` exports the same diagram as a
+  flat vector box with no shadows, which reads as a generic diagram next to the
+  rest of the paper.
+- **SVG (website Paper tab): `@mermaid-js/mermaid-cli@11.4.2 --width <width>
+  -C web-theme.css`.** Keeps the node metrics and thick outlines the published
+  render was tuned against.
+
+Both formats must be regenerated together for a figure change (`./build-figures.sh both`).
+`ONLY='mixers/kpa.mmd'` limits a run to matching sources.
 
 `puppeteer-config.json` is kept for manual runs of `mermaid-cli`; the build
 script generates its own temporary Puppeteer config so it works on machines

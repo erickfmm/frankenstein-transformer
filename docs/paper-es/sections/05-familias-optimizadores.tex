@@ -3,7 +3,7 @@
 
 Optimizar arquitecturas transformer grandes se complica por paisajes no convexos, puntos de silla y grupos de parámetros heterogéneos. El sistema soporta treinta y ocho familias de optimizadores en ocho categorías: líneas base clásicas (SGD, SGD con momentum, RMSProp, AdamW, RAdam); momentum y reducción de varianza (Adan, ADOPT, AdEMAMix, MARS, Cautious AdamW); métodos eficientes en memoria y de bajo rango (Adafactor, GaLore, Lion, APOLLO, APOLLO-Mini, Q-APOLLO, AdamPM); métodos sin programación y sin parámetros (Schedule-Free AdamW, Prodigy) con escalado para lotes grandes (LAMB); métodos conscientes de la curvatura y de segundo orden (Sophia, Shampoo, SOAP); métodos orientados a geometría (Muon, Turbo-Muon, AF-Muon, AdaMuon, Dion3, ROOT, Muon², NorMuon, Conda, TUON, NAMO, NAMO-D); optimizadores de adaptividad ajustable (Anon); y métodos evolutivos poblacionales (EvE, EA4LLM). Los algoritmos, el pseudocódigo y las comparaciones de memoria y complejidad se recopilan en el Apéndice~\ref{sec:annex-optimizers}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizer-routing.pdf}}
 \caption{Selección de optimizador en la práctica: la clase determina la regla de actualización, mientras que el esquema controla cómo se aplican los hiperparámetros en los diez bloques canónicos de parámetros (embeddings, encodings posicionales, atención, feed-forward, normalización, heads, mHC, routers, residuales y el resto de parámetros).}

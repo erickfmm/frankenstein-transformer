@@ -17,7 +17,7 @@ El sistema implementa cincuenta y seis mezcladores de secuencia organizados en n
     \item \textbf{Aumentados con convolución} (2): el bloque Conformer \citep{Gulati2020} fusiona atención multi-cabeza con un módulo de convolución depthwise entre dos capas feed-forward Macaron, aportando a cada capa una rama local junto al campo receptivo global; Fast Conformer \citep{rekesh_fastconformer_2023} conserva ese diseño para voz de forma larga y reemplaza la autoatención global por una ventana local limitada más un token global anclado a la cabecera (Anexo~\ref{sec:annex-conformer}).
 \end{enumerate}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/mixer-taxonomy.pdf}}
 \caption{Taxonomía de los cincuenta y cinco mezcladores de secuencia en nueve categorías funcionales. Las líneas base densas ofrecen enrutamiento global completo a costo cuadrático; los métodos recurrentes comprimen el estado para inferencia en tiempo constante; las variantes dispersas restringen el patrón de atención; los mecanismos con compuerta modulan retención y olvido; los métodos latentes comprimen las representaciones clave--valor; la familia de memoria combina una memoria asociativa en tiempo de prueba (Titans), búsquedas hash de N-gramas (Engram) y capacidad de valores indexada por token (Memory Attention); los métodos de peso rápido formulan la transición de estado como una regla de aprendizaje en línea; los métodos geométricos codifican priors estructurados; los métodos aumentados con convolución añaden una rama convolucional local junto a la atención.}
@@ -27,14 +27,14 @@ El sistema implementa cincuenta y seis mezcladores de secuencia organizados en n
 \subsection{Familias Densa y Recurrente}
 Las líneas base densas---softmax estándar \citep{vaswani_attention_2017}, atención sigmoide \citep{ramapuram_theory_2024} y Atención Continua \citep{khadangi_continuum_2026}, que reemplaza el softmax por la integración exacta de una densidad de relevancia exponencial sobre trayectorias clave/valor lineales por tramos---y la familia recurrente---RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023} y bloques tipo ODE \citep{zhang_continuous_2021}---definen el compromiso entre expresividad y eficiencia. Las formulaciones, las formas paralela y recurrente, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-transformer}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/dense-map.pdf}}
 \caption{Líneas base de atención densa. La atención estándar y la sigmoide calculan interacciones por pares completas; Grouped-Query Attention comparte cabezas clave--valor entre grupos de consultas, reduciendo el tráfico de memoria sin perder la expresividad de la atención completa.}
 \label{fig:dense-map}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/recurrent-map.pdf}}
 \caption{Familia recurrente y retentiva. RetNet ofrece formas paralela y recurrente, Mamba usa parámetros selectivos de espacio de estados y los bloques ODE modelan profundidad continua; todos logran inferencia en tiempo constante por paso.}
@@ -45,7 +45,7 @@ Las líneas base densas---softmax estándar \citep{vaswani_attention_2017}, aten
 \label{sec:memory-family}
 La familia de memoria agrupa tres mecanismos que añaden almacenamiento junto al operador de atención. Titans \citep{behrouz_titans_2025} ejecuta atención densa sobre una ventana local mientras una memoria asociativa impulsada por sorpresa se actualiza en tiempo de prueba; este repositorio implementa solo la ventana de atención, y el módulo de memoria neuronal no forma parte de la implementación. Engram \citep{cheng2026conditionalmemoryscalablelookup} recupera embeddings de N-gramas mediante tablas hash por orden y los incorpora con compuerta al flujo residual. Memory Attention \citep{kang_memory_attention_2026} conserva el operador de atención softmax estándar pero elimina la proyección de valores dedicada: los valores son las claves contextuales más una fila de memoria indexada por ID de token y específica de capa, \(V = K + \mathrm{Norm}(E[s])\), con RoPE aplicado solo al par de puntuación. Esto aumenta la capacidad de parámetros sin cómputo denso proporcional y mantiene un caché KV convencional en inferencia.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/memory-map.pdf}}
 \caption{Familia de memoria. Titans mantiene una memoria asociativa impulsada por sorpresa entre pasos junto a una ventana de atención local; Engram recupera embeddings de N-gramas mediante búsquedas hash; Memory Attention forma los valores a partir de las claves contextuales más una fila normalizada de una tabla de memoria por ID de token y por capa, reemplazando la proyección de valores y manteniendo la ponderación de atención cuadrática completa.}
@@ -55,7 +55,7 @@ La familia de memoria agrupa tres mecanismos que añaden almacenamiento junto al
 \subsection{Familia de Atención Latente y de Bajo Rango}
 Esta familia comprime el estado clave--valor por token en un latente de bajo rango: MLA, GQLA, MLRA, Tucker, KPA, TPA, MFA, IHA, GTA y MTLA unifican diseños agrupados, latentes, factorizados por Kronecker y CP, y temporales. CCA y CCGQA formulan la atención en un latente comprimido con agrupamiento desacoplado, mientras que GMA reemplaza la interacción por pares con enrutamiento probabilístico mediante componentes de mezcla gaussiana aprendidos. Las formulaciones, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-latent}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/latent-map.pdf}}
 \caption{Atención latente y de bajo rango. Los pares clave--valor se proyectan a un espacio latente de bajo rango, donde la atención se calcula a menor costo, y se proyectan de vuelta. Las variantes difieren en factorización, intercalado de cabezas, compresión temporal, formulación de covarianza cruzada y enrutamiento probabilístico.}
@@ -65,7 +65,7 @@ Esta familia comprime el estado clave--valor por token en un latente de bajo ran
 \subsection{Extensiones de Atención Dispersa}
 El registro incluye doce bloques dispersos \citep{child_sparse_transformer_2019,beltagy_longformer_2020,jolicoeur_sliding_window_2026,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026,kubicek_lsa_2026,wu_deep_sparse_conformer_2022}. Dos métodos en tiempo de inferencia, \texttt{fasa} y \texttt{sparge}, aplican su heurística dispersa solo cuando el modelo está en modo evaluación: durante el entrenamiento la capa híbrida contenedora sustituye atención estándar densa sobre las mismas proyecciones $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$, de modo que los pesos entrenados son exactamente los que lee la ruta dispersa en inferencia. \texttt{swa} también es sin entrenamiento pero es un mixer entrenable normal, por lo que ejecuta su patrón de ventana tanto en entrenamiento como en inferencia. LSA es el selector semántico de la familia: las claves se agrupan y se clusterizan con Ward por bloque de 512 tokens, y cada consulta puntúa los centroides de buckets en caché en lugar de todas las claves, seleccionando los $p$ buckets mejores que se expanden a sus $k$ claves de largo alcance sobre sumideros y una ventana de un bloque. ProbSparse \citep{wu_deep_sparse_conformer_2022,zhou_informer_2021} invierte el eje: ordena las consultas con una aproximación max--mean de la divergencia KL frente a la uniforme sobre un subconjunto muestreado de claves y solo puntúa las $u = c_2\lceil\ln L\rceil$ dominantes, lo que lleva la capa a $\mathcal{O}(L\log L)$ para encoders bidireccionales largos y deja la decodificación densa. Las formulaciones, el pseudocódigo, las características por bloque y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-sparse}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/sparse-map.pdf}}
 \caption{Decisiones de diseño en atención dispersa. Los métodos reducen el costo restringiendo vecindarios, construyendo grafos dispersos o seleccionando solo tokens o bloques de alto valor.}
@@ -77,7 +77,7 @@ La familia con compuerta contiene nueve bloques \citep{yang_gla_2023,yang_deltan
 
 La atención de peso rápido reformula la actualización recurrente como una regla de aprendizaje continuo en línea; las seis variantes Falcon \citep{zhang_falcon_2026} unifican la regresión estilo DeltaNet y las escrituras de atención lineal bajo semántica de lectura-tras-escritura con tamaños de paso normalizados y olvido explícito. Cada variante incluye un escaneo recurrente de referencia y un kernel paralelo por fragmentos. Las formulaciones, los parámetros de configuración y los resultados publicados se recopilan en el Apéndice~\ref{sec:annex-fast-weight}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/gating-template.pdf}}
 \caption{Plantilla genérica de compuerta. Una compuerta puede decaer la memoria existente, regular la fuerza de escritura o modular las salidas de atención densa, según la familia de bloques.}

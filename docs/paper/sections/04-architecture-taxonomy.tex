@@ -17,7 +17,7 @@ The system implements fifty-six sequence mixers organized into nine functional c
     \item \textbf{Convolution-augmented} (2): the Conformer block \citep{Gulati2020} fuses multi-head self-attention with a depthwise-convolution module between two Macaron feed-forward layers, giving every layer a local branch alongside the global receptive field; Fast Conformer \citep{rekesh_fastconformer_2023} keeps that design for long-form speech and replaces global self-attention with a limited local window plus a head-pinned global token (Appendix~\ref{sec:annex-conformer}).
 \end{enumerate}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/mixer-taxonomy.pdf}}
 \caption{Taxonomy of the fifty-six sequence mixers across nine functional categories. Dense baselines provide full global routing at quadratic cost; recurrent methods compress state for constant-time inference; sparse variants restrict the attention pattern; gated mechanisms modulate retention and forgetting; latent methods compress key--value representations; the memory family pairs a test-time associative memory (Titans), hash-based N-gram lookups (Engram), and token-indexed value capacity (Memory Attention); fast-weight methods cast the state transition as an online learning rule; geometric methods encode structured priors; convolution-augmented methods add a local convolution branch beside attention.}
@@ -27,14 +27,14 @@ The system implements fifty-six sequence mixers organized into nine functional c
 \subsection{Dense and Recurrent Families}
 The dense baselines---standard softmax \citep{vaswani_attention_2017}, sigmoid attention \citep{ramapuram_theory_2024}, and Continuum Attention \citep{khadangi_continuum_2026}, which replaces the softmax with exact integration of an exponential relevance density over piecewise-linear key/value trajectories---and the recurrent family---RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, and ODE-style blocks \citep{zhang_continuous_2021}---define the expressiveness-versus-efficiency trade-off. Formulations, parallel and recurrent forms, pseudocode, and a comparison table are collected in Appendix~\ref{sec:annex-transformer}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/dense-map.pdf}}
 \caption{Dense attention baselines. Standard and sigmoid attention compute full pairwise interactions; Grouped-Query Attention shares key--value heads across query groups, reducing memory traffic while keeping full attention expressivity.}
 \label{fig:dense-map}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/recurrent-map.pdf}}
 \caption{Recurrent and retentive family. RetNet offers parallel and recurrent forms, Mamba uses selective state-space parameters, and ODE blocks model continuous depth; all achieve constant-time per-step inference.}
@@ -56,7 +56,7 @@ token-ID-indexed memory row, \(V = K + \mathrm{Norm}(E[s])\), with RoPE applied
 only to the scoring pair. It increases parameter capacity without proportional
 dense computation and retains a conventional KV cache at inference.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/memory-map.pdf}}
 \caption{Memory family. Titans carries a surprise-driven associative memory across steps beside a local attention window; Engram retrieves N-gram embeddings through hash lookups; Memory Attention forms values from the contextual keys plus a normalized row of a per-layer token-ID memory table, replacing the value projection while keeping full quadratic attention weighting.}
@@ -66,7 +66,7 @@ dense computation and retains a conventional KV cache at inference.
 \subsection{Latent and Low-Rank Attention Family}
 This family compresses per-token key--value state into a low-rank latent: MLA, GQLA, MLRA, Tucker, KPA, TPA, MFA, IHA, GTA, and MTLA unify grouped-query, latent, Kronecker- and CP-factorized, and temporal designs. CCA and CCGQA formulate attention in a compressed latent with decoupled grouping, while GMA replaces pairwise interaction with probabilistic routing through learned Gaussian-mixture components. Formulations, pseudocode, and a comparison table are collected in Appendix~\ref{sec:annex-latent}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/latent-map.pdf}}
 \caption{Latent and low-rank attention. Key--value pairs are projected into a low-rank latent space, where attention is computed at reduced cost, and projected back. Variants differ in factorization, head interleaving, temporal compression, cross-covariance formulation, and probabilistic routing.}
@@ -76,7 +76,7 @@ This family compresses per-token key--value state into a low-rank latent: MLA, G
 \subsection{Sparse Attention Extensions}
 The registry includes twelve sparse blocks \citep{child_sparse_transformer_2019,beltagy_longformer_2020,jolicoeur_sliding_window_2026,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,lai_minimax_2026,fu_sparda_2026,kubicek_lsa_2026,wu_deep_sparse_conformer_2022}. Two inference-time methods, \texttt{fasa} and \texttt{sparge}, apply their sparse heuristic only when the model is in evaluation mode: during training the enclosing hybrid layer substitutes standard dense attention over the same $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$ projections, so the trained weights are exactly the ones the sparse path reads at inference. \texttt{swa} is also training-free but is a normal trainable mixer, so it runs its windowed pattern in both training and inference. LSA is the family's semantic selector: keys are pooled and Ward-clustered per 512-token block, and each query scores the cached bucket centroids instead of every key, selecting top-$p$ buckets that expand into its $k$ long-range keys on top of sinks and a one-block window. ProbSparse \citep{wu_deep_sparse_conformer_2022,zhou_informer_2021} inverts the axis: it ranks queries with a max--mean approximation of the KL divergence against the uniform distribution over a sampled key subset and scores only the top-$u = c_2\lceil\ln L\rceil$ dominant ones, which brings the layer to $\mathcal{O}(L\log L)$ for long bidirectional encoders while leaving decoding dense. Formulations, pseudocode, per-block characteristics, and a comparison table are collected in Appendix~\ref{sec:annex-sparse}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/sparse-map.pdf}}
 \caption{Sparse attention design choices. Methods reduce cost by restricting neighborhoods, constructing sparse graphs, or selecting only high-value tokens or blocks.}
@@ -88,7 +88,7 @@ The gated family contains nine blocks \citep{yang_gla_2023,yang_deltanet_2024,ya
 
 Fast-weight attention recasts the recurrent update as an online continual-learning rule; the six Falcon variants \citep{zhang_falcon_2026} unify DeltaNet-style regression and linear-attention writes under read-after-write semantics with normalized step sizes and explicit forgetting. Each variant ships a recurrent reference scan and a chunk-parallel kernel. Formulations, configuration knobs, and published results are collected in Appendix~\ref{sec:annex-fast-weight}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/gating-template.pdf}}
 \caption{Generic gating template. A gate can decay existing memory, regulate write strength, or modulate dense attention outputs, depending on the block family.}

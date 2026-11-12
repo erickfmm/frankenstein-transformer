@@ -5,7 +5,7 @@ The deploy stage converts a trained checkpoint into a deployment artifact throug
 
 The safetensors artifact supports two load-time runtimes. In the \emph{dequantize-on-load} runtime (v1), packed blocks are expanded to FP32 parameters while the model is loaded, so inference executes exactly like the unquantized backbone. In the \emph{packed-linear} runtime (v2), each quantized projection keeps its packed buffers and dequantizes inside \texttt{forward}; when a projection replaces a BitLinear layer, the input LayerNorm and INT8 activation quantization are preserved. Only two-dimensional linear weights whose last dimension is a multiple of 32 are quantized; embeddings, normalization parameters, biases and convolutions remain in FP32, which bounds the achievable compression ratio. The experiment harness exports \texttt{Q8\_0}, \texttt{Q4\_0} and \texttt{i2\_s} in both runtimes and reports their task accuracy alongside the unquantized export. The formulations, block layouts and size estimates are deferred to Appendix~\ref{sec:annex-bitnet}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/deploy-flow.pdf}}
 \caption{Deployment path from a trained checkpoint to a compact artifact. Quantization is a deploy-stage transformation rather than a separate model family.}

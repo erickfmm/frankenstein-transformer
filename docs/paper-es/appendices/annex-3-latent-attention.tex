@@ -427,7 +427,7 @@ que nunca materializa la afinidad normalizada implícita $A^{\text{GMA}}_{ij} = 
 \subsection{Atención de Producto de Kronecker (KPA)}
 \label{sec:kpa-es}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/mixers/kpa.pdf}}
 \caption{Atención de Producto de Kronecker (KPA). Cada matriz de consulta, clave y valor por token es una suma normalizada de productos de Kronecker de dos factores contextuales compactos: $A_r\in\mathbb{R}^{h_1\times d_1}$ particiona el eje de cabezas y $B_r\in\mathbb{R}^{h_2\times d_2}$ el eje de características dentro de cada cabeza. Solo los factores K/V entran al caché, y el RoPE Kronecker-separable rota únicamente el factor $B$.}
@@ -486,7 +486,7 @@ que aumenta con la asimetría de los factores.
 \subsection{Atención de Producto Tensorial (TPA)}
 \label{sec:tpa-es}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/mixers/tpa.pdf}}
 \caption{Atención de Producto Tensorial (TPA). Cada rebanada de consulta, clave y valor por token es una suma CP normalizada $\frac{1}{R}\sum_r a_r(x_t)\otimes b_r(x_t)$ de un vector del eje de cabezas $a_r\in\mathbb{R}^{h}$ y un vector del eje de características $b_r\in\mathbb{R}^{d_h}$. RoPE actúa fila a fila sobre los factores $B$, por lo que las claves cacheadas pueden almacenarse pre-rotadas; solo los cuatro flujos de factores entran al caché.}
@@ -547,7 +547,7 @@ Una variante fusionada en el espacio de factores (FlashTPA, Apéndice~A del pape
 \subsection{Atención de Factorización Multimatriz (MFA)}
 \label{sec:mfa-es}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/mixers/mfa.pdf}}
 \caption{Atención de Factorización Multimatriz (MFA). Las proyecciones compartidas $S_q,S_k,S_v\in\mathbb{R}^{H\times C}$ producen una única cabeza de clave y valor de ancho $C$, mientras que cada una de las $m$ cabezas posee un factor de consulta $Q_c\in\mathbb{R}^{C\times C}$ y una proyección de salida $O_c\in\mathbb{R}^{C\times H}$. Por tanto la caché KV guarda $2C$ flotantes por token independientemente de $m$ (solo $C$ con MFA-KR, que reconstruye los valores desde las claves mediante una compuerta inicializada en cero).}

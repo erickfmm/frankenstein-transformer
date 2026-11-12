@@ -458,7 +458,7 @@ which never materialises the implicit normalised affinity $A^{\text{GMA}}_{ij} =
 \subsection{Kronecker Product Attention (KPA)}
 \label{sec:kpa}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/mixers/kpa.pdf}}
 \caption{Kronecker Product Attention (KPA). Each per-token query, key and value matrix is a normalized sum of Kronecker products of two compact contextual factors: $A_r\in\mathbb{R}^{h_1\times d_1}$ partitions the head axis, $B_r\in\mathbb{R}^{h_2\times d_2}$ the within-head feature axis. Only the K/V factors enter the cache, and Kronecker-Separable RoPE rotates the $B$ factor alone.}
@@ -517,7 +517,7 @@ which increases with factor asymmetry.
 \subsection{Tensor Product Attention (TPA)}
 \label{sec:tpa}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/mixers/tpa.pdf}}
 \caption{Tensor Product Attention (TPA). Each per-token query, key and value slice is a normalized CP sum $\frac{1}{R}\sum_r a_r(x_t)\otimes b_r(x_t)$ of a head-axis vector $a_r\in\mathbb{R}^{h}$ and a feature-axis vector $b_r\in\mathbb{R}^{d_h}$. RoPE acts row-wise on the $B$ factors, so cached keys can be stored pre-rotated; only the four factor streams enter the cache.}
@@ -578,7 +578,7 @@ A fused factor-space variant (FlashTPA, Appendix~A of the paper) computes the he
 \subsection{Multi-matrix Factorization Attention (MFA)}
 \label{sec:mfa}
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/mixers/mfa.pdf}}
 \caption{Multi-matrix Factorization Attention (MFA). Shared projections $S_q,S_k,S_v\in\mathbb{R}^{H\times C}$ produce a single key and value head of width $C$, while each of the $m$ heads owns a query factor $Q_c\in\mathbb{R}^{C\times C}$ and an output projection $O_c\in\mathbb{R}^{C\times H}$. The KV cache therefore holds $2C$ floats per token regardless of $m$ (only $C$ under MFA-KR, which rebuilds values from keys through a zero-initialised gate).}

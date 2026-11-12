@@ -5,7 +5,7 @@ La etapa de despliegue convierte un checkpoint entrenado en un artefacto de desp
 
 El artefacto safetensors admite dos runtimes de carga. En el runtime \emph{dequantize-on-load} (v1), los bloques empaquetados se expanden a parámetros FP32 durante la carga, de modo que la inferencia se ejecuta igual que el backbone sin cuantizar. En el runtime \emph{packed-linear} (v2), cada proyección cuantizada conserva sus búferes empaquetados y des-cuantiza dentro de \texttt{forward}; cuando una proyección reemplaza a una capa BitLinear, se preservan el LayerNorm de entrada y la cuantización INT8 de activaciones. Solo se cuantizan pesos lineales bidimensionales cuya última dimensión es múltiplo de 32; los embeddings, los parámetros de normalización, los sesgos y las convoluciones permanecen en FP32, lo que acota la compresión alcanzable. El harness experimental exporta \texttt{Q8\_0}, \texttt{Q4\_0} e \texttt{i2\_s} en ambos runtimes y reporta su exactitud de tarea junto a la exportación sin cuantizar. Las formulaciones, los diseños de bloque y las estimaciones de tamaño se remiten al Apéndice~\ref{sec:annex-bitnet}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/deploy-flow.pdf}}
 \caption{Ruta de despliegue desde un checkpoint entrenado hasta un artefacto compacto. La cuantización es una transformación de la etapa de despliegue, no una familia de modelos separada.}

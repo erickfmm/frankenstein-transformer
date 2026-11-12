@@ -23,7 +23,7 @@ The authoritative contract is \path{src/schema.yaml}, a modular JSON Schema whos
 
 \paragraph{Optimizer selection.} \texttt{training.optimizer.optimizer\_class} selects one of thirty-eight optimizer families, summarized in Section~\ref{sec:optimizer-families} and detailed in Appendix~\ref{sec:annex-optimizers}.
 
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{figures/system-architecture.pdf}}
 \caption{System architecture: configuration flows through validation, partitions into model, training, and optimizer components, executes at runtime, and produces deployment and SBERT artifacts.}
