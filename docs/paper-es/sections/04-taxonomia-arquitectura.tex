@@ -10,7 +10,7 @@ El sistema implementa cincuenta mezcladores de secuencia organizados en nueve ca
     \item \textbf{Recurrentes y retentivas} (3): RetNet, Mamba y bloques tipo ODE mantienen estado para inferencia en tiempo constante mediante recurrencia, espacios de estados selectivos o profundidad continua.
     \item \textbf{Patrones dispersos} (11): Sparse Transformer, Longformer, SWA con sumideros de atención, BigBird, SparseK, NSA, SpargeAttn, FASA, MSA, SparDA y LSA reducen el costo cuadrático mediante dispersión estructurada, selección de tokens, poda sin entrenamiento o clustering semántico de claves.
     \item \textbf{Mecanismos con compuerta} (9): GLA, DeltaNet, Gated DeltaNet, Gated DeltaNet-2, HGRN2, FoX, Gated Softmax, KDA y First Passage Attention (FPA) introducen control dependiente de los datos sobre retención, olvido y fuerza de actualización.
-    \item \textbf{Compresión latente} (10): MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA y GMA comprimen el estado clave--valor en cuellos de botella de bajo rango o enrutan mediante una memoria latente de mezcla gaussiana.
+    \item \textbf{Compresión latente} (11): MLA, GQLA, MLRA, Tucker, KPA, IHA, GTA, MTLA, CCA, CCGQA y GMA comprimen el estado clave--valor en cuellos de botella de bajo rango o enrutan mediante una memoria latente de mezcla gaussiana.
     \item \textbf{Memoria} (3): Titans combina una ventana de atención local con una memoria asociativa impulsada por sorpresa que se actualiza en tiempo de prueba; Engram proporciona memoria de lectura/escritura en tiempo de prueba mediante búsquedas hash de N-gramas; Memory Attention reemplaza la proyección de valores dedicada por una tabla de memoria token-ID específica de capa.
     \item \textbf{Atención de peso rápido} (6): Falcon-1/2/3 y Falcon-1A/2A/3A tratan la transición de estado recurrente como una regla de aprendizaje continuo en línea \citep{zhang_falcon_2026}.
     \item \textbf{Campo geométrico} (1): SSOG aplica un prior geométrico estructurado sobre la matriz de atención \citep{pisoni_ssog_2026}.
@@ -20,7 +20,7 @@ El sistema implementa cincuenta mezcladores de secuencia organizados en nueve ca
 \begin{figure}[t]
 \centering
 \fitfigure{\includegraphics{../paper/figures/mixer-taxonomy.pdf}}
-\caption{Taxonomía de los cincuenta mezcladores de secuencia en nueve categorías funcionales. Las líneas base densas ofrecen enrutamiento global completo a costo cuadrático; los métodos recurrentes comprimen el estado para inferencia en tiempo constante; las variantes dispersas restringen el patrón de atención; los mecanismos con compuerta modulan retención y olvido; los métodos latentes comprimen las representaciones clave--valor; la familia de memoria combina una memoria asociativa en tiempo de prueba (Titans), búsquedas hash de N-gramas (Engram) y capacidad de valores indexada por token (Memory Attention); los métodos de peso rápido formulan la transición de estado como una regla de aprendizaje en línea; los métodos geométricos codifican priors estructurados; los métodos aumentados con convolución añaden una rama convolucional local junto a la atención.}
+\caption{Taxonomía de los cincuenta y un mezcladores de secuencia en nueve categorías funcionales. Las líneas base densas ofrecen enrutamiento global completo a costo cuadrático; los métodos recurrentes comprimen el estado para inferencia en tiempo constante; las variantes dispersas restringen el patrón de atención; los mecanismos con compuerta modulan retención y olvido; los métodos latentes comprimen las representaciones clave--valor; la familia de memoria combina una memoria asociativa en tiempo de prueba (Titans), búsquedas hash de N-gramas (Engram) y capacidad de valores indexada por token (Memory Attention); los métodos de peso rápido formulan la transición de estado como una regla de aprendizaje en línea; los métodos geométricos codifican priors estructurados; los métodos aumentados con convolución añaden una rama convolucional local junto a la atención.}
 \label{fig:comprehensive-taxonomy}
 \end{figure}
 
@@ -53,7 +53,7 @@ La familia de memoria agrupa tres mecanismos que añaden almacenamiento junto al
 \end{figure}
 
 \subsection{Familia de Atención Latente y de Bajo Rango}
-Esta familia comprime el estado clave--valor por token en un latente de bajo rango: MLA, GQLA, MLRA, Tucker, IHA, GTA y MTLA unifican diseños agrupados, latentes, factorizados y temporales. CCA y CCGQA formulan la atención en un latente comprimido con agrupamiento desacoplado, mientras que GMA reemplaza la interacción por pares con enrutamiento probabilístico mediante componentes de mezcla gaussiana aprendidos. Las formulaciones, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-latent}.
+Esta familia comprime el estado clave--valor por token en un latente de bajo rango: MLA, GQLA, MLRA, Tucker, KPA, IHA, GTA y MTLA unifican diseños agrupados, latentes, factorizados por Kronecker y temporales. CCA y CCGQA formulan la atención en un latente comprimido con agrupamiento desacoplado, mientras que GMA reemplaza la interacción por pares con enrutamiento probabilístico mediante componentes de mezcla gaussiana aprendidos. Las formulaciones, el pseudocódigo y una tabla comparativa se recopilan en el Apéndice~\ref{sec:annex-latent}.
 
 \begin{figure}[t]
 \centering

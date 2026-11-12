@@ -1,7 +1,7 @@
 \section{Comprehensive Summary Tables}
 \label{sec:annex-summary-tables}
 
-This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 50 sequence mixers across nine families, 38 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
+This appendix provides a complete reference of all components implemented in the Frankenstein Transformer codebase: 51 sequence mixers across nine families, 38 optimizers, 6 normalization variants, 43 activation functions, and 4 embedding methods. Each table is self-contained and cross-references the bibliography.
 
 \subsection{Sequence Mixer Summary}
 
@@ -81,12 +81,13 @@ falcon2a & Fast-weight & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Per-channel
 falcon3a & Fast-weight & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ + $\mathcal{O}(B)$ tail & Windowed additive; best length extrapolation & \citep{zhang_falcon_2026} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Latent (10)}} \\
+\multicolumn{6}{c}{\textbf{Latent (11)}} \\
 \midrule
 mla & Latent & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & KV latent of rank $r_{\text{kv}} \approx d/2$; DeepSeek-style & \citep{mehta_mla_2025} \\
 gqla & Latent & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & Hardware-adaptive dual decode paths; GQA + latent fusion & \citep{meng_gqla_2026} \\
 mlra & Latent & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & $L$ sub-heads; 4-way tensor-parallel compatible & \citep{liu_mlra_2026} \\
 tucker & Latent & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(k_{\text{rank}} \cdot n)$ & Tucker factorization; unifies MHA/GQA/MLA & \citep{klein_tucker_2026} \\
+kpa & Latent & $\mathcal{O}(n^2 d)$ & $\mathcal{O}((R_K{+}R_V)(h_1d_1{+}h_2d_2))$ per token & Kronecker-sum K/V factors; strictly generalizes TPA; Kronecker-Separable RoPE & \citep{nikpour_kpa_2026} \\
 iha & Latent & $\mathcal{O}(n^2 H^2)$ & $\mathcal{O}(H \cdot n \cdot d_h)$ & Pseudo-heads; $\Theta(\sqrt{k})$ parameter scaling & \citep{duvvuri_iha_2026} \\
 gta & Latent & $\mathcal{O}(n^2 \cdot G \cdot d_h)$ & $\mathcal{O}(r_v \cdot n)$ & Shared map + SiLU decoder; 62.5\% FLOP reduction & \citep{sun_gta_2025} \\
 mtla & Latent & $\mathcal{O}(n^2 d / m)$ & $\mathcal{O}(r_{\text{kv}} \cdot n / m)$ & Temporal merge; $5.3\times$ decode speedup & \citep{deng_mtla_2025} \\

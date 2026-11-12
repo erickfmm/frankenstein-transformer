@@ -49,6 +49,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "gqla",
             "mlra",
             "tucker",
+            "kpa",
             "iha",
             "gta",
             "mtla",
@@ -95,6 +96,10 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "gqla": {"latent_rank", "num_groups", "decode_path"},
             "mlra": {"latent_rank", "num_latent_heads"},
             "tucker": {"query_rank", "key_rank", "value_rank"},
+            "kpa": {
+                "h1", "h2", "d1", "d2",
+                "query_rank", "key_rank", "value_rank",
+            },
             "iha": {"num_pseudo_heads"},
             "gta": {"num_shared_groups", "value_latent_rank"},
             "mtla": {"latent_rank", "merge_factor", "stride"},
@@ -150,7 +155,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             )
 
     def test_cache_specs_match_layer_pattern_enum(self):
-        """T12: CACHE_SPECS covers every built-in mixer (50).
+        """T12: CACHE_SPECS covers every built-in mixer (51).
 
         The assembled enum may also contain plugin mixers (config-declared
         plugins are loaded by other tests in the same process), so assert
@@ -165,7 +170,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
                 "layer_pattern"
             ]["items"]["enum"]
         )
-        self.assertEqual(len(CACHE_SPECS), 51)
+        self.assertEqual(len(CACHE_SPECS), 52)
         self.assertTrue(set(CACHE_SPECS).issubset(enum_values))
 
     def test_inference_schema_is_referenced(self):

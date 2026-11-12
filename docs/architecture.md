@@ -389,7 +389,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-51 enum values in 9 families. `config subkey` is the optional
+52 enum values in 9 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -436,6 +436,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `gqla` | Latent | `gqla.*` | yes |
 | `mlra` | Latent | `mlra.*` | yes |
 | `tucker` | Latent | `tucker.*` | yes |
+| `kpa` | Latent | `kpa.*` | yes |
 | `iha` | Latent | `iha.*` | yes |
 | `gta` | Latent | `gta.*` | yes |
 | `mtla` | Latent | `mtla.*` | yes |
@@ -754,7 +755,7 @@ logical roles). Per-layer storage is typed:
 | `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
 
 **Capability registry (D5).** `src/model/cache/capabilities.py` re-exports the
-per-mixer `CacheSpec` declared on each registry `MixerSpec` (50 built-ins) and
+per-mixer `CacheSpec` declared on each registry `MixerSpec` (51 built-ins) and
 derives its `CACHE_SPECS` map from the registry. A layer caches only when
 the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
 (incremental branch implemented + parity-tested). Everything else receives

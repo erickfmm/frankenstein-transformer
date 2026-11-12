@@ -1,9 +1,9 @@
 """Unit tests for the latent / KV-compression attention family.
 
-Covers the nine latent mixers introduced in the latent/ subpackage:
-MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA (arXiv:2506.09342,
-2605.15250, 2603.02188, 2603.30033, 2602.21371, 2506.17286, 2505.13544,
-2510.04476).
+Covers the ten latent mixers introduced in the latent/ subpackage:
+MLA, GQLA, MLRA, Tucker, IHA, GTA, MTLA, CCA, CCGQA, KPA
+(arXiv:2506.09342, 2605.15250, 2603.02188, 2603.30033, 2602.21371,
+2506.17286, 2505.13544, 2510.04476, 2610.12657).
 """
 import unittest
 from importlib.util import find_spec
@@ -23,6 +23,7 @@ if TORCH_AVAILABLE:
         MTLAAttention,
         CCAAttention,
         CCGQAAttention,
+        KPAAttention,
     )
 
 
@@ -275,6 +276,71 @@ class CCGQAAttentionTests(unittest.TestCase):
     def test_kv_larger_than_query_raises(self):
         with self.assertRaises(ValueError):
             CCGQAAttention(_cfg(attention={'ccgqa': {'query_latent_rank': 12, 'kv_latent_rank': 24, 'num_kv_heads': 6}}))  # kv > query
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class KPAAttentionTests(unittest.TestCase):
+    """Kronecker Product Attention (arXiv:2610.12657)."""
+
+    def test_output_shape(self):
+        attn = KPAAttention(_cfg())
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_mode(self):
+        attn = KPAAttention(_cfg(dims={'mode': 'decoder'}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_explicit_knobs(self):
+        attn = KPAAttention(_cfg(attention={'kpa': {
+            'h1': 2, 'h2': 3, 'd1': 1, 'd2': 8,
+            'query_rank': 4, 'key_rank': 2, 'value_rank': 3,
+        }}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+        self.assertEqual((attn.h1, attn.h2, attn.d1, attn.d2), (2, 3, 1, 8))
+
+    def test_auto_split_defaults(self):
+        attn = KPAAttention(_cfg())
+        self.assertEqual(attn.h1 * attn.h2, attn.num_heads)
+        self.assertEqual(attn.d1 * attn.d2, attn.head_dim)
+        # 6 heads -> largest proper divisor 3; head_dim 8 -> d1 = 8, d2 = 1
+        self.assertEqual((attn.h1, attn.h2), (3, 2))
+        self.assertEqual((attn.d1, attn.d2), (8, 1))
+
+    def test_invalid_head_split_raises(self):
+        with self.assertRaises(ValueError):
+            KPAAttention(_cfg(attention={'kpa': {'h1': 4, 'h2': 4}}))  # 16 != 6
+
+    def test_invalid_feature_split_raises(self):
+        with self.assertRaises(ValueError):
+            KPAAttention(_cfg(attention={'kpa': {'d1': 3, 'd2': 3}}))  # 9 != 8
+
+    def test_invalid_rank_raises(self):
+        with self.assertRaises(ValueError):
+            KPAAttention(_cfg(attention={'kpa': {'key_rank': 0}}))
+
+    def test_no_nan_inf(self):
+        attn = KPAAttention(_cfg(dims={'mode': 'decoder'}))
+        out = attn(_x())
+        self.assertTrue(torch.isfinite(out).all())
+
+    def test_gradient_flows(self):
+        attn = KPAAttention(_cfg())
+        x = _x().requires_grad_(True)
+        attn(x).sum().backward()
+        self.assertIsNotNone(x.grad)
+
+    def test_param_count_formula(self):
+        cfg = _cfg()
+        attn = KPAAttention(cfg)
+        h = cfg.dims.hidden_size
+        s = attn.h1 * attn.d1 + attn.h2 * attn.d2
+        expected = h * (attn.query_rank + attn.key_rank + attn.value_rank) * s + h * h
+        actual = sum(p.numel() for p in attn.parameters())
+        self.assertEqual(actual, expected)
+
+    def test_bitnet_enabled_forward(self):
+        attn = KPAAttention(_cfg(bitnet={'enabled': True}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
 
 if __name__ == "__main__":

@@ -271,6 +271,9 @@ ATTENTIONS = [
     "gated_deltanet2", "hgrn2", "fox", "gated_softmax",
     "engram", "gqa", "mla", "gqla", "mlra",
     "tucker", "iha", "gta", "mtla", "cca", "ccgqa",
+    # Kronecker Product Attention (arXiv:2610.12657): Kronecker-factored K/V
+    # with a per-token latent factor cache; trains densely in both modes.
+    "kpa",
     "msa", "sparda", "kda", "gma", "ssog",
     "falcon1", "falcon2", "falcon3", "falcon1a",
     "falcon2a", "falcon3a",

@@ -1,7 +1,7 @@
 \section{Tablas de Resumen Completas}
 \label{sec:annex-summary-tables}
 
-Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 50 mezcladores de secuencia en nueve familias, 38 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
+Este anexo proporciona una referencia completa de todos los componentes implementados en el código base de Frankenstein Transformer: 51 mezcladores de secuencia en nueve familias, 38 optimizadores, 6 variantes de normalización, 43 funciones de activación y 4 métodos de embedding. Cada tabla es autocontenida y referencia la bibliografía.
 
 \subsection{Resumen de Mezcladores de Secuencia}
 
@@ -81,12 +81,13 @@ falcon2a & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ & Decaimient
 falcon3a & Peso rápido & $\mathcal{O}(L d^2)$ & $\mathcal{O}(d^2)$ + cola $\mathcal{O}(B)$ & Aditivo con ventana; mejor extrapolación de longitud & \citep{zhang_falcon_2026} \\
 \midrule
 
-\multicolumn{6}{c}{\textbf{Latente (10)}} \\
+\multicolumn{6}{c}{\textbf{Latente (11)}} \\
 \midrule
 mla & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & KV latente de rango $r_{\text{kv}} \approx d/2$; estilo DeepSeek & \citep{mehta_mla_2025} \\
 gqla & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & Rutas de decodificación duales adaptativas al hardware; fusión GQA + latente & \citep{meng_gqla_2026} \\
 mlra & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(r_{\text{kv}} \cdot n)$ & $L$ sub-cabezas; compatible con tensor-paralelismo de 4 vías & \citep{liu_mlra_2026} \\
 tucker & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}(k_{\text{rank}} \cdot n)$ & Factorización Tucker; unifica MHA/GQA/MLA & \citep{klein_tucker_2026} \\
+kpa & Latente & $\mathcal{O}(n^2 d)$ & $\mathcal{O}((R_K{+}R_V)(h_1d_1{+}h_2d_2))$ por token & Factores K/V como suma de Kronecker; generaliza estrictamente a TPA; RoPE Kronecker-separable & \citep{nikpour_kpa_2026} \\
 iha & Latente & $\mathcal{O}(n^2 H^2)$ & $\mathcal{O}(H \cdot n \cdot d_h)$ & Pseudo-cabezas; escalado de parámetros $\Theta(\sqrt{k})$ & \citep{duvvuri_iha_2026} \\
 gta & Latente & $\mathcal{O}(n^2 \cdot G \cdot d_h)$ & $\mathcal{O}(r_v \cdot n)$ & Mapa compartido + decodificador SiLU; reducción de FLOPs del 62.5\% & \citep{sun_gta_2025} \\
 mtla & Latente & $\mathcal{O}(n^2 d / m)$ & $\mathcal{O}(r_{\text{kv}} \cdot n / m)$ & Fusión temporal; aceleración de decodificación de $5.3\times$ & \citep{deng_mtla_2025} \\

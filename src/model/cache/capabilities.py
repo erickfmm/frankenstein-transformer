@@ -65,6 +65,7 @@ IMPLEMENTED_MIXERS = frozenset(
         "gqla",           # F1
         "mlra",           # F1
         "tucker",         # F1
+        "kpa",            # F1 (Kronecker factor streams, expand + RoPE per step)
         "iha",            # F1 (pseudo-mix after cache read)
         "gta",            # F1 (grouped post-RoPE keys + latent values)
         # ---- F1 sparse family ----

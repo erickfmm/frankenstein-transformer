@@ -23,9 +23,9 @@ A **schema-first, config-driven transformer experimentation toolkit**: pick mixe
 
 | Mixers | Optimizers | Pos. Encodings | Activations | Norms | Model Classes | Tasks | Presets | CLI Commands |
 |:------:|:----------:|:--------------:|:-----------:|:-----:|:-------------:|:-----:|:-------:|:------------:|
-| **50** | **38** | **12** | **44** | **6** | **4** | **9** | **189** | **4** |
+| **51** | **38** | **12** | **44** | **6** | **4** | **9** | **189** | **4** |
 
-> **51 mixer architectures** — 50 mixer classes plus the `mamba` linear passthrough; the schema exposes all 51 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
+> **52 mixer architectures** — 51 mixer classes plus the `mamba` linear passthrough; the schema exposes all 52 `layer_pattern` values. The positional-encoding count includes `none`; 11 methods inject position.
 
 ## How It Works
 
@@ -122,7 +122,7 @@ code as the built-ins.
 
 | Feature | Scale |
 |---------|-------|
-| Sequence mixer architectures | **51** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
+| Sequence mixer architectures | **52** across 9 families: Dense, Recurrent, Sparse, Gated, Fast-Weight, Latent, Geometric, Convolution-augmented, Memory |
 | Optimizer families | 38 across 8 categories |
 | Positional encodings | 12 model-wide (11 active + `none`): `rope`, `hope`, `nope`, `alibi`, `bam`, `pape*`, `sinusoidal_*`, `learned_absolute`, with per-mixer opt-out |
 | FFN activations | 44 (40 elementwise + `swiglu`, `geglu`, `reglu`, `situ`) |
@@ -170,7 +170,7 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 | **Sparse** (11) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), and semantic key-clustering patterns |
 | **Gated** (9) | `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa`, `gated_softmax`, `kda` | Linear attention with multiplicative gates, delta rules, gated softmax, and path-extremum forgetting |
 | **Fast-Weight** (6) | `falcon1`, `falcon2`, `falcon3`, `falcon1a`, `falcon2a`, `falcon3a` | Fast-weight / online-learning attention with per-layer fast-weight update rules |
-| **Latent** (10) | `mla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`, `cca`, `ccgqa`, `gma` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
+| **Latent** (11) | `mla`, `gqla`, `mlra`, `tucker`, `kpa`, `iha`, `gta`, `mtla`, `cca`, `ccgqa`, `gma` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, Kronecker-product factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
 | **Geometric** (1) | `ssog` | Separable Sum of Gaussians — geometric field attention |
 | **Convolution-augmented** (2) | `conformer`, `fastconformer` | Macaron FFN₁ + MHSA + depthwise-conv module (arXiv:2005.08100); Fast Conformer's limited-context window plus a head-pinned global token (arXiv:2305.05084) |
 | **Memory** (3) | `titan`, `engram`, `memory` | Test-time memory attention, n-gram conditional memory lookup, and token-ID memory values `V = K + Norm(E[s])` (arXiv:2609.28399) |

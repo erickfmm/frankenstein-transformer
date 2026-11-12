@@ -455,3 +455,61 @@ which never materialises the implicit normalised affinity $A^{\text{GMA}}_{ij} =
     \item \textbf{Strengths}: Fixed-$K$ linear-time sequence mixing; probabilistic interpretable routing; bidirectional and causal variants; non-negative low-rank affinity interpretation $A^{\text{GMA}} = \mathrm{diag}(d)^{-1} \Gamma^Q (\Gamma^K)^\top$.
     \item \textbf{Limitations}: Quality depends on $K$ and the routing dimension $d_r$; causal GMA trails optimised SDPA and state-space models on WikiText-103 in the paper's current implementation; not a universal replacement for softmax attention.
 \end{itemize}
+\subsection{Kronecker Product Attention (KPA)}
+\label{sec:kpa}
+
+\begin{figure}[t]
+\centering
+\fitfigure{\includegraphics{figures/mixers/kpa.pdf}}
+\caption{Kronecker Product Attention (KPA). Each per-token query, key and value matrix is a normalized sum of Kronecker products of two compact contextual factors: $A_r\in\mathbb{R}^{h_1\times d_1}$ partitions the head axis, $B_r\in\mathbb{R}^{h_2\times d_2}$ the within-head feature axis. Only the K/V factors enter the cache, and Kronecker-Separable RoPE rotates the $B$ factor alone.}
+\label{fig:mixer-kpa}
+\end{figure}
+
+Kronecker Product Attention (KPA) \citep{nikpour_kpa_2026} is a KV-compression mixer that factorises the per-token key, value and query matrices as normalized sums of Kronecker products of compact contextual factors. Unlike Tensor Product Attention (TPA), whose CP decomposition operates on vectors, KPA acts on matrices and therefore encodes structure at both the head and the feature level; rank-one CP factorisation is recovered as the degenerate split $h_1=h, d_1=1, h_2=1, d_2=d_h$, so KPA strictly generalises TPA at the same parameter budget.
+
+\subsubsection{Mathematical Foundation}
+Let $h = h_1 h_2$ be the number of heads and $d_h = d_1 d_2$ the head width. For a token with hidden state $x_t \in \mathbb{R}^{d_{\text{model}}}$, the Kronecker product obeys the mixed-product identity
+\[
+(M \otimes N)(P \otimes Q) = (MP) \otimes (NQ),
+\]
+and the three projections are
+\[
+Q_t = \frac{1}{R_Q}\sum_{r=1}^{R_Q} A^Q_r(x_t)\otimes B^Q_r(x_t),\quad
+K_t = \frac{1}{R_K}\sum_{r=1}^{R_K} A^K_r(x_t)\otimes B^K_r(x_t),\quad
+V_t = \frac{1}{R_V}\sum_{r=1}^{R_V} A^V_r(x_t)\otimes B^V_r(x_t),
+\]
+with $A^\cdot_r(x_t) = W^{A^\cdot}_r x_t \in \mathbb{R}^{h_1\times d_1}$ and $B^\cdot_r(x_t) = W^{B^\cdot}_r x_t \in \mathbb{R}^{h_2\times d_2}$ produced by independent bias-free linear maps; the rank index is merged into a single batched projection per factor kind. Heads are indexed by pairs $(i_1,i_2)$ with $i_1\in[h_1]$, $i_2\in[h_2]$, and the mixed-product identity factorises every attention score into a head-level and a feature-level inner product:
+\[
+\mathrm{score}_{(i_1,i_2)}(t,s) = \frac{1}{R_Q R_K}\sum_{r=1}^{R_Q}\sum_{r'=1}^{R_K}
+\bigl[(A^Q_r)_{i_1}^{\top}(A^K_{r'})_{i_1}\bigr]\,
+\bigl[(B^Q_r)_{i_2}^{\top}(B^K_{r'})_{i_2}\bigr].
+\]
+Kronecker-Separable RoPE uses the operator $R_{\mathrm{KPA}}(t) = I_{d_1}\otimes R^{(2)}_\theta(t)$ with frequencies $\theta_j = 10000^{-2j/d_2}$ calibrated to $d_2$. Because $(I_{d_1}\otimes R^{(2)}_\theta(t))((A_r)_{i_1}\otimes(B_r)_{i_2}) = (A_r)_{i_1}\otimes R^{(2)}_\theta(t)(B_r)_{i_2}$, only the $B$ factor is rotated, the $A$ factor is cached unrotated, and the relative-position property follows from $R^{(2)}_\theta(t)^{\top}R^{(2)}_\theta(s) = R^{(2)}_\theta(s-t)$; no decoupled RoPE branch is needed.
+The cache stores $\{A^K_r, B^K_r\}_{r=1}^{R_K}\cup\{A^V_r, B^V_r\}_{r=1}^{R_V}$ per token (with $B^K$ pre-rotated), at a cost of $(R_K+R_V)(h_1d_1+h_2d_2)$ floats instead of $2h_1h_2d_1d_2$ for MHA, i.e. a compression factor
+\[
+C_{\mathrm{KPA}} = \frac{2h_1h_2d_1d_2}{(R_K+R_V)(h_1d_1+h_2d_2)},
+\]
+which increases with factor asymmetry.
+
+\subsubsection{Algorithmic Pseudocode}
+\begin{algorithmic}[1]
+\State \textbf{Input:} hidden state $X\in\mathbb{R}^{n\times d}$, splits $h_1 h_2 = H$, $d_1 d_2 = d_h$, ranks $R_Q, R_K, R_V$
+\State $A^Q \gets \texttt{reshape}(X W^{A^Q}, n, R_Q, h_1, d_1)$, \quad $B^Q \gets \texttt{reshape}(X W^{B^Q}, n, R_Q, h_2, d_2)$
+\State likewise $(A^K,B^K)$ with $R_K$ and $(A^V,B^V)$ with $R_V$ \Comment{bias-free factor projections}
+\For{each of $Q,K,V$}
+    \State $M \gets \frac{1}{R}\sum_{r} A_r \otimes B_r$ \Comment{Kronecker sum, eqs. (2)--(4)}
+    \State $M \gets \texttt{reshape}(M, n, h_1 h_2, d_1 d_2)$ \Comment{head $(i_1,i_2)\mapsto i_1 h_2 + i_2$}
+\EndFor
+\State apply $R_{\mathrm{KPA}}$ to $Q$ and $K$ \Comment{rotate $B$ only; $A$ stays unrotated}
+\State $S \gets QK^{\top}/\sqrt{d_h}$; \quad $S \gets \texttt{mask}(S)$ if causal
+\State $O \gets \texttt{softmax}(S)\,V$; \quad \textbf{Output:} $Y = O W_O$
+\end{algorithmic}
+
+\subsubsection{Key Characteristics}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n^2 d)$ attention plus $\mathcal{O}\big(n\,d\,(R_Q+R_K+R_V)(h_1d_1+h_2d_2)\big)$ factor projections.
+    \item \textbf{Inference complexity}: $\mathcal{O}(n\,h\,d_h)$ attention per step and $\mathcal{O}\big((R_K+R_V)(h_1d_1+h_2d_2)\big)$ cached state per token; $6.4\times$--$10\times$ KV compression in the paper.
+    \item \textbf{Trainable}: trained from scratch (nanoGPT + SwiGLU + RoPE) at 125M, 353M, 773M and 1.5B parameters on FineWeb-Edu for $\sim$50B tokens.
+    \item \textbf{Strengths}: strict generalisation of TPA with richer block structure at matched parameters; RoPE-compatible without MLA's decoupled branch; the head split $h_1\times h_2$ is a design-time compression/accuracy knob with no architectural change.
+    \item \textbf{Limitations}: the paper fixes $d_1=d_2=8$ and evaluates only causal language models; an efficient factored decoding kernel and long-context evaluation are left as future work; materialising the Kronecker sums is quadratic in the sequence length like dense attention.
+\end{itemize}

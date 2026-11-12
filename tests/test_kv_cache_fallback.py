@@ -50,9 +50,9 @@ def _build(pattern, pe="rope", **extra):
 class RegistryConsistencyTests(unittest.TestCase):
     def test_capacity_spec_covers_every_enum_value(self):
         enum = _schema_enum()
-        # CACHE_SPECS is derived from the built-in specs (50); the assembled
+        # CACHE_SPECS is derived from the built-in specs (51); the assembled
         # enum may also contain config-declared plugin mixers.
-        self.assertEqual(len(CACHE_SPECS), 51)
+        self.assertEqual(len(CACHE_SPECS), 52)
         self.assertTrue(set(CACHE_SPECS).issubset(set(enum)))
         # All implemented mixers must exist in the schema enum.
         self.assertTrue(IMPLEMENTED_MIXERS.issubset(set(enum)))

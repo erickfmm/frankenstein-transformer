@@ -8,6 +8,7 @@ Latent Attention
    gqla
    gta
    iha
+   kpa
    mla
    mlra
    mtla

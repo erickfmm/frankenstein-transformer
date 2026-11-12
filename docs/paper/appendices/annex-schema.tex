@@ -95,6 +95,16 @@ attention.tucker.query\_rank & int $\ge 1$ & Tucker rank for query weight tensor
 attention.tucker.key\_rank & int $\ge 1$ & Tucker rank for key weight tensor. Default: \texttt{hidden\_size // 2}. \\
 attention.tucker.value\_rank & int $\ge 1$ & Tucker rank for value weight tensor. Default: \texttt{hidden\_size // 2}. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.attention.kpa.*}} \\
+\midrule
+attention.kpa.h1 & int $\ge 1$ (or \texttt{null}) & Head-partition factor count; $h_1 h_2 = \texttt{num\_heads}$. Default: largest proper divisor of \texttt{num\_heads}. \\
+attention.kpa.h2 & int $\ge 1$ (or \texttt{null}) & Within-head factor count. Default: \texttt{num\_heads // h1}. \\
+attention.kpa.d1 & int $\ge 1$ & Head-partition factor width; $d_1 d_2 = \texttt{head\_dim}$. Default: 8 (falls back to the largest divisor of \texttt{head\_dim}). \\
+attention.kpa.d2 & int $\ge 1$ (or \texttt{null}) & Within-head factor width. Default: \texttt{head\_dim // d1}. \\
+attention.kpa.query\_rank & int $\ge 1$ & Number of Kronecker terms for the query. Default: 6. \\
+attention.kpa.key\_rank & int $\ge 1$ & Number of Kronecker terms for the key (cached). Default: 2. \\
+attention.kpa.value\_rank & int $\ge 1$ & Number of Kronecker terms for the value (cached). Default: 2. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.attention.iha.*}} \\
 \midrule
 attention.iha.num\_pseudo\_heads & int $\ge 1$ & Number of pseudo-heads per head for IHA. Default: \texttt{num\_heads}. \\
@@ -277,6 +287,7 @@ mla & Multi-Head Latent Attention + RoPE & \checkmark & \checkmark \\
 gqla & Group-Query Latent Attention --- two decoding paths & \checkmark & \checkmark \\
 mlra & Multi-Head Low-Rank Attention --- partitionable latent & \checkmark & \checkmark \\
 tucker & Tucker Attention --- generalised low-rank factorisation & \checkmark & \checkmark \\
+kpa & Kronecker Product Attention --- Kronecker-sum K/V factors, Kronecker-Separable RoPE & \checkmark & \checkmark \\
 iha & Interleaved Head Attention --- cross-head pseudo-heads & \checkmark & \checkmark \\
 gta & Grouped-head laTenT Attention --- shared map + latent values & \checkmark & \checkmark \\
 mtla & Multi-head Temporal Latent Attention --- temporal KV merge & \checkmark & \checkmark \\

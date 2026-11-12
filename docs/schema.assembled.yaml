@@ -950,6 +950,8 @@ properties:
 
               | `tucker` | Tucker Attention — generalised low-rank factorisation (paper: arxiv:2603.30033) | ✅ | ✅ |
 
+              | `kpa` | Kronecker Product Attention — sums of Kronecker products of contextual factors, Kronecker-Separable RoPE (paper: arxiv:2610.12657) | ✅ | ✅ |
+
               | `iha` | Interleaved Head Attention — cross-head pseudo-heads (paper: arxiv:2602.21371) | ✅ | ✅ |
 
               | `gta` | Grouped-head laTenT Attention — shared map + latent values (paper: arxiv:2506.17286) | ✅ | ✅ |
@@ -1074,6 +1076,8 @@ properties:
 
               | `tucker` | Tucker Attention — factorización de bajo rango generalizada (paper: arxiv:2603.30033) | ✅ | ✅ |
 
+              | `kpa` | Atención de Producto de Kronecker — sumas de productos de Kronecker de factores contextuales, RoPE Kronecker-separable (paper: arxiv:2610.12657) | ✅ | ✅ |
+
               | `iha` | Interleaved Head Attention — pseudo-cabezas entre cabezas (paper: arxiv:2602.21371) | ✅ | ✅ |
 
               | `gta` | Grouped-head laTenT Attention — mapa compartido + valores latentes (paper: arxiv:2506.17286) | ✅ | ✅ |
@@ -1148,6 +1152,7 @@ properties:
               - hgrn2
               - iha
               - kda
+              - kpa
               - longformer
               - lsa
               - mamba
@@ -2766,6 +2771,13 @@ properties:
                 title_es: Codificación posicional de kda
                 description: Whether `kda` consumes the model-wide positional encoding.
                 description_es: Si `kda` consume la codificación posicional global.
+              kpa_use_pe:
+                type: boolean
+                default: true
+                title: kpa positional encoding
+                title_es: Codificación posicional de kpa
+                description: Whether `kpa` consumes the model-wide positional encoding.
+                description_es: Si `kpa` consume la codificación posicional global.
               longformer_use_pe:
                 type: boolean
                 default: true
@@ -5346,6 +5358,253 @@ properties:
                   **Referencias:** (paper: arxiv:2607.24653)'
                 examples:
                 - true
+          kpa:
+            type: object
+            additionalProperties: false
+            title: Kronecker Product Attention
+            title_es: Atención de Producto de Kronecker
+            description: 'Hyperparameters for `kpa` (Kronecker Product Attention (paper: arxiv:2610.12657)).
+
+              Each per-token query, key and value matrix is a normalized sum of
+
+              Kronecker products `(1/R) Σ_r A_r ⊗ B_r` of two compact contextual
+
+              factors: `A_r ∈ R^{h1×d1}` partitions the head axis and `B_r ∈ R^{h2×d2}`
+
+              the within-head feature axis, with `h1*h2 == num_heads` and
+
+              `d1*d2 == head_dim`. Only the K/V factors are cached, at
+
+              `(R_K+R_V)(h1*d1+h2*d2)` floats per token instead of `2*num_heads*head_dim`
+
+              for MHA (6.4×–10× compression in the paper). Setting
+
+              `h1 = num_heads, d1 = 1, h2 = 1, d2 = head_dim` recovers Tensor Product
+
+              Attention. Only applies when `kpa` appears in `layer_pattern`.
+
+
+              **References:** (paper: arxiv:2610.12657)'
+            description_es: 'Hiperparámetros para `kpa` (Atención de Producto de Kronecker (paper: arxiv:2610.12657)).
+
+              Cada matriz de query, key y value por token es una suma normalizada de
+
+              productos de Kronecker `(1/R) Σ_r A_r ⊗ B_r` de dos factores
+
+              contextuales compactos: `A_r ∈ R^{h1×d1}` particiona el eje de cabezas y
+
+              `B_r ∈ R^{h2×d2}` el eje de características dentro de cada cabeza, con
+
+              `h1*h2 == num_heads` y `d1*d2 == head_dim`. Solo se cachean los factores
+
+              K/V, a `(R_K+R_V)(h1*d1+h2*d2)` flotantes por token en lugar de
+
+              `2*num_heads*head_dim` para MHA (compresión de 6.4×–10× en el paper).
+
+              Ajustar `h1 = num_heads, d1 = 1, h2 = 1, d2 = head_dim` recupera Tensor
+
+              Product Attention. Solo aplica cuando `kpa` está en `layer_pattern`.
+
+
+              **Referencias:** (paper: arxiv:2610.12657)'
+            properties:
+              h1:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: KPA Head Split (h1)
+                title_es: Partición de Cabezas KPA (h1)
+                description: 'Head-partition factor count `h1` of `kpa` (paper: arxiv:2610.12657,
+
+                  §2.2), with `h1*h2 == num_heads`. `null` picks the largest proper
+
+                  divisor of `num_heads` (the paper''s best configurations are
+
+                  asymmetric with the larger factor in `h1`: `8×2` for 16 heads,
+
+                  `10×2` for 20). A more unequal split increases KV compression
+
+                  (eq. 10) at the same parameter budget.
+
+
+                  **References:** (paper: arxiv:2610.12657)'
+                description_es: 'Número de factores de partición de cabezas `h1` de `kpa`
+
+                  (paper: arxiv:2610.12657, §2.2), con `h1*h2 == num_heads`. `null`
+
+                  elige el mayor divisor propio de `num_heads` (las mejores
+
+                  configuraciones del paper son asimétricas con el factor mayor en
+
+                  `h1`: `8×2` para 16 cabezas, `10×2` para 20). Una partición más
+
+                  desigual aumenta la compresión del KV (ec. 10) con el mismo
+
+                  presupuesto de parámetros.
+
+
+                  **Referencias:** (paper: arxiv:2610.12657)'
+                examples:
+                - 8
+              h2:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: KPA Within-Head Factor Count (h2)
+                title_es: Número de Factores Intra-Cabeza KPA (h2)
+                description: 'Within-head factor count `h2` of `kpa`, with
+
+                  `h1*h2 == num_heads`. `null` defaults to `num_heads // h1`.
+
+
+                  **References:** (paper: arxiv:2610.12657)'
+                description_es: 'Número de factores intra-cabeza `h2` de `kpa`, con
+
+                  `h1*h2 == num_heads`. `null` por defecto es `num_heads // h1`.
+
+
+                  **Referencias:** (paper: arxiv:2610.12657)'
+                examples:
+                - 2
+              d1:
+                type: integer
+                default: 8
+                title: KPA Feature Split (d1)
+                title_es: Partición de Características KPA (d1)
+                description: 'Head-partition factor width `d1` of `kpa`, with
+
+                  `d1*d2 == head_dim`. Default 8, matching the paper''s fixed
+
+                  `d1 = d2 = 8` (Appendix C). If `head_dim` is not divisible by the
+
+                  requested value the module falls back to the largest divisor of
+
+                  `head_dim` not exceeding it.
+
+
+                  **References:** (paper: arxiv:2610.12657)'
+                description_es: 'Ancho del factor de partición de cabezas `d1` de `kpa`, con
+
+                  `d1*d2 == head_dim`. Por defecto 8, igual que el `d1 = d2 = 8` fijo
+
+                  del paper (Apéndice C). Si `head_dim` no es divisible por el valor
+
+                  pedido, el módulo recurre al mayor divisor de `head_dim` que no lo
+
+                  exceda.
+
+
+                  **Referencias:** (paper: arxiv:2610.12657)'
+                examples:
+                - 8
+              d2:
+                type:
+                - integer
+                - 'null'
+                default: null
+                title: KPA Within-Head Factor Width (d2)
+                title_es: Ancho del Factor Intra-Cabeza KPA (d2)
+                description: 'Within-head factor width `d2` of `kpa`, with
+
+                  `d1*d2 == head_dim`. `null` defaults to `head_dim // d1`. The
+
+                  Kronecker-Separable RoPE frequencies are calibrated to `d2`
+
+                  (Theorem 2.4).
+
+
+                  **References:** (paper: arxiv:2610.12657)'
+                description_es: 'Ancho del factor intra-cabeza `d2` de `kpa`, con
+
+                  `d1*d2 == head_dim`. `null` por defecto es `head_dim // d1`. Las
+
+                  frecuencias del RoPE Kronecker-separable se calibran a `d2`
+
+                  (Teorema 2.4).
+
+
+                  **Referencias:** (paper: arxiv:2610.12657)'
+                examples:
+                - 8
+              query_rank:
+                type: integer
+                default: 6
+                title: KPA Query Rank (R_Q)
+                title_es: Rango de Query KPA (R_Q)
+                description: 'Number of Kronecker terms `R_Q` for the query of `kpa`
+
+                  (paper: arxiv:2610.12657, §3.1 uses `R_Q = 6`). Queries are never
+
+                  cached, so `R_Q` can exceed `key_rank`/`value_rank` freely at no
+
+                  inference-memory cost.
+
+
+                  **References:** (paper: arxiv:2610.12657)'
+                description_es: 'Número de términos de Kronecker `R_Q` para el query de `kpa`
+
+                  (paper: arxiv:2610.12657, §3.1 usa `R_Q = 6`). Los queries nunca se
+
+                  cachean, así que `R_Q` puede superar libremente a
+
+                  `key_rank`/`value_rank` sin coste de memoria en inferencia.
+
+
+                  **Referencias:** (paper: arxiv:2610.12657)'
+                examples:
+                - 6
+              key_rank:
+                type: integer
+                default: 2
+                title: KPA Key Rank (R_K)
+                title_es: Rango de Key KPA (R_K)
+                description: 'Number of Kronecker terms `R_K` for the key of `kpa`
+
+                  (paper: arxiv:2610.12657, §3.1 uses `R_K = R_V = 2`). Together with
+
+                  `value_rank` it sets the cached per-token cost
+
+                  `(R_K+R_V)(h1*d1+h2*d2)` and the compression factor of eq. 10.
+
+
+                  **References:** (paper: arxiv:2610.12657)'
+                description_es: 'Número de términos de Kronecker `R_K` para el key de `kpa`
+
+                  (paper: arxiv:2610.12657, §3.1 usa `R_K = R_V = 2`). Junto con
+
+                  `value_rank` fija el coste cacheado por token
+
+                  `(R_K+R_V)(h1*d1+h2*d2)` y el factor de compresión de la ec. 10.
+
+
+                  **Referencias:** (paper: arxiv:2610.12657)'
+                examples:
+                - 2
+              value_rank:
+                type: integer
+                default: 2
+                title: KPA Value Rank (R_V)
+                title_es: Rango de Value KPA (R_V)
+                description: 'Number of Kronecker terms `R_V` for the value of `kpa`
+
+                  (paper: arxiv:2610.12657, §3.1 uses `R_K = R_V = 2`). See
+
+                  `key_rank` for the cached-cost formula.
+
+
+                  **References:** (paper: arxiv:2610.12657)'
+                description_es: 'Número de términos de Kronecker `R_V` para el value de `kpa`
+
+                  (paper: arxiv:2610.12657, §3.1 usa `R_K = R_V = 2`). Ver
+
+                  `key_rank` para la fórmula del coste cacheado.
+
+
+                  **Referencias:** (paper: arxiv:2610.12657)'
+                examples:
+                - 2
           lsa:
             type: object
             additionalProperties: false

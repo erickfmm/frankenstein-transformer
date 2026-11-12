@@ -424,3 +424,61 @@ que nunca materializa la afinidad normalizada implícita $A^{\text{GMA}}_{ij} = 
     \item \textbf{Fortalezas}: Mezcla de secuencias en tiempo lineal con $K$ fijo; enrutamiento probabilístico interpretable; variantes bidireccional y causal; interpretación de afinidad de rango bajo no negativa $A^{\text{GMA}} = \mathrm{diag}(d)^{-1} \Gamma^Q (\Gamma^K)^\top$.
     \item \textbf{Limitaciones}: La calidad depende de $K$ y la dimensión de enrutamiento $d_r$; la GMA causal queda por debajo de SDPA optimizada y modelos de espacio de estados en WikiText-103 en la implementación actual del paper; no es un reemplazo universal para la atención softmax.
 \end{itemize}
+\subsection{Atención de Producto de Kronecker (KPA)}
+\label{sec:kpa-es}
+
+\begin{figure}[t]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/kpa.pdf}}
+\caption{Atención de Producto de Kronecker (KPA). Cada matriz de consulta, clave y valor por token es una suma normalizada de productos de Kronecker de dos factores contextuales compactos: $A_r\in\mathbb{R}^{h_1\times d_1}$ particiona el eje de cabezas y $B_r\in\mathbb{R}^{h_2\times d_2}$ el eje de características dentro de cada cabeza. Solo los factores K/V entran al caché, y el RoPE Kronecker-separable rota únicamente el factor $B$.}
+\label{fig:mixer-kpa-es}
+\end{figure}
+
+La Atención de Producto de Kronecker (KPA) \citep{nikpour_kpa_2026} es un mixer de compresión de KV que factoriza las matrices de clave, valor y consulta por token como sumas normalizadas de productos de Kronecker de factores contextuales compactos. A diferencia de Tensor Product Attention (TPA), cuya descomposición CP opera sobre vectores, KPA actúa sobre matrices y por tanto codifica estructura tanto a nivel de cabeza como de características; la factorización CP de rango uno se recupera como la partición degenerada $h_1=h, d_1=1, h_2=1, d_2=d_h$, de modo que KPA generaliza estrictamente a TPA con el mismo presupuesto de parámetros.
+
+\subsubsection{Fundamento Matemático}
+Sea $h = h_1 h_2$ el número de cabezas y $d_h = d_1 d_2$ el ancho de cabeza. Para un token con estado oculto $x_t \in \mathbb{R}^{d_{\text{model}}}$, el producto de Kronecker satisface la identidad de producto mixto
+\[
+(M \otimes N)(P \otimes Q) = (MP) \otimes (NQ),
+\]
+y las tres proyecciones son
+\[
+Q_t = \frac{1}{R_Q}\sum_{r=1}^{R_Q} A^Q_r(x_t)\otimes B^Q_r(x_t),\quad
+K_t = \frac{1}{R_K}\sum_{r=1}^{R_K} A^K_r(x_t)\otimes B^K_r(x_t),\quad
+V_t = \frac{1}{R_V}\sum_{r=1}^{R_V} A^V_r(x_t)\otimes B^V_r(x_t),
+\]
+con $A^\cdot_r(x_t) = W^{A^\cdot}_r x_t \in \mathbb{R}^{h_1\times d_1}$ y $B^\cdot_r(x_t) = W^{B^\cdot}_r x_t \in \mathbb{R}^{h_2\times d_2}$ producidos por mapas lineales independientes sin sesgo; el índice de rango se fusiona en una única proyección batcheada por tipo de factor. Las cabezas se indexan por pares $(i_1,i_2)$ con $i_1\in[h_1]$, $i_2\in[h_2]$, y la identidad de producto mixto factoriza cada puntaje de atención en un producto interno a nivel de cabeza y otro a nivel de características:
+\[
+\mathrm{score}_{(i_1,i_2)}(t,s) = \frac{1}{R_Q R_K}\sum_{r=1}^{R_Q}\sum_{r'=1}^{R_K}
+\bigl[(A^Q_r)_{i_1}^{\top}(A^K_{r'})_{i_1}\bigr]\,
+\bigl[(B^Q_r)_{i_2}^{\top}(B^K_{r'})_{i_2}\bigr].
+\]
+El RoPE Kronecker-separable usa el operador $R_{\mathrm{KPA}}(t) = I_{d_1}\otimes R^{(2)}_\theta(t)$ con frecuencias $\theta_j = 10000^{-2j/d_2}$ calibradas a $d_2$. Como $(I_{d_1}\otimes R^{(2)}_\theta(t))((A_r)_{i_1}\otimes(B_r)_{i_2}) = (A_r)_{i_1}\otimes R^{(2)}_\theta(t)(B_r)_{i_2}$, solo se rota el factor $B$, el factor $A$ se cachea sin rotar, y la propiedad de posición relativa se sigue de $R^{(2)}_\theta(t)^{\top}R^{(2)}_\theta(s) = R^{(2)}_\theta(s-t)$; no se necesita una rama RoPE desacoplada.
+El caché almacena $\{A^K_r, B^K_r\}_{r=1}^{R_K}\cup\{A^V_r, B^V_r\}_{r=1}^{R_V}$ por token (con $B^K$ pre-rotado), a un coste de $(R_K+R_V)(h_1d_1+h_2d_2)$ flotantes en lugar de $2h_1h_2d_1d_2$ para MHA, es decir un factor de compresión
+\[
+C_{\mathrm{KPA}} = \frac{2h_1h_2d_1d_2}{(R_K+R_V)(h_1d_1+h_2d_2)},
+\]
+que aumenta con la asimetría de los factores.
+
+\subsubsection{Pseudocódigo Algorítmico}
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} estado oculto $X\in\mathbb{R}^{n\times d}$, particiones $h_1 h_2 = H$, $d_1 d_2 = d_h$, rangos $R_Q, R_K, R_V$
+\State $A^Q \gets \texttt{reshape}(X W^{A^Q}, n, R_Q, h_1, d_1)$, \quad $B^Q \gets \texttt{reshape}(X W^{B^Q}, n, R_Q, h_2, d_2)$
+\State análogamente $(A^K,B^K)$ con $R_K$ y $(A^V,B^V)$ con $R_V$ \Comment{proyecciones de factores sin sesgo}
+\For{cada uno de $Q,K,V$}
+    \State $M \gets \frac{1}{R}\sum_{r} A_r \otimes B_r$ \Comment{suma de Kronecker, ecs. (2)--(4)}
+    \State $M \gets \texttt{reshape}(M, n, h_1 h_2, d_1 d_2)$ \Comment{cabeza $(i_1,i_2)\mapsto i_1 h_2 + i_2$}
+\EndFor
+\State aplicar $R_{\mathrm{KPA}}$ a $Q$ y $K$ \Comment{rotar solo $B$; $A$ queda sin rotar}
+\State $S \gets QK^{\top}/\sqrt{d_h}$; \quad $S \gets \texttt{mask}(S)$ si es causal
+\State $O \gets \texttt{softmax}(S)\,V$; \quad \textbf{Salida:} $Y = O W_O$
+\end{algorithmic}
+
+\subsubsection{Características Clave}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad de entrenamiento}: atención $\mathcal{O}(n^2 d)$ más proyecciones de factores $\mathcal{O}\big(n\,d\,(R_Q+R_K+R_V)(h_1d_1+h_2d_2)\big)$.
+    \item \textbf{Complejidad de inferencia}: atención $\mathcal{O}(n\,h\,d_h)$ por paso y estado cacheado $\mathcal{O}\big((R_K+R_V)(h_1d_1+h_2d_2)\big)$ por token; compresión de KV de $6.4\times$--$10\times$ en el paper.
+    \item \textbf{Entrenable}: entrenado desde cero (nanoGPT + SwiGLU + RoPE) a 125M, 353M, 773M y 1.5B parámetros sobre FineWeb-Edu durante $\sim$50B tokens.
+    \item \textbf{Fortalezas}: generalización estricta de TPA con estructura de bloques más rica a igual presupuesto; compatible con RoPE sin la rama desacoplada de MLA; la partición de cabezas $h_1\times h_2$ es un control de compresión/precisión en tiempo de diseño sin cambios arquitectónicos.
+    \item \textbf{Limitaciones}: el paper fija $d_1=d_2=8$ y evalúa solo modelos de lenguaje causales; un kernel de decodificación factorizada eficiente y la evaluación en contextos largos quedan como trabajo futuro; materializar las sumas de Kronecker es cuadrático en la longitud de secuencia, como la atención densa.
+\end{itemize}

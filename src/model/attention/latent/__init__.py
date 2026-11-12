@@ -1,6 +1,6 @@
 """Latent and KV-compression attention family.
 
-This subpackage groups nine dense-attention variants that reduce the
+This subpackage groups ten dense-attention variants that reduce the
 Key-Value cache footprint or mix information across attention heads,
 generalising Grouped-Query Attention (GQA) along complementary axes:
 
@@ -51,6 +51,12 @@ generalising Grouped-Query Attention (GQA) along complementary axes:
   mixing). Supports bidirectional (encoder) and causal (decoder, via
   prefix cumsums) variants.
 
+* :class:`KPAAttention` -- Kronecker Product Attention (KPA),
+  arXiv:2610.12657. Represents each per-token K/V as a normalized sum of
+  Kronecker products of compact contextual factors, caches only the
+  factors (6.4x-10x compression), and rotates only the ``B`` factor under
+  Kronecker-Separable RoPE (no decoupled branch).
+
 All modules follow the project attention-mixer interface:
 ``forward(x: torch.Tensor, logical_layer_idx: Optional[int] = None) ->
 torch.Tensor`` and accept an :class:`FrankensteinModelConfig`-like ``config`` object
@@ -68,6 +74,7 @@ from .gta import GTAAttention
 from .mtla import MTLAAttention
 from .cca import CCAAttention, CCGQAAttention
 from .gma import GaussianMixtureAttention
+from .kpa import KPAAttention
 
 __all__ = [
     "MLAAttention",
@@ -80,4 +87,5 @@ __all__ = [
     "CCAAttention",
     "CCGQAAttention",
     "GaussianMixtureAttention",
+    "KPAAttention",
 ]
