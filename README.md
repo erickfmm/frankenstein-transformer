@@ -131,7 +131,7 @@ code as the built-ins.
 | Model classes | `frankenstein_text_encoder`, `frankenstein_text_decoder`, `frankenstein_vit`, `frankenstein_audio` + reusable in-process engine API |
 | Training tasks | `mlm`, `sbert`, `causal_lm`, `patch_prediction`, `classification`, `segmentation`, `text_classification`, `asr`, `audio_classification` |
 | Normalization types | `layer_norm`, `dynamic_tanh`, `derf`, `rms_norm`, `prms_norm`, `flash_norm` |
-| Config presets | 54 named presets + 135 example configs (schema smoke-tested in CI) |
+| Config presets | 55 named presets + 136 example configs (schema smoke-tested in CI) |
 | CLI subcommands | 4 (`train`, `deploy`, `infer`, `web-server`) |
 | Web configuration UI | Streamlit schema-driven YAML builder |
 | Quantized deployment | BitNet + checkpoint export pipeline (HF safetensors `q8_0`/`q4_0`/`i2_s` / GGUF) |
@@ -170,14 +170,14 @@ All model-executing commands accept `--device auto|cpu|cuda|mps`.
 | **Sparse** (11) | `sparse_transformer`, `longformer`, `swa`, `bigbird`, `sparsek`, `nsa`, `sparge` ⚠️, `fasa` ⚠️, `msa`, `sparda`, `lsa` | Factorized, sliding-window, token-selection, block-sparse (GQA-based), and semantic key-clustering patterns |
 | **Gated** (9) | `gla`, `deltanet`, `gated_deltanet`, `gated_deltanet2`, `hgrn2`, `fox`, `fpa`, `gated_softmax`, `kda` | Linear attention with multiplicative gates, delta rules, gated softmax, and path-extremum forgetting |
 | **Fast-Weight** (6) | `falcon1`, `falcon2`, `falcon3`, `falcon1a`, `falcon2a`, `falcon3a` | Fast-weight / online-learning attention with per-layer fast-weight update rules |
-| **Latent** (13) | `mla`, `gqla`, `gmla`, `mlra`, `tucker`, `kpa`, `tpa`, `iha`, `gta`, `mtla`, `cca`, `ccgqa`, `gma` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, Kronecker-product factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
+| **Latent** (14) | `mla`, `gqla`, `gmla`, `mlra`, `tucker`, `kpa`, `tpa`, `mfa`, `iha`, `gta`, `mtla`, `cca`, `ccgqa`, `gma` | KV-compression and head-mixing variants generalising GQA (latent attention, Tucker factorisation, Kronecker-product factorisation, interleaved pseudo-heads, temporal merging, compressed convolutional attention, Gaussian mixture attention) |
 | **Geometric** (1) | `ssog` | Separable Sum of Gaussians — geometric field attention |
 | **Convolution-augmented** (2) | `conformer`, `fastconformer` | Macaron FFN₁ + MHSA + depthwise-conv module (arXiv:2005.08100); Fast Conformer's limited-context window plus a head-pinned global token (arXiv:2305.05084) |
 | **Memory** (3) | `titan`, `engram`, `memory` | Test-time memory attention, n-gram conditional memory lookup, and token-ID memory values `V = K + Norm(E[s])` (arXiv:2609.28399) |
 
 ⚠️ `sparge` and `fasa` are **inference-sparse**: they train as dense attention over their own projections, then activate their sparse heuristic in `eval()`. They are valid in training presets.
 
-Configure via `layer_pattern` in YAML. The schema accepts 54 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
+Configure via `layer_pattern` in YAML. The schema accepts 55 mixer values. See [src/schema.yaml](src/schema.yaml) for the full mixer reference table and [docs/architecture.md](docs/architecture.md#74-sequence-mixers-modeldimslayer_pattern) for the mixer registry and extension recipe.
 
 ## Optimizer Categories
 
@@ -288,7 +288,7 @@ This engine powers the **`dashai-frankenstein` plugin**, which registers Franken
 | [docs/figures/readme-command-flow.mmd](docs/figures/readme-command-flow.mmd) | Source for the README command/pipeline figure |
 | [docs/architecture.md](docs/architecture.md) | Canonical implementation spec: architecture, state, extension guide |
 | [docs/architecture.md](docs/architecture.md#711-vision-transformer-image-vision_dataset) | Vision Transformer (frankenstein_vit) — patch prediction, classification, segmentation |
-| [docs/architecture.md](docs/architecture.md#component-registry-and-plugin-schema-assembly) | Component registry, plugin schema assembly, and mixer selection guide (54 architectures / 9 families) |
+| [docs/architecture.md](docs/architecture.md#component-registry-and-plugin-schema-assembly) | Component registry, plugin schema assembly, and mixer selection guide (55 architectures / 9 families) |
 | [docs/dashai-plugin-audit.md](docs/dashai-plugin-audit.md) | DashAI plugin integration design and status |
 | [frankenstein-transformer.readthedocs.io](https://frankenstein-transformer.readthedocs.io/en/latest/) | Full hosted documentation (specification, API, papers, bibliography) |
 | [docs/transformers_compatibility.md](docs/transformers_compatibility.md) | HuggingFace export compatibility guide |

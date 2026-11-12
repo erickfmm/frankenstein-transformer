@@ -25,6 +25,7 @@ if TORCH_AVAILABLE:
         CCGQAAttention,
         KPAAttention,
         TPAAttention,
+        MFAAttention,
     )
 
 
@@ -406,6 +407,85 @@ class TPAAttentionTests(unittest.TestCase):
 
     def test_bitnet_enabled_forward(self):
         attn = TPAAttention(_cfg(bitnet={'enabled': True}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class MFAAttentionTests(unittest.TestCase):
+    """Multi-matrix Factorization Attention (arXiv:2412.19255)."""
+
+    def test_output_shape(self):
+        attn = MFAAttention(_cfg())
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_decoder_mode(self):
+        attn = MFAAttention(_cfg(dims={'mode': 'decoder'}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+
+    def test_default_factor_rank(self):
+        attn = MFAAttention(_cfg())
+        self.assertEqual(attn.factor_rank, 128)
+        self.assertFalse(attn.key_reuse)
+        self.assertEqual(attn.num_kv_heads, 1)
+
+    def test_explicit_knobs(self):
+        attn = MFAAttention(_cfg(attention={'mfa': {
+            'factor_rank': 16, 'key_reuse': True,
+        }}))
+        self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
+        self.assertEqual(attn.factor_rank, 16)
+        self.assertTrue(attn.key_reuse)
+        self.assertIsNone(attn.w_v_shared)
+
+    def test_key_reuse_starts_as_identity(self):
+        attn = MFAAttention(_cfg(attention={'mfa': {'key_reuse': True}}))
+        keys = torch.randn(BSZ, SEQ, attn.factor_rank)
+        self.assertTrue(torch.equal(attn._values_from_keys(keys), keys))
+
+    def test_invalid_rank_raises(self):
+        with self.assertRaises(ValueError):
+            MFAAttention(_cfg(attention={'mfa': {'factor_rank': 0}}))
+
+    def test_head_geometry_decoupled_from_hidden_size(self):
+        # Paper Table 7: 18 heads of width 256 at hidden_size 2048 (2048 % 18 != 0).
+        attn = MFAAttention(_cfg(dims={'hidden_size': 36, 'num_heads': 5}))
+        self.assertEqual(attn.num_heads, 5)
+        self.assertEqual(attn.head_dim, 128)
+        out = attn(torch.randn(BSZ, SEQ, 36))
+        self.assertEqual(out.shape, (BSZ, SEQ, 36))
+
+    def test_no_nan_inf(self):
+        attn = MFAAttention(_cfg(dims={'mode': 'decoder'}))
+        self.assertTrue(torch.isfinite(attn(_x())).all())
+
+    def test_gradient_flows(self):
+        attn = MFAAttention(_cfg())
+        x = _x().requires_grad_(True)
+        attn(x).sum().backward()
+        self.assertIsNotNone(x.grad)
+
+    def test_key_reuse_gate_receives_gradient(self):
+        attn = MFAAttention(_cfg(attention={'mfa': {'key_reuse': True}}))
+        attn(_x()).sum().backward()
+        self.assertIsNotNone(attn.key_reuse_gate.grad)
+        self.assertGreater(float(attn.key_reuse_gate.grad.abs().sum()), 0.0)
+
+    def test_param_count_formula(self):
+        cfg = _cfg()
+        attn = MFAAttention(cfg)
+        h, m, c = cfg.dims.hidden_size, attn.num_heads, attn.factor_rank
+        expected = 3 * h * c + m * c * c + m * c * h
+        self.assertEqual(sum(p.numel() for p in attn.parameters()), expected)
+
+    def test_param_count_formula_key_reuse(self):
+        cfg = _cfg(attention={'mfa': {'key_reuse': True}})
+        attn = MFAAttention(cfg)
+        h, m, c = cfg.dims.hidden_size, attn.num_heads, attn.factor_rank
+        expected = 2 * h * c + m * c * c + m * c * h + c * c + c
+        self.assertEqual(sum(p.numel() for p in attn.parameters()), expected)
+
+    def test_bitnet_enabled_forward(self):
+        attn = MFAAttention(_cfg(bitnet={'enabled': True}))
         self.assertEqual(attn(_x()).shape, (BSZ, SEQ, DIM))
 
 

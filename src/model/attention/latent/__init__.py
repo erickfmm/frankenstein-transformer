@@ -61,6 +61,12 @@ generalising Grouped-Query Attention (GQA) along complementary axes:
   sum of rank-one outer products of contextual vector factors, caches the
   four factor streams at ``(R_K+R_V)(h+d_h)`` floats per token, and is
   RoPE-compatible (eq. 3.5 pre-rotates the ``B_K`` factor).
+* :class:`MFAAttention` -- Multi-matrix Factorization Attention (MFA),
+  arXiv:2412.19255. Shared low-rank ``S_q``/``S_k``/``S_v`` projections
+  with per-head ``Q_c``/``O_c`` factors give many high-rank heads over a
+  single shared K/V head: ``2C`` cached floats per token regardless of
+  head count. The ``key_reuse`` knob enables MFA-KR, which caches only
+  keys and reconstructs values through a zero-initialised gate.
 
 All modules follow the project attention-mixer interface:
 ``forward(x: torch.Tensor, logical_layer_idx: Optional[int] = None) ->
@@ -81,6 +87,7 @@ from .cca import CCAAttention, CCGQAAttention
 from .gma import GaussianMixtureAttention
 from .kpa import KPAAttention
 from .tpa import TPAAttention
+from .mfa import MFAAttention
 
 __all__ = [
     "MLAAttention",
@@ -95,4 +102,5 @@ __all__ = [
     "GaussianMixtureAttention",
     "KPAAttention",
     "TPAAttention",
+    "MFAAttention",
 ]

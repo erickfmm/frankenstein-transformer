@@ -261,6 +261,7 @@ properties:
       | `tucker` | Tucker Attention — generalised low-rank factorisation (paper: arxiv:2603.30033) | ✅ | ✅ |
       | `kpa` | Kronecker Product Attention — sums of Kronecker products of contextual factors, Kronecker-Separable RoPE (paper: arxiv:2610.12657) | ✅ | ✅ |
       | `tpa` | Tensor Product Attention — CP sums of contextual vector-factor outer products, factorized KV cache (paper: arxiv:2501.06425) | ✅ | ✅ |
+      | `mfa` | Multi-matrix Factorization Attention — shared low-rank S_q/S_k/S_v + per-head Q_c/O_c over a single shared K/V head, MFA-KR key reuse (paper: arxiv:2412.19255) | ✅ | ✅ |
       | `iha` | Interleaved Head Attention — cross-head pseudo-heads (paper: arxiv:2602.21371) | ✅ | ✅ |
       | `gta` | Grouped-head laTenT Attention — shared map + latent values (paper: arxiv:2506.17286) | ✅ | ✅ |
       | `mtla` | Multi-head Temporal Latent Attention — temporal KV merge (paper: arxiv:2505.13544) | ✅ | ✅ |
@@ -326,6 +327,7 @@ properties:
       | `tucker` | Tucker Attention — factorización de bajo rango generalizada (paper: arxiv:2603.30033) | ✅ | ✅ |
       | `kpa` | Atención de Producto de Kronecker — sumas de productos de Kronecker de factores contextuales, RoPE Kronecker-separable (paper: arxiv:2610.12657) | ✅ | ✅ |
       | `tpa` | Atención de Producto Tensorial — sumas CP de productos externos de factores vectoriales contextuales, caché KV factorizada (paper: arxiv:2501.06425) | ✅ | ✅ |
+      | `mfa` | Atención de Factorización Multimatriz — S_q/S_k/S_v compartidos de bajo rango + Q_c/O_c por cabeza sobre una única cabeza K/V compartida, reúso de clave MFA-KR (paper: arxiv:2412.19255) | ✅ | ✅ |
       | `iha` | Interleaved Head Attention — pseudo-cabezas entre cabezas (paper: arxiv:2602.21371) | ✅ | ✅ |
       | `gta` | Grouped-head laTenT Attention — mapa compartido + valores latentes (paper: arxiv:2506.17286) | ✅ | ✅ |
       | `mtla` | Multi-head Temporal Latent Attention — fusión temporal de KV (paper: arxiv:2505.13544) | ✅ | ✅ |

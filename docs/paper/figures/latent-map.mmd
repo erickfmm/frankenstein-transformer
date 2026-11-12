@@ -17,3 +17,14 @@ flowchart TD
     fk --> cp
     fv --> cp
   end
+
+  subgraph mfa["Factorised QK, single shared K/V head (MFA)"]
+    mq["q_c = (x S_q) Q_c<br/>m heads of width C"]
+    mk["k = x S_k, v = x S_v<br/>(single head, C)"]
+    mkr["MFA-KR: v = k(I+diag(α)N)<br/>α = 0 at init"]
+    matt["Attention<br/>softmax(q_c kᵀ/√C)v"]
+    mq --> matt
+    mk --> matt
+    mk -. "key reuse" .-> mkr
+    mkr -. "v" .-> matt
+  end

@@ -1,0 +1,30 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":18,"rankSpacing":26,"useMaxWidth":false}}}%%
+flowchart TD
+  x["x<br/>[B,n,H]"]
+  sq["q_s = S_q·x<br/>[B,n,C]"]
+  qh["q_c = q_s·Q_c<br/>[B,n,m,C]"]
+  sk["k = S_k·x<br/>[B,n,C]"]
+  sv["v = S_v·x<br/>[B,n,C]"]
+  kr["MFA-KR: v = k(I + diag(α)N)<br/>α zero-init"]
+  rope["RoPE(q_c, k)<br/>(C-dim rows)"]
+  s["scores = q_c kᵀ/√C<br/>[B,m,n,n]"]
+  sm["softmax (causal in decoder)"]
+  o["O = Σ_c softmax·v · O_cᵀ<br/>[B,n,H]"]
+  c["KV cache {k, v}<br/>2C / token (C with MFA-KR)"]
+
+  x -- "S_q" --> sq
+  sq -- "Q_c (per head)" --> qh
+  x -- "S_k" --> sk
+  x -- "S_v" --> sv
+  sk -. "key reuse" .-> kr
+  sv -. "MFA-KR only" .-> kr
+  qh -- "Q_c" --> rope
+  sk -- "k" --> rope
+  rope -- "q_c kᵀ" --> s
+  s -- "softmax" --> sm
+  sm -- "·v" --> o
+  kr -. "v (MFA-KR)" .-> o
+  sv -- "v" --> o
+  rope -- "O_c (per head)" --> o
+  sk -. "shared head" .-> c
+  sv -. "2C (1C KR)" .-> c

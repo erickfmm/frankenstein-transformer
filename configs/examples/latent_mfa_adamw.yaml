@@ -1,0 +1,74 @@
+model_class: frankenstein_text_encoder
+model:
+  dims:
+    vocab_size: 50000
+    hidden_size: 512
+    num_layers: 10
+    num_loops: 1
+    num_heads: 8
+    layer_pattern:
+    - mfa
+  norm:
+    type: layer_norm
+  embedding:
+    conv:
+      enabled: false
+  attention:
+    mfa:
+      factor_rank: 64
+      key_reuse: false
+    retnet:
+      heads: 8
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 2048
+    activation: gelu
+  positional_encoding: rope
+training:
+  task: mlm
+  seed: 42
+  num_epochs: 4
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 512
+  mlm_probability: 0.15
+  max_samples: 6000000
+  dataset_batch_size: 15000
+  num_workers: 6
+  cache_dir: ./temp_data/v2_dataset_cache
+  gradient_accumulation_steps: 8
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-6
+      adamw-lr_norms: 5e-6
+      adamw-lr_attention: 3e-6
+      adamw-lr_other: 2e-6
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_embeddings:
+      - 0.9
+      - 0.95
+      adamw-betas_norms:
+      - 0.9
+      - 0.95
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-eps_embeddings: 1e-8
+      adamw-eps_norms: 1e-8
+      adamw-eps_attention: 1e-8
+      adamw-eps_other: 1e-8
+  scheduler_total_steps: 9000
+  max_nan_retries: 4
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_es_arch_mfa_adamw.csv
+  telemetry_log_interval: 5

@@ -641,6 +641,27 @@ ATTENTION_SPECS = (
         needs_pos_encoder=True,
     ),
     MixerSpec(
+        name="mfa",
+        builder="src.model.attention.latent.mfa:MFAAttention",
+        description="Multi-matrix Factorization Attention — shared low-rank S_q/S_k/S_v with per-head Q_c/O_c over a single shared K/V head, plus the MFA-KR key-reuse variant (paper: arxiv:2412.19255)",
+        description_es="Atención de Factorización Multimatriz — S_q/S_k/S_v compartidos de bajo rango con Q_c/O_c por cabeza sobre una única cabeza K/V compartida, más la variante MFA-KR de reúso de clave (paper: arxiv:2412.19255)",
+        references=("2412.19255",),
+        params_schema="schema/_model/_attention_latent.yaml#/properties/mfa",
+        defaults={
+            "factor_rank": 128,
+            "key_reuse": False,
+        },
+        cache=CacheSpec(
+            supported=True,
+            slot_type="latent_kv",
+            notes="MFA (arXiv:2412.19255); a single shared K/V head of width C (class (i) semantics) — plain MFA caches {k, v} at 2C floats/token, MFA-KR caches only k (C floats/token) and rebuilds v = k(I + diag(alpha)N) with the zero-initialised gate; exact prefill/decode parity via the latent slot.",
+        ),
+        cache_implemented=True,
+        qk_norm_supported=True,
+        qk_clip_supported=True,
+        needs_pos_encoder=True,
+    ),
+    MixerSpec(
         name="longformer",
         builder="src.model.attention.sparse.longformer:LongformerAttention",
         description="Longformer: sliding windows + global tokens (paper: arxiv:2004.05150)",

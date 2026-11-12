@@ -543,3 +543,62 @@ Una variante fusionada en el espacio de factores (FlashTPA, Apéndice~A del pape
     \item \textbf{Fortalezas}: compatibilidad nativa con RoPE (y con cualquier codificación posicional) sin la rama desacoplada de MLA; mejor perplejidad de validación y métricas downstream que MHA, MQA, GQA y MLA a igual número de parámetros; MHA/MQA/GQA se recuperan como casos especiales no contextuales de rango $h$/rango 1/rango $G$, lo que convierte el rango en un único control de diseño.
     \item \textbf{Limitaciones}: hiperparámetros de rango adicionales ($R_Q,R_K,R_V$) y un coste de factorización en la ruta materializada; la calidad depende de la elección de rango; el paper evalúa solo modelos de lenguaje causales; la aceleración completa requiere el kernel FlashTPA.
 \end{itemize}
+
+\subsection{Atención de Factorización Multimatriz (MFA)}
+\label{sec:mfa-es}
+
+\begin{figure}[t]
+\centering
+\fitfigure{\includegraphics{../paper/figures/mixers/mfa.pdf}}
+\caption{Atención de Factorización Multimatriz (MFA). Las proyecciones compartidas $S_q,S_k,S_v\in\mathbb{R}^{H\times C}$ producen una única cabeza de clave y valor de ancho $C$, mientras que cada una de las $m$ cabezas posee un factor de consulta $Q_c\in\mathbb{R}^{C\times C}$ y una proyección de salida $O_c\in\mathbb{R}^{C\times H}$. Por tanto la caché KV guarda $2C$ flotantes por token independientemente de $m$ (solo $C$ con MFA-KR, que reconstruye los valores desde las claves mediante una compuerta inicializada en cero).}
+\label{fig:mixer-mfa-es}
+\end{figure}
+
+La Atención de Factorización Multimatriz (MFA) \citep{hu_mfa_2025} es la contraparte orientada a capacidad de MLA: en lugar de comprimir un par clave--valor multicabeza completo en un latente, mantiene muchas cabezas de rango alto sobre una \emph{única} cabeza de clave/valor compartida. El artículo interpreta cada variante de MHA como una factorización de bajo rango de la Atención Bilineal Totalmente Parametrizada (FPBA) y muestra que el número de cabezas y el rango por cabeza, y no solo el rango de compresión, determinan la capacidad. MFA factoriza el circuito QK como $W_c\approx S_qQ_cS_k^{\top}$ y el circuito VO como $U_c\approx S_vO_c^{\top}$, con $S_q,S_k,S_v$ compartidas entre cabezas y solo $Q_c,O_c$ específicas por cabeza. El Rango Efectivo Total es $mC$ mientras que la Dimensión del Subespacio Latente Compartido permanece en $C$, así que escalar el número de cabezas cuesta unos $CH$ parámetros por cabeza y no afecta a la caché.
+
+\subsubsection{Fundamento Matemático}
+Las formas de inferencia y de factorización del artículo son
+\[
+O_i=\sum_{c=1}^{m}\Big(\sum_{j=1}^{i}\phi\Big(\frac{x_iS_qQ_c\,(x_jS_k)^{\top}}{\sqrt{d}}\Big)x_jS_v\Big)O_c^{\top}
+=\sum_{c=1}^{m}\Big(\sum_{j=1}^{i}\phi\Big(\frac{w_i\,x_j^{\top}}{\sqrt{d}}\Big)x_jS_vO_c^{\top}\Big),
+\]
+con $w_i=x_iS_qQ_cS_k^{\top}$ y $\phi$ el softmax. Las claves y los valores son de una sola cabeza, $k_j=x_jS_k,\;v_j=x_jS_v\in\mathbb{R}^{C}$, así que la decodificación almacena
+\[
+\mathrm{KV}_{\mathrm{MFA}}=2C\ \text{flotantes/token}\quad(\text{independiente de }m),
+\]
+y el conteo de parámetros de la capa de atención (Tabla~1 del artículo) es
+\[
+P_{\mathrm{MFA}}=H(3C+mC)+mC^{2}=3HC+mC^{2}+mCH .
+\]
+La variante MFA-Key-Reuse reparametriza la proyección de valor a partir de la de clave,
+\[
+S_v=S_k+\alpha\odot NS_k=(I+\mathrm{diag}(\alpha)N)W_K,\qquad N\in\mathbb{R}^{C\times C},\ \alpha\in\mathbb{R}^{C},
+\]
+con $\alpha$ inicializado en cero, de modo que $S_v=S_k$ al inicio del entrenamiento; los autores identifican esto como el ingrediente clave de estabilidad (Tabla~4: la reutilización ingenua pierde 0.20 nats, una proyección de valor extra es inestable con 7.88 ppl, la variante residual recupera 6.65 y la compuerta inicializada en cero alcanza 6.45 frente a 6.35 de MFA). La decodificación cachea entonces solo $k$, reduciendo la huella a la mitad, $C$ flotantes por token:
+\[
+\mathrm{KV}_{\mathrm{MFA\text{-}KR}}=C\ \text{flotantes/token},\qquad
+P_{\mathrm{MFA\text{-}KR}}=2HC+mC^{2}+mCH+C^{2}+C .
+\]
+Como $S_k$ y $S_v$ son proyecciones ordinarias de una sola cabeza, RoPE se aplica fila a fila directamente a las consultas y claves de dimensión $C$; a diferencia de MLA no hay rama rotatoria desacoplada, y el artículo valida tanto RoPE como ALiBi (Tabla~5).
+
+\subsubsection{Pseudocódigo Algorítmico}
+\begin{algorithmic}[1]
+\State \textbf{Entrada:} estado oculto $X\in\mathbb{R}^{n\times H}$, $m$ cabezas, rango de factorización $C$, bandera de reúso de clave
+\State $K\gets XS_k$, \quad $V\gets XS_v$ (o $V\gets K(I+\mathrm{diag}(\alpha)N)$ con reúso de clave) \Comment{única cabeza compartida}
+\For{$c=1,\dots,m$}
+    \State $Q_c\gets (XS_q)Q_c$ \Comment{factor de consulta de rango $C$}
+    \State aplicar RoPE a $Q_c$ y $K$; \quad $A_c\gets\texttt{softmax}(Q_cK^{\top}/\sqrt{C})$ \Comment{máscara si es causal}
+    \State $Y_c\gets A_cV$
+\EndFor
+\State \textbf{Salida:} $O\gets\sum_{c=1}^{m}Y_cO_c^{\top}$
+\end{algorithmic}
+En decodificación, $k_t$ y $v_t$ se añaden a la caché compartida (solo $k_t$ con MFA-KR), y el coste por paso es $\mathcal{O}(m\,T\,C)$ frente a una caché de ancho $C$.
+
+\subsubsection{Características Clave}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complejidad de entrenamiento}: atención $\mathcal{O}(n^{2}mC)$ más proyecciones $\mathcal{O}(nH(3C+mC))$.
+    \item \textbf{Complejidad de inferencia}: $\mathcal{O}(mTC)$ por paso de decodificación; $2C$ flotantes cacheados por token ($C$ con MFA-KR), independientemente del número de cabezas.
+    \item \textbf{Entrenable}: entrenado desde cero; modelos MoE de 6.9B parámetros sobre 1T tokens, con la ablación densa a 1B/20B tokens.
+    \item \textbf{Fortalezas}: caché KV desacoplada del número de cabezas; cada cabeza mantiene rango $C>d$, así que la capacidad escala con $mC$ a $\approx CH$ parámetros por cabeza extra; compatibilidad nativa con RoPE/ALiBi sin la rama desacoplada de MLA; supera a MHA (49.9 vs.\ 49.0 de exactitud media) con 87.5\% menos caché, y MFA-KR alcanza 93.7\% con un coste menor.
+    \item \textbf{Limitaciones}: clave y valor comparten un único cuello de botella de dimensión $C$ por token, por lo que el subespacio latente compartido acota la calidad; el reúso de clave de MFA-KR cuesta hasta 0.1 nats frente a MFA; el artículo evalúa solo modelos de lenguaje causales y no mide latencia a nivel de sistema.
+\end{itemize}

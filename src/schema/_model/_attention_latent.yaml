@@ -528,6 +528,89 @@ properties:
 
           **Referencias:** (paper: arxiv:2501.06425)
         examples: [2]
+  mfa:
+    type: object
+    additionalProperties: false
+    title: "Multi-matrix Factorization Attention"
+    title_es: "Atención de Factorización Multimatriz"
+    description: |-
+      Hyperparameters for `mfa` (Multi-matrix Factorization Attention
+      (paper: arxiv:2412.19255)). Shared low-rank projections
+      `S_q, S_k, S_v ∈ R^(H×C)` with head-specific `Q_c, O_c ∈ R^(C×C)`
+      give `m` high-rank heads over a single shared K/V head
+      (`k = x S_k`, `v = x S_v`, both in `R^C`), so the KV cache is `2C`
+      floats per token regardless of the head count. `key_reuse` enables
+      MFA-KR, which reparameterises `S_v = (I + diag(α)N) S_k` with a
+      zero-initialised `α` and caches only keys. Only applies when `mfa`
+      appears in `layer_pattern`.
+
+      **References:** (paper: arxiv:2412.19255)
+    description_es: |-
+      Hiperparámetros para `mfa` (Atención de Factorización Multimatriz
+      (paper: arxiv:2412.19255)). Proyecciones compartidas de bajo rango
+      `S_q, S_k, S_v ∈ R^(H×C)` con `Q_c, O_c ∈ R^(C×C)` específicos por
+      cabeza dan `m` cabezas de rango alto sobre una única cabeza K/V
+      compartida (`k = x S_k`, `v = x S_v`, ambas en `R^C`), así que la
+      caché KV es de `2C` flotantes por token independientemente del número
+      de cabezas. `key_reuse` habilita MFA-KR, que reparametriza
+      `S_v = (I + diag(α)N) S_k` con `α` inicializado en cero y cachea solo
+      las claves. Solo aplica cuando `mfa` está en `layer_pattern`.
+
+      **Referencias:** (paper: arxiv:2412.19255)
+    properties:
+      factor_rank:
+        type: integer
+        minimum: 1
+        default: 128
+        title: "MFA Factorization Rank (C)"
+        title_es: "Rango de Factorización MFA (C)"
+        description: |-
+          Low-rank factorization dimension `C` of `mfa`
+          (paper: arxiv:2412.19255, eqs. 6-7). It is simultaneously the
+          per-head width, the width of the shared `S_q`/`S_k`/`S_v`
+          projections and the per-token KV-cache width, so the cache is
+          `2C` floats per token (independent of `dims.num_heads`). The paper
+          uses `C = 256` at `hidden_size = 2048`; it should exceed the
+          equivalent MHA head width `hidden_size // num_heads`. Each extra
+          head costs `~C·H` additional parameters.
+
+          **References:** (paper: arxiv:2412.19255)
+        description_es: |-
+          Dimensión de factorización de bajo rango `C` de `mfa`
+          (paper: arxiv:2412.19255, ecs. 6-7). Es a la vez el ancho por
+          cabeza, el ancho de las proyecciones compartidas `S_q`/`S_k`/`S_v`
+          y el ancho del caché KV por token, así que el caché es de `2C`
+          flotantes por token (independiente de `dims.num_heads`). El paper
+          usa `C = 256` con `hidden_size = 2048`; conviene que supere el
+          ancho de cabeza equivalente de MHA `hidden_size // num_heads`.
+          Cada cabeza adicional cuesta `~C·H` parámetros.
+
+          **Referencias:** (paper: arxiv:2412.19255)
+        examples: [256]
+      key_reuse:
+        type: boolean
+        default: false
+        title: "MFA Key Reuse (MFA-KR)"
+        title_es: "Reúso de Clave MFA (MFA-KR)"
+        description: |-
+          Enable the MFA-Key-Reuse variant (MFA-KR, paper: arxiv:2412.19255,
+          eqs. 8-9): the value projection is reparameterised as
+          `S_v = (I + diag(α)N) S_k` with `α` initialised to zero, so training
+          starts from `S_v = S_k` (the paper's stability recipe) and decoding
+          caches only the key stream. This halves the KV cache from `2C` to
+          `C` floats per token at a small quality cost.
+
+          **References:** (paper: arxiv:2412.19255)
+        description_es: |-
+          Habilita la variante MFA-Key-Reuse (MFA-KR, paper:
+          arxiv:2412.19255, ecs. 8-9): la proyección de valor se reparametriza
+          como `S_v = (I + diag(α)N) S_k` con `α` inicializado en cero, así que
+          el entrenamiento parte de `S_v = S_k` (la receta de estabilidad del
+          paper) y la decodificación cachea solo el flujo de claves. Esto
+          reduce la caché KV de `2C` a `C` flotantes por token con un coste
+          pequeño de calidad.
+
+          **Referencias:** (paper: arxiv:2412.19255)
   iha:
     type: object
     additionalProperties: false

@@ -22,7 +22,7 @@ load.
 
 | Dimension | Count | Defined in |
 |---|---:|---|
-| `model.dims.layer_pattern` values | **54** (53 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
+| `model.dims.layer_pattern` values | **55** (54 concrete mixers + `mamba`) | `src/schema/_model/_dims.yaml` |
 | Optimizer families | **38** | `src/schema/_optimizer.yaml` |
 | Normalization types | **6** | `src/schema/_model/_norm.yaml` |
 | Positional encodings | **12** (11 active + `none`) | `src/schema/_model/_positional_encoding.yaml` |
@@ -35,7 +35,7 @@ load.
 | Deployment formats | **4** | `src/cli.py` (`deploy --format`) |
 
 > The schema enums are the executable contract for code. The README census
-> reports the same numbers: 54 `layer_pattern` values (including the `mamba`
+> reports the same numbers: 55 `layer_pattern` values (including the `mamba`
 > placeholder) and 12 positional encodings (11 active + `none`). The
 > mathematical definitions stay in the paper; this document tracks what is
 > actually wired up.
@@ -79,7 +79,7 @@ The YAML file is the single source of truth for model/training settings.
 | `src/model/residuals/**` | Residual strategies + factory |
 | `src/model/moe/**` | MoE router scoring, load balancing, experts, shared experts, LatentMoE, hash layers |
 | `src/model/numerics.py` | Fixed softmax / cross-entropy swaps (arXiv:2610.31642) |
-| `src/model/attention/**` | 54 mixers (53 classes + `mamba`): `gated/`, `latent/`, `sparse/`, top-level modules |
+| `src/model/attention/**` | 55 mixers (54 classes + `mamba`): `gated/`, `latent/`, `sparse/`, top-level modules |
 | `src/model/norm/**` | 6 norms + factory |
 | `src/model/embeddings/**` | 12 positional encodings + factorized/dynamic (EELBERT) embeddings + factory |
 | `src/model/cache/**` | KV-cache manager, typed slots, capability registry, quantization codecs, eviction policies |
@@ -250,7 +250,7 @@ flowchart TD
 
     subgraph HYBRID["HybridLayer internals"]
       N1["norm1 = get_norm()"]
-      MX["mixer registry<br/>(53 classes + mamba)"]
+      MX["mixer registry<br/>(54 classes + mamba)"]
       FF["FFN / GatedFFN / MoE"]
       N2["norm2 = get_norm()<br/>or FlashNormLinear fusion"]
       MOD["Mixture-of-Depths router"]
@@ -389,7 +389,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 
 ### 7.4 Sequence mixers (`model.dims.layer_pattern`)
 
-54 enum values in 9 families. `config subkey` is the optional
+55 enum values in 9 families. `config subkey` is the optional
 `model.attention.<subkey>` object; "—" means no knobs.
 
 | Mixer | Family | Config subkey | Train |
@@ -439,6 +439,7 @@ compatibility report (HF wrappers cannot run the custom hash).
 | `tucker` | Latent | `tucker.*` | yes |
 | `kpa` | Latent | `kpa.*` | yes |
 | `tpa` | Latent | `tpa.*` | yes |
+| `mfa` | Latent | `mfa.*` | yes |
 | `iha` | Latent | `iha.*` | yes |
 | `gta` | Latent | `gta.*` | yes |
 | `mtla` | Latent | `mtla.*` | yes |
@@ -757,7 +758,7 @@ logical roles). Per-layer storage is typed:
 | `TokenTailSlot` | `token_tail` | last `n` token ids | engram |
 
 **Capability registry (D5).** `src/model/cache/capabilities.py` re-exports the
-per-mixer `CacheSpec` declared on each registry `MixerSpec` (54 built-ins) and
+per-mixer `CacheSpec` declared on each registry `MixerSpec` (55 built-ins) and
 derives its `CACHE_SPECS` map from the registry. A layer caches only when
 the spec says `supported` **and** the mixer is in `IMPLEMENTED_MIXERS`
 (incremental branch implemented + parity-tested). Everything else receives
@@ -772,7 +773,7 @@ parametrization.
 Implemented cached branches (parity-tested in
 `tests/test_kv_cache_mixers.py`): `standard`, `gqa`,
 `sigmoid`, `ca`, `gated_softmax`, `titan`, `fox`,
-`mla`, `gqla`, `mlra`, `tucker`, `iha`,
+`mla`, `mfa`, `gqla`, `mlra`, `tucker`, `iha`,
 `gta`, `swa`, `longformer`, `bigbird`,
 `sparse_transformer`, `fasa`, `retnet`,
 `gla`, `deltanet`, `gated_deltanet`,

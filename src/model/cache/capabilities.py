@@ -68,6 +68,7 @@ IMPLEMENTED_MIXERS = frozenset(
         "tucker",         # F1
         "kpa",            # F1 (Kronecker factor streams, expand + RoPE per step)
         "tpa",            # F1 (CP vector-factor streams, expand + RoPE per step)
+        "mfa",            # F1 (single shared K/V head; MFA-KR caches K only)
         "iha",            # F1 (pseudo-mix after cache read)
         "gta",            # F1 (grouped post-RoPE keys + latent values)
         # ---- F1 sparse family ----

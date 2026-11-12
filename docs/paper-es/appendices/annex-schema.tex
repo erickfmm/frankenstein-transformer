@@ -111,6 +111,11 @@ attention.tpa.query\_rank & int $\ge 1$ & Rango CP $R_Q$ de los factores de cons
 attention.tpa.key\_rank & int $\ge 1$ & Rango CP $R_K$ de los factores de clave (cacheados). Por defecto: 2. \\
 attention.tpa.value\_rank & int $\ge 1$ & Rango CP $R_V$ de los factores de valor (cacheados). Por defecto: 2. \\
 \midrule
+\multicolumn{3}{l}{\textit{model.attention.mfa.*}} \\
+\midrule
+attention.mfa.factor\_rank & int $\ge 1$ & Dimensión de factorización de bajo rango $C$, igual al ancho por cabeza, al ancho de $S_q/S_k/S_v$ y al ancho del caché KV por token. Por defecto: 128. \\
+attention.mfa.key\_reuse & bool & Habilita MFA-KR: $S_v=(I+\mathrm{diag}(\alpha)N)S_k$ con $\alpha$ inicializado en cero; la decodificación cachea solo claves ($C$ flotantes/token). Por defecto: false. \\
+\midrule
 \multicolumn{3}{l}{\textit{model.attention.iha.*}} \\
 \midrule
 attention.iha.num\_pseudo\_heads & int $\ge 1$ & Número de pseudo-cabezas por cabeza para IHA. Por defecto: \texttt{num\_heads}. \\
@@ -295,6 +300,7 @@ mlra & Atención Multi-Cabeza de Rango Bajo --- latente particionable & \checkma
 tucker & Atención Tucker --- factorización de rango bajo generalizada & \checkmark & \checkmark \\
 kpa & Atención de Producto de Kronecker --- factores K/V como suma de Kronecker, RoPE Kronecker-separable & \checkmark & \checkmark \\
 tpa & Atención de Producto Tensorial --- Q/K/V con factores vectoriales CP, caché KV factorizada, compatible con RoPE & \checkmark & \checkmark \\
+mfa & Atención de Factorización Multimatriz --- QK compartido de bajo rango, una sola cabeza K/V compartida, reúso de clave MFA-KR & \checkmark & \checkmark \\
 iha & Atención de Cabezas Entrelazadas --- pseudo-cabezas entre cabezas & \checkmark & \checkmark \\
 gta & Atención laTenT por Cabezas Agrupadas --- mapa compartido + valores latentes & \checkmark & \checkmark \\
 mtla & Atención Latente Temporal Multi-Cabeza --- fusión temporal KV & \checkmark & \checkmark \\

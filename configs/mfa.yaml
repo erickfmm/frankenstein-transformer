@@ -1,0 +1,72 @@
+# Multi-matrix Factorization Attention (arXiv:2412.19255) — paper reference
+# configuration (Table 7), adapted to this toolkit's dense decoder baseline.
+# Paper: 6.9B MoE (1.2B activated), hidden 2048, 24 layers, 18 heads of
+# width 256, factor rank C = 256, RMSNorm, SwiGLU, RoPE base 500000,
+# context 16384. MFA-KR is selected with `key_reuse: true` (zero-init alpha).
+#
+# DEVIATIONS (documented, not pursued): the paper's MoE experts are replaced
+# by a dense FFN of the same shared-expert width (3008); max_length is 2048
+# instead of 16384 for single-device CPU/GPU feasibility; head count stays at
+# the paper's 18 because MFA decouples head geometry from hidden_size.
+model_class: frankenstein_text_decoder
+model:
+  dims:
+    vocab_size: 65536
+    hidden_size: 2048
+    num_layers: 24
+    num_loops: 1
+    num_heads: 18
+    dropout: 0.0
+    mode: decoder
+    layer_pattern:
+    - mfa
+  norm:
+    type: rms_norm
+  attention:
+    mfa:
+      factor_rank: 256
+      key_reuse: false
+    retnet:
+      heads: 18
+  moe:
+    enabled: false
+  bitnet:
+    enabled: false
+  ffn:
+    hidden_size: 3008
+    activation: swiglu
+  positional_encoding: rope
+  positional_encoding_parameters:
+    rope:
+      base: 500000.0
+training:
+  task: causal_lm
+  seed: 42
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 2048
+  gradient_accumulation_steps: 8
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_other: 3.0e-4
+      adamw-lr_attention: 3.0e-4
+      adamw-betas_other:
+      - 0.9
+      - 0.95
+      adamw-betas_attention:
+      - 0.9
+      - 0.95
+      adamw-eps_other: 1.0e-8
+      adamw-eps_attention: 1.0e-8
+      adamw-wd_other: 0.1
+      adamw-wd_attention: 0.1
+  # Paper: 2000-step linear warm-up then cosine decay to 1e-5.
+  scheduler_total_steps: 20000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  grad_clip_max_norm: 1.0
+  max_nan_retries: 4
+  gradient_log_interval: 10
+  csv_log_path: training_metrics_mfa.csv
+  telemetry_log_interval: 5

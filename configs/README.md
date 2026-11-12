@@ -306,6 +306,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
   - `tucker` — Tucker Attention, generalised low-rank factorisation (arXiv:2603.30033).
   - `kpa` — Kronecker Product Attention, sums of Kronecker products of contextual K/V factors with Kronecker-Separable RoPE (arXiv:2610.12657).
   - `tpa` — Tensor Product Attention, CP sums of contextual vector-factor outer products with a factorized KV cache (arXiv:2501.06425).
+  - `mfa` — Multi-matrix Factorization Attention, shared low-rank QK factorization over one shared K/V head, plus the MFA-KR key-reuse variant (arXiv:2412.19255).
   - `iha` — Interleaved Head Attention, cross-head pseudo-heads (arXiv:2602.21371).
   - `gta` — Grouped-head laTenT Attention, shared map + latent values (arXiv:2506.17286).
   - `mtla` — Multi-head Temporal Latent Attention, temporal KV merge (arXiv:2505.13544).
@@ -367,7 +368,7 @@ The `model` block is fully hierarchical: `dims`, `norm`, `embedding`,
 
 #### model.attention.<mixer>
 
-Per-mixer sub-objects: `ca`, `mta`, `kda`, `mla`, `gmla`, `gqla`, `mlra`, `tucker`, `iha`, `gta`, `mtla`,
+Per-mixer sub-objects: `ca`, `mta`, `kda`, `mla`, `gmla`, `gqla`, `mlra`, `tucker`, `tpa`, `mfa`, `iha`, `gta`, `mtla`,
 `cca`, `ccgqa`, `msa`, `sparda`, `lsa`, `fastconformer`, `engram`, `gma`, `ssog`, `conformer`,
 `falcon`, `ode` (`solver`, `steps`), `retnet` (`heads`). Optional rank fields
 accept `null` (= derive from `hidden_size` / `num_heads`).
@@ -493,6 +494,8 @@ accept `null` (= derive from `hidden_size` / `num_heads`).
 - `model.attention.gqla.decode_path`: `"mqa_absorb"` or `"gqa"` (default `"gqa"`).
 - `model.attention.mlra.latent_rank`: total latent rank for `mlra` (default `hidden_size // 2`).
 - `model.attention.mlra.num_latent_heads`: number of disjoint latent sub-heads (default 4).
+- `model.attention.mfa.factor_rank`: low-rank factorization dimension for `mfa`, equal to the per-head width and the shared K/V/cache width (default 128; the paper uses 256 at `hidden_size = 2048`).
+- `model.attention.mfa.key_reuse`: enable MFA-KR, reparameterising `S_v = (I + diag(α)N)S_k` with zero-initialised `α` and caching only keys (default false).
 - `model.attention.tucker.query_rank`, `model.attention.tucker.key_rank`, `model.attention.tucker.value_rank`: Tucker ranks (default `hidden_size` for Q, `hidden_size // 2` for K/V).
 - `model.attention.iha.num_pseudo_heads`: number of pseudo-heads per head for `iha` (default `num_heads`).
 - `model.attention.gta.num_shared_groups`: number of head groups sharing an attention map for `gta` (default `num_heads // 4`).

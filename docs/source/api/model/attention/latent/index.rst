@@ -9,6 +9,7 @@ Latent Attention
    gta
    iha
    kpa
+   mfa
    mla
    mlra
    mtla

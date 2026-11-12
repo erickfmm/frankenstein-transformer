@@ -574,3 +574,62 @@ A fused factor-space variant (FlashTPA, Appendix~A of the paper) computes the he
     \item \textbf{Strengths}: native RoPE (and generic position-encoding) compatibility without MLA's decoupled branch; better validation perplexity and downstream scores than MHA, MQA, GQA and MLA at matched parameter counts; MHA/MQA/GQA are recovered as non-contextual rank-$h$/rank-1/rank-$G$ special cases, which makes the rank a single design knob.
     \item \textbf{Limitations}: extra rank hyperparameters ($R_Q,R_K,R_V$) and a factorisation cost on the materialised path; quality depends on rank choice; the paper evaluates causal language models only; the full speed-up requires the FlashTPA kernel.
 \end{itemize}
+
+\subsection{Multi-matrix Factorization Attention (MFA)}
+\label{sec:mfa}
+
+\begin{figure}[t]
+\centering
+\fitfigure{\includegraphics{figures/mixers/mfa.pdf}}
+\caption{Multi-matrix Factorization Attention (MFA). Shared projections $S_q,S_k,S_v\in\mathbb{R}^{H\times C}$ produce a single key and value head of width $C$, while each of the $m$ heads owns a query factor $Q_c\in\mathbb{R}^{C\times C}$ and an output projection $O_c\in\mathbb{R}^{C\times H}$. The KV cache therefore holds $2C$ floats per token regardless of $m$ (only $C$ under MFA-KR, which rebuilds values from keys through a zero-initialised gate).}
+\label{fig:mixer-mfa}
+\end{figure}
+
+Multi-matrix Factorization Attention (MFA) \citep{hu_mfa_2025} is the capacity-oriented counterpart of MLA: instead of compressing a full multi-head key--value pair into one latent, it keeps many high-rank heads over a \emph{single} shared key/value head. The paper reads every MHA variant as a low-rank factorisation of Fully Parameterized Bilinear Attention (FPBA) and shows that the head count and the per-head rank, not only the compression rank, drive capacity. MFA factorises the QK circuit as $W_c\approx S_qQ_cS_k^{\top}$ and the VO circuit as $U_c\approx S_vO_c^{\top}$, with $S_q,S_k,S_v$ shared across heads and only $Q_c,O_c$ head-specific. The Total Effective Rank is $mC$ while the Shared Latent Subspace Dimension stays at $C$, so scaling the head count costs about $CH$ parameters per head and leaves the cache untouched.
+
+\subsubsection{Mathematical Foundation}
+The inference and factorisation forms of the paper are
+\[
+O_i=\sum_{c=1}^{m}\Big(\sum_{j=1}^{i}\phi\Big(\frac{x_iS_qQ_c\,(x_jS_k)^{\top}}{\sqrt{d}}\Big)x_jS_v\Big)O_c^{\top}
+=\sum_{c=1}^{m}\Big(\sum_{j=1}^{i}\phi\Big(\frac{w_i\,x_j^{\top}}{\sqrt{d}}\Big)x_jS_vO_c^{\top}\Big),
+\]
+with $w_i=x_iS_qQ_cS_k^{\top}$ and $\phi$ the softmax. Keys and values are single-head, $k_j=x_jS_k,\;v_j=x_jS_v\in\mathbb{R}^{C}$, so decoding stores
+\[
+\mathrm{KV}_{\mathrm{MFA}}=2C\ \text{floats/token}\quad(\text{independent of }m),
+\]
+and the attention-layer parameter count (Table~1 of the paper) is
+\[
+P_{\mathrm{MFA}}=H(3C+mC)+mC^{2}=3HC+mC^{2}+mCH .
+\]
+The MFA-Key-Reuse variant reparameterises the value projection from the key projection,
+\[
+S_v=S_k+\alpha\odot NS_k=(I+\mathrm{diag}(\alpha)N)W_K,\qquad N\in\mathbb{R}^{C\times C},\ \alpha\in\mathbb{R}^{C},
+\]
+with $\alpha$ initialised to zero so that $S_v=S_k$ at the start of training, which the authors identify as the key stability ingredient (Table~4: a vanilla key-reuse variant loses 0.20 nats, an extra value projection is unstable at 7.88 ppl, the residual variant recovers 6.65, and the zero-initialised gate reaches 6.45 against MFA's 6.35). Decoding then caches only $k$, halving the footprint to $C$ floats per token:
+\[
+\mathrm{KV}_{\mathrm{MFA\text{-}KR}}=C\ \text{floats/token},\qquad
+P_{\mathrm{MFA\text{-}KR}}=2HC+mC^{2}+mCH+C^{2}+C .
+\]
+Because $S_k$ and $S_v$ are ordinary single-head projections, RoPE applies row-wise to the $C$-dim queries and keys directly; unlike MLA there is no decoupled rotary branch, and the paper validates both RoPE and ALiBi (Table~5).
+
+\subsubsection{Algorithmic Pseudocode}
+\begin{algorithmic}[1]
+\State \textbf{Input:} hidden state $X\in\mathbb{R}^{n\times H}$, $m$ heads, factorisation rank $C$, key-reuse flag
+\State $K\gets XS_k$, \quad $V\gets XS_v$ (or $V\gets K(I+\mathrm{diag}(\alpha)N)$ when key reuse) \Comment{single shared head}
+\For{$c=1,\dots,m$}
+    \State $Q_c\gets (XS_q)Q_c$ \Comment{rank-$C$ query factor}
+    \State apply RoPE to $Q_c$ and $K$; \quad $A_c\gets\texttt{softmax}(Q_cK^{\top}/\sqrt{C})$ \Comment{mask if causal}
+    \State $Y_c\gets A_cV$
+\EndFor
+\State \textbf{Output:} $O\gets\sum_{c=1}^{m}Y_cO_c^{\top}$
+\end{algorithmic}
+At decode, $k_t$ and $v_t$ are appended to the shared cache (only $k_t$ under MFA-KR), and the per-step cost is $\mathcal{O}(m\,T\,C)$ against a cache of width $C$.
+
+\subsubsection{Key Characteristics}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n^{2}mC)$ attention plus $\mathcal{O}(nH(3C+mC))$ projections.
+    \item \textbf{Inference complexity}: $\mathcal{O}(mTC)$ per decode step; $2C$ cached floats per token ($C$ under MFA-KR), independent of the head count.
+    \item \textbf{Trainable}: trained from scratch; 6.9B-parameter MoE models over 1T tokens, with the dense ablation at 1B/20B tokens.
+    \item \textbf{Strengths}: KV cache decoupled from head count; each head keeps rank $C>d$, so capacity scales with $mC$ at $\approx CH$ parameters per extra head; native RoPE/ALiBi compatibility without MLA's decoupled branch; outperforms MHA (49.9 vs.\ 49.0 average accuracy) with 87.5\% less cache, and MFA-KR reaches 93.7\% with a minor trade-off.
+    \item \textbf{Limitations}: key and value share one $C$-dim bottleneck per token, so the shared latent subspace bounds quality; MFA-KR's key reuse costs up to 0.1 nats against MFA; the paper evaluates causal language models only and does not measure system-level latency.
+\end{itemize}

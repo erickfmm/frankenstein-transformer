@@ -277,6 +277,9 @@ ATTENTIONS = [
     # Tensor Product Attention (arXiv:2501.06425): CP vector-factor Q/K/V
     # with a per-token latent factor cache; trains densely in both modes.
     "tpa",
+    # Multi-matrix Factorization Attention (arXiv:2412.19255): shared low-rank
+    # QK factorization with a single shared K/V head; MFA-KR via mfa.key_reuse.
+    "mfa",
     "msa", "sparda", "kda", "gma", "ssog",
     "falcon1", "falcon2", "falcon3", "falcon1a",
     "falcon2a", "falcon3a",
