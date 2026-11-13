@@ -122,9 +122,14 @@ class TrainingConfig:
             emergency GPU→CPU offload.
         gpu_temp_poll_interval_seconds: Seconds between temperature polls
             while paused.
-        checkpoint_every_n_steps: Save a rolling checkpoint every N steps.
+        checkpoint_every_n_steps: Save a rolling checkpoint every N steps
+            (``0`` disables rolling checkpoints).
         max_rolling_checkpoints: Maximum number of rolling checkpoints to keep.
-        num_best_checkpoints: Number of best-loss checkpoints to retain.
+        num_best_checkpoints: Number of best-loss checkpoints to retain
+            (``0`` disables best checkpoints).
+        save_epoch_checkpoints: If ``True`` (default), save a full checkpoint
+            at the end of every epoch; ``False`` keeps only rolling/best/final
+            checkpoints.
         nan_check_interval: Check for NaN loss every N steps.
         log_gradient_stats: Whether to log gradient statistics.
         gradient_log_interval: Steps between gradient stat logging.
@@ -189,7 +194,10 @@ class TrainingConfig:
     max_rolling_checkpoints: int = 3     # Keep only last N rolling checkpoints
     
     # Best Model Checkpoints
-    num_best_checkpoints: int = 2        # Keep top K best models
+    num_best_checkpoints: int = 2        # Keep top K best models (0 = disabled)
+
+    # Epoch-end checkpoints (``training.save_epoch_checkpoints``)
+    save_epoch_checkpoints: bool = True  # Save a full checkpoint every epoch
     
     # NaN Detection
     nan_check_interval: int = 10         # Check for NaN every N steps
@@ -2345,7 +2353,8 @@ class TitanTrainer:
                         self._pending_thermal_repair_action = "none"
                         optimizer_window_start = time.perf_counter()
 
-                        if self.global_step % self.training_config.checkpoint_every_n_steps == 0:
+                        rolling_every = self.training_config.checkpoint_every_n_steps
+                        if rolling_every > 0 and self.global_step % rolling_every == 0:
                             self._save_rolling_checkpoint(epoch)
 
                         # Flush an on-demand checkpoint if the supervisor
@@ -2555,6 +2564,8 @@ class TitanTrainer:
         os.makedirs(path, exist_ok=True)
         
         k = self.training_config.num_best_checkpoints
+        if k <= 0:
+            return  # best checkpoints disabled (``num_best_checkpoints: 0``)
         
         # Use negative loss because heapq is a min-heap
         # We want to keep the K smallest losses (best models)
@@ -2610,7 +2621,7 @@ class TitanTrainer:
                 logging.warning("Failed to finish the W&B run: %s", exc)
             self._wandb_module = None
     
-    def save_checkpoint(self, epoch: int, suffix: str = "", path: str = "checkpoints") -> str:
+    def save_checkpoint(self, epoch: int, suffix: str = "", path: str = "checkpoints", filename: Optional[str] = None) -> str:
         """Save a comprehensive training checkpoint.
 
         Includes model state, optimizer state, scheduler state, AMP scaler
@@ -2620,6 +2631,9 @@ class TitanTrainer:
             epoch: Current epoch number.
             suffix: Optional filename suffix (e.g. ``"_epoch_end"``).
             path: Directory to save the checkpoint in.
+            filename: Optional exact filename. When given, it overrides the
+                default ``titan_checkpoint_epoch_<epoch><suffix>.pt`` name
+                (used for the stable ``titan_final.pt`` artifact).
 
         Returns:
             Absolute path to the saved checkpoint file.
@@ -2639,7 +2653,7 @@ class TitanTrainer:
             'training_task': self.task,
         }
 
-        filename = f"titan_checkpoint_epoch_{epoch}{suffix}.pt"
+        filename = filename or f"titan_checkpoint_epoch_{epoch}{suffix}.pt"
         checkpoint_path = os.path.join(path, filename)
         
         torch.save(checkpoint, checkpoint_path)

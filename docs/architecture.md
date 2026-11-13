@@ -925,6 +925,18 @@ NaN retries, CSV/NVML telemetry, the GPU thermal guard (`gpu_temp_*`), and
 optional GaLore settings. The guard pauses at `gpu_temp_pause_threshold_c`
 (default 90 °C) and resumes at `gpu_temp_resume_threshold_c` (80 °C).
 
+**Checkpointing.** Four independent knobs control the artifacts a run writes
+under `checkpoints/`: rolling checkpoints every
+`checkpoint_every_n_steps` steps (kept to `max_rolling_checkpoints`, `0`
+disables), best-by-loss checkpoints (`num_best_checkpoints`, `0` disables),
+optional per-epoch checkpoints (`save_epoch_checkpoints`, default `true`,
+writes `titan_checkpoint_epoch_<n>_epoch_end.pt`), and one always-written
+final checkpoint at successful completion (`titan_final.pt`, stable name,
+overwritten on resumed runs; skipped on NaN/storage early stops). The e2e
+harness (`full_tests/_helpers.py::run_training`) pins the minimal policy —
+`save_epoch_checkpoints: false`, `checkpoint_every_n_steps: 0`,
+`num_best_checkpoints: 0` — so each run keeps exactly `titan_final.pt`.
+
 **Reproducibility.** `training.seed` (int, default `42`) seeds the Python,
 NumPy, PyTorch and CUDA RNGs, model weight initialization (the entrypoints
 seed before constructing the model), every `shuffle=True` DataLoader through a

@@ -234,6 +234,7 @@ Todo se escribe bajo `full_tests/tmp/results/` (git-ignorado):
 
 - `max_samples` y `dataset_batch_size` son pequeños para que el corpus produzca unos pocos batches.
 - Cada run tiene su propio `cwd` (`full_tests/tmp/runs/<id>/`) para aislar los checkpoints.
+- Política de checkpoints en e2e: cada run escribe **solo** `checkpoints/titan_final.pt` (se inyectan `save_epoch_checkpoints: false`, `checkpoint_every_n_steps: 0` y `num_best_checkpoints: 0` en el YAML del run) para minimizar el disco; los smokes de deploy/export usan ese artefacto de forma determinista.
 - Con `--no-realonall` el tokenizador se entrena una sola vez y se copia al CWD de cada run (`es_redpajama_<vocab_size>.model`) para evitar que el loader legacy intente bajar 100 GB de datos.
 - La decodificación de audio real requiere `torchcodec` en el entorno con la versión actual de `datasets`; si falta, los combos de audio real fallan con `ImportError` y el harness continúa.
 - Se fija semilla vía un `sitecustomize.py` generado en `tmp/` y añadido a `PYTHONPATH`, sembrando `torch`, `numpy` y `random` en cada subproceso sin modificar el proyecto.

@@ -77,6 +77,7 @@
     checkpoint_every_n_steps: 500
     max_rolling_checkpoints: 3
     num_best_checkpoints: 2
+    save_epoch_checkpoints: true
     nan_check_interval: 10
     log_gradient_stats: true
     gradient_log_interval: 10

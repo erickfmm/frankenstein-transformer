@@ -701,6 +701,7 @@ def _train_from_config_path(
         num_epochs_effective = int(num_epochs)
     nan_detected = False
     best_loss = trainer.best_loss
+    final_checkpoint_path: Optional[str] = None
 
     try:
         for epoch in range(resume_epoch, num_epochs_effective):
@@ -714,8 +715,9 @@ def _train_from_config_path(
                     break
 
                 logging.info("✅ Epoch %s completed - Average Loss: %.4f", epoch + 1, avg_loss)
-                checkpoint_path = trainer.save_checkpoint(epoch, suffix="_epoch_end")
-                logging.info("💾 Epoch checkpoint saved: %s", checkpoint_path)
+                if training_config.save_epoch_checkpoints:
+                    checkpoint_path = trainer.save_checkpoint(epoch, suffix="_epoch_end")
+                    logging.info("💾 Epoch checkpoint saved: %s", checkpoint_path)
 
                 if torch.cuda.is_available():
                     memory_allocated = torch.cuda.memory_allocated() / 1024**3
@@ -746,6 +748,10 @@ def _train_from_config_path(
         else:
             best_loss = trainer.best_loss
             evaluate_and_write(trainer, test_split, task)
+            final_checkpoint_path = trainer.save_checkpoint(
+                num_epochs_effective - 1, filename="titan_final.pt"
+            )
+            logging.info("💾 Final checkpoint saved: %s", final_checkpoint_path)
     finally:
         trainer.close()
 
@@ -800,6 +806,8 @@ def _train_from_config_path(
     logging.info("  Best model checkpoints: %s", len(trainer.best_checkpoints))
     for neg_loss, checkpoint_path in sorted(trainer.best_checkpoints, reverse=True):
         logging.info("    - %s (loss=%.6f)", checkpoint_path, -neg_loss)
+    if final_checkpoint_path:
+        logging.info("  Final checkpoint: %s", final_checkpoint_path)
 
     logging.info("\n📊 Training metrics saved to: %s", training_config.csv_log_path)
     logging.info("✨ Training pipeline completed!")
@@ -1082,8 +1090,15 @@ def _train_vision(
             if should_stop:
                 completed = False
                 break
+            if training_config.save_epoch_checkpoints:
+                checkpoint_path = trainer.save_checkpoint(epoch, suffix="_epoch_end")
+                logging.info("💾 Epoch checkpoint saved: %s", checkpoint_path)
         if completed:
             evaluate_and_write(trainer, test_split, loaded.task)
+            final_checkpoint_path = trainer.save_checkpoint(
+                int(num_epochs_eff) - 1, filename="titan_final.pt"
+            )
+            logging.info("💾 Final checkpoint saved: %s", final_checkpoint_path)
     finally:
         trainer.close()
 
@@ -1242,8 +1257,15 @@ def _train_audio(
             if should_stop:
                 completed = False
                 break
+            if training_config.save_epoch_checkpoints:
+                checkpoint_path = trainer.save_checkpoint(epoch, suffix="_epoch_end")
+                logging.info("💾 Epoch checkpoint saved: %s", checkpoint_path)
         if completed:
             evaluate_and_write(trainer, test_split, loaded.task)
+            final_checkpoint_path = trainer.save_checkpoint(
+                int(num_epochs_eff) - 1, filename="titan_final.pt"
+            )
+            logging.info("💾 Final checkpoint saved: %s", final_checkpoint_path)
     finally:
         trainer.close()
 

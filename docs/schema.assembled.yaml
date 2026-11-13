@@ -11017,16 +11017,16 @@ properties:
         default: 500
         title: Checkpoint Frequency
         title_es: Frecuencia de Checkpoints
-        description: 'Save rolling checkpoint every N steps. Typical: 500–5000. More often = less data loss on crash, more disk I/O.
+        description: 'Save rolling checkpoint every N steps. Typical: 500–5000. More often = less data loss on crash, more disk I/O. 0 = disabled (no rolling checkpoints).
 
 
-          **Impact:** Balance with disk speed. For long training runs (weeks) use shorter intervals.
+          **Impact:** Balance with disk speed. For long training runs (weeks) use shorter intervals. Crash recovery with 0 relies on epoch/best/final checkpoints.
 
           '
-        description_es: 'Guardar checkpoint rodante cada N pasos. Típico: 500–5000. Más frecuente = menos pérdida de datos en crash, más I/O.
+        description_es: 'Guardar checkpoint rodante cada N pasos. Típico: 500–5000. Más frecuente = menos pérdida de datos en crash, más I/O. 0 = deshabilitado (sin checkpoints rodantes).
 
 
-          **Impacto:** Balancear con velocidad de disco. Para entrenamientos largos (semanas) usar intervalos más cortos.
+          **Impacto:** Balancear con velocidad de disco. Para entrenamientos largos (semanas) usar intervalos más cortos. Con 0, la recuperación depende de los checkpoints de época/mejor/final.
 
           '
         examples:
@@ -11055,13 +11055,13 @@ properties:
         default: 2
         title: Best Checkpoints
         title_es: Mejores Checkpoints
-        description: 'Number of best checkpoints kept permanently (by validation loss). Typical: 1–3. Not auto-deleted.
+        description: 'Number of best checkpoints kept permanently (by validation loss). Typical: 1–3. Not auto-deleted. 0 = disabled (no best checkpoints).
 
 
           **Impact:** Useful for ensembling or selecting among models with similar performance.
 
           '
-        description_es: 'Número de mejores checkpoints conservados permanentemente (por pérdida de validación). Típico: 1–3. No se eliminan automáticamente.
+        description_es: 'Número de mejores checkpoints conservados permanentemente (por pérdida de validación). Típico: 1–3. No se eliminan automáticamente. 0 = deshabilitado (sin mejores checkpoints).
 
 
           **Impacto:** Útil para ensamblado o selección entre modelos con rendimiento similar.
@@ -11069,6 +11069,25 @@ properties:
           '
         examples:
         - 2
+      save_epoch_checkpoints:
+        type: boolean
+        default: true
+        title: Save Epoch Checkpoints
+        title_es: Guardar Checkpoints por Época
+        description: 'Save a full checkpoint at the end of every epoch (`titan_checkpoint_epoch_<n>_epoch_end.pt`). When false, only rolling/best checkpoints and the single final checkpoint are written.
+
+
+          **Impact:** One extra full checkpoint per epoch on disk, never auto-deleted. Disable for long runs with many epochs where rolling + best + final are enough (the e2e harness does exactly that).
+
+          '
+        description_es: 'Guarda un checkpoint completo al final de cada época (`titan_checkpoint_epoch_<n>_epoch_end.pt`). Cuando es false, solo se escriben los checkpoints rodantes/mejores y el checkpoint final único.
+
+
+          **Impacto:** Un checkpoint completo extra por época en disco, nunca eliminado automáticamente. Deshabilitar en entrenamientos largos con muchas épocas donde rodantes + mejor + final bastan (el harness e2e hace exactamente eso).
+
+          '
+        examples:
+        - true
       nan_check_interval:
         type: integer
         default: 10
@@ -16416,6 +16435,7 @@ examples:
     checkpoint_every_n_steps: 500
     max_rolling_checkpoints: 3
     num_best_checkpoints: 2
+    save_epoch_checkpoints: true
     nan_check_interval: 10
     log_gradient_stats: true
     gradient_log_interval: 10

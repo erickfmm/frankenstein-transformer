@@ -871,6 +871,11 @@ def run_training(
     if test_percentage is not None:
         training_cfg["test_percentage"] = float(test_percentage)
     training_cfg["gpu_temp_guard_enabled"] = bool(gpu_temp_guard)
+    # Checkpoint policy for e2e: only the single final artifact survives a run
+    # (no per-epoch, rolling or best checkpoints) to keep disk usage low.
+    training_cfg["save_epoch_checkpoints"] = False
+    training_cfg["checkpoint_every_n_steps"] = 0
+    training_cfg["num_best_checkpoints"] = 0
     if gpu_temp_pause_threshold_c is not None:
         training_cfg["gpu_temp_pause_threshold_c"] = float(gpu_temp_pause_threshold_c)
     if gpu_temp_resume_threshold_c is not None:
@@ -953,7 +958,8 @@ def run_training(
         status = "FAILED"
         notes = f"non-zero exit ({proc.returncode})"
 
-    # Try to locate the final epoch-end checkpoint for downstream deploy smoke tests.
+    # Locate the final checkpoint for downstream deploy smoke tests
+    # (``titan_final.pt`` under the e2e policy, newest artifact otherwise).
     checkpoint_path = find_latest_checkpoint(run_dir)
     test_metrics = read_test_metrics(run_dir)
 
@@ -1011,6 +1017,11 @@ def find_latest_checkpoint(run_dir: Path) -> Optional[Path]:
     checkpoint_dir = run_dir / "checkpoints"
     if not checkpoint_dir.exists():
         return None
+    # The e2e policy writes exactly one artifact (``titan_final.pt``); prefer it
+    # deterministically before falling back to the newest file by mtime.
+    final = checkpoint_dir / "titan_final.pt"
+    if final.exists():
+        return final
     candidates = sorted(checkpoint_dir.glob("titan_*.pt"), key=lambda p: p.stat().st_mtime, reverse=True)
     return candidates[0] if candidates else None
 

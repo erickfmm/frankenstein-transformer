@@ -836,11 +836,18 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         checkpoint_every_n_steps_schema = training_schema["properties"]["checkpoint_every_n_steps"]
         max_rolling_checkpoints_schema = training_schema["properties"]["max_rolling_checkpoints"]
         num_best_checkpoints_schema = training_schema["properties"]["num_best_checkpoints"]
+        save_epoch_checkpoints_schema = training_schema["properties"]["save_epoch_checkpoints"]
         with st.expander("Checkpoint Settings", expanded=False):
+            save_epoch_checkpoints = st.checkbox(
+                get_field_title(save_epoch_checkpoints_schema, "Save Epoch Checkpoints"),
+                value=True,
+                key="training.save_epoch_checkpoints",
+                help=get_field_description(save_epoch_checkpoints_schema),
+            )
             checkpoint_every_n_steps = st.number_input(
                 get_field_title(checkpoint_every_n_steps_schema, "Checkpoint Every N Steps"),
                 value=500,
-                min_value=1,
+                min_value=0,
                 key="training.checkpoint_every_n_steps",
                 help=get_field_description(checkpoint_every_n_steps_schema),
             )
@@ -854,11 +861,12 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
             num_best_checkpoints = st.number_input(
                 get_field_title(num_best_checkpoints_schema, "Num Best Checkpoints"),
                 value=2,
-                min_value=1,
+                min_value=0,
                 key="training.num_best_checkpoints",
                 help=get_field_description(num_best_checkpoints_schema),
             )
 
+            training_config["save_epoch_checkpoints"] = save_epoch_checkpoints
             training_config["checkpoint_every_n_steps"] = checkpoint_every_n_steps
             training_config["max_rolling_checkpoints"] = max_rolling_checkpoints
             training_config["num_best_checkpoints"] = num_best_checkpoints
