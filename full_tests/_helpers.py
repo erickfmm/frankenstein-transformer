@@ -1465,7 +1465,10 @@ def _classification_scores(rows: List[dict]) -> Dict[str, Any]:
     if not pairs:
         return {}
 
-    labels = sorted({truth for _, truth in pairs})
+    # The label space must cover predictions too: on tiny held-out splits a
+    # class can be absent from every truth yet still be predicted, which
+    # would otherwise raise ``KeyError`` when indexing the confusion matrix.
+    labels = sorted({label for pair in pairs for label in pair})
     index = {label: position for position, label in enumerate(labels)}
     size = len(labels)
     confusion = [[0] * size for _ in range(size)]

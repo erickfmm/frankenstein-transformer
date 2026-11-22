@@ -24,6 +24,7 @@ try:
         estimate_model_size,
         BitNetQuantizer,
     )
+    from ..utils.config_payload import as_plain_dict
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 except ImportError:
     from model.config import FrankensteinModelConfig
@@ -36,6 +37,7 @@ except ImportError:
         estimate_model_size,
         BitNetQuantizer,
     )
+    from utils.config_payload import as_plain_dict
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
 logging.basicConfig(
@@ -137,7 +139,7 @@ class ModelDeployer:
         """
         logger.info(f"Loading training checkpoint: {checkpoint_path}")
         
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         
         # Record the training task so validation can exercise the right head.
         if self.task is None and checkpoint.get('training_task'):
@@ -147,7 +149,11 @@ class ModelDeployer:
         if 'config' in checkpoint:
             import dataclasses
 
-            saved_config = checkpoint['config']
+            # The trainer stores the live ``FrankensteinModelConfig`` dataclass
+            # (``trainer.py``: ``'config': self.config``); older checkpoints
+            # stored the plain ``model:`` mapping. Normalize both before the
+            # schema-style ``.get`` lookups below.
+            saved_config = as_plain_dict(checkpoint['config'])
             saved = FrankensteinModelConfig.from_dict(
                 saved_config, model_class=saved_config.get("model_class")
             )

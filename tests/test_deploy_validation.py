@@ -147,3 +147,30 @@ def test_validate_deployment_reads_training_task_from_checkpoint(tmp_path):
     assert deployer.task == "segmentation"
     deployer.convert_to_deployment(str(tmp_path / "deploy"), save_format="standard")
     assert deployer.validate_deployment(str(tmp_path / "deploy"))
+
+
+@pytest.mark.parametrize("save_as_dataclass", [True, False])
+def test_load_training_checkpoint_accepts_dataclass_and_mapping(tmp_path, save_as_dataclass):
+    """The trainer stores ``'config': self.config`` (a dataclass), not a mapping.
+
+    ``ModelDeployer.load_training_checkpoint`` used to call ``
+    saved_config.get("model_class")`` unconditionally, so every e2e deploy
+    (experiment 3: 324 combos x 2 formats) failed with
+    ``AttributeError: 'FrankensteinModelConfig' object has no attribute 'get'``.
+    Both payload shapes must load and produce the recorded model class.
+    """
+    config = _vit_config("classification")
+    model = FrankensteinViT(config)
+    checkpoint_path = tmp_path / "ckpt.pt"
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "config": config if save_as_dataclass else config.to_jsonable(),
+            "training_task": "classification",
+        },
+        checkpoint_path,
+    )
+    deployer = ModelDeployer(_vit_config("classification"))
+    deployer.load_training_checkpoint(str(checkpoint_path))
+    assert deployer.task == "classification"
+    assert deployer.model.__class__.__name__ == "FrankensteinViT"

@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -35,6 +34,7 @@ import yaml
 
 from .export_compat import model_config_from
 from ..model.config import merge_model_blocks
+from ..utils.config_payload import as_plain_dict
 
 try:
     from .quantization import bake_bitnet_weights
@@ -481,15 +481,8 @@ def _repo_root() -> Path:
 
 
 def _as_plain_dict(value: Any) -> Dict[str, Any]:
-    if value is None:
-        return {}
-    if isinstance(value, dict):
-        return dict(value)
-    if is_dataclass(value):
-        return asdict(value)
-    if hasattr(value, "__dict__"):
-        return dict(vars(value))
-    raise TypeError(f"Unsupported config payload type: {type(value)!r}")
+    """Backwards-compatible alias for :func:`src.utils.config_payload.as_plain_dict`."""
+    return as_plain_dict(value)
 
 
 def _extract_state_dict(checkpoint: Dict[str, Any]) -> Dict[str, torch.Tensor]:
