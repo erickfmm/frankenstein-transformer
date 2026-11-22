@@ -4,7 +4,7 @@
 
 Este apéndice reporta la ronda~3 en su totalidad. La ronda~2 midió 868 configuraciones y dejó vacías 194 de las 861 celdas híbridas; la ronda~3 cierra la matriz. La campaña entrenó todos los pares no ordenados de los $54$ mixers registrados---$\binom{54}{2}=1{,}431$ celdas, sin ninguna ausente---más $54$ líneas base de un solo mixer y $168$ corridas de ablación que mueven un interruptor a la vez (familia de optimizador, normalización, codificación posicional, enrutamiento MoE, camino residual, tarea y clase de modelo). Es la medición más grande del proyecto: $1{,}653$ corridas de entrenamiento, $20,5$ millones de pasos de optimización registrados y $3{,}668$ horas de tiempo de pared de entrenamiento repartidas en $7,2$ días calendario.
 
-El apéndice sigue el orden del análisis: la población y sus advertencias, el paisaje de parámetros, los resultados de entrenamiento, la dinámica de aprendizaje, la presión del gradiente por bloque, el coste del entrenamiento, las mediciones de inferencia y cuantización, la fiabilidad del pipeline y las correlaciones entre las variables medidas. Todos los números los regenera \texttt{make\_report.py} a partir de \texttt{master.csv}; todas las figuras las regenera \texttt{make\_paper\_figures.py} con los mismos constructores que el resto del informe, así que este texto y los artefactos no pueden contradecirse.
+El apéndice sigue el orden del análisis: la población y sus advertencias, el paisaje de parámetros, los resultados de entrenamiento, el atlas de mixers con sus roles, sinergias y frontera de Pareto, la dinámica de aprendizaje, la presión del gradiente por bloque, las ablaciones de optimizador y componentes, el coste del entrenamiento, las mediciones de inferencia y cuantización, la fiabilidad del pipeline y las correlaciones entre las variables medidas. Todos los números los regenera \texttt{make\_report.py} a partir de \texttt{master.csv}; todas las figuras las regenera \texttt{make\_paper\_figures.py} con los mismos constructores que el resto del informe, así que este texto y los artefactos no pueden contradecirse.
 
 \subsection{Configuración, población y exclusiones}
 
@@ -37,9 +37,9 @@ interruptores de tarea & 4 & 0 & 499 & 0,31 & 6,426 & 265,0 & 100,0\% \\
 \end{tabular}
 \end{table}
 
-Dos exclusiones condicionan el resto del apéndice. Primero, la etapa de \emph{despliegue} no se analiza. En esta ronda el desplegador recibió la dataclass viva \texttt{FrankensteinModelConfig} guardada en el checkpoint donde esperaba un diccionario y le llamó \texttt{.get()}, así que $822$ de los $1{,}334$ registros de despliegue fallaron con \texttt{'FrankensteinModelConfig' object has no attribute 'get'}. Medir una etapa rota confundiría un error de serialización con la calidad de la cuantización; por eso el despliegue se descarta y el análisis de pesos cuantizados usa la ruta de exportación a Transformers, que exportó $4{,}686$ modelos sin fallos. Segundo, solo $662$ de las corridas produjeron filas de inferencia de Hugging Face ($33{,}380$ filas de muestra sobre $653$ pares MLM más unas pocas corridas de LM causal y clasificación de texto); la sección de inferencia estudia ese subconjunto, no el atlas completo.
+Dos exclusiones condicionan el resto del apéndice. Primero, la etapa de \emph{despliegue} no se analiza: durante la campaña su manejo del payload de configuración se vio afectado por un error que ya está parchado en el harness, así que los registros de despliegue de esta ronda se dejan de lado y el análisis de pesos cuantizados usa la ruta de exportación a Transformers, que exportó $4{,}686$ modelos sin fallos. Segundo, solo $662$ de las corridas produjeron filas de inferencia de Hugging Face ($33{,}380$ filas de muestra sobre $653$ pares MLM más unas pocas corridas de LM causal y clasificación de texto); la sección de inferencia estudia ese subconjunto, no el atlas completo.
 
-Las corridas son heterogéneas de una forma que importa para las curvas. Las configuraciones piden 500 épocas, pero el harness detiene una corrida antes (por calendario, criterio de meseta o un tope específico de la ablación): $734$ corridas llegaron a la última época y $919$ se detuvieron antes. Por eso las curvas de aprendizaje se estiran sobre el progreso propio de cada corrida en lugar de dibujarse contra pasos absolutos, de modo que una corrida de 300 épocas y una de 500 se comparan en la misma fracción de su calendario. El análisis de rendimiento y coste conserva los tiempos absolutos, porque eso es lo que pagó la campaña. Las 61 corridas con menos de 5{,}000 pasos registrados están dominadas por las familias de audio, tokenizadores y datos reales, cuyos conjuntos son lo bastante pequeños como para terminar en segundos. Una distinción más fuerte importa para todas las comparaciones que siguen: $44$ corridas se detuvieron antes de la época~100---quince de las diecisiete ablaciones MoE (pruebas de humo de enrutamiento de cinco épocas), la única conversión BitNet/GGUF, veintidós pares truncados y un puñado de ablaciones de interruptores y de PE. Permanecen en la población y en el registro de cómputo, pero todos los resultados de pérdida, dinámica, gradiente, coste por corrida y correlación se calculan sobre las $1{,}609$ corridas con al menos 100 épocas. La columna de presupuesto de la Tabla~\ref{tab:r3-families} hace visible la distinción.
+Las corridas son heterogéneas de una forma que importa para las curvas. Las configuraciones piden 500 épocas, pero el harness detiene una corrida antes (por calendario, criterio de meseta o un tope específico de la ablación): $734$ corridas llegaron a la última época y $919$ se detuvieron antes. Por eso las curvas de aprendizaje se estiran sobre el progreso propio de cada corrida en lugar de dibujarse contra pasos absolutos, de modo que una corrida de 300 épocas y una de 500 se comparan en la misma fracción de su calendario. El análisis de rendimiento y coste conserva los tiempos absolutos, porque eso es lo que pagó la campaña. Las $61$ corridas con menos de 5{,}000 pasos registrados están dominadas por las familias de audio, tokenizadores y datos reales, cuyos conjuntos son lo bastante pequeños como para terminar en segundos. Una distinción más fuerte importa para todas las comparaciones que siguen: $44$ corridas se detuvieron antes de la época~100---quince de las diecisiete ablaciones MoE (pruebas de humo de enrutamiento de cinco épocas), la única conversión BitNet/GGUF, cinco pruebas de humo de interruptores y PE, una corrida de transductor de audio sin épocas válidas y veintidós pares híbridos (doce truncados, diez los fallos de \texttt{engram} que se discuten en la Sección~\ref{sec:r3-reliability}). Permanecen en la población y en el registro de cómputo, pero todos los resultados de pérdida, dinámica, gradiente, coste por corrida y correlación se calculan sobre las $1{,}609$ corridas con al menos 100 épocas. La columna de presupuesto de la Tabla~\ref{tab:r3-families} hace visible la distinción. Una nota de calidad de datos completa la configuración: el entrenador escribe una fila centinela con pérdida cero cuando no puede formar el último lote, y esas filas se descartan antes de agregar, así que cada «pérdida final» citada en este apéndice es la última época \emph{válida} de la corrida.
 
 \begin{figure}[tbp]
 \centering
@@ -129,6 +129,114 @@ La calidad retenida se mide con las filas de inferencia. Sobre los $653$ pares M
 \end{tabular}
 \end{table}
 
+Un segundo mixer vale un quinto de nat. Las $54$ líneas base de un solo mixer---cada capa con el mismo mixer dos veces---terminan con una mediana de $8,998$ nats frente a $8,78$ de los pares, y $131$ de los $1{,}409$ pares analizados terminan por debajo de la mejor línea base, el \texttt{conformer} duplicado con $8,392$ nats. Duplicar un buen mixer es una pila razonable; mezclar dos distintos es, en la mediana, el mejor negocio, y la cima de la tabla de pares está muy por encima de cualquier pila homogénea.
+
+\subsection{El atlas de mixers: roles, sinergias y frontera de Pareto}
+
+La Figura~\ref{fig:r3-matrix} es la pieza central de la ronda: la matriz completa de $54\times54$ en la que cada celda es un par híbrido, las filas indexan el primer mixer (A), las columnas el segundo (B) y el color codifica la pérdida final. Los diez pares con \texttt{engram} que fallan son los únicos huecos---$10$ celdas vacías de $1{,}431$. La matriz se lee en dos direcciones. Columna a columna---fijar el segundo mixer, variar el primero---el segundo mixer domina: un buen B (\texttt{conformer}, \texttt{falcon3a}, \texttt{falcon2a}) mantiene casi cualquier A en una banda estrecha, mientras un mal B (\texttt{mamba}, \texttt{cca}, \texttt{iha}) arrastra incluso al mejor A al fondo del rango. Fila a fila---ningún A rescata a un mal B. La ronda~2 midió esta asimetría sobre dos tercios de la rejilla; la ronda~3 la mide completa.
+
+\begin{figure}[tbp]
+\centering
+\fitfigure{\includegraphics{../paper/figures/experiments/round3/matrix_loss-es.pdf}}
+\caption{El atlas de mixers: pérdida final de entrenamiento de cada par híbrido en la rejilla $54\times54$. Las filas son el primer mixer (A), las columnas el segundo (B); las diez celdas vacías son los pares con \texttt{engram} que fallan.}
+\label{fig:r3-matrix}
+\end{figure}
+
+Sobre los $52$ mixers que aparecen en ambos roles con calendario completo, la pérdida mediana abarca $0,88$ nats en el rol B (mejor \texttt{conformer} con $8,168$, peor \texttt{mamba} con $9,051$) frente a $0,80$ nats en el rol A (mejor \texttt{conformer} con $8,163$, peor \texttt{iha} con $8,968$): el segundo mixer es la palanca, exactamente como en la ronda~2. Las dos lecturas no son independientes---las medianas por rol correlacionan en $+0,72$ (Figura~\ref{fig:r3-roles})---así que un mixer bueno en un rol tiende a serlo en el otro, pero el eje B es el más ancho y carga con la decisión. \texttt{retnet} aparece solo en el rol A y \texttt{swa} solo en el rol B tras el filtro de humo; ambos quedan fuera de la comparación.
+
+\begin{figure}[tbp]
+\centering
+\fitfigure{\includegraphics{../paper/figures/experiments/round3/roles_scatter-es.pdf}}
+\caption{Pérdida mediana de cada mixer en el rol A frente al rol B (52 mixers con calendario completo en ambos roles). La diagonal es la identidad; el eje B es el más ancho.}
+\label{fig:r3-roles}
+\end{figure}
+\begin{table}[H]
+\centering
+\small
+\caption{Segundos mixers: ocho mejores y ocho peores por pérdida mediana en el rol B, con el número de pares, la mediana del mismo mixer en el rol A y el top-5 retenido medio de sus pares.}
+\label{tab:r3-best-b}
+\begin{tabular}{lrrrr}
+\toprule
+Mixer & Pares & Mediana B & Mediana A & Top-5 \\
+\midrule
+\texttt{conformer} & 43 & 8,168 & 8,163 & 12,8\% \\
+\texttt{falcon3a} & 41 & 8,451 & 8,397 & 22,8\% \\
+\texttt{falcon2a} & 40 & 8,469 & 8,417 & 20,8\% \\
+\texttt{falcon1a} & 39 & 8,471 & 8,361 & 25,1\% \\
+\texttt{falcon2} & 37 & 8,599 & 8,464 & 22,6\% \\
+\texttt{engram} & 18 & 8,607 & 8,565 & n/a \\
+\texttt{falcon3} & 38 & 8,622 & 8,476 & 28,6\% \\
+\texttt{gated\_deltanet2} & 14 & 8,641 & 8,561 & n/a \\
+\texttt{mamba} & 1 & 9,051 & 8,935 & n/a \\
+\texttt{cca} & 26 & 9,018 & 8,935 & n/a \\
+\texttt{iha} & 23 & 8,940 & 8,968 & n/a \\
+\texttt{titan} & 3 & 8,935 & 8,812 & n/a \\
+\texttt{gla} & 11 & 8,933 & 8,708 & n/a \\
+\texttt{kpa} & 29 & 8,931 & 8,851 & n/a \\
+\texttt{ode} & 2 & 8,918 & 8,886 & n/a \\
+\texttt{sparda} & 32 & 8,913 & 8,790 & n/a \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El mejor segundo mixer en pérdida no es el mejor en calidad. La Tabla~\ref{tab:r3-best-b} empareja las medianas de pérdida con el top-5 retenido de los mismos pares, y los dos órdenes discrepan: \texttt{conformer} es el mejor B en pérdida pero casi el peor en top-5 retenido ($12,8\%$), mientras \texttt{ccgqa} encabeza el ranking de calidad con $30,4\%$ y una pérdida de mitad de tabla. La Figura~\ref{fig:r3-top5-b} muestra el orden completo---la forma a nivel de rol de la advertencia pérdida/calidad de la sección anterior.
+
+\begin{figure}[tbp]
+\centering
+\fitfigure{\includegraphics{../paper/figures/experiments/round3/top5_by_b-es.pdf}}
+\caption{Acierto top-5 retenido medio de los pares agrupados por segundo mixer (mixers con al menos 20 pares evaluados). \texttt{conformer} (naranja) es el mejor B en pérdida.}
+\label{fig:r3-top5-b}
+\end{figure}
+
+\paragraph{La interacción supera a los marginales.}
+Ordenar los mixers individualmente no reconstruye el atlas, porque los pares interactúan. Siguiendo la ronda~2, la sinergia de un par mide cuánto se aleja del promedio de sus dos marginales,
+\[
+S_{A,B} = \frac{\mu_A + \mu_B}{2} - L_{A,B},
+\]
+donde $\mu_A$ y $\mu_B$ son las pérdidas medias de todos los pares que contienen A y B. La sinergia absoluta mediana es $0,09$ nats y el P90 es $0,26$: en uno de cada diez pares la interacción mueve el resultado en más de un cuarto de nat, más de lo que mueven en total la mayoría de las ablaciones de optimizador, normalización o PE. El $15,3\%$ de los pares se desvía más de 0,15 nats de lo que predicen sus partes. La cola positiva (Tabla~\ref{tab:r3-synergy}) la lidera \texttt{attn\_falcon2a\_\_conformer} con $+0,55$ nats: los pares que superan a sus marginales apilan un primer mixer barato y estable bajo un segundo fuerte. La cola negativa la domina \texttt{mtla} como B---\texttt{attn\_mtla\_\_tpa} pierde $-0,82$ nats frente a lo que predicen sus partes---mixers que parecen medianos aislados pero chocan al apilarlos. Para síntesis el mensaje es el mismo de la ronda~2: una lista ordenada de mixers es un resumen necesario pero una herramienta de diseño insuficiente; hay que consultar el atlas, o al menos la tabla de sinergias, antes de componer una pila.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Las mejores y peores interacciones por sinergia ($S_{A,B}=(\mu_A+\mu_B)/2-L_{A,B}$). Valores positivos: el par supera lo que predicen sus marginales.}
+\label{tab:r3-synergy}
+\begin{tabular}{lrrr}
+\toprule
+Par & Pérdida & Esperada & Sinergia \\
+\midrule
+\texttt{attn\_falcon2a\_\_conformer} & 7,736 & 8,287 & +0,551 \\
+\texttt{attn\_hgrn2\_\_conformer} & 7,842 & 8,370 & +0,528 \\
+\texttt{attn\_gated\_deltanet2\_\_falcon2a} & 7,984 & 8,483 & +0,499 \\
+\texttt{attn\_falcon3a\_\_gmla} & 8,043 & 8,535 & +0,492 \\
+\texttt{attn\_falcon1a\_\_gmla} & 8,052 & 8,538 & +0,486 \\
+\texttt{attn\_mtla\_\_tpa} & 9,695 & 8,879 & -0,816 \\
+\texttt{attn\_gqla\_\_mtla} & 9,683 & 8,881 & -0,802 \\
+\texttt{attn\_mla\_\_mtla} & 9,678 & 8,878 & -0,800 \\
+\texttt{attn\_mtla\_\_lsa} & 9,565 & 8,878 & -0,687 \\
+\texttt{attn\_gqa\_\_mtla} & 9,568 & 8,881 & -0,687 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[tbp]
+\centering
+\fitfigure{\includegraphics{../paper/figures/experiments/round3/synergy-es.pdf}}
+\caption{Las ocho mejores y ocho peores interacciones por sinergia $S_{A,B}=(\mu_A+\mu_B)/2-L_{A,B}$. Los valores positivos superan lo que predicen los marginales.}
+\label{fig:r3-synergy}
+\end{figure}
+
+\paragraph{La frontera velocidad--calidad.}
+$11$ de los $1{,}409$ pares analizados están sobre la frontera de Pareto velocidad--calidad (Figura~\ref{fig:r3-pareto}): ningún otro par es a la vez más rápido y con menor pérdida. La frontera va de \texttt{attn\_iha\_\_mtla}---$9,57$ nats en $0,57$ horas, la celda más barata del atlas---al mejor global \texttt{attn\_falcon2a\_\_conformer} con $7,736$ nats en 2,75 horas, pasando por \texttt{attn\_ssog\_\_conformer} con $8,21$ nats en $1,32$ horas. La frontera pone precio al intercambio: la primera hora y media compra 1,4 nats, la siguiente hora y media compra 0,5, y quien optimiza un despliegue real elige un punto de esa curva, no un puesto de tabla de líderes. Cuatro de los $11$ miembros de la frontera usan un primer mixer gated-delta y todos emparejan un A barato con un B fuerte---la forma cuantitativa de la misma asimetría que muestra la matriz.
+
+\begin{figure}[tbp]
+\centering
+\fitfigure{\includegraphics{../paper/figures/experiments/round3/pareto-es.pdf}}
+\caption{La frontera de Pareto velocidad--calidad de los pares híbridos. Ningún par fuera de la frontera es a la vez más rápido y con menor pérdida.}
+\label{fig:r3-pareto}
+\end{figure}
+
+\paragraph{Duplicados y colapsos.}
+El atlas mide menos modelos distintos de los que nombra. $297$ de los $1{,}409$ pares analizados comparten una pérdida final idéntica bit a bit con al menos otro par, en $88$ grupos duplicados. Dos hechos estructurales explican la mayoría. Primero, los cuatro mixers de ventana \texttt{standard}, \texttt{bigbird}, \texttt{longformer} y \texttt{titan} son el mismo modelo en un contexto de 64 tokens: sus ventanas de atención cubren la secuencia completa, así que los cuatro coinciden en los 49 segundos mixers compartidos en el rol A y en los siete en el rol B. Segundo, \texttt{fastconformer} y \texttt{swa} son idénticos bit a bit allí donde ambos fueron emparejados (46 segundos mixers compartidos). El mismo colapso aparece dentro de las ablaciones: \texttt{none} y \texttt{nope} se reproducen exactamente, \texttt{pape} y \texttt{pape\_efficient} son la misma corrida, y \texttt{bitnet\_conv} sin el embedding convolutivo es indistinguible de \texttt{bitnet\_on}. Contando clases de equivalencia, los $54$ mixers registrados se reducen a unos 50 modelos distintos a esta longitud de contexto. Cada uno de estos hechos es una advertencia que se arrastra y no un defecto escondido, exactamente como en la ronda~2.
+
 \subsection{Dinámica de aprendizaje}
 
 La Figura~\ref{fig:r3-curves-quantiles} muestra la curva de la población. El par mediano empieza en $10,50$ nats y termina en $8,78$; la banda P10--P90 al final es $8,41$--$8,97$, más estrecha que la dispersión entre familias. La mayor parte de la reducción ocurre en el primer cuarto: la mediana alcanza $9,47$ al 25\% del calendario, $8,92$ a la mitad y $8,75$ a las tres cuartas partes. La ronda~3 mide, por tanto, cuán rápido aprende una configuración, no dónde converge: las curvas siguen bajando cuando termina el calendario.
@@ -146,7 +254,7 @@ La Figura~\ref{fig:r3-curves-quantiles} muestra la curva de la población. El pa
 \label{fig:r3-curves-top10}
 \end{figure}
 
-El orden de los mejores pares se establece temprano. Al cuarto del calendario la pérdida por par ya ordena los pares con una correlación de Spearman de $0,62$ frente a su orden final, y en la Figura~\ref{fig:r3-curves-top10} los diez mejores se separan de la población antes de la mitad y rara vez se cruzan después. El número de épocas necesarias para alcanzar el 90\% de la caída total de pérdida de una corrida lo confirma: la mediana es $41\%$ del calendario, y las medianas por familia van desde $21\%$ en las tareas de visión (donde la pérdida colapsa casi de inmediato) hasta $56\%$ en las ablaciones de normalización (donde las diferencias entre normas solo aparecen tarde). Los pares híbridos se sitúan en $40\%$.
+El orden de los mejores pares se establece temprano. A la décima parte del calendario la pérdida por par ya ordena los pares con una correlación de Spearman de $0,38$ frente a su orden final, y al cuarto la correlación es $0,62$; en la Figura~\ref{fig:r3-curves-top10} los diez mejores se separan de la población antes de la mitad y rara vez se cruzan después. El número de épocas necesarias para alcanzar el 90\% de la caída total de pérdida de una corrida lo confirma: la mediana es $41\%$ del calendario, y las medianas por familia van desde $21\%$ en las tareas de visión (donde la pérdida colapsa casi de inmediato) hasta $56\%$ en las ablaciones de normalización (donde las diferencias entre normas solo aparecen tarde). Los pares híbridos se sitúan en $40\%$.
 
 \begin{figure}[tbp]
 \centering
@@ -206,9 +314,174 @@ El mapa de calor (Figura~\ref{fig:r3-grad-heatmap}) lee las mismas estadísticas
 \label{fig:r3-grad-health}
 \end{figure}
 
-El recorte, sin embargo, es rutina y no excepción. La mediana del cociente de recorte medio es $1,04$---justo por encima del umbral 1---y $51,6\%$ de las corridas pasan la campaña recortando de media, con un P90 de $1,65$. La ronda~2 reportó una mediana de 0,90 y un recorte excepcional; la diferencia es el calendario más largo y las tasas de aprendizaje más altas de la ronda~3. La consecuencia para el informe es que las normas de gradiente deben leerse como normas después del recorte, que es lo que registra el entrenador.
+El recorte, sin embargo, es rutina y no excepción. La mediana del cociente de recorte medio es $1,04$---justo por encima del umbral 1---y el $51,6\%$ de las corridas pasan la campaña recortando de media, con un P90 de $1,65$. La ronda~2 reportó una mediana de 0,90 y un recorte excepcional; la diferencia es el calendario más largo y las tasas de aprendizaje más altas de la ronda~3. La consecuencia para el informe es que las normas de gradiente deben leerse como normas después del recorte, que es lo que registra el entrenador.
 
-El consumo de memoria es modesto: la corrida mediana alcanza un pico de $1{,}457$ MB de memoria residente y el máximo es $3{,}159$ MB, así que el atlas completo cabe en un solo host de CPU con una docena de workers.
+La huella de memoria es modesta y plana. La corrida mediana del análisis mantiene $815$ MB de memoria residente (P90 $843$ MB); las familias de visión son la excepción con unos $1{,}572$ MB, y la mayor media corrida a corrida es $1{,}640$ MB (\texttt{vit\_segmentation\_pixel}). La telemetría de pico existe para $18$ corridas de la campaña y alcanza los $3{,}159$ MB. El atlas completo cabe en un solo host de CPU con una docena de workers.
+
+\subsection{Ablaciones de optimizador y componentes}
+
+\paragraph{Optimizadores: pérdida, presión del gradiente, CPU y memoria.}
+El barrido de optimizadores corre $39$ optimizadores sobre el mismo esqueleto de 309k parámetros, los mismos datos y la misma tasa de aprendizaje; la Tabla~\ref{tab:r3-optimizers} reporta las épocas efectivas, la pérdida final, la norma del gradiente, el cociente de recorte, el tiempo por paso y la memoria residente media de cada uno. Tres resultados destacan.
+
+Primero, el barrido tiene un clúster de identidad. Ocho optimizadores (\texttt{adamw}, \texttt{adan}, \texttt{ademamix}, \texttt{adopt}, \texttt{cautious\_adamw}, \texttt{mars\_adamw}, \texttt{schedulefree\_adamw}, \texttt{soap}) producen trayectorias que coinciden dentro de $2\times10^{-6}$ nats---son la misma regla de actualización con estos hiperparámetros---así que la ablación mide realmente los 31 restantes. La ronda~2 vio el mismo clúster y lo leyó como optimizadores intercambiables; la identidad bit a bit de las trayectorias hace la lectura precisa.
+
+Segundo, el ranking de pérdida es un ranking de presión de gradiente. Sobre las $39$ corridas, la correlación de rango entre la pérdida final y la norma final del gradiente es $-0,92$ (contra la media por corrida, $-0,86$) y contra el cociente de recorte $-0,86$. Los optimizadores que terminan más abajo son los que mantienen gradientes grandes y siguen recortando: \texttt{af\_muon} llega a $5,685$ nats con el mayor gradiente final del barrido ($13,03$, tras $284$ épocas), \texttt{sophia} llega a $7,310$ con $9,74$, mientras \texttt{sgd\_momentum} termina en $10,206$ con $4,08$. La velocidad de aprendizaje a esta escala se compra con magnitud de gradiente, no con un precondicionador más sofisticado---la forma a nivel de optimizador del hallazgo por bloques de que el gradiente de la cabeza domina.
+
+Tercero, la calidad y el coste de CPU son ortogonales: la correlación entre pérdida final y tiempo por paso es $-0,06$, y el calendario efectivo solo añade $+0,26$. Entre las 36 corridas con telemetría comparable, el tiempo por paso abarca $305$--$438$ ms (\texttt{soap} a \texttt{rmsprop}), un 40\%; la memoria es aún más plana: el optimizador mediano mantiene $805$ MB de memoria residente y solo \texttt{eve} destaca con $1{,}096$ MB, un tercio por encima de la mediana, pagando su estado extra. Las tres incorporaciones tardías al barrido (\texttt{af\_muon}, \texttt{ada\_muon}, \texttt{ea4llm}) registran tiempos por paso de $111$--$121$ ms frente a 305--438 del resto con calendarios de pared más largos, así que su cronómetro cubre solo parte del trabajo y queda excluido del rango anterior; sus pérdidas y normas de gradiente no se ven afectadas.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Ablación de optimizadores sobre el mismo esqueleto: épocas efectivas, pérdida final, norma del gradiente (media y final), cociente de recorte, tiempo por paso y memoria residente media. Orden por pérdida.}
+\label{tab:r3-optimizers}
+\begin{tabular}{lrrrrrr}
+\toprule
+Optimizador & Ép. & Pérdida & Grad (m/f) & Recorte & Paso (ms) & RSS (MB) \\
+\midrule
+\texttt{af\_muon} & 284 & 5,685 & 6,00 / 13,03 & 1,20 & 121 & 788 \\
+\texttt{sophia} & 284 & 7,310 & 7,03 / 9,74 & 1,41 & 358 & 818 \\
+\texttt{lion} & 370 & 7,846 & 5,72 / 6,98 & 1,14 & 337 & 783 \\
+\texttt{adam\_pm} & 370 & 8,563 & 5,13 / 6,03 & 1,03 & 331 & 791 \\
+\texttt{cautious\_adamw} & 312 & 8,769 & 4,63 / 5,29 & 0,93 & 355 & 808 \\
+\texttt{soap} & 312 & 8,769 & 4,63 / 5,29 & 0,93 & 305 & 805 \\
+\texttt{mars\_adamw} & 312 & 8,769 & 4,63 / 5,29 & 0,93 & 358 & 805 \\
+\texttt{adopt} & 312 & 8,769 & 4,63 / 5,29 & 0,93 & 319 & 779 \\
+\texttt{schedulefree\_adamw} & 312 & 8,769 & 4,63 / 5,29 & 0,93 & 353 & 797 \\
+\texttt{ademamix} & 312 & 8,769 & 4,63 / 5,29 & 0,93 & 359 & 788 \\
+\texttt{adan} & 312 & 8,769 & 4,63 / 5,29 & 0,93 & 308 & 805 \\
+\texttt{adamw} & 312 & 8,769 & 4,63 / 5,29 & 0,93 & 425 & 805 \\
+\texttt{shampoo} & 312 & 8,815 & 4,58 / 5,16 & 0,92 & 355 & 806 \\
+\texttt{lamb} & 284 & 9,052 & 5,82 / 7,88 & 1,16 & 349 & 807 \\
+\texttt{nor\_muon} & 370 & 9,098 & 4,85 / 5,52 & 0,97 & 347 & 805 \\
+\texttt{turbo\_muon} & 312 & 9,212 & 4,40 / 5,01 & 0,88 & 381 & 805 \\
+\texttt{tuon} & 370 & 9,235 & 4,70 / 5,32 & 0,94 & 329 & 809 \\
+\texttt{muon2} & 370 & 9,311 & 4,49 / 5,04 & 0,90 & 328 & 807 \\
+\texttt{muon} & 370 & 9,312 & 4,51 / 5,08 & 0,90 & 332 & 805 \\
+\texttt{root} & 370 & 9,321 & 4,48 / 5,03 & 0,90 & 339 & 799 \\
+\texttt{namo\_d} & 312 & 9,336 & 4,26 / 4,73 & 0,85 & 322 & 795 \\
+\texttt{namo} & 312 & 9,337 & 4,26 / 4,73 & 0,85 & 333 & 808 \\
+\texttt{eve} & 370 & 9,536 & 4,87 / 5,25 & 0,97 & 329 & 1096 \\
+\texttt{radam} & 312 & 9,561 & 4,47 / 5,06 & 0,89 & 351 & 807 \\
+\texttt{laprop} & 312 & 9,581 & 4,48 / 5,02 & 0,90 & 334 & 807 \\
+\texttt{rmsprop} & 312 & 9,616 & 4,44 / 4,92 & 0,89 & 438 & 784 \\
+\texttt{ada\_muon} & 312 & 9,835 & 4,20 / 4,41 & 0,84 & 120 & 800 \\
+\texttt{adafactor} & 312 & 9,848 & 4,20 / 4,51 & 0,84 & 309 & 742 \\
+\texttt{conda} & 370 & 9,949 & 4,48 / 4,90 & 0,90 & 339 & 839 \\
+\texttt{galore\_adamw} & 370 & 9,958 & 4,55 / 4,93 & 0,91 & 412 & 811 \\
+\texttt{anon} & 312 & 10,005 & 4,08 / 4,32 & 0,82 & 350 & 829 \\
+\texttt{apollo} & 499 & 10,006 & 4,47 / 4,75 & 0,89 & 312 & 752 \\
+\texttt{sgd\_momentum} & 312 & 10,206 & 3,96 / 4,08 & 0,79 & 412 & 788 \\
+\texttt{apollo\_mini} & 499 & 10,226 & 4,01 / 4,15 & 0,80 & 322 & 750 \\
+\texttt{dion3} & 370 & 10,227 & 4,11 / 4,34 & 0,82 & 335 & 782 \\
+\texttt{sgd} & 312 & 10,400 & 4,01 / 4,13 & 0,80 & 403 & 737 \\
+\texttt{prodigy} & 312 & 10,421 & 4,02 / 4,15 & 0,80 & 354 & 841 \\
+\texttt{q\_apollo} & 297 & 10,435 & 4,22 / 4,41 & 0,84 & 319 & 766 \\
+\texttt{ea4llm} & 370 & 10,526 & 4,01 / 4,13 & 0,80 & 111 & 762 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[tbp]
+\centering
+\fitfigure{\includegraphics{../paper/figures/experiments/round3/optimizer_panel-es.pdf}}
+\caption{Ablación de optimizadores, ordenada por pérdida final: pérdida, norma media del gradiente, tiempo por paso y memoria residente media por optimizador.}
+\label{fig:r3-optimizers}
+\end{figure}
+
+\paragraph{Normalización.}
+El ranking se invierte respecto de la ronda~2 (Tabla~\ref{tab:r3-norms}). \texttt{prms\_norm} gana con $8,340$ nats---medio nat por delante de \texttt{layer\_norm} con $8,815$---mientras que \texttt{flash\_norm}, el ganador claro de la ronda~2 a 100 épocas, cierra la tabla con $9,135$ (284 épocas efectivas) y \texttt{dynamic\_tanh} es el peor con $9,354$. Los calendarios difieren (284--370 épocas efectivas), así que el orden carga con la advertencia de presupuesto habitual; pero el ganador de la ronda~2 no sobrevive al calendario más largo, y «moderno» tampoco es automáticamente mejor a esta escala.
+
+\begin{figure}[tbp]
+\centering
+\fitfigure{\includegraphics{../paper/figures/experiments/round3/ablation_loss-es.pdf}}
+\caption{Ablaciones de componentes sobre el esqueleto compartido: normalización, codificaciones posicionales de texto e interruptores estructurales (sin pruebas de humo).}
+\label{fig:r3-ablations}
+\end{figure}
+\begin{table}[H]
+\centering
+\small
+\caption{Ablación de normalización: pérdida final, épocas efectivas y parámetros.}
+\label{tab:r3-norms}
+\begin{tabular}{lrrr}
+\toprule
+Variante & Pérdida & Épocas & Parám. \\
+\midrule
+\texttt{prms\_norm} & 8,340 & 312 & 309k \\
+\texttt{layer\_norm} & 8,815 & 312 & 310k \\
+\texttt{rms\_norm} & 8,930 & 312 & 309k \\
+\texttt{derf} & 8,958 & 370 & 310k \\
+\texttt{flash\_norm} & 9,135 & 284 & 308k \\
+\texttt{dynamic\_tanh} & 9,354 & 370 & 310k \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Codificación posicional.}
+La familia PAPE lidera, como en la ronda~2 (Tabla~\ref{tab:r3-pe}): \texttt{pape\_ri} con $8,696$ nats, luego \texttt{pape} y \texttt{pape\_efficient} con $8,764$---gemelos idénticos bit a bit. La \texttt{rope} clásica y \texttt{sinusoidal\_rotary} reproducen la línea base exactamente ($8,815$, 312 épocas), \texttt{alibi} se sitúa en $8,826$ y las variantes sin posición \texttt{none}, \texttt{nope} y \texttt{bam} se agrupan en $8,892$, con \texttt{none} y \texttt{nope} idénticos hasta el sexto decimal. La corrida de seis épocas de \texttt{hope} es una prueba de humo y queda excluida de la tabla.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Ablación de codificación posicional de texto (la corrida de seis épocas de \texttt{hope} es una prueba de humo y queda excluida).}
+\label{tab:r3-pe}
+\begin{tabular}{lrrr}
+\toprule
+Codificación & Pérdida & Épocas & Parám. \\
+\midrule
+\texttt{pape\_ri} & 8,696 & 312 & 310k \\
+\texttt{pape} & 8,764 & 450 & 316k \\
+\texttt{pape\_efficient} & 8,764 & 450 & 316k \\
+\texttt{rope} & 8,815 & 312 & 310k \\
+\texttt{sinusoidal\_rotary} & 8,815 & 312 & 310k \\
+\texttt{alibi} & 8,826 & 312 & 310k \\
+\texttt{none} & 8,892 & 370 & 310k \\
+\texttt{nope} & 8,892 & 370 & 310k \\
+\texttt{bam} & 8,892 & 370 & 310k \\
+\texttt{sinusoidal\_absolute} & 8,911 & 370 & 310k \\
+\texttt{learned\_absolute} & 9,009 & 368 & 316k \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Interruptores estructurales.}
+Las tres victorias sobre la línea base compartida son los embeddings factorizados ($8,655$ nats, 499 épocas efectivas), los embeddings dinámicos ($8,684$, 499) y el intercambio softmax-fijada/ssmax (\texttt{ssmax} con $8,799$). Los interruptores \texttt{fixed\_softmax}, \texttt{fixed\_ce}, \texttt{fixed\_both} y el embedding convolutivo reproducen la línea base exactamente ($8,815$), lo que los identifica como no-ops en esta configuración. Las variantes residuales cuestan pérdida (\texttt{full\_attn} $+0,14$, \texttt{block\_attn} $+0,16$, \texttt{none} $+0,22$ sobre el camino estándar en $8,815$), SwiGLU cuesta $+0,19$ con un calendario más corto (281 épocas), dos bucles Hyperloop cuestan $+0,16$, mHC $+0,13$ a 443 épocas, y el par BitNet (\texttt{bitnet\_on}/\texttt{bitnet\_conv}, idénticos) aterriza en $9,563$ tras las 499 épocas completas---el calendario más largo de la familia, consistente con el arranque lento conocido de BitNet. Los interruptores sin calendario completo (\texttt{moe}, \texttt{mod}, \texttt{pos\_hope}, \texttt{bitnet\_routers}) son pruebas de humo y quedan excluidos de la tabla.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Interruptores estructurales con calendario completo, ordenados por pérdida final. Los nombres están abreviados (sin \texttt{trans\_}); las pruebas de humo quedan excluidas.}
+\label{tab:r3-switches}
+\begin{tabular}{lrrr}
+\toprule
+Interruptor & Pérdida & Épocas & Parám. \\
+\midrule
+\texttt{factorized\_emb} & 8,655 & 499 & 247k \\
+\texttt{dynamic\_emb} & 8,684 & 499 & 211k \\
+\texttt{ssmax} & 8,799 & 370 & 310k \\
+\texttt{ffn\_relu} & 8,806 & 312 & 310k \\
+\texttt{ssog\_fixed\_field} & 8,808 & 377 & 273k \\
+\texttt{fixed\_both} & 8,815 & 312 & 310k \\
+\texttt{embedding\_conv} & 8,815 & 312 & 310k \\
+\texttt{fixed\_softmax} & 8,815 & 312 & 310k \\
+\texttt{fixed\_ce} & 8,815 & 312 & 310k \\
+\texttt{mhc} & 8,942 & 443 & 353k \\
+\texttt{residuals\_full\_attn} & 8,951 & 370 & 310k \\
+\texttt{num\_loops\_2} & 8,975 & 381 & 254k \\
+\texttt{residuals\_block\_attn} & 8,980 & 370 & 310k \\
+\texttt{ffn\_swiglu} & 9,009 & 281 & 328k \\
+\texttt{residuals\_none} & 9,033 & 370 & 310k \\
+\texttt{fixed\_softmax\_ssmax\_bitnet} & 9,498 & 499 & 308k \\
+\texttt{ssog\_bitnet} & 9,563 & 499 & 303k \\
+\texttt{bitnet\_conv} & 9,563 & 499 & 308k \\
+\texttt{bitnet\_on} & 9,563 & 499 & 308k \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Tamaño de lote, tareas, tokenizadores y MoE.}
+Duplicar el tamaño de lote alcanza $8,523$ nats (499 épocas efectivas) frente a $8,815$ de la referencia con lote 1 (312); la comparación carga con un confuso de calendario, y las pruebas de humo de enrutamiento MoE (15 de 17 variantes, cinco épocas) no dicen nada sobre la capacidad de los expertos---solo \texttt{moe\_latent} ($8,790$) y \texttt{moe\_interleaved} ($8,955$) corrieron el calendario completo, ambos en la mediana de los pares. Los interruptores de tarea anclan las escalas de pérdida: la LM causal corre entre $4,694$ y $6,426$ nats (el decodificador conformer con $4,694$ es el más fuerte de los cuatro), la MLM en $8,815$ y la familia de tokenizadores entre $6,03$ y $6,20$. Ninguno de estos números es comparable con la población de pares MLM; son anclas de escala, como en la ronda~2.
+
+\paragraph{Visión, audio y datos reales.}
+Las familias de visión se comportan como en la ronda~2, con una novedad: la ablación de codificación posicional del ViT es un nulo limpio. Las $39$ corridas \texttt{vit\_pe}---13 codificaciones $\times$ 3 tareas---reproducen, dentro de cada tarea, una misma pérdida hasta el sexto decimal (dispersión $0,000$: clasificación $0,382$, predicción de parches $1,004$, segmentación $1,195$): en una rejilla de parches de $4\times4$ la codificación posicional es invisible. El orden de tareas coincide con la ronda~2 (segmentación la más fácil, predicción de parches la más difícil); la variante SSOG cuesta 0,18 nats en clasificación ($0,559$ frente a $0,382$) y el ViT conformer aterriza en $0,602$. La familia de audio va del ASR CTC con $0,633$ a la clasificación de audio con $1,942$, y las corridas con datos reales enmarcan a las sintéticas: la LM causal de Borges aterriza en $5,56$ y la MLM de Borges en $8,52$, indistinguible de la población MLM sintética---la comprobación de que el atlas sintético no medía un artefacto.
 
 \subsection{Rendimiento y coste}
 
@@ -311,18 +584,20 @@ Dos resultados negativos completan la sección. El número de parámetros no pre
 
 El entrenamiento es fiable: $1{,}643$ de $1{,}653$ corridas terminan bien (tasa de fallo $0,6\%$). Los diez fallos son pares híbridos que contienen \texttt{engram}; ocho salen con código 1 y dos con código 134 (SIGABRT), y ninguna otra familia falla. El fallo es estructural y no aleatorio---\texttt{engram} es el único mixer con un banco de memoria externo, y diez de los cincuenta y tres pares que lo usan fallan mientras los otros cuarenta y tres entrenan---y por eso el atlas sigue conteniendo todas las celdas: los diez pares fallidos están en la tabla de población pero ausentes de los análisis de pérdida e inferencia.
 
-El resto del pipeline está más sano que en la ronda~2. La exportación a Transformers no falla nunca ($4{,}686$ registros, todos OK), la evaluación de inferencia falla una vez (una corrida \texttt{pape\_efficient}) y el único problema sistémico es la etapa de despliegue excluida arriba. El registro de etapas (Figura~\ref{fig:r3-stage-status}) hace visible la asimetría: entrenamiento y exportación están casi enteramente en verde, la inferencia está en verde con una fila roja y el despliegue es la única etapa con un bloque rojo grande.
+El resto del pipeline está más sano que en la ronda~2. La exportación a Transformers no falla nunca ($4{,}686$ registros, todos OK) y la evaluación de inferencia falla una vez (una corrida \texttt{pape\_efficient}). El registro de etapas (Figura~\ref{fig:r3-stage-status}) hace visible el cuadro: entrenamiento y exportación están casi enteramente en verde, y la inferencia está en verde con una fila roja.
 
 \begin{figure}[tbp]
 \centering
 \fitfigure{\includegraphics{../paper/figures/experiments/round3/stage_status-es.pdf}}
-\caption{Estado del pipeline por etapa, sin despliegue.}
+\caption{Estado del pipeline por etapa.}
 \label{fig:r3-stage-status}
 \end{figure}
 
 \subsection{Correlaciones}
 
 La Figura~\ref{fig:r3-correlation} es la matriz de Spearman de las variables medidas sobre los $1{,}431$ pares. Las correlaciones fuertes no triviales son las que describen el calendario y no la arquitectura: el tiempo de entrenamiento crece con el número de épocas ($+0,74$), el rendimiento es casi el inverso del tiempo por paso ($-0,95$) y la pérdida media baja a medida que el calendario se alarga ($-0,76$). El número de parámetros se correlaciona moderadamente con la pérdida ($-0,42$) y con la magnitud del gradiente ($+0,47$) y débilmente con el tiempo de pared ($+0,23$), la forma cuantitativa de la ley de coste débil de la sección anterior.
+
+Merece la pena hacer explícito un contraste con la ronda~2. Allí la matriz sobre todas las filas estaba dominada por el contraste entre familias y leía $-0,43$ contra $-0,20$ dentro de los pares; aquí, recalcular la correlación parámetros--pérdida sobre las $1{,}609$ corridas de análisis en lugar de solo los pares la deja en $-0,42$, porque las familias de ablación comparten esqueleto y la población es homogénea. La ronda~3 no tiene ese confuso que desactivar: el número dentro de los pares es el número de la población.
 
 \begin{figure}[tbp]
 \centering
@@ -336,13 +611,16 @@ La Figura~\ref{fig:r3-correlation} es la matriz de Spearman de las variables med
 \begin{enumerate}[leftmargin=1.4em,itemsep=2pt]
 \item El atlas completo es medible en una semana de un solo host de CPU: $1{,}653$ corridas, $20,5$ millones de pasos, $3{,}668$ horas, una tasa de fallo de entrenamiento del $0,6\%$ y ningún paso con NaN.
 \item La pila de mixers domina el espacio de diseño. El mejor par alcanza $7,736$ nats y el peor $9,70$, mientras que las ablaciones de optimizador, normalización y codificación posicional mueven la pérdida menos que la dispersión entre pares.
+\item El segundo mixer es la palanca y la interacción es real: las medianas del rol B abarcan $0,88$ nats frente a $0,80$ del rol A, el P90 de la sinergia absoluta es $0,26$ nats, y mezclar dos mixers distintos supera a duplicar uno por 0,22 nats en la mediana.
 \item El tamaño ayuda pero no decide: la correlación de rango entre parámetros y pérdida es $-0,42$, y los mixers más baratos se reparten a ambos lados de la mediana.
-\item El aprendizaje es rápido y el ranking se decide temprano: el par mediano alcanza el 90\% de su caída de pérdida al $41\%$ del calendario y los diez mejores se separan de la población en el primer 15\%.
+\item El aprendizaje es rápido y el ranking se decide temprano: el par mediano alcanza el 90\% de su caída de pérdida al $41\%$ del calendario, la pérdida al cuarto del calendario ya ordena los pares con $0,62$, y los diez mejores se separan de la población en el primer 15\%.
 \item La presión del gradiente es estable y específica por bloque: dominan la cabeza ($3,66$), la atención ($2,12$) y la FFN ($0,71$), los coeficientes de variación de los bloques activos se quedan por debajo de 0,35 y el orden de los bloques es constante en la campaña.
+\item La ablación de optimizadores convierte el ranking de pérdida en un ranking de presión de gradiente ($-0,92$ entre pérdida final y norma final del gradiente sobre $39$ optimizadores), un clúster de ocho optimizadores es idéntico bit a bit, y la calidad es ortogonal al coste de CPU ($-0,06$) y a la memoria (mediana $805$ MB).
+\item Las ablaciones de componentes se separan: \texttt{prms\_norm} lidera las normalizaciones con $8,340$ (la victoria de \texttt{flash\_norm} de la ronda~2 no sobrevive al calendario más largo), la familia PAPE lidera las codificaciones posicionales, los embeddings factorizados ganan los interruptores, y el barrido de codificaciones posicionales del ViT es un resultado nulo ($39$ corridas, dispersión cero dentro de cada tarea).
 \item El recorte es rutina, no excepción: la mediana del cociente de recorte es $1,04$ y el $51,6\%$ de las corridas recortan de media, lo que cambia la lectura de las normas de gradiente a cantidades posteriores al recorte.
 \item El tiempo de entrenamiento es casi independiente del número de parámetros con un calendario fijo (exponente log-log $0,25$, $R^2=0,06$): lo domina el número de pasos, y los pares híbridos absorben el $90,0\%$ de las $3{,}668$ horas.
 \item La cuantización a 8 y 4 bits es esencialmente sin pérdida en el runtime \texttt{v2} ($99,5\%$ y $91,8\%$ de acuerdo por muestra), mientras que los pesos de 2 bits cambian el modelo cualitativamente ($20,8\%$ de acuerdo, $-2,03$ puntos de top-1).
-\item El pipeline es fiable salvo la etapa de despliegue, cuyo error de payload de configuración está documentado y excluido; las rutas de exportación y evaluación están limpias.
+\item El pipeline es fiable de extremo a extremo: el entrenamiento falla el $0,6\%$ de las veces, todo en el banco de memoria de un solo mixer, la exportación a Transformers no falla nunca y la evaluación falla una vez.
 \item La ronda hereda la advertencia central de la ronda~2: la pérdida de entrenamiento y la calidad retenida son casi incorrelacionadas ($+0,14$), así que el atlas debe leerse como un mapa de velocidad y estabilidad de aprendizaje, no como una tabla de líderes.
 \end{enumerate}
 

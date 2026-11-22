@@ -273,6 +273,10 @@ def render_page(stats: dict, atlas: dict) -> str:
     grad = stats["gradients"]
     quant = stats["quantization"]
     compute = stats["compute"]
+    opt = stats["optimizers"]
+    abl = stats["ablations"]
+    atlas_st = stats["atlas"]
+    syn = atlas_st["synergy"]
     roles = atlas["roles"]
     meta = atlas["meta"]
 
@@ -312,9 +316,16 @@ def render_page(stats: dict, atlas: dict) -> str:
         "curves": figure("curves_quantiles", "Population learning curves", "Curvas de aprendizaje de la población"),
         "top10": figure("curves_top10", "The ten best pairs over time", "Los diez mejores pares en el tiempo"),
         "convergence": figure("convergence_speed", "How early the ranking is decided", "Cuán temprano se decide el ranking"),
+        "matrix": figure("matrix_loss", "The atlas in print: final loss of every pair", "El atlas impreso: pérdida final de cada par"),
+        "roles": figure("roles_scatter", "The role effect: A vs B", "El efecto del rol: A vs B"),
+        "topb": figure("top5_by_b", "Held-out quality by second mixer", "Calidad retenida por segundo mixer"),
+        "synergy": figure("synergy", "Extreme synergies", "Sinergias extremas"),
+        "pareto": figure("pareto", "The speed–quality Pareto front", "La frontera de Pareto velocidad–calidad"),
         "grad_groups": figure("grad_groups_curves", "Gradient norm per block", "Norma del gradiente por bloque"),
         "grad_heatmap": figure("grad_heatmap", "Gradient norm relative to the first epoch", "Gradiente relativo a la primera época"),
         "grad_health": figure("grad_health", "Clip ratio and gradient variability", "Recorte y variabilidad del gradiente"),
+        "optimizer_panel": figure("optimizer_panel", "Optimizers: loss, gradients, CPU and memory", "Optimizadores: pérdida, gradientes, CPU y memoria"),
+        "ablation_loss": figure("ablation_loss", "Component ablations on the shared backbone", "Ablaciones de componentes sobre el esqueleto compartido"),
         "time": figure("time_vs_params", "Time against parameter count", "Tiempo frente a parámetros"),
         "cost": figure("cost_per_mparam", "Minutes per million parameters", "Minutos por millón de parámetros"),
         "throughput": figure("throughput_family", "Throughput by family", "Rendimiento por familia"),
@@ -327,6 +338,27 @@ def render_page(stats: dict, atlas: dict) -> str:
         "stage": figure("stage_status", "Pipeline reliability by stage", "Fiabilidad del pipeline por etapa"),
         "correlation": figure("correlation", "Spearman correlations", "Correlaciones de Spearman"),
     }
+
+    opt_rows = [
+        [
+            f"<code>{row['name']}</code>",
+            f"{row['epochs']:.0f}",
+            f"{row['loss']:.3f}",
+            f"{row['grad_mean']:.2f} / {row['grad_final']:.2f}",
+            f"{row['clip']:.2f}",
+            f"{row['step_ms']:.0f}",
+            f"{row['rss_mb']:.0f}",
+        ]
+        for row in opt["rows"]
+    ]
+    optimizer_table = table(
+        [
+            T("Optimizer", "Optimizador"), "Ep.",
+            T("Loss", "Pérdida"), T("Grad (m/f)", "Grad (m/f)"),
+            T("Clip", "Recorte"), T("Step (ms)", "Paso (ms)"), T("RSS (MB)", "RSS (MB)"),
+        ],
+        opt_rows,
+    )
 
     family_rows = []
     for row in compute["by_family"]:
@@ -487,6 +519,9 @@ def render_page(stats: dict, atlas: dict) -> str:
 <li><b>{T("Gradient pressure is block-specific", "La presión del gradiente es específica por bloque")}</b><br>{T(
  f"The head carries the largest gradient ({d(g['head']['mean_median'],2)}), then attention ({d(g['attention']['mean_median'],2)}) and the FFN ({d(g['ffn']['mean_median'],2)}); embeddings and normalization are an order of magnitude smaller. The active blocks keep a coefficient of variation below 0.35, and clipping is routine: the median clip ratio is {d(grad['clip_median'],2)}.",
  f"La cabeza soporta el gradiente mayor ({d(g['head']['mean_median'],2)}), luego la atención ({d(g['attention']['mean_median'],2)}) y la FFN ({d(g['ffn']['mean_median'],2)}); los embeddings y la normalización son un orden de magnitud menores. Los bloques activos mantienen un coeficiente de variación por debajo de 0,35, y el recorte es rutina: la mediana del cociente es {d(grad['clip_median'],2)}.")}</li>
+<li><b>{T("Optimizers buy speed with gradient, not preconditioning", "Los optimizadores compran velocidad con gradiente, no con precondicionamiento")}</b><br>{T(
+ f"Across the 39 optimizers, final loss and final gradient norm correlate at {opt['rho_loss_grad_final']:+.2f}: <code>af_muon</code> ends at 5.685 nats with the largest final gradient, while eight AdamW-family optimizers are bit-identical. Quality is orthogonal to step time ({opt['rho_loss_step']:+.2f}) and to memory (median {n(opt['rss_median'])} MB; only <code>eve</code> pays extra state).",
+ f"Entre los 39 optimizadores, la pérdida final y la norma final del gradiente correlacionan en {opt['rho_loss_grad_final']:+.2f}: <code>af_muon</code> termina en 5.685 nats con el mayor gradiente final, mientras que ocho optimizadores de la familia AdamW son idénticos bit a bit. La calidad es ortogonal al tiempo por paso ({opt['rho_loss_step']:+.2f}) y a la memoria (mediana {n(opt['rss_median'])} MB; solo <code>eve</code> paga estado extra).")}</li>
 <li><b>{T("Quantization: 8 and 4 bits are free, 2 bits is not", "Cuantización: 8 y 4 bits son gratis, 2 bits no")}</b><br>{T(
  f"Against the unquantized export, <code>q8_0_v2</code> changes the top-1 by {q8['mean_delta_pp']:+.2f} pp and leaves {d(q8['pct_equal'],1)}% of the pairs unchanged; <code>q4_0_v2</code> changes it by {q4['mean_delta_pp']:+.2f} pp with {d(q4['pct_equal'],1)}% unchanged; <code>i2_s_v2</code> loses {d(abs(i2['mean_delta_pp']),2)} pp and degrades {d(i2['pct_worse'],1)}% of the pairs.",
  f"Frente a la exportación sin cuantizar, <code>q8_0_v2</code> cambia el top-1 en {q8['mean_delta_pp']:+.2f} pp y deja sin cambios el {d(q8['pct_equal'],1)} % de los pares; <code>q4_0_v2</code> lo cambia en {q4['mean_delta_pp']:+.2f} pp con el {d(q4['pct_equal'],1)} % sin cambios; <code>i2_s_v2</code> pierde {d(abs(i2['mean_delta_pp']),2)} pp y degrada el {d(i2['pct_worse'],1)} % de los pares.")}</li>
@@ -496,16 +531,16 @@ def render_page(stats: dict, atlas: dict) -> str:
 <section id="method" class="section">
 <h2>{T("What was run, and how to read it", "Qué se corrió y cómo leerlo")}</h2>
 {p(
- f"Experiment 3 is the same harness as Experiment 2 with the grid completed and the schedule extended to 500 epochs. Every configuration asks for 500 epochs, but the harness stops runs earlier — by schedule, plateau criterion or an ablation-specific cap: {n(pop['n_runs'] - pop['early_stop'])} runs reached the end and {n(pop['early_stop'])} stopped sooner. The 44 runs that stopped before epoch 100 (fifteen five-epoch MoE routing tests, the BitNet/GGUF conversion, twenty-two truncated pairs and a few switches) are excluded from every loss, dynamics, gradient and correlation comparison; they stay in the population and the compute ledger.",
- f"El Experimento 3 es el mismo arnés que el Experimento 2 con la rejilla completa y el calendario extendido a 500 épocas. Todas las configuraciones piden 500 épocas, pero el arnés detiene corridas antes — por calendario, criterio de meseta o un tope específico de la ablación: {n(pop['n_runs'] - pop['early_stop'])} corridas llegaron al final y {n(pop['early_stop'])} se detuvieron antes. Las 44 corridas que se detuvieron antes de la época 100 (quince pruebas de enrutamiento MoE de cinco épocas, la conversión BitNet/GGUF, veintidós pares truncados y algunos interruptores) quedan excluidas de toda comparación de pérdida, dinámica, gradiente y correlación; permanecen en la población y en el registro de cómputo.")}
+ f"Experiment 3 is the same harness as Experiment 2 with the grid completed and the schedule extended to 500 epochs. Every configuration asks for 500 epochs, but the harness stops runs earlier — by schedule, plateau criterion or an ablation-specific cap: {n(pop['n_runs'] - pop['early_stop'])} runs reached the end and {n(pop['early_stop'])} stopped sooner. The 44 runs that stopped before epoch 100 (fifteen five-epoch MoE routing tests, the BitNet/GGUF conversion, five switch/PE smokes, one audio transducer run and twenty-two hybrid pairs — twelve truncated, ten the <code>engram</code> crashes) are excluded from every loss, dynamics, gradient and correlation comparison; they stay in the population and the compute ledger.",
+ f"El Experimento 3 es el mismo arnés que el Experimento 2 con la rejilla completa y el calendario extendido a 500 épocas. Todas las configuraciones piden 500 épocas, pero el arnés detiene corridas antes — por calendario, criterio de meseta o un tope específico de la ablación: {n(pop['n_runs'] - pop['early_stop'])} corridas llegaron al final y {n(pop['early_stop'])} se detuvieron antes. Las 44 corridas que se detuvieron antes de la época 100 (quince pruebas de enrutamiento MoE de cinco épocas, la conversión BitNet/GGUF, cinco pruebas de humo de interruptores y PE, una corrida de transductor de audio y veintidós pares híbridos —doce truncados, diez los fallos de <code>engram</code>—) quedan excluidas de toda comparación de pérdida, dinámica, gradiente y correlación; permanecen en la población y en el registro de cómputo.")}
 {p(
- "<b>Deployment is excluded on purpose.</b> The deployer received the dataclass stored in the checkpoint where it expected a mapping and called <code>.get()</code> on it, so 822 of the 1,334 deploy records failed. Measuring a broken stage would confound a serialization bug with quantization quality; the quantized analysis therefore uses the Transformers-export path, which exported 4,686 models with no failures.",
- "<b>El despliegue se excluye a propósito.</b> El desplegador recibió la dataclass guardada en el checkpoint donde esperaba un diccionario y le llamó <code>.get()</code>, así que 822 de los 1.334 registros de despliegue fallaron. Medir una etapa rota confundiría un error de serialización con la calidad de la cuantización; por eso el análisis cuantizado usa la ruta de exportación a Transformers, que exportó 4.686 modelos sin fallos.")}
+ "<b>Deployment is excluded.</b> During the campaign the deploy stage's configuration-payload handling was affected by a bug that has since been patched in the harness, so this round's deploy records are set aside; the quantized analysis uses the Transformers-export path, which exported 4,686 models with no failures.",
+ "<b>El despliegue queda excluido.</b> Durante la campaña, el manejo del payload de configuración de la etapa de despliegue se vio afectado por un error que ya está parchado en el harness, así que los registros de despliegue de esta ronda se dejan de lado; el análisis cuantizado usa la ruta de exportación a Transformers, que exportó 4.686 modelos sin fallos.")}
 {p(
  f"The population by family is below. <b>Smoke</b> counts the runs shorter than 100 epochs; the loss and cost columns are computed over the remaining {n(pop['n_analysis'])} runs. The tokenizer, task and real-data families run different tasks, so their losses are not comparable with MLM.",
  f"La población por familia está abajo. <b>Humo</b> cuenta las corridas de menos de 100 épocas; las columnas de pérdida y coste se calculan sobre las {n(pop['n_analysis'])} corridas restantes. Las familias de tokenizadores, tareas y datos reales corren tareas distintas, así que sus pérdidas no son comparables con MLM.")}
 {family_table}
-<div class="callout warn"><span class="callout-icon">!</span><div><div class="t-en"><b>Data-quality notes.</b> The trainer writes a zero-loss sentinel row when the final batch cannot be formed; those rows are dropped before aggregation, so the final loss is the last <em>valid</em> epoch. Fifteen of the seventeen MoE ablations are five-epoch routing smoke tests and are not evidence about expert capacity. Nine mixers appear in only one role after the smoke filter and are excluded from the A/B comparison.</div><div class="t-es"><b>Notas de calidad de datos.</b> El entrenador escribe una fila centinela con pérdida cero cuando no puede formar el último lote; esas filas se descartan antes de agregar, así que la pérdida final es la última época <em>válida</em>. Quince de las diecisiete ablaciones MoE son pruebas de humo de enrutamiento de cinco épocas y no son evidencia sobre la capacidad de los expertos. Nueve mixers aparecen en un solo rol tras el filtro de humo y quedan fuera de la comparación A/B.</div></div></div>
+<div class="callout warn"><span class="callout-icon">!</span><div><div class="t-en"><b>Data-quality notes.</b> The trainer writes a zero-loss sentinel row when the final batch cannot be formed; those rows are dropped before aggregation, so the final loss is the last <em>valid</em> epoch. Fifteen of the seventeen MoE ablations are five-epoch routing smoke tests and are not evidence about expert capacity. Nine mixers appear in only one role after the smoke filter and are excluded from the A/B comparison. And the atlas measures fewer distinct models than it names: 297 of the 1,409 analysed pairs share a bit-identical loss with another pair, because <code>standard</code>, <code>bigbird</code>, <code>longformer</code> and <code>titan</code> collapse into one model at a 64-token context and <code>fastconformer</code> equals <code>swa</code> wherever both were paired.</div><div class="t-es"><b>Notas de calidad de datos.</b> El entrenador escribe una fila centinela con pérdida cero cuando no puede formar el último lote; esas filas se descartan antes de agregar, así que la pérdida final es la última época <em>válida</em>. Quince de las diecisiete ablaciones MoE son pruebas de humo de enrutamiento de cinco épocas y no son evidencia sobre la capacidad de los expertos. Nueve mixers aparecen en un solo rol tras el filtro de humo y quedan fuera de la comparación A/B. Y el atlas mide menos modelos distintos de los que nombra: 297 de los 1.409 pares analizados comparten una pérdida idéntica bit a bit con otro par, porque <code>standard</code>, <code>bigbird</code>, <code>longformer</code> y <code>titan</code> colapsan en un solo modelo en un contexto de 64 tokens y <code>fastconformer</code> equivale a <code>swa</code> allí donde ambos fueron emparejados.</div></div></div>
 </section>
 
 <section id="params" class="section">
@@ -529,6 +564,9 @@ def render_page(stats: dict, atlas: dict) -> str:
 {p(
  f"Held-out quality comes from the export path: {n(stats['inference']['n_combos'])} configurations produced Hugging Face rows, {n(stats['inference']['n_pairs_combos'])} of them MLM pairs. The mean top-1 is {top1_mean}% and the mean top-5 is {top5_mean}%, with a median top-5 of 28.6%: a few pairs learned something, most did not. The rank correlation between final training loss and held-out top-5 is only {stats['inference']['loss_top5_rho']:+.2f}, so training loss is not a leaderboard.",
  f"La calidad retenida viene de la ruta de exportación: {n(stats['inference']['n_combos'])} configuraciones produjeron filas de Hugging Face, {n(stats['inference']['n_pairs_combos'])} de ellas pares MLM. El top-1 medio es {top1_mean} % y el top-5 medio es {top5_mean} %, con una mediana de top-5 de 28,6 %: unos pocos pares aprendieron algo, la mayoría no. La correlación de rango entre pérdida final de entrenamiento y top-5 retenido es solo {stats['inference']['loss_top5_rho']:+.2f}, así que la pérdida de entrenamiento no es una tabla de líderes.")}
+<p>{T(
+ f"A second mixer is worth a fifth of a nat: the 54 single-mixer baselines (each layer running the same mixer twice) end at a median of {d(atlas_st['singles']['median'], 3)} nats against {loss_median} for the pairs, and {n(atlas_st['singles']['pairs_better_than_best_single'])} of the 1,409 analysed pairs end below the best single, the doubled <code>conformer</code> at {d(atlas_st['singles']['best'][1], 3)}. Mixing two different mixers beats doubling one at the median.",
+ f"Un segundo mixer vale un quinto de nat: las 54 líneas base de un solo mixer (cada capa con el mismo mixer dos veces) terminan con una mediana de {d(atlas_st['singles']['median'], 3)} nats frente a {loss_median} de los pares, y {n(atlas_st['singles']['pairs_better_than_best_single'])} de los 1.409 pares analizados terminan por debajo de la mejor línea base, el <code>conformer</code> duplicado con {d(atlas_st['singles']['best'][1], 3)}. Mezclar dos mixers distintos supera a duplicar uno en la mediana.")}</p>
 </section>
 
 <section id="dynamics" class="section">
@@ -538,8 +576,8 @@ def render_page(stats: dict, atlas: dict) -> str:
  f"El par mediano empieza en {d(stats['dynamics']['p50']['start'],2)} nats y termina en {d(stats['dynamics']['p50']['end'],2)}; la banda P10–P90 al final es {d(stats['dynamics']['band']['p10_end'],2)}–{d(stats['dynamics']['band']['p90_end'],2)}. La mayor parte de la reducción ocurre en el primer cuarto: {d(stats['dynamics']['p50']['q25'],2)} al 25 % del calendario, {d(stats['dynamics']['p50']['q50'],2)} a la mitad, {d(stats['dynamics']['p50']['q75'],2)} a las tres cuartas partes. Las curvas siguen bajando al terminar el calendario, así que la ronda mide velocidad de aprendizaje, no calidad convergida.")}
 {figure_grid([figs['curves'], figs['top10']])}
 {p(
- f"By a quarter of the schedule the per-pair loss already ranks the pairs with ρ = {d(stats['dynamics']['rank_stability_25'],2)} against the final order, and the ten best separate from the population before the halfway mark. The number of epochs needed to reach 90% of a run's loss drop confirms it: the median is {d(stats['convergence']['overall_median'],0)}% of the schedule, from {d(stats['convergence']['by_family']['pair']['median'],0)}% for hybrid pairs to {d(stats['convergence']['by_family']['vision']['median'],0)}% for vision tasks.",
- f"Al cuarto del calendario la pérdida por par ya ordena los pares con ρ = {d(stats['dynamics']['rank_stability_25'],2)} frente al orden final, y los diez mejores se separan de la población antes de la mitad. El número de épocas necesarias para alcanzar el 90 % de la caída de pérdida lo confirma: la mediana es el {d(stats['convergence']['overall_median'],0)} % del calendario, desde el {d(stats['convergence']['by_family']['pair']['median'],0)} % de los pares híbridos hasta el {d(stats['convergence']['by_family']['vision']['median'],0)} % de las tareas de visión.")}
+ f"By a tenth of the schedule the per-pair loss already ranks the pairs with ρ = {d(stats['dynamics']['rank_stability_10'],2)}, and by a quarter the correlation reaches {d(stats['dynamics']['rank_stability_25'],2)} against the final order — the ten best separate from the population before the halfway mark. The number of epochs needed to reach 90% of a run's loss drop confirms it: the median is {d(stats['convergence']['overall_median'],0)}% of the schedule, from {d(stats['convergence']['by_family']['pair']['median'],0)}% for hybrid pairs to {d(stats['convergence']['by_family']['vision']['median'],0)}% for vision tasks.",
+ f"A la décima parte del calendario la pérdida por par ya ordena los pares con ρ = {d(stats['dynamics']['rank_stability_10'],2)}, y al cuarto la correlación alcanza {d(stats['dynamics']['rank_stability_25'],2)} frente al orden final — los diez mejores se separan de la población antes de la mitad. El número de épocas necesarias para alcanzar el 90 % de la caída de pérdida lo confirma: la mediana es el {d(stats['convergence']['overall_median'],0)} % del calendario, desde el {d(stats['convergence']['by_family']['pair']['median'],0)} % de los pares híbridos hasta el {d(stats['convergence']['by_family']['vision']['median'],0)} % de las tareas de visión.")}
 {figure_grid([figs['convergence']])}
 </section>
 
@@ -559,8 +597,27 @@ def render_page(stats: dict, atlas: dict) -> str:
  f"El recorte es rutina, no excepción: la mediana del cociente de recorte medio es {d(grad['clip_median'],2)} — justo por encima del umbral 1 — y el {d(grad['clip_share_above_1'],1)} % de las corridas recortan de media, con un P90 de {d(grad['clip_p90'],2)}. La ronda 2 reportó una mediana de 0,90 y un recorte excepcional; la diferencia es el calendario más largo y las tasas de aprendizaje más altas de la ronda 3.")}</p>
 </section>
 
+<section id="optimizers" class="section">
+<h2>{T("5 · Optimizers and component ablations", "5 · Optimizadores y ablaciones de componentes")}</h2>
+{p(
+ f"The optimizer sweep runs {opt['n']} optimizers on the same 309k-parameter backbone, the same data and the same learning rate. Eight of them (<code>adamw</code>, <code>adan</code>, <code>adopt</code>, <code>soap</code>, <code>ademamix</code>, <code>mars_adamw</code>, <code>schedulefree_adamw</code>, <code>cautious_adamw</code>) produce trajectories that agree to within 2×10⁻⁶ nats — they are the same update rule at these hyperparameters — so the ablation really measures the remaining 31.",
+ f"El barrido de optimizadores corre {opt['n']} optimizadores sobre el mismo esqueleto de 309k parámetros, los mismos datos y la misma tasa de aprendizaje. Ocho de ellos (<code>adamw</code>, <code>adan</code>, <code>adopt</code>, <code>soap</code>, <code>ademamix</code>, <code>mars_adamw</code>, <code>schedulefree_adamw</code>, <code>cautious_adamw</code>) producen trayectorias que coinciden dentro de 2×10⁻⁶ nats — son la misma regla de actualización con estos hiperparámetros — así que la ablación mide realmente los 31 restantes.")}
+<p>{T(
+ f"The loss ranking is a gradient-pressure ranking: the rank correlation between final loss and final gradient norm across the 39 runs is {opt['rho_loss_grad_final']:+.2f} (against the clip ratio, {opt['rho_loss_clip']:+.2f}). The optimizers that end lower are the ones whose gradients stay large and keep clipping: <code>{opt['rows'][0]['name']}</code> reaches {opt['rows'][0]['loss']:.3f} nats with the largest final gradient of the sweep ({opt['rows'][0]['grad_final']:.2f}), <code>{opt['rows'][1]['name']}</code> reaches {opt['rows'][1]['loss']:.3f} with {opt['rows'][1]['grad_final']:.2f}, while <code>sgd_momentum</code> ends at 10.206 with 4.08. Learning speed at this scale is bought with gradient magnitude, not with a fancier preconditioner.",
+ f"El ranking de pérdida es un ranking de presión de gradiente: la correlación de rango entre pérdida final y norma final del gradiente sobre las 39 corridas es {opt['rho_loss_grad_final']:+.2f} (contra el cociente de recorte, {opt['rho_loss_clip']:+.2f}). Los optimizadores que terminan más abajo son los que mantienen gradientes grandes y siguen recortando: <code>{opt['rows'][0]['name']}</code> llega a {opt['rows'][0]['loss']:.3f} nats con el mayor gradiente final del barrido ({opt['rows'][0]['grad_final']:.2f}), <code>{opt['rows'][1]['name']}</code> llega a {opt['rows'][1]['loss']:.3f} con {opt['rows'][1]['grad_final']:.2f}, mientras que <code>sgd_momentum</code> termina en 10.206 con 4.08. La velocidad de aprendizaje a esta escala se compra con magnitud de gradiente, no con un precondicionador más sofisticado.")}</p>
+<p>{T(
+ f"Quality and CPU cost are orthogonal (ρ = {opt['rho_loss_step']:+.2f} between loss and step time). Among the 36 runs with comparable telemetry the step time spans 305–438 ms per step, about 40%, and memory is flatter still: the median optimizer holds {n(opt['rss_median'])} MB of resident memory and only <code>{opt['rss_max'][0]}</code> stands out at {n(opt['rss_max'][1])} MB. The three late additions (<code>af_muon</code>, <code>ada_muon</code>, <code>ea4llm</code>) log step timers that cover only part of the work (111–121 ms against 305–438 for the rest, with longer wall-clock schedules), so their step-time column is not comparable; their losses and gradient norms are unaffected.",
+ f"La calidad y el coste de CPU son ortogonales (ρ = {opt['rho_loss_step']:+.2f} entre pérdida y tiempo por paso). Entre las 36 corridas con telemetría comparable, el tiempo por paso abarca 305–438 ms, un 40 %, y la memoria es aún más plana: el optimizador mediano mantiene {n(opt['rss_median'])} MB de memoria residente y solo <code>{opt['rss_max'][0]}</code> destaca con {n(opt['rss_max'][1])} MB. Las tres incorporaciones tardías (<code>af_muon</code>, <code>ada_muon</code>, <code>ea4llm</code>) registran cronómetros que cubren solo parte del trabajo (111–121 ms frente a 305–438 del resto, con calendarios de pared más largos), así que su columna de tiempo por paso no es comparable; sus pérdidas y normas de gradiente no se ven afectadas.")}</p>
+{optimizer_table}
+{figure_grid([figs['optimizer_panel']])}
+<p>{T(
+ f"The component ablations separate more than the optimizers. The normalization ranking flips relative to Experiment 2: <code>prms_norm</code> wins at 8.340 nats — half a nat ahead of <code>layer_norm</code> — while <code>flash_norm</code>, the clear winner at 100 epochs, closes the table at 9.135 (284 effective epochs). The PAPE family leads the positional encodings as before (<code>pape_ri</code> at 8.696, <code>pape</code>/<code>pape_efficient</code> at 8.764 as bit-identical twins, classical <code>rope</code> exactly at the baseline). Factorised embeddings win the structural switches at 8.655, the fixed-softmax toggles are no-ops on this backbone, the residual variants all cost loss, and the BitNet pair needs the full 499 epochs to land at 9.563. The ViT positional-encoding sweep is a clean null result: all 39 <code>vit_pe</code> runs (13 encodings × 3 tasks) reproduce one loss per task to the sixth decimal — at a 4×4 patch grid the positional encoding is invisible.",
+ f"Las ablaciones de componentes se separan más que los optimizadores. El ranking de normalización se invierte respecto del Experimento 2: <code>prms_norm</code> gana con 8.340 nats —medio nat por delante de <code>layer_norm</code>— mientras que <code>flash_norm</code>, el ganador claro a 100 épocas, cierra la tabla con 9.135 (284 épocas efectivas). La familia PAPE lidera las codificaciones posicionales como antes (<code>pape_ri</code> con 8.696, <code>pape</code>/<code>pape_efficient</code> con 8.764 como gemelos idénticos bit a bit, la <code>rope</code> clásica exactamente en la línea base). Los embeddings factorizados ganan los interruptores estructurales con 8.655, los interruptores de softmax fijada son no-ops sobre este esqueleto, las variantes residuales cuestan pérdida y el par BitNet necesita las 499 épocas completas para aterrizar en 9.563. El barrido de codificaciones posicionales del ViT es un nulo limpio: las 39 corridas <code>vit_pe</code> (13 codificaciones × 3 tareas) reproducen una pérdida por tarea hasta el sexto decimal — en una rejilla de parches de 4×4 la codificación posicional es invisible.")}</p>
+{figure_grid([figs['ablation_loss']])}
+</section>
+
 <section id="cost" class="section">
-<h2>{T("5 · Throughput and cost", "5 · Rendimiento y coste")}</h2>
+<h2>{T("6 · Throughput and cost", "6 · Rendimiento y coste")}</h2>
 {p(
  f"Training time grows only weakly with parameters: a log-log fit over the MLM pairs gives an exponent of {d(compute['time_slope'],2)} with R² = {d(compute['time_r2'],2)}. The clock is dominated by the number of steps, not by the parameter count. The normalised cost is the fair comparison: the median run spends {n(compute['minutes_per_mparam_median'])} minutes per million parameters, with family medians spanning a factor of about three.",
  f"El tiempo de entrenamiento crece solo débilmente con los parámetros: un ajuste log-log sobre los pares MLM da un exponente de {d(compute['time_slope'],2)} con R² = {d(compute['time_r2'],2)}. El reloj lo domina el número de pasos, no el de parámetros. El coste normalizado es la comparación justa: la corrida mediana gasta {n(compute['minutes_per_mparam_median'])} minutos por millón de parámetros, con medianas por familia que abarcan un factor de aproximadamente tres.")}
@@ -572,7 +629,7 @@ def render_page(stats: dict, atlas: dict) -> str:
 </section>
 
 <section id="inference" class="section">
-<h2>{T("6 · Inference and quantization", "6 · Inferencia y cuantización")}</h2>
+<h2>{T("7 · Inference and quantization", "7 · Inferencia y cuantización")}</h2>
 {p(
  f"{n(stats['inference']['n_combos'])} configurations produced Hugging Face rows: {n(stats['inference']['n_pairs_combos'])} MLM pairs, four causal-LM runs and one text-classification run. Each was exported unquantized (<code>hf_none</code>) and re-exported with three codecs at two loader runtimes (<code>q8_0</code>, <code>q4_0</code>, <code>i2_s</code>, each in <code>v1</code> and <code>v2</code>). The two runtimes sampled different mask positions — only 3.5% of the <code>v1</code> keys coincide with the baseline — so <code>v1</code> cannot be paired; the clean comparison is the <code>v2</code> family, which reuses the baseline masks for 99.4% of the keys. This is a harness property, not a model property.",
  f"{n(stats['inference']['n_combos'])} configuraciones produjeron filas de Hugging Face: {n(stats['inference']['n_pairs_combos'])} pares MLM, cuatro corridas de LM causal y una de clasificación de texto. Cada una se exportó sin cuantizar (<code>hf_none</code>) y se reexportó con tres códecs en dos runtimes de carga (<code>q8_0</code>, <code>q4_0</code>, <code>i2_s</code>, cada uno en <code>v1</code> y <code>v2</code>). Los dos runtimes muestrearon posiciones de máscara distintas — solo el 3,5 % de las claves de <code>v1</code> coinciden con la base — así que <code>v1</code> no puede emparejarse; la comparación limpia es la familia <code>v2</code>, que reutiliza las máscaras de la base en el 99,4 % de las claves. Esto es una propiedad del arnés, no de los modelos.")}
@@ -592,16 +649,16 @@ def render_page(stats: dict, atlas: dict) -> str:
 </section>
 
 <section id="reliability" class="section">
-<h2>{T("7 · Reliability and failure taxonomy", "7 · Fiabilidad y taxonomía de fallos")}</h2>
+<h2>{T("8 · Reliability and failure taxonomy", "8 · Fiabilidad y taxonomía de fallos")}</h2>
 {p(
- f"Training is reliable: {n(pop['training_ok'])} of {runs} runs succeed ({failure}% failure rate). All ten failures are hybrid pairs that contain <code>engram</code>; eight exit with code 1 and two with code 134 (SIGABRT), and no other family fails. The Transformers export never fails (4,686 records), inference evaluation fails once, and the only systemic problem is the deploy stage excluded above.",
- f"El entrenamiento es fiable: {n(pop['training_ok'])} de {runs} corridas terminan bien (tasa de fallo {failure} %). Los diez fallos son pares híbridos que contienen <code>engram</code>; ocho salen con código 1 y dos con código 134 (SIGABRT), y ninguna otra familia falla. La exportación a Transformers no falla nunca (4.686 registros), la evaluación de inferencia falla una vez y el único problema sistémico es la etapa de despliegue excluida arriba.")}
+ f"Training is reliable: {n(pop['training_ok'])} of {runs} runs succeed ({failure}% failure rate). All ten failures are hybrid pairs that contain <code>engram</code>; eight exit with code 1 and two with code 134 (SIGABRT), and no other family fails. The Transformers export never fails (4,686 records, all OK) and inference evaluation fails once (a <code>pape_efficient</code> run).",
+ f"El entrenamiento es fiable: {n(pop['training_ok'])} de {runs} corridas terminan bien (tasa de fallo {failure} %). Los diez fallos son pares híbridos que contienen <code>engram</code>; ocho salen con código 1 y dos con código 134 (SIGABRT), y ninguna otra familia falla. La exportación a Transformers no falla nunca (4.686 registros, todos OK) y la evaluación de inferencia falla una vez (una corrida <code>pape_efficient</code>).")}
 {figure_grid([figs['stage']])}
 {reliability_table}
 </section>
 
 <section id="correlations" class="section">
-<h2>{T("8 · Correlations", "8 · Correlaciones")}</h2>
+<h2>{T("9 · Correlations", "9 · Correlaciones")}</h2>
 <p>{T(
  "The Spearman matrix over the hybrid pairs shows that the strongest non-trivial correlations describe the schedule rather than the architecture: training time grows with the number of epochs (+0.74), throughput is almost the inverse of step time (-0.95) and mean loss falls as the schedule lengthens (-0.76). The parameter count correlates moderately with loss (-0.42) and gradient magnitude (+0.47) and weakly with wall time (+0.23).",
  "La matriz de Spearman sobre los pares híbridos muestra que las correlaciones fuertes no triviales describen el calendario y no la arquitectura: el tiempo de entrenamiento crece con el número de épocas (+0,74), el rendimiento es casi el inverso del tiempo por paso (-0,95) y la pérdida media baja a medida que el calendario se alarga (-0,76). El número de parámetros correlaciona moderadamente con la pérdida (-0,42) y con la magnitud del gradiente (+0,47) y débilmente con el tiempo de pared (+0,23).")}</p>
@@ -609,7 +666,11 @@ def render_page(stats: dict, atlas: dict) -> str:
 </section>
 
 <section id="atlas" class="section">
-<h2>{T("9 · The interactive atlas", "9 · El atlas interactivo")}</h2>
+<h2>{T("10 · The interactive atlas", "10 · El atlas interactivo")}</h2>
+<p>{T(
+ f"The print version of the same matrix: every cell is one hybrid pair, coloured by final loss, with the ten <code>engram</code> holes visible. Column by column the second mixer dominates — a good B keeps almost every A in a narrow band, a bad B drags even the best A down — and no A rescues a bad B.",
+ f"La versión impresa de la misma matriz: cada celda es un par híbrido, coloreado por pérdida final, con los diez huecos de <code>engram</code> visibles. Columna a columna el segundo mixer domina — un buen B mantiene casi cualquier A en una banda estrecha, un mal B arrastra incluso al mejor A — y ningún A rescata a un mal B.")}</p>
+{figure_grid([figs['matrix']])}
 {p(
  f"One cell per hybrid pair: rows are the first mixer (A), columns the second (B), and the upper triangle holds the {pairs} measured pairs. Pick a metric and hover a cell; the ten <code>engram</code> pairs that crash are shown as empty cells. The colour always runs from best (green) to worst (red) for the selected metric.",
  f"Una celda por par híbrido: las filas son el primer mixer (A), las columnas el segundo (B), y el triángulo superior contiene los {pairs} pares medidos. Elige una métrica y pasa el cursor por una celda; los diez pares con <code>engram</code> que fallan aparecen como celdas vacías. El color siempre va del mejor (verde) al peor (rojo) para la métrica elegida.")}
@@ -633,12 +694,21 @@ def render_page(stats: dict, atlas: dict) -> str:
  f"Each point is one mixer: its median loss when it sits in layer 0 (A) against its median loss when it sits in layer 1 (B). Points off the diagonal are role-sensitive; the B axis is the wider one ({roles['range_b']} nats against {roles['range_a']}), which is the quantitative form of “the second mixer is the lever”.",
  f"Cada punto es un mixer: su pérdida mediana cuando ocupa la capa 0 (A) frente a su pérdida mediana cuando ocupa la capa 1 (B). Los puntos fuera de la diagonal son sensibles al rol; el eje B es el más ancho ({roles['range_b']} nats frente a {roles['range_a']}), que es la forma cuantitativa de “el segundo mixer es la palanca”.")}</p>
 <div id="roles-chart" class="chart-lg" role="img" aria-label="A-role versus B-role median loss"></div>
+<h3>{T("Synergy, quality and the Pareto front", "Sinergia, calidad y frontera de Pareto")}</h3>
+<p>{T(
+ f"Ranking mixers individually cannot reconstruct the atlas, because pairs interact. The synergy of a pair is how far it sits from the average of its two marginals, S = (μ<sub>A</sub> + μ<sub>B</sub>)/2 − L<sub>A,B</sub>: the median absolute synergy is {d(syn['abs_median'], 2)} nats and the P90 is {d(syn['abs_p90'], 2)}, so one pair in ten moves by more than a quarter of a nat on interaction alone — more than most ablations move in total. The positive tail stacks a cheap, stable first mixer under a strong second one (<code>falcon2a + conformer</code> at +{d(syn['top'][0]['synergy'], 2)}); the negative tail is dominated by <code>mtla</code> as B (<code>mtla + tpa</code> at {d(syn['bottom'][0]['synergy'], 2)}).",
+ f"Ordenar los mixers individualmente no reconstruye el atlas, porque los pares interactúan. La sinergia de un par mide cuánto se aleja del promedio de sus dos marginales, S = (μ<sub>A</sub> + μ<sub>B</sub>)/2 − L<sub>A,B</sub>: la sinergia absoluta mediana es {d(syn['abs_median'], 2)} nats y el P90 es {d(syn['abs_p90'], 2)}, así que uno de cada diez pares se mueve más de un cuarto de nat solo por interacción — más de lo que mueven la mayoría de las ablaciones en total. La cola positiva apila un primer mixer barato y estable bajo un segundo fuerte (<code>falcon2a + conformer</code> con +{d(syn['top'][0]['synergy'], 2)}); la cola negativa la domina <code>mtla</code> como B (<code>mtla + tpa</code> con {d(syn['bottom'][0]['synergy'], 2)}).")}</p>
+{figure_grid([figs['synergy'], figs['topb']])}
+<p>{T(
+ f"The two panels above close the loop with the loss/quality warning at role level: <code>conformer</code> is the best second mixer by loss and nearly the worst by held-out top-5 (12.8% against <code>ccgqa</code>'s 30.4%). And the speed–quality trade has a front: {len(atlas_st['pareto'])} of the 1,409 analysed pairs are non-dominated, from <code>iha + mtla</code> (9.57 nats in 0.57 h) to <code>falcon2a + conformer</code> (7.74 in 2.75). A deployment picks a point on that curve, not a leaderboard rank.",
+ f"Los dos paneles de arriba cierran el circuito con la advertencia pérdida/calidad a nivel de rol: <code>conformer</code> es el mejor segundo mixer en pérdida y casi el peor en top-5 retenido (12.8 % frente al 30.4 % de <code>ccgqa</code>). Y el intercambio velocidad–calidad tiene una frontera: {len(atlas_st['pareto'])} de los 1.409 pares analizados no son dominados, de <code>iha + mtla</code> (9.57 nats en 0.57 h) a <code>falcon2a + conformer</code> (7.74 en 2.75). Un despliegue elige un punto de esa curva, no un puesto de tabla de líderes.")}</p>
+{figure_grid([figs['pareto']])}
 <h3>{T("Mixer ranking by median loss", "Ranking de mixers por pérdida mediana")}</h3>
 <div id="ranking-chart" class="chart-xl" role="img" aria-label="Mixer ranking by median final loss"></div>
 </section>
 
 <section id="data" class="section">
-<h2>{T("10 · Data and reproducibility", "10 · Datos y reproducibilidad")}</h2>
+<h2>{T("11 · Data and reproducibility", "11 · Datos y reproducibilidad")}</h2>
 <p>{T(
  f"Two files are published next to this page: <a href=\"data/atlas.csv\" download>atlas.csv</a> (one row per hybrid pair: loss, parameters, duration, top-1 and top-5) and <a href=\"data/mixers.csv\" download>mixers.csv</a> (one row per mixer: median loss and parameters). The full per-run tables stay in the experiment tree and are summarised in the appendix of the paper.",
  f"Junto a esta página se publican dos archivos: <a href=\"data/atlas.csv\" download>atlas.csv</a> (una fila por par híbrido: pérdida, parámetros, duración, top-1 y top-5) y <a href=\"data/mixers.csv\" download>mixers.csv</a> (una fila por mixer: pérdida y parámetros medianos). Las tablas completas por corrida quedan en el árbol del experimento y se resumen en el apéndice del paper.")}</p>
@@ -648,7 +718,7 @@ def render_page(stats: dict, atlas: dict) -> str:
 </section>
 
 <section id="conclusions" class="section">
-<h2>{T("11 · What the complete grid changes", "11 · Qué cambia la rejilla completa")}</h2>
+<h2>{T("12 · What the complete grid changes", "12 · Qué cambia la rejilla completa")}</h2>
 <div class="conclusions">
   <div class="conclusion"><span class="num">01</span><div><b>{T("Completeness is a result", "La completitud es un resultado")}</b><p>{T(
     f"Round 2 measured two thirds of the grid; Round 3 measures all {pairs} cells. The rankings that survive — the second mixer as the lever, the weakness of scale, the loss/quality gap — survive because the missing third of the grid could not have hidden a different answer.",
@@ -656,13 +726,16 @@ def render_page(stats: dict, atlas: dict) -> str:
   <div class="conclusion"><span class="num">02</span><div><b>{T("The schedule, not the model, sets the loss", "El calendario, no el modelo, fija la pérdida")}</b><p>{T(
     "Training time grows with epochs and barely with parameters; mean loss falls as the schedule lengthens. Any cross-family reading of the loss must control for the number of epochs, which is why this page reports the budget next to every family.",
     "El tiempo de entrenamiento crece con las épocas y apenas con los parámetros; la pérdida media baja a medida que el calendario se alarga. Cualquier lectura transversal de la pérdida debe controlar el número de épocas, y por eso esta página reporta el presupuesto junto a cada familia.")}</p></div></div>
-  <div class="conclusion"><span class="num">03</span><div><b>{T("Quantize at 8 or 4 bits, not at 2", "Cuantiza a 8 o 4 bits, no a 2")}</b><p>{T(
+  <div class="conclusion"><span class="num">03</span><div><b>{T("Optimizers buy speed with gradient, not preconditioning", "Los optimizadores compran velocidad con gradiente, no con precondicionamiento")}</b><p>{T(
+    f"Across the 39 optimizers, final loss and final gradient norm correlate at {opt['rho_loss_grad_final']:+.2f} and quality is orthogonal to CPU cost ({opt['rho_loss_step']:+.2f}) and to memory (median {n(opt['rss_median'])} MB). Pick the optimizer that keeps gradient pressure high; pick the fastest one you can deploy.",
+    f"Entre los 39 optimizadores, la pérdida final y la norma final del gradiente correlacionan en {opt['rho_loss_grad_final']:+.2f} y la calidad es ortogonal al coste de CPU ({opt['rho_loss_step']:+.2f}) y a la memoria (mediana {n(opt['rss_median'])} MB). Elige el optimizador que mantiene alta la presión de gradiente; elige el más rápido que puedas desplegar.")}</p></div></div>
+  <div class="conclusion"><span class="num">04</span><div><b>{T("Quantize at 8 or 4 bits, not at 2", "Cuantiza a 8 o 4 bits, no a 2")}</b><p>{T(
     f"The v2 runtime keeps {d(agree['q8_0']['mean'],1)}% and {d(agree['q4_0']['mean'],1)}% of the predictions at 8 and 4 bits; 2 bits keeps {d(agree['i2_s']['mean'],1)}% and costs {d(abs(i2['mean_delta_pp']),2)} pp of top-1. Two bits is a different model, not a smaller file.",
     f"El runtime v2 conserva el {d(agree['q8_0']['mean'],1)} % y el {d(agree['q4_0']['mean'],1)} % de las predicciones a 8 y 4 bits; 2 bits conserva el {d(agree['i2_s']['mean'],1)} % y cuesta {d(abs(i2['mean_delta_pp']),2)} pp de top-1. Dos bits es otro modelo, no un archivo más pequeño.")}</p></div></div>
-  <div class="conclusion"><span class="num">04</span><div><b>{T("Fix the deploy stage before rerunning it", "Arregla el despliegue antes de repetirlo")}</b><p>{T(
-    "The deploy bug is fixed and covered by a regression test, but this round's 822 failures were excluded. The next round should re-measure deployment on the same grid before drawing conclusions about the deployment path.",
-    "El error de despliegue está corregido y cubierto por una prueba de regresión, pero los 822 fallos de esta ronda quedaron excluidos. La próxima ronda debería volver a medir el despliegue sobre la misma rejilla antes de concluir sobre esa ruta.")}</p></div></div>
-  <div class="conclusion"><span class="num">05</span><div><b>{T("Measure quality, not only loss", "Mide la calidad, no solo la pérdida")}</b><p>{T(
+  <div class="conclusion"><span class="num">05</span><div><b>{T("The atlas measures fewer models than it names", "El atlas mide menos modelos de los que nombra")}</b><p>{T(
+    "297 of the 1,409 analysed pairs share a bit-identical loss with another pair: the four window mixers collapse into one at a 64-token context, fastconformer equals swa, none equals nope, and pape equals pape_efficient. Counting equivalence classes is part of reading the grid, not a defect to hide.",
+    "297 de los 1.409 pares analizados comparten una pérdida idéntica bit a bit con otro par: los cuatro mixers de ventana colapsan en uno en un contexto de 64 tokens, fastconformer equivale a swa, none equivale a nope y pape equivale a pape_efficient. Contar clases de equivalencia es parte de leer la rejilla, no un defecto que esconder.")}</p></div></div>
+  <div class="conclusion"><span class="num">06</span><div><b>{T("Measure quality, not only loss", "Mide la calidad, no solo la pérdida")}</b><p>{T(
     f"The loss/quality rank correlation is {stats['inference']['loss_top5_rho']:+.2f}: the atlas ranks learning speed, not model quality. A larger held-out set with per-token log-likelihood is the next measurement that would turn the atlas into a ranking.",
     f"La correlación de rango pérdida/calidad es {stats['inference']['loss_top5_rho']:+.2f}: el atlas ordena velocidad de aprendizaje, no calidad de modelo. Un conjunto retenido más grande con log-verosimilitud por token es la próxima medición que convertiría el atlas en un ranking.")}</p></div></div>
 </div>
@@ -697,6 +770,7 @@ def render_page(stats: dict, atlas: dict) -> str:
     <a href="../2/index.html">{T("Experiment 2", "Experimento 2")}</a>
     <a href="#summary">{T("Summary", "Resumen")}</a>
     <a href="#atlas">{T("Atlas", "Atlas")}</a>
+    <a href="#optimizers">{T("Optimizers", "Optimizadores")}</a>
     <a href="#gradients">{T("Gradients", "Gradientes")}</a>
     <a href="#inference">{T("Quantization", "Cuantización")}</a>
     <a href="#data">{T("Data", "Datos")}</a>
@@ -867,11 +941,11 @@ def render_page(stats: dict, atlas: dict) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Experiment 3 · The complete mixer atlas · Frankenstein Transformer</title>
-<meta name="description" content="Experiment 3: 1,653 runs, 1,431 hybrid pairs and 20.5 M training steps — the complete mixer atlas, with per-block gradients, throughput, quantization and an interactive A×B matrix.">
+<meta name="description" content="Experiment 3: 1,653 runs, 1,431 hybrid pairs and 20.5 M training steps — the complete mixer atlas, with per-block gradients, per-optimizer loss/CPU/memory, quantization and an interactive A×B matrix.">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Experiment 3 · The complete mixer atlas">
-<meta property="og:description" content="1,653 runs, 1,431 hybrid pairs, 20.5 M steps: the complete mixer atlas with gradients, cost and quantization.">
-<meta property="og:image" content="https://erickfmm.github.io/frankenstein-transformer/experiments/3/img/quant_agreement-dark.png">
+<meta property="og:description" content="1,653 runs, 1,431 hybrid pairs, 20.5 M steps: the complete mixer atlas with gradients, per-optimizer cost, quantization and the mixer × mixer matrix.">
+<meta property="og:image" content="https://erickfmm.github.io/frankenstein-transformer/experiments/3/img/matrix_loss-dark.png">
 <meta property="og:url" content="https://erickfmm.github.io/frankenstein-transformer/experiments/3/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0d1117">

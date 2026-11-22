@@ -824,7 +824,7 @@ def train_vs_inference(theme):
 # Reliability and correlation
 # ---------------------------------------------------------------------------
 def stage_status(theme):
-    """Pipeline status counts per stage, deploy excluded."""
+    """Pipeline status counts per stage."""
     results = pd.read_csv(C.CSVS / "results.json.csv", low_memory=False)
     results = results[~results["category"].eq("deploy")]
     counts = results.groupby(["category", "status"]).size().unstack(fill_value=0)
@@ -840,7 +840,7 @@ def stage_status(theme):
     ax.set_yticklabels(counts.index)
     ax.set_xscale("log")
     ax.set_xlabel(tr("stage records (log)", "registros de etapa (log)"))
-    ax.set_title(tr("Pipeline reliability by stage (deploy excluded)", "Fiabilidad del pipeline por etapa (deploy excluido)"))
+    ax.set_title(tr("Pipeline reliability by stage", "Fiabilidad del pipeline por etapa"))
     ax.legend(frameon=False, fontsize=7, ncol=3, loc="lower right")
     _style(ax, theme, grid_axis="x")
     fig.tight_layout()
@@ -884,6 +884,262 @@ def correlation(theme):
     return fig
 
 
+# ---------------------------------------------------------------------------
+# The mixer atlas: super matrix, roles, synergy, Pareto, per-B quality
+# ---------------------------------------------------------------------------
+def _mixer_order(pairs: pd.DataFrame) -> list[str]:
+    """Registry (generation) order of the mixers, reconstructed from the pairs.
+
+    The axes follow the order used to generate the pairs (A before B); an
+    alphabetical order would push half of the pairs below the diagonal and
+    make the upper-triangle atlas look perforated.
+    """
+    edges = [(a, b) for a, b in zip(pairs["pair_a"], pairs["pair_b"]) if a and b]
+    nodes = sorted({mixer for edge in edges for mixer in edge})
+    successors = {mixer: [] for mixer in nodes}
+    indegree = {mixer: 0 for mixer in nodes}
+    for a, b in edges:
+        successors[a].append(b)
+        indegree[b] += 1
+    queue = sorted(mixer for mixer in nodes if indegree[mixer] == 0)
+    order = []
+    while queue:
+        mixer = queue.pop(0)
+        order.append(mixer)
+        for successor in successors[mixer]:
+            indegree[successor] -= 1
+            if indegree[successor] == 0:
+                queue.append(successor)
+        queue.sort()
+    return order if len(order) == len(nodes) else sorted(nodes)
+
+
+def matrix_loss(theme):
+    """The 54x54 super matrix: final loss of every hybrid pair (A x B)."""
+    master = load()["master"]
+    pairs = master[master["family"] == "pair"].copy()
+    mixers = _mixer_order(pairs)
+    index = {mixer: position for position, mixer in enumerate(mixers)}
+    grid = np.full((len(mixers), len(mixers)), np.nan)
+    for _, row in pairs.iterrows():
+        a, b = row.get("pair_a"), row.get("pair_b")
+        if a in index and b in index and pd.notna(row.get("final_loss")):
+            grid[index[a], index[b]] = row["final_loss"]
+    cmap = LinearSegmentedColormap.from_list(
+        "atlas", [theme["good"], "#d2991d", theme["bad"]]
+    )
+    cmap.set_bad(color=theme["grid"])
+    fig, ax = plt.subplots(figsize=(10.6, 9.0))
+    masked = np.ma.masked_invalid(grid)
+    image = ax.imshow(masked, aspect="equal", cmap=cmap, interpolation="nearest")
+    ax.set_xticks(range(len(mixers)))
+    ax.set_xticklabels(mixers, rotation=90, fontsize=6.2, color=theme["fg"])
+    ax.set_yticks(range(len(mixers)))
+    ax.set_yticklabels(mixers, fontsize=6.2, color=theme["fg"])
+    ax.set_xlabel(tr("second mixer (B)", "segundo mixer (B)"))
+    ax.set_ylabel(tr("first mixer (A)", "primer mixer (A)"))
+    ax.set_title(
+        tr(
+            "The mixer atlas: final loss of the 1,431 pairs",
+            "El atlas de mixers: pérdida final de los 1,431 pares",
+        )
+    )
+    bar = fig.colorbar(image, ax=ax, pad=0.015, fraction=0.046)
+    bar.set_label(tr("final loss (nats)", "pérdida final (nats)"), fontsize=8)
+    bar.ax.tick_params(labelsize=7, colors=theme["muted"])
+    ax.tick_params(length=0)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    fig.tight_layout()
+    return fig
+
+
+def roles_scatter(theme):
+    """Median loss of every mixer in the A role against the B role."""
+    master = analysis(load()["master"])
+    pairs = master[master["family"] == "pair"].dropna(subset=["final_loss"])
+    by_a = pairs.groupby("pair_a")["final_loss"].median()
+    by_b = pairs.groupby("pair_b")["final_loss"].median()
+    common = sorted(set(by_a.index) & set(by_b.index))
+    x = by_a[common].to_numpy()
+    y = by_b[common].to_numpy()
+    lo = float(min(x.min(), y.min())) - 0.05
+    hi = float(max(x.max(), y.max())) + 0.05
+    fig, ax = plt.subplots(figsize=(6.6, 5.4))
+    ax.plot([lo, hi], [lo, hi], linestyle="--", linewidth=1, color=theme["muted"])
+    ax.scatter(x, y, s=26, alpha=0.8, color=theme["accent"], linewidths=0)
+    for mixer, xv, yv in zip(common, x, y):
+        if mixer in ("conformer", "mamba", "iha", "mtla", "ccgqa", "engram"):
+            ax.annotate(
+                mixer, (xv, yv), fontsize=7, color=theme["fg"],
+                xytext=(4, 4), textcoords="offset points",
+            )
+    rho = _spearman(x, y)
+    ax.text(0.02, 0.97, tr(f"Spearman ρ = {rho:+.2f}", f"Spearman ρ = {rho:+.2f}"),
+            transform=ax.transAxes, va="top", fontsize=8, color=theme["muted"])
+    ax.set_xlabel(tr("median loss as first mixer (A)", "pérdida mediana como primer mixer (A)"))
+    ax.set_ylabel(tr("median loss as second mixer (B)", "pérdida mediana como segundo mixer (B)"))
+    ax.set_title(tr("The role effect: A vs B", "El efecto del rol: A vs B"))
+    _style(ax, theme)
+    fig.tight_layout()
+    return fig
+
+
+def top5_by_b(theme):
+    """Mean held-out top-5 hit rate of the pairs grouped by second mixer."""
+    data = load()
+    master = analysis(data["master"])
+    acc = data["inference_acc"]
+    base = acc[(acc["deploy_format"] == "hf_none") & acc["task"].eq("mlm")]
+    pairs = master[(master["family"] == "pair")].merge(
+        base[["combo_id", "top5"]], left_on="run", right_on="combo_id"
+    ).dropna(subset=["top5", "final_loss"])
+    grouped = pairs.groupby("pair_b")["top5"].agg(["mean", "size"])
+    grouped = grouped[grouped["size"] >= 20].sort_values("mean")
+    labels = list(grouped.index)
+    values = grouped["mean"].to_numpy() * 100
+    counts = grouped["size"].to_numpy()
+    colors = [theme["warm"] if name == "conformer" else theme["accent"] for name in labels]
+    fig, ax = plt.subplots(figsize=(7.4, 4.6))
+    ax.barh(range(len(labels)), values, color=colors, alpha=0.85)
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels([f"{name} (n={n})" for name, n in zip(labels, counts)], fontsize=8)
+    ax.set_xlabel(tr("mean held-out top-5 (%)", "top-5 retenido medio (%)"))
+    ax.set_title(
+        tr(
+            "Held-out quality by second mixer — the best-loss B is not the best-quality B",
+            "Calidad retenida por segundo mixer — el mejor B en pérdida no es el mejor en calidad",
+        ), fontsize=10)
+    _style(ax, theme, grid_axis="x")
+    fig.tight_layout()
+    return fig
+
+
+def synergy(theme):
+    """Best and worst mixer interactions by synergy (marginals minus pair)."""
+    master = analysis(load()["master"])
+    pairs = master[master["family"] == "pair"].dropna(subset=["final_loss"]).copy()
+    means = {}
+    for _, row in pairs.iterrows():
+        means.setdefault(row["pair_a"], []).append(row["final_loss"])
+        means.setdefault(row["pair_b"], []).append(row["final_loss"])
+    means = {name: float(np.mean(values)) for name, values in means.items()}
+    pairs["synergy"] = pairs.apply(
+        lambda row: (means[row["pair_a"]] + means[row["pair_b"]]) / 2 - row["final_loss"],
+        axis=1,
+    )
+    top = pairs.nlargest(8, "synergy")
+    bottom = pairs.nsmallest(8, "synergy").iloc[::-1]
+    frame = pd.concat([bottom, top])
+    labels = [run.replace("attn_", "").replace("__", " + ") for run in frame["run"]]
+    values = frame["synergy"].to_numpy()
+    colors = [theme["good"] if v > 0 else theme["bad"] for v in values]
+    fig, ax = plt.subplots(figsize=(7.0, 5.2))
+    ax.barh(range(len(frame)), values, color=colors, alpha=0.82)
+    ax.axvline(0, color=theme["fg"], linewidth=0.9)
+    ax.set_yticks(range(len(frame)))
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_xlabel(tr("synergy: expected minus observed loss (nats)", "sinergia: pérdida esperada menos observada (nats)"))
+    ax.set_title(tr("Interaction beats marginals: extreme synergies", "La interacción supera a los marginales: sinergias extremas"))
+    _style(ax, theme, grid_axis="x")
+    fig.tight_layout()
+    return fig
+
+
+def pareto(theme):
+    """Speed--quality Pareto front of the hybrid pairs (MLM)."""
+    master = analysis(load()["master"])
+    pairs = master[(master["family"] == "pair") & master["task"].eq("mlm")]
+    pairs = pairs.dropna(subset=["final_loss", "duration_h"])
+    ordered = pairs.sort_values("duration_h")
+    front, best = [], np.inf
+    for _, row in ordered.iterrows():
+        if row["final_loss"] < best:
+            front.append(row)
+            best = row["final_loss"]
+    front = pd.DataFrame(front)
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    ax.scatter(pairs["duration_h"], pairs["final_loss"], s=8, alpha=0.35,
+               color=theme["muted"], linewidths=0, label=tr("pairs", "pares"))
+    ax.plot(front["duration_h"], front["final_loss"], color=theme["bad"],
+            linewidth=1.2, marker="o", markersize=3.5, label=tr("Pareto front", "frontera de Pareto"))
+    for _, row in front.iterrows():
+        name = row["run"].replace("attn_", "").replace("__", " + ")
+        if row["final_loss"] < 8.7 or row["duration_h"] < 0.7:
+            ax.annotate(name, (row["duration_h"], row["final_loss"]),
+                        fontsize=6.5, color=theme["fg"],
+                        xytext=(4, 3), textcoords="offset points")
+    ax.set_xlabel(tr("training wall time (hours)", "tiempo de pared (horas)"))
+    ax.set_ylabel(tr("final loss (nats)", "pérdida final (nats)"))
+    ax.set_title(tr(f"The speed--quality Pareto front ({len(front)} of {len(pairs):,} pairs)",
+                    f"La frontera de Pareto velocidad-calidad ({len(front)} de {len(pairs):,} pares)"))
+    ax.legend(frameon=False, fontsize=8)
+    _style(ax, theme)
+    fig.tight_layout()
+    return fig
+
+
+def optimizer_panel(theme):
+    """Per-optimizer loss, gradient pressure, step time and memory (4 panels)."""
+    master = analysis(load()["master"])
+    opt = master[master["family"] == "optimizer"].dropna(subset=["final_loss"]).copy()
+    opt = opt.sort_values("final_loss")
+    names = list(opt["optimizer"])
+    y = range(len(names))
+    panels = [
+        ("final_loss", tr("final loss (nats)", "pérdida final (nats)"), theme["accent"]),
+        ("mean_grad_norm", tr("mean grad norm (post-clip)", "norma media del gradiente (post-recorte)"), theme["purple"]),
+        ("mean_step_time_ms", tr("mean step time (ms)", "tiempo medio por paso (ms)"), theme["warm"]),
+        ("mean_rss_mb", tr("mean resident memory (MB)", "memoria residente media (MB)"), theme["good"]),
+    ]
+    fig, axes = plt.subplots(2, 2, figsize=(9.6, 10.4))
+    for ax, (column, label, color) in zip(axes.flat, panels):
+        ax.barh(y, opt[column].to_numpy(), color=color, alpha=0.82)
+        ax.set_yticks(list(y))
+        ax.set_yticklabels(names, fontsize=6.4)
+        ax.set_xlabel(label, fontsize=8)
+        ax.invert_yaxis()
+        _style(ax, theme, grid_axis="x")
+    fig.suptitle(
+        tr(
+            "Optimizer ablation: loss, gradient pressure, CPU and memory (sorted by loss)",
+            "Ablación de optimizadores: pérdida, gradiente, CPU y memoria (orden por pérdida)",
+        ), fontsize=11,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.985))
+    return fig
+
+
+def ablation_loss(theme):
+    """Normalization, text-PE and structural-switch ablations (3 panels)."""
+    master = analysis(load()["master"])
+    groups = [
+        ("norm", tr("normalization", "normalización")),
+        ("pe", tr("positional encoding (text)", "codificación posicional (texto)")),
+        ("switch", tr("structural switches", "interruptores estructurales")),
+    ]
+    fig, axes = plt.subplots(1, 3, figsize=(10.6, 5.6))
+    for ax, (family, title) in zip(axes, groups):
+        rows = master[(master["family"] == family)].dropna(subset=["final_loss"])
+        rows = rows.sort_values("final_loss", ascending=False)
+        labels = [run.replace(f"{family}_", "").replace("trans_", "").replace("_", " ")
+                  for run in rows["run"]]
+        ax.barh(range(len(rows)), rows["final_loss"], color=C.FAMILY_COLOR[family],
+                alpha=0.82)
+        ax.set_yticks(range(len(rows)))
+        ax.set_yticklabels(labels, fontsize=7)
+        lo = float(rows["final_loss"].min())
+        ax.set_xlim(lo - 0.25, float(rows["final_loss"].max()) + 0.25)
+        ax.axvline(lo, color=theme["muted"], linewidth=0.8, linestyle="--")
+        ax.set_title(title, fontsize=9.5)
+        ax.set_xlabel(tr("final loss (nats)", "pérdida final (nats)"), fontsize=8)
+        _style(ax, theme, grid_axis="x")
+    fig.suptitle(tr("Component ablations on the shared backbone (smoke runs excluded)",
+                    "Ablaciones de componentes sobre el esqueleto compartido (sin pruebas de humo)"), fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    return fig
+
+
 #: Builder registry used by the PNG and the paper-figure scripts.
 FIGURES = [
     ("params_family_box", params_family_box, 0.75),
@@ -893,9 +1149,16 @@ FIGURES = [
     ("curves_quantiles", curves_quantiles, 0.85),
     ("curves_top10", curves_top10, 0.85),
     ("convergence_speed", convergence_speed, 0.78),
+    ("matrix_loss", matrix_loss, 0.95),
+    ("roles_scatter", roles_scatter, 0.9),
+    ("top5_by_b", top5_by_b, 0.82),
+    ("synergy", synergy, 0.82),
+    ("pareto", pareto, 0.85),
     ("grad_groups_curves", grad_groups_curves, 0.82),
     ("grad_heatmap", grad_heatmap, 0.82),
     ("grad_health", grad_health, 0.72),
+    ("optimizer_panel", optimizer_panel, 0.72),
+    ("ablation_loss", ablation_loss, 0.8),
     ("time_vs_params", time_vs_params, 0.85),
     ("cost_per_mparam", cost_per_mparam, 0.75),
     ("throughput_family", throughput_family, 0.78),

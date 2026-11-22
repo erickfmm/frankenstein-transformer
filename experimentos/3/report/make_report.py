@@ -209,6 +209,220 @@ def compute_stats() -> dict:
         for _, row in best_acc.iterrows()
     ]
 
+    # ------------------------------------------------------------- atlas
+    pairs_loss = pair_runs.dropna(subset=["final_loss"]).copy()
+    by_a = pairs_loss.groupby("pair_a")["final_loss"].agg(["median", "size"])
+    by_b = pairs_loss.groupby("pair_b")["final_loss"].agg(["median", "size"])
+    common_roles = sorted(set(by_a.index) & set(by_b.index))
+    med_a = by_a.loc[common_roles, "median"]
+    med_b = by_b.loc[common_roles, "median"]
+    singles = analysis_runs[analysis_runs["family"] == "single"].dropna(
+        subset=["final_loss"]
+    )
+    best_single = singles.nsmallest(1, "final_loss").iloc[0]
+
+    # Synergy: how far a pair is from the mean of its two marginals.
+    members: dict[str, list[float]] = {}
+    for _, row in pairs_loss.iterrows():
+        members.setdefault(row["pair_a"], []).append(row["final_loss"])
+        members.setdefault(row["pair_b"], []).append(row["final_loss"])
+    marginals = {name: float(np.mean(v)) for name, v in members.items()}
+    pairs_loss["synergy"] = pairs_loss.apply(
+        lambda row: (marginals[row["pair_a"]] + marginals[row["pair_b"]]) / 2
+        - row["final_loss"],
+        axis=1,
+    )
+
+    # Bit-identical pairs: window mixers that collapse at a 64-token context.
+    dup_groups = pairs_loss.groupby(pairs_loss["final_loss"].round(6))["run"]
+    dup_sizes = dup_groups.size()
+
+    top5_b = pairs_loss.merge(
+        mlm_base[["combo_id", "top5"]], left_on="run", right_on="combo_id"
+    ).groupby("pair_b")["top5"].agg(["mean", "size"])
+    top5_b = top5_b[top5_b["size"] >= 20].sort_values("mean", ascending=False)
+
+    pareto_rows = pairs_loss[pairs_loss["task"] == "mlm"].sort_values("duration_h")
+    front: list[dict] = []
+    frontier = np.inf
+    for _, row in pareto_rows.iterrows():
+        if row["final_loss"] < frontier:
+            frontier = row["final_loss"]
+            front.append(
+                {
+                    "run": str(row["run"]),
+                    "loss": float(row["final_loss"]),
+                    "duration_h": float(row["duration_h"]),
+                }
+            )
+
+    def _role_rows(frame, role):
+        rows = []
+        for mixer, group in frame.iterrows():
+            top5_row = top5_b.loc[mixer] if mixer in top5_b.index else None
+            rows.append(
+                {
+                    "mixer": str(mixer),
+                    "n": int(group["size"]),
+                    "median": float(group["median"]),
+                    "median_other": float(
+                        (med_b if role == "a" else med_a).get(mixer, np.nan)
+                    ),
+                    "top5": float(top5_row["mean"]) if top5_row is not None else None,
+                }
+            )
+        return rows
+
+    stats["atlas"] = {
+        "n_cells": int((training["family"] == "pair").sum()),
+        "n_measured": int(len(pairs_loss)),
+        "n_holes": int(
+            training.loc[training["family"] == "pair", "final_loss"].isna().sum()
+        ),
+        "roles": {
+            "n_common": len(common_roles),
+            "range_a": float(med_a.max() - med_a.min()),
+            "range_b": float(med_b.max() - med_b.min()),
+            "best_a": [str(med_a.idxmin()), float(med_a.min())],
+            "worst_a": [str(med_a.idxmax()), float(med_a.max())],
+            "best_b": [str(med_b.idxmin()), float(med_b.min())],
+            "worst_b": [str(med_b.idxmax()), float(med_b.max())],
+            "rho": mc._spearman(med_a.to_numpy(), med_b.to_numpy()),
+            "only_a": sorted(set(by_a.index) - set(by_b.index)),
+            "only_b": sorted(set(by_b.index) - set(by_a.index)),
+        },
+        "singles": {
+            "n": int(len(singles)),
+            "median": float(singles["final_loss"].median()),
+            "best": [str(best_single["run"]), float(best_single["final_loss"])],
+            "pairs_better_than_best_single": int(
+                (pairs_loss["final_loss"] < best_single["final_loss"]).sum()
+            ),
+        },
+        "synergy": {
+            "abs_median": float(pairs_loss["synergy"].abs().median()),
+            "abs_p90": float(pairs_loss["synergy"].abs().quantile(0.9)),
+            "share_above_015": float((pairs_loss["synergy"] > 0.15).mean() * 100),
+            "top": [
+                {"run": str(r["run"]), "loss": float(r["final_loss"]),
+                 "expected": float(r["final_loss"] + r["synergy"]),
+                 "synergy": float(r["synergy"])}
+                for _, r in pairs_loss.nlargest(5, "synergy").iterrows()
+            ],
+            "bottom": [
+                {"run": str(r["run"]), "loss": float(r["final_loss"]),
+                 "expected": float(r["final_loss"] + r["synergy"]),
+                 "synergy": float(r["synergy"])}
+                for _, r in pairs_loss.nsmallest(5, "synergy").iterrows()
+            ],
+        },
+        "duplicates": {
+            "n_groups": int((dup_sizes > 1).sum()),
+            "n_pairs": int(dup_sizes[dup_sizes > 1].sum()),
+        },
+        "top5_by_b": [
+            {"mixer": str(mixer), "top5": float(group["mean"]),
+             "n": int(group["size"])}
+            for mixer, group in top5_b.iterrows()
+        ],
+        "best_b": _role_rows(by_b.sort_values("median").head(8), "b"),
+        "worst_b": _role_rows(by_b.sort_values("median").tail(8).iloc[::-1], "b"),
+        "pareto": front,
+    }
+
+    # ----------------------------------------------------------- optimizers
+    opt = analysis_runs[analysis_runs["family"] == "optimizer"].dropna(
+        subset=["final_loss"]
+    ).copy()
+    adamw_loss = float(opt.loc[opt["optimizer"] == "adamw", "final_loss"].iloc[0])
+    cluster = sorted(opt.loc[(opt["final_loss"] - adamw_loss).abs() < 1e-4, "optimizer"])
+    opt_sorted = opt.sort_values("final_loss")
+    stats["optimizers"] = {
+        "n": int(len(opt)),
+        "rows": [
+            {
+                "name": str(row["optimizer"]),
+                "epochs": float(row["final_epoch"]),
+                "loss": float(row["final_loss"]),
+                "grad_mean": float(row["mean_grad_norm"]),
+                "grad_final": float(row["final_grad_norm"]),
+                "clip": float(row["mean_clip_ratio"]),
+                "step_ms": float(row["mean_step_time_ms"]),
+                "tokens_per_sec": float(row["tokens_per_sec"])
+                if pd.notna(row["tokens_per_sec"]) else None,
+                "rss_mb": float(row["mean_rss_mb"]),
+                "hours": float(row["duration_h"]),
+            }
+            for _, row in opt_sorted.iterrows()
+        ],
+        "cluster": cluster,
+        "rho_loss_grad": mc._spearman(opt["final_loss"], opt["mean_grad_norm"]),
+        "rho_loss_grad_final": mc._spearman(opt["final_loss"], opt["final_grad_norm"]),
+        "rho_loss_clip": mc._spearman(opt["final_loss"], opt["mean_clip_ratio"]),
+        "rho_loss_step": mc._spearman(opt["final_loss"], opt["mean_step_time_ms"]),
+        "rho_loss_epochs": mc._spearman(opt["final_loss"], opt["final_epoch"]),
+        "fast_timer": sorted(opt.loc[opt["mean_step_time_ms"] < 150, "optimizer"]),
+        "rss_median": float(opt["mean_rss_mb"].median()),
+        "rss_max": [
+            str(opt.loc[opt["mean_rss_mb"].idxmax(), "optimizer"]),
+            float(opt["mean_rss_mb"].max()),
+        ],
+        "step_min": [
+            str(opt.loc[opt["mean_step_time_ms"].idxmin(), "optimizer"]),
+            float(opt["mean_step_time_ms"].min()),
+        ],
+        "step_max": [
+            str(opt.loc[opt["mean_step_time_ms"].idxmax(), "optimizer"]),
+            float(opt["mean_step_time_ms"].max()),
+        ],
+    }
+
+    # ------------------------------------------------------------- ablations
+    def _rows(family, dropna=True, min_epochs=None):
+        frame = analysis_runs[analysis_runs["family"] == family]
+        if min_epochs:
+            frame = frame[frame["final_epoch"].fillna(0) >= min_epochs]
+        if dropna:
+            frame = frame.dropna(subset=["final_loss"])
+        return [
+            {
+                "run": str(row["run"]),
+                "loss": float(row["final_loss"]) if pd.notna(row["final_loss"]) else None,
+                "epochs": float(row["final_epoch"]) if pd.notna(row["final_epoch"]) else None,
+                "params": float(row["total"]),
+                "task": str(row["task"]),
+            }
+            for _, row in frame.sort_values("final_loss").iterrows()
+        ]
+
+    vit_pe = analysis_runs[analysis_runs["family"] == "vit_pe"].dropna(
+        subset=["final_loss"]
+    )
+    vit_pe_spread = {
+        task: float(group["final_loss"].max() - group["final_loss"].min())
+        for task, group in vit_pe.groupby("task")
+    }
+    stats["ablations"] = {
+        "norm": _rows("norm"),
+        "pe": _rows("pe"),
+        "switch": _rows("switch"),
+        "batch": _rows("batch"),
+        "task": _rows("task"),
+        "tokenizer": _rows("tokenizer"),
+        "moe_full": _rows("moe", min_epochs=100),
+        "moe_smoke": int(
+            (
+                training.loc[training["family"] == "moe", "final_epoch"].fillna(0) < 100
+            ).sum()
+        ),
+        "vit_pe_spread": vit_pe_spread,
+        "vit_pe_n": int(len(vit_pe)),
+        "vision": _rows("vision"),
+        "audio": _rows("audio"),
+        "realdata": _rows("realdata"),
+    }
+
+
     # ------------------------------------------------------------- dynamics
     runs = pair_runs[pair_runs["task"] == "mlm"]["run"].tolist()
     curves = mc._curves(data["epochs"], runs)["loss"]
@@ -229,6 +443,7 @@ def compute_stats() -> dict:
                 "p10_start": float(np.percentile(curves[:, 0], 10)),
                 "p90_start": float(np.percentile(curves[:, 0], 90)),
             },
+            "rank_stability_10": mc._spearman(curves[:, 5], curves[:, -1]),
             "rank_stability_25": mc._spearman(curves[:, 12], curves[:, -1]),
         }
     speed = _convergence(epochs, analysis_runs)
@@ -273,8 +488,19 @@ def compute_stats() -> dict:
             (training["std_grad_norm"] / training["mean_grad_norm"]).replace([np.inf, -np.inf], np.nan),
             training["final_loss"],
         ),
+        # ``cpu_rss_peak_mb`` was only logged for part of the campaign (the
+        # vision families), so the headline numbers use the mean resident
+        # memory, which every run reports.
         "rss_median_mb": float(training["rss_peak_mb"].median()),
         "rss_max_mb": float(training["rss_peak_mb"].max()),
+        "rss_runs_with_peak": int(training["rss_peak_mb"].notna().sum()),
+        "rss_mean_median_mb": float(analysis_runs["mean_rss_mb"].median()),
+        "rss_mean_p90_mb": _q(analysis_runs["mean_rss_mb"], 0.9),
+        "rss_mean_max_mb": float(analysis_runs["mean_rss_mb"].max()),
+        "rss_mean_max_run": str(analysis_runs.loc[analysis_runs["mean_rss_mb"].idxmax(), "run"]),
+        "rss_vision_median_mb": float(
+            analysis_runs.loc[analysis_runs["family"].isin(["vision", "vit_pe"]), "mean_rss_mb"].median()
+        ),
     }
 
     # -------------------------------------------------------------- compute
@@ -424,6 +650,7 @@ def compute_stats() -> dict:
         }
     ).dropna()
     corr = features.corr(method="spearman")
+    all_loss = analysis_runs.dropna(subset=["final_loss", "params_m"])
     stats["correlations"] = {
         "labels": list(corr.columns),
         "matrix": corr.to_numpy().round(2).tolist(),
@@ -436,6 +663,10 @@ def compute_stats() -> dict:
             "duration_params": float(corr.loc["duration_h", "params_m"]),
             "params_grad": float(corr.loc["params_m", "grad_norm"]),
         },
+        "params_loss_all": mc._spearman(
+            np.log10(all_loss["params_m"]), all_loss["final_loss"]
+        ),
+        "params_loss_all_n": int(len(all_loss)),
     }
     return stats
 
@@ -690,11 +921,125 @@ def build_tables(st: dict, lang: str) -> dict[str, str]:
             ]
         )
     tables["reliability_table"] = tex_table(
-        "Fallos de entrenamiento por familia (el despliegue se excluye deliberadamente)."
+        "Fallos de entrenamiento por familia."
         if not en
-        else "Training failures by family (deployment is deliberately excluded).",
+        else "Training failures by family.",
         "tab:r3-reliability",
         r"Family & $n$ & Failed & Rate" if en else r"Familia & $n$ & Fallos & Tasa",
+        rows,
+        "lrrr",
+    )
+
+    rows = []
+    for row in st["optimizers"]["rows"]:
+        rows.append(
+            [
+                C.tex_tt(row["name"]),
+                f"{row['epochs']:.0f}",
+                f"{row['loss']:.3f}",
+                f"{row['grad_mean']:.2f} / {row['grad_final']:.2f}",
+                f"{row['clip']:.2f}",
+                f"{row['step_ms']:.0f}",
+                f"{row['rss_mb']:.0f}",
+            ]
+        )
+    tables["optimizer_table"] = tex_table(
+        "Ablación de optimizadores sobre el mismo esqueleto: épocas efectivas, pérdida final, norma del gradiente (media y final), cociente de recorte, tiempo por paso y memoria residente media. Orden por pérdida."
+        if not en
+        else "Optimizer ablation on the shared backbone: effective epochs, final loss, gradient norm (mean and final), clip ratio, step time and mean resident memory. Sorted by loss.",
+        "tab:r3-optimizers",
+        r"Optimizer & Ep. & Loss & Grad (m/f) & Clip & Step (ms) & RSS (MB)" if en
+        else r"Optimizador & Ép. & Pérdida & Grad (m/f) & Recorte & Paso (ms) & RSS (MB)",
+        rows,
+        "lrrrrrr",
+    )
+
+    def _ablation_table(family_key, label, caption_en, caption_es, header_en, header_es):
+        rows = []
+        for row in st["ablations"][family_key]:
+            if row["loss"] is None:
+                continue
+            name = str(row["run"])
+            for prefix in (f"{family_key}_", "trans_"):
+                if name.startswith(prefix):
+                    name = name[len(prefix):]
+                    break
+            rows.append(
+                [
+                    C.tex_tt(name),
+                    f"{row['loss']:.3f}",
+                    f"{row['epochs']:.0f}",
+                    f"{row['params'] / 1e3:.0f}k",
+                ]
+            )
+        return tex_table(
+            caption_es if not en else caption_en, label, header_en if en else header_es,
+            rows, "lrrr",
+        )
+
+    tables["norm_table"] = _ablation_table(
+        "norm", "tab:r3-norms",
+        "Normalization ablation: final loss, effective epochs and parameters.",
+        "Ablación de normalización: pérdida final, épocas efectivas y parámetros.",
+        r"Variant & Final loss & Epochs & Params",
+        r"Variante & Pérdida & Épocas & Parám.",
+    )
+    tables["pe_table"] = _ablation_table(
+        "pe", "tab:r3-pe",
+        "Text positional-encoding ablation (the six-epoch \\texttt{hope} run is a smoke test and is excluded).",
+        "Ablación de codificación posicional de texto (la corrida de seis épocas de \\texttt{hope} es una prueba de humo y queda excluida).",
+        r"Encoding & Final loss & Epochs & Params",
+        r"Codificación & Pérdida & Épocas & Parám.",
+    )
+    tables["switch_table"] = _ablation_table(
+        "switch", "tab:r3-switches",
+        "Structural switches with a full schedule, ordered by final loss. The names are shortened (\\texttt{trans\\_} dropped); smoke runs are excluded.",
+        "Interruptores estructurales con calendario completo, ordenados por pérdida final. Los nombres están abreviados (sin \\texttt{trans\\_}); las pruebas de humo quedan excluidas.",
+        r"Switch & Final loss & Epochs & Params",
+        r"Interruptor & Pérdida & Épocas & Parám.",
+    )
+
+    rows = []
+    for row in st["atlas"]["best_b"] + st["atlas"]["worst_b"]:
+        top5 = f"{row['top5'] * 100:.1f}\\%" if row["top5"] is not None else "n/a"
+        other = f"{row['median_other']:.3f}" if np.isfinite(row["median_other"]) else "n/a"
+        rows.append(
+            [
+                C.tex_tt(row["mixer"]),
+                str(row["n"]),
+                f"{row['median']:.3f}",
+                other,
+                top5,
+            ]
+        )
+    tables["best_b_table"] = tex_table(
+        "Segundos mixers: ocho mejores y ocho peores por pérdida mediana en el rol B, con el número de pares, la mediana del mismo mixer en el rol A y el top-5 retenido medio de sus pares."
+        if not en
+        else "Second mixers: the eight best and eight worst by median loss in the B role, with the pair count, the same mixer's median in the A role and the mean held-out top-5 of its pairs.",
+        "tab:r3-best-b",
+        r"Mixer & Pairs & B median & A median & Top-5" if en
+        else r"Mixer & Pares & Mediana B & Mediana A & Top-5",
+        rows,
+        "lrrrr",
+    )
+
+    rows = []
+    for row in st["atlas"]["synergy"]["top"] + st["atlas"]["synergy"]["bottom"]:
+        rows.append(
+            [
+                C.tex_tt(row["run"]),
+                f"{row['loss']:.3f}",
+                f"{row['expected']:.3f}",
+                f"{row['synergy']:+.3f}",
+            ]
+        )
+    tables["synergy_table"] = tex_table(
+        "Las mejores y peores interacciones por sinergia ($S_{A,B}=(\\mu_A+\\mu_B)/2-L_{A,B}$). Valores positivos: el par supera lo que predicen sus marginales."
+        if not en
+        else "The best and worst mixer interactions by synergy ($S_{A,B}=(\\mu_A+\\mu_B)/2-L_{A,B}$). Positive values mean the pair beats what its parts predict.",
+        "tab:r3-synergy",
+        r"Pair & Pair loss & Expected & Synergy" if en
+        else r"Par & Pérdida & Esperada & Sinergia",
         rows,
         "lrrr",
     )
