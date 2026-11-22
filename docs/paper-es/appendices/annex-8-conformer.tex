@@ -1,13 +1,13 @@
-\section{Atención Aumentada con Convolución: Conformer y Fast Conformer}
+\subsection{Atención Aumentada con Convolución: Conformer y Fast Conformer}
 \label{sec:annex-conformer}
 
-\subsection{Resumen Ejecutivo}
+\subsubsection{Resumen Ejecutivo}
 
 El bloque Conformer \citep{Gulati2020} es el mezclador de secuencia aumentado con convolución del conjunto de herramientas, expuesto como \texttt{conformer}. Conserva el campo receptivo global de la atención de producto punto escalada y añade una rama de convolución depthwise que modela estructura local de banda estrecha---el sesgo inductivo que necesita el reconocimiento de voz y que la atención pura no aporta. El bloque intercala atención multi-cabeza (MHSA) con codificación posicional sinusoidal relativa entre dos capas feed-forward de medio paso estilo Macaron \citep{Lu2019}, e inserta el módulo de convolución entre la atención y la segunda FFN. En la receta de referencia alcanza $1.9\%$/$3.9\%$ WER en LibriSpeech \emph{test-clean}/\emph{test-other} sin modelo de lenguaje externo (Conformer-L, 118.8M parámetros), y es el mezclador recomendado para la clase de modelo de audio del Anexo~\ref{sec:annex-audio}. Su hermano de forma larga, Fast Conformer \citep{rekesh_fastconformer_2023}, conserva el módulo de convolución y la disposición del bloque pero reemplaza la autoatención global por atención de contexto limitado---una ventana local fija más un token global anclado a la cabecera de la secuencia---de modo que audio de horas se decodifica con memoria acotada; se documenta a continuación. El conjunto de herramientas ejecuta ambas capas feed-forward a paso completo (la variante ``full-step'' de la Tabla~5 del paper) y deja que la capa exterior posea la segunda; la Tabla~\ref{tab:conformer-mapping} lista las desviaciones.
 
 Los mezcladores están disponibles en todas las clases de modelo: encoder de texto, decoder causal (donde el padding depthwise se desplaza para seguir siendo seguro en streaming), Vision Transformer y \texttt{frankenstein\_audio}. Como los bloques viven dentro de \texttt{HybridLayer}, componen con los otros 48 mezcladores, las 6 normas, las 4 estrategias de residual, MoE, Mixture-of-Depths, mHC, AttnRes, BitNet y las 36 familias de optimizadores.
 
-\subsection{Conformer: Atención Aumentada con Convolución}
+\subsubsection{Conformer: Atención Aumentada con Convolución}
 
 \begin{figure}[H]
 \centering
@@ -16,7 +16,7 @@ Los mezcladores están disponibles en todas las clases de modelo: encoder de tex
 \label{fig:mixer-conformer}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 Para una entrada de bloque $x \in \mathbb{R}^{B \times n \times d}$, el bloque de referencia de la Fig.~1 de \citet{Gulati2020} es
 \begin{align}
@@ -69,7 +69,7 @@ donde $\odot$ es el producto elemento a elemento (una GLU que reduce los $2d$ ca
 \end{equation}
 En modo decoder la suma de la Ecuación~\ref{eq:conformer-depthwise} se desplaza a $z_t = \sum_{k=0}^{K-1} w_k \tilde{h}_{t-K+1+k}$, de modo que ninguna trama futura entra en la convolución; los modos encoder y ViT conservan el padding simétrico ``same'' del paper.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{Bloque Conformer (\texttt{conformer})}
@@ -92,7 +92,7 @@ En modo decoder la suma de la Ecuación~\ref{eq:conformer-depthwise} se desplaza
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Mapeo de Implementación y Desviaciones}
+\paragraph{Mapeo de Implementación y Desviaciones}
 
 La Tabla~\ref{tab:conformer-mapping} mapea el bloque del paper sobre el conjunto de herramientas. Las desviaciones sustantivas son los dos escalados residuales y la segunda capa feed-forward: el paper conserva ambos coeficientes $\tfrac12$ de Macaron y envuelve la $\mathrm{FFN}_2$ en el bloque, mientras que \texttt{conformer} usa pasos completos y devuelve el estado tras el módulo de convolución, dejando que el \texttt{HybridLayer} exterior aplique su $\mathrm{norm}_2 + \mathrm{FFN}$ compartida (también a paso completo). La descomposición es deliberada: mantiene disponibles para la segunda FFN el enrutamiento MoE, Mixture-of-Depths, los flujos mHC/Hyperloop, AttnRes, la fusión FlashNorm, las proyecciones BitNet y el enrutamiento de optimizadores por grupo de parámetros, nada de lo cual sobreviviría a una FFN privada dentro del mezclador.
 
@@ -118,7 +118,7 @@ Dropout ($p=0.1$) & \texttt{model.dims.dropout} & global, por bloque \\
 
 \paragraph{Por qué la FFN a paso completo es segura.} Omitir el $\tfrac12$ de Macaron cambia la escala residual de cada rama, no la forma expresiva del bloque: la variante de paso completo es exactamente la que \citet{Gulati2020} ablacionan en su Tabla~5, donde mueve el WER dev-clean/dev-other de $1.9/4.4$ (medio paso) a $1.9/4.5$ (paso completo), es decir, una décima. El conjunto de herramientas usa pasos completos en ambas capas feed-forward; la primera permanece privada en el mezclador y la segunda es la compartida, lo que preserva la composabilidad descrita arriba.
 
-\subsection{Ablaciones Publicadas}
+\subsubsection{Ablaciones Publicadas}
 
 La Tabla~\ref{tab:conformer-ablations} resume las ablaciones que motivan la configuración por defecto. Los valores son los reportados por \citet{Gulati2020}; el orden cualitativo es lo que codifican los valores por defecto.
 
@@ -140,7 +140,7 @@ Ubicación de la convolución & tras MHSA, antes de $\mathrm{FFN}_2$ & se conser
 \label{tab:conformer-ablations}
 \end{table}
 
-\subsection{Reutilización de la Infraestructura Existente}
+\subsubsection{Reutilización de la Infraestructura Existente}
 
 Como \texttt{ConformerAttention} devuelve un delta y hereda el constructor \texttt{mixer(config, pos\_encoder=...)}, toda la pila se reutiliza sin casos especiales:
 
@@ -152,7 +152,7 @@ Como \texttt{ConformerAttention} devuelve un delta y hereda el constructor \text
     \item \textbf{Caché KV:} \texttt{conformer} se registra como \emph{no} cacheable (\texttt{supported=False}), porque el estado de la convolución depthwise y las estadísticas de BatchNorm deberían acarrearse entre pasos. \texttt{generate()} cae a la ruta de recómputo completo, que es exacta.
 \end{itemize}
 
-\subsection{Cuándo Usarlo}
+\subsubsection{Cuándo Usarlo}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Voz:} mezclador por defecto para \texttt{asr} y \texttt{audio\_classification}; con tramas de 40\,ms tras el submuestreo $4\times$, el kernel de 32 abarca $\sim$1.28\,s de contexto, aproximadamente el ancho de una secuencia de fonos.
@@ -160,7 +160,7 @@ Como \texttt{ConformerAttention} devuelve un delta y hereda el constructor \text
     \item \textbf{Decodificación en streaming:} usable en \texttt{mode: decoder} con padding convolucional causal, pero sin la caché incremental del Anexo~\ref{sec:annex-kv-cache}; la recurrencia depthwise es la pieza que falta.
 \end{itemize}
 
-\subsection{Fast Conformer: Atención de Contexto Limitado con un Token Global Anclado a la Cabecera}
+\subsubsection{Fast Conformer: Atención de Contexto Limitado con un Token Global Anclado a la Cabecera}
 
 \begin{figure}[H]
 \centering
@@ -169,7 +169,7 @@ Como \texttt{ConformerAttention} devuelve un delta y hereda el constructor \text
 \label{fig:mixer-fastconformer}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 Fast Conformer \citep{rekesh_fastconformer_2023} ataca el costo cuadrático de la autoatención de Conformer de dos formas: eleva el submuestreo del front-end a $8\times$ y, para entradas de forma larga, sustituye la atención global por atención de \emph{contexto limitado}. El paper describe el mezclador en prosa y no con ecuaciones desplegadas: ``usamos un único token de atención global, que atiende a todos los demás tokens y hace que todos los demás tokens lo atiendan, usando un conjunto separado de proyecciones lineales query, key y value, mientras que los demás atienden en una ventana de tamaño fijo alrededor de cada token'' (\S2.2), mientras que el modelo de forma larga evaluado ``tiene capas de proyección query, key y value compartidas que se usan para la atención global y local'' (\S3.4) y fija ``el tamaño del contexto limitado \ldots en 128 pasos a cada lado de un token''. Esta implementación codifica exactamente esa descripción y hereda el flujo de datos de la atención global de Longformer \citep{beltagy_longformer_2020}, que el paper cita explícitamente para el mecanismo y para su kernel de chunks solapados.
 
@@ -205,7 +205,7 @@ z_{ij} = \frac{\mathbf{q}_i \cdot \tilde{\mathbf{k}}_j}{\sqrt{d}}, \qquad
 \]
 En la variante separada, la fila de una consulta global se calcula con las proyecciones globales sobre todo el prefijo causal, $\mathbf{o}_i = \sum_{j \le i} \operatorname{softmax}_j(\mathbf{q}^{g}_i \cdot \mathbf{k}^{g}_j/\sqrt{d})\,\mathbf{v}^{g}_j$, igual que el diseño de atención global de Longformer. Con proyecciones compartidas los tres casos colapsan a un único conjunto $\mathbf{Q}/\mathbf{K}/\mathbf{V}$: los tokens globales son simplemente posiciones con filas y columnas sin enmascarar.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{Atención de contexto limitado Fast Conformer (forma de referencia densa enmascarada)}
@@ -236,7 +236,7 @@ En la variante separada, la fila de una consulta global se calcula con las proye
 
 En decodificación incremental el estado retenido es un anillo acotado: la región fijada de la cabecera cubre $\mathcal{G}$ y el anillo conserva las últimas $w/2+1$ claves, de modo que cada paso cuesta $\mathcal{O}(w+g)$. El patrón exacto se evalúa contra las posiciones absolutas en caché (a diferencia del atajo ``retención igual a patrón'', porque un prefijo global espaciado puede contener posiciones no globales).
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: $\mathcal{O}(n\,(w+g)\,d)$ en entrenamiento y $\mathcal{O}(w+g)$ por token decodificado con el kernel de chunks solapados del paper; la implementación de referencia aquí enmascara una matriz de puntuaciones densa, matemáticamente idéntica pero $\mathcal{O}(n^2)$ en cómputo. La memoria está acotada por $w+g$.

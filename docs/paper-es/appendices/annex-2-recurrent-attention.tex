@@ -1,7 +1,7 @@
-\section{Transformadores Densos, Recurrentes y Aumentados con Memoria}
+\section{Familias de Mezcladores de Secuencia}
 \label{sec:annex-transformer}
 
-Este anexo sintetiza las familias densas, recurrentes y aumentadas con memoria de transformers. El campo ha evolucionado hacia varios paradigmas principales: atención densa global con variantes, compresión de cabezas clave-valor mediante atención por consultas agrupadas, compresión de estado recurrente con decaimiento, modelos de espacio de estado selectivos, integración numérica de profundidad continua, memoria de valores indexada por token y arquitecturas aumentadas con memoria. Comprender esta taxonomía ilumina las compensaciones fundamentales entre expresividad, costo computacional, huella de memoria y simplicidad de despliegue.
+Esta sección sintetiza las familias densas, recurrentes y aumentadas con memoria de transformers; las familias restantes---latente, dispersa, con compuerta, de campo geométrico (SSOG), de peso rápido y aumentada con convolución---siguen en las Secciones~\ref{sec:annex-latent} a~\ref{sec:annex-conformer}. El campo ha evolucionado hacia varios paradigmas principales: atención densa global con variantes, compresión de cabezas clave-valor mediante atención por consultas agrupadas, compresión de estado recurrente con decaimiento, modelos de espacio de estado selectivos, integración numérica de profundidad continua, memoria de valores indexada por token y arquitecturas aumentadas con memoria. Comprender esta taxonomía ilumina las compensaciones fundamentales entre expresividad, costo computacional, huella de memoria y simplicidad de despliegue.
 
 \subsection{Atención Densa de Referencia: Estándar, Sigmoide, Continua, Exclusiva y Multi-Token}
 
@@ -219,7 +219,7 @@ de modo que los mapas de atención se combinan entre cabezas (una mezcla post-so
 
 \subsection{Memory Attention}
 
-La familia de memoria agrupa a Titans (la ventana de atención implementada aquí), Engram (Anexo~\ref{sec:annex-runtime}) y Memory Attention; este anexo cubre los miembros del lado de la atención.
+La familia de memoria agrupa a Titans (la ventana de atención implementada aquí), Engram (Anexo~\ref{sec:annex-runtime}) y Memory Attention; esta sección cubre los miembros del lado de la atención.
 
 \begin{figure}[H]
 \centering

@@ -1,9 +1,9 @@
-\section{Familias de Atención Latente y de Rango Bajo}
+\subsection{Familias de Atención Latente y de Rango Bajo}
 \label{sec:annex-latent}
 
-Este anexo cubre la familia de mecanismos de atención de compresión latente / de rango bajo de KV. Estas arquitecturas comprimen el estado clave--valor por token en un vector latente de rango bajo que es la única cantidad materializada en el caché KV durante la decodificación, luego reconstruyen las claves y valores completos de todas las cabezas al vuelo. La familia unifica diseños de consulta agrupada, latente, factorizado y latente temporal bajo un cuello de botella de rango bajo común.
+Esta sección cubre la familia de mecanismos de atención de compresión latente / de rango bajo de KV. Estas arquitecturas comprimen el estado clave--valor por token en un vector latente de rango bajo que es la única cantidad materializada en el caché KV durante la decodificación, luego reconstruyen las claves y valores completos de todas las cabezas al vuelo. La familia unifica diseños de consulta agrupada, latente, factorizado y latente temporal bajo un cuello de botella de rango bajo común.
 
-\subsection{Atención Latente Multi-Cabeza (MLA)}
+\subsubsection{Atención Latente Multi-Cabeza (MLA)}
 
 \begin{figure}[H]
 \centering
@@ -13,7 +13,7 @@ Este anexo cubre la familia de mecanismos de atención de compresión latente / 
 \end{figure}
 La Atención Latente Multi-Cabeza (MLA, por sus siglas en inglés) \citep{mehta_mla_2025} comprime el estado clave--valor por token en un único vector latente de rango bajo $c_{KV}$ de rango $r_{kv}$, el cual es la única cantidad materializada en el caché KV durante la decodificación. Un par de matrices de up-proyección reconstruye las claves y valores completos de todas las cabezas al vuelo, mientras que RoPE se aplica a los tensores de consulta y clave descomprimidos para preservar la estructura posicional. Los autores muestran que el ancho latente óptimo de Pareto se sitúa cerca de $r_{kv} = d_{\text{oculto}} / 2$, punto en el cual MLA reduce a la mitad el caché KV pero iguala la calidad de la atención multi-cabeza (MHA) en modelos pequeños.
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 \[
 c_{KV} = W_{DKV}\, x \in \mathbb{R}^{r_{kv}}, \qquad
 k = W_{UK}\, c_{KV}, \qquad
@@ -25,7 +25,7 @@ q = W_{Q}\, x.
 \text{atencion} = \texttt{softmax}\!\left(\frac{\tilde q\, \tilde k^\top}{\sqrt{d_h}}\right) v.
 \]
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} estado oculto $x \in \mathbb{R}^{n \times d}$, rango $r_{kv}$, proyecciones $W_{DKV}, W_{UK}, W_{UV}, W_{Q}$
 \State $c_{KV} \gets W_{DKV}\, x$ \Comment{down-proyección a latente de rango $r_{kv}$ (en caché en inferencia)}
@@ -36,7 +36,7 @@ q = W_{Q}\, x.
 \State \textbf{Salida:} $\mathbf{Y} = \text{pesos} \cdot v$
 \end{algorithmic}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 \cdot d)$ (atención completa sobre cabezas descomprimidas).
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token, espacio de caché KV $\mathcal{O}(r_{kv} \cdot n)$ (sólo latente).
@@ -45,7 +45,7 @@ q = W_{Q}\, x.
     \item \textbf{Limitaciones}: la up-proyección añade FLOPs de decodificación; el rango latente es un presupuesto global fijo compartido entre cabezas.
 \end{itemize}
 
-\subsection{Atención Latente por Consultas Agrupadas (GQLA)}
+\subsubsection{Atención Latente por Consultas Agrupadas (GQLA)}
 
 \begin{figure}[H]
 \centering
@@ -55,7 +55,7 @@ q = W_{Q}\, x.
 \end{figure}
 La Atención Latente por Consultas Agrupadas (GQLA, por sus siglas en inglés) \citep{meng_gqla_2026} es una modificación mínima de MLA que expone dos rutas de decodificación algebraicamente equivalentes sobre los mismos pesos entrenados: una ruta MQA-absorb (que fusiona la up-proyección en la consulta, óptima en hardware tipo H100) y una ruta GQA-expanded (que materializa claves/valores completos, óptima en hardware H20 / predicción multi-token). Las dos rutas son matemáticamente idénticas porque la up-proyección es lineal, de modo que $\texttt{softmax}(q_{\text{absorbido}} \cdot c_{KV}^\top) = \texttt{softmax}((q \cdot W_{UK}^\top) \cdot c_{KV}^\top)$, permitiendo un despacho adaptativo al hardware sin reentrenamiento.
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 Mismo latente que MLA:
 \[
 c_{KV} = W_{DKV}\, x, \qquad k = W_{UK}\, c_{KV}, \qquad v = W_{UV}\, c_{KV}, \qquad q = W_{Q}\, x.
@@ -67,7 +67,7 @@ c_{KV} = W_{DKV}\, x, \qquad k = W_{UK}\, c_{KV}, \qquad v = W_{UV}\, c_{KV}, \q
 \text{Ruta B (GQA-expanded): } \text{atencion} = \texttt{softmax}\!\left(\frac{q\, k^\top}{\sqrt{d_h}}\right) v, \quad k = W_{UK} c_{KV},\ v = W_{UV} c_{KV}.
 \]
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} $x$, pesos $W_{DKV}, W_{UK}, W_{UV}, W_{Q}$, bandera de hardware $\text{hw} \in \{\text{H100}, \text{H20}\}$
 \State $c_{KV} \gets W_{DKV}\, x$ \Comment{latente compartido, en caché}
@@ -84,7 +84,7 @@ c_{KV} = W_{DKV}\, x, \qquad k = W_{UK}\, c_{KV}, \qquad v = W_{UV}\, c_{KV}, \q
 \State \textbf{Salida:} $\mathbf{Y}$
 \end{algorithmic}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 \cdot d)$, idéntica a MLA.
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token, estado latente $\mathcal{O}(r_{kv} \cdot n)$; ruta elegida por hardware.
@@ -93,7 +93,7 @@ c_{KV} = W_{DKV}\, x, \qquad k = W_{UK}\, c_{KV}, \qquad v = W_{UV}\, c_{KV}, \q
     \item \textbf{Limitaciones}: mismas compensaciones de rango latente que MLA; la selección de ruta es una heurística de despliegue.
 \end{itemize}
 
-\subsection{Atención Multi-Cabeza de Rango Bajo (MLRA)}
+\subsubsection{Atención Multi-Cabeza de Rango Bajo (MLRA)}
 
 \begin{figure}[H]
 \centering
@@ -103,7 +103,7 @@ c_{KV} = W_{DKV}\, x, \qquad k = W_{UK}\, c_{KV}, \qquad v = W_{UV}\, c_{KV}, \q
 \end{figure}
 La Atención Multi-Cabeza de Rango Bajo (MLRA, por sus siglas en inglés) \citep{liu_mlra_2026} refactoriza el latente único de MLA en $L$ sub-cabezas disjuntas cada una de rango $r/L$, de modo que el caché KV puede particionarse entre $L$ dispositivos para una decodificación tensor-paralela de 4 vías (cada dispositivo carga sólo $1/L$ del caché). Las up-proyecciones por sub-cabeza reconstruyen la porción correspondiente de las cabezas completas y se concatenan, logrando una aceleración de decodificación de 2.8$\times$ sobre MLA preservando el presupuesto latente global.
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 \[
 c_{KV} = [c_1, c_2, \ldots, c_L], \quad c_i \in \mathbb{R}^{r/L}, \qquad c_{KV} = W_{DKV}\, x.
 \]
@@ -115,7 +115,7 @@ k = [k_1; \ldots; k_L], \quad v = [v_1; \ldots; v_L].
 \text{atencion} = \texttt{softmax}\!\left(\frac{q\, k^\top}{\sqrt{d_h}}\right) v.
 \]
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} $x$, número de sub-cabezas $L$, proyecciones por sub-cabeza $W_{UK}^{(i)}, W_{UV}^{(i)}$
 \State $c_{KV} \gets W_{DKV}\, x = [c_1, \ldots, c_L]$ \Comment{particionar latente en $L$ bloques}
@@ -127,7 +127,7 @@ k = [k_1; \ldots; k_L], \quad v = [v_1; \ldots; v_L].
 \State \textbf{Salida:} $\mathbf{Y} = \text{pesos} \cdot v$
 \end{algorithmic}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 \cdot d)$ (atención completa sobre cabezas concatenadas).
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token, estado $\mathcal{O}(r_{kv} \cdot n)$ particionado entre $L$ dispositivos.
@@ -136,7 +136,7 @@ k = [k_1; \ldots; k_L], \quad v = [v_1; \ldots; v_L].
     \item \textbf{Limitaciones}: requiere que $L$ divida a $r_{kv}$; más matrices de proyección que MLA; all-reduce inter-dispositivo en la salida.
 \end{itemize}
 
-\subsection{Atención Tucker}
+\subsubsection{Atención Tucker}
 
 \begin{figure}[H]
 \centering
@@ -146,7 +146,7 @@ k = [k_1; \ldots; k_L], \quad v = [v_1; \ldots; v_L].
 \end{figure}
 La Atención Tucker \citep{klein_tucker_2026} unifica MHA, GQA y MLA bajo una única factorización estilo Tucker de los tensores de pesos de consulta/clave/valor con rangos independientes $q_{\text{rank}}, k_{\text{rank}}, v_{\text{rank}}$. Se recupera MHA cuando todos los rangos igualan el tamaño oculto, GQA cuando $k_{\text{rank}} = v_{\text{rank}} < d$, y MLA cuando $k_{\text{rank}} = v_{\text{rank}}$ es igual al rango latente. Como la factorización es una repas lineal de pesos, el método es totalmente compatible con FlashAttention y RoPE, y produce un orden de magnitud menos parámetros para métricas comparables.
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 \[
 \mathbf{Q} = W_{Q,\text{core}}\, W_{Q,\text{factor}}\, x, \qquad
 \mathbf{K} = W_{K,\text{core}}\, W_{K,\text{factor}}\, x, \qquad
@@ -157,7 +157,7 @@ La Atención Tucker \citep{klein_tucker_2026} unifica MHA, GQA y MLA bajo una ú
 \]
 Casos especiales: MHA $\Leftrightarrow q_{\text{rank}} = k_{\text{rank}} = v_{\text{rank}} = d$; GQA $\Leftrightarrow k_{\text{rank}} = v_{\text{rank}} < d$; MLA $\Leftrightarrow k_{\text{rank}} = v_{\text{rank}} = r_{kv}$.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} $x$, rangos $q_{\text{rank}}, k_{\text{rank}}, v_{\text{rank}}$, matrices core/factor
 \State $\mathbf{Q} \gets W_{Q,\text{core}}\, W_{Q,\text{factor}}\, x$ \Comment{consulta factorizada de rango $q_{\text{rank}}$}
@@ -168,7 +168,7 @@ Casos especiales: MHA $\Leftrightarrow q_{\text{rank}} = k_{\text{rank}} = v_{\t
 \State \textbf{Salida:} $\mathbf{Y} = \text{pesos} \cdot \mathbf{V}$
 \end{algorithmic}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 \cdot d)$ sobre los tensores reconstruidos.
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token; tamaño de caché gobernado por $k_{\text{rank}}$.
@@ -177,7 +177,7 @@ Casos especiales: MHA $\Leftrightarrow q_{\text{rank}} = k_{\text{rank}} = v_{\t
     \item \textbf{Limitaciones}: dos matmuls por proyección añaden latencia; la selección de rango es un problema de ajuste por tarea.
 \end{itemize}
 
-\subsection{Atención de Cabezas Entrelazadas (IHA)}
+\subsubsection{Atención de Cabezas Entrelazadas (IHA)}
 
 \begin{figure}[H]
 \centering
@@ -187,7 +187,7 @@ Casos especiales: MHA $\Leftrightarrow q_{\text{rank}} = k_{\text{rank}} = v_{\t
 \end{figure}
 La Atención de Cabezas Entrelazadas (IHA, por sus siglas en inglés) \citep{duvvuri_iha_2026} construye $P$ pseudo-cabezas por cabeza original (típicamente $P = H$) donde cada consulta/clave/valor pseudo es una combinación lineal aprendida de todas las $H$ cabezas originales. Esto induce hasta $P^2$ patrones de atención distintos por cabeza con una sobrecarga de $\mathcal{O}(H^2 P)$. Teóricamente, IHA necesita sólo $\Theta(\sqrt{k}\, n^2)$ parámetros frente a $\Theta(k\, n^2)$ de MHA en la tarea Polinomial; empíricamente entrega $+10$--$20\%$ en RULER de recuperación multi-clave, $+5.8\%$ en GSM8K y $+2.8\%$ en MATH-500.
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 {\small
 \[
 q_{\text{pseudo}}[p] = \sum_{h=1}^{H} \text{mix}_q[p, h]\, q[h], \quad
@@ -201,7 +201,7 @@ v_{\text{pseudo}}[p] = \sum_{h} \text{mix}_v[p, h]\, v[h].
 \mathbf{Y}[h] = \frac{1}{P} \sum_{p} \text{atencion}_p[h].
 \]
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} por cabeza $q[h], k[h], v[h]$, matrices de mezcla $\text{mix}_q, \text{mix}_k, \text{mix}_v \in \mathbb{R}^{P \times H}$
 \For{$p = 1, \ldots, P$}
@@ -212,7 +212,7 @@ v_{\text{pseudo}}[p] = \sum_{h} \text{mix}_v[p, h]\, v[h].
 \State \textbf{Salida:} $\mathbf{Y}[h] \gets \frac{1}{P} \sum_p \text{atencion}_p[h]$ \Comment{promediar salidas pseudo-cabeza por cabeza}
 \end{algorithmic}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 \cdot H \cdot P)$ con $P \approx H$, es decir $\mathcal{O}(n^2 \cdot H^2)$.
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token con caché KV; sobrecarga extra de mezcla $\mathcal{O}(H^2 P)$.
@@ -221,7 +221,7 @@ v_{\text{pseudo}}[p] = \sum_{h} \text{mix}_v[p, h]\, v[h].
     \item \textbf{Limitaciones}: costo de mezcla cuadrático en cabezas; más patrones de atención a computar; latencia añadida con $H$ grande.
 \end{itemize}
 
-\subsection{Atención laTenT por Cabezas Agrupadas (GTA)}
+\subsubsection{Atención laTenT por Cabezas Agrupadas (GTA)}
 
 \begin{figure}[H]
 \centering
@@ -231,7 +231,7 @@ v_{\text{pseudo}}[p] = \sum_{h} \text{mix}_v[p, h]\, v[h].
 \end{figure}
 La Atención laTenT por Cabezas Agrupadas (GTA, por sus siglas en inglés) \citep{sun_gta_2025} combina dos compresiones: (1) un \emph{mapa de atención compartido} --- un tensor de puntajes de atención por grupo de cabezas, reutilizado entre todas las cabezas del grupo, reduciendo el caché de claves; y (2) un \emph{decodificador de valores no lineal} --- el caché de valores se comprime a un latente mediante una down-proyección y se reconstruye por una up-proyección con compuerta SiLU antes de la proyección de salida. GTA reduce los FLOPs de atención hasta 62.5\% frente a GQA, encoge el caché KV hasta 70\%, y produce una aceleración de inferencia de 2$\times$ de extremo a extremo.
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 {\footnotesize
 \[
 q_g = \texttt{mean}(q[\text{grupo } g]), \quad k_g = \texttt{mean}(k[\text{grupo } g]), \quad
@@ -243,7 +243,7 @@ v_{\text{latente}} = W_{DV}\, x, \qquad v = \text{SiLU}(W_{UV}\, v_{\text{latent
 \mathbf{Y} = \text{atencion}_g \cdot v.
 \]
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} $q, k$ por cabeza, oculto $x$, partición de grupos $\{g\}$
 \State $v_{\text{latente}} \gets W_{DV}\, x$ \Comment{comprimir valores a latente (en caché)}
@@ -256,7 +256,7 @@ v_{\text{latente}} = W_{DV}\, x, \qquad v = \text{SiLU}(W_{UV}\, v_{\text{latent
 \State \textbf{Salida:} $\mathbf{Y}$
 \end{algorithmic}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 \cdot G \cdot d_h)$ donde $G$ es el número de grupos (frente a $H$ cabezas en GQA).
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token; caché de valores $\mathcal{O}(r_v \cdot n)$, caché de claves reducido por compartición de grupo.
@@ -265,7 +265,7 @@ v_{\text{latente}} = W_{DV}\, x, \qquad v = \text{SiLU}(W_{UV}\, v_{\text{latent
     \item \textbf{Limitaciones}: el mapa compartido reduce la diversidad por cabeza; el decodificador no lineal añade latencia; el agrupamiento debe elegirse con cuidado.
 \end{itemize}
 
-\subsection{Atención Latente Temporal Multi-Cabeza (MTLA)}
+\subsubsection{Atención Latente Temporal Multi-Cabeza (MTLA)}
 
 \begin{figure}[H]
 \centering
@@ -275,7 +275,7 @@ v_{\text{latente}} = W_{DV}\, x, \qquad v = \text{SiLU}(W_{UV}\, v_{\text{latent
 \end{figure}
 La Atención Latente Temporal Multi-Cabeza (MTLA, por sus siglas en inglés) \citep{deng_mtla_2025} extiende MLA a lo largo del eje temporal: una hyper-red fusiona dinámicamente $m$ vectores temporalmente adyacentes del caché KV en un único slot, reduciendo la longitud temporal por un factor de $m$. Una máscara causal consciente del stride mantiene el entrenamiento paralelo consistente con la inferencia autorregresiva, produciendo una aceleración de decodificación de 5.3$\times$ y una reducción de memoria GPU de 8.3$\times$ frente a MHA en traducción de voz En--De.
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 \[
 c_{KV}^{(t)} = W_{DKV}\, x^{(t)} \in \mathbb{R}^{r_{kv}} \text{ (latente por token)}.
 \]
@@ -287,7 +287,7 @@ donde $s$ es el stride y $m$ la ventana de fusión. Las consultas atienden sobre
 \text{atencion} = \texttt{softmax}\!\left(\frac{q\, \bar k^\top}{\sqrt{d_h}} + M_{\text{stride}}\right) \bar v, \quad \bar k = W_{UK}\, \bar c_{KV},\ \bar v = W_{UV}\, \bar c_{KV}.
 \]
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} latentes por token $c_{KV}^{(t)}$, ventana de fusión $m$, stride $s$
 \State \textbf{Fase de fusión (hyper-red):}
@@ -300,7 +300,7 @@ donde $s$ es el stride y $m$ la ventana de fusión. Las consultas atienden sobre
 \State \textbf{Salida:} $\mathbf{Y} = \text{pesos} \cdot \bar v$
 \end{algorithmic}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 \cdot d / m)$ sobre la secuencia fusionada (longitud $\lceil n/m \rceil$) más costo de la hyper-red.
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n/m)$ por token sobre slots fusionados; estado $\mathcal{O}(r_{kv} \cdot n / m)$.
@@ -309,9 +309,9 @@ donde $s$ es el stride y $m$ la ventana de fusión. Las consultas atienden sobre
     \item \textbf{Limitaciones}: la ventana de fusión puede difuminar detalle temporal fino; la hyper-red añade cómputo; el diseño de la máscara no es trivial.
 \end{itemize}
 
-\subsection{Comparación y Síntesis Arquitectónica}
+\subsubsection{Comparación y Síntesis Arquitectónica}
 
-\subsection{Atención Convolucional Comprimida (CCA)}
+\subsubsection{Atención Convolucional Comprimida (CCA)}
 
 \begin{figure}[H]
 \centering
@@ -323,7 +323,7 @@ La Atención Convolucional Comprimida (CCA, por sus siglas en inglés) \citep{fi
 
 Para hacer viable la atención en el latente comprimido, CCA introduce tres innovaciones: (1) dos convoluciones causales sobre el tensor empaquetado q/k (una convolución de secuencia depth-wise y una convolución agrupada de canales por cabeza), (2) q-k-mean (añade la media pre-convolución de q y k a los valores post-convolución), y (3) value-shift (cada cabeza recibe la mitad de sus valores del token actual y la mitad del token anterior mediante dos proyecciones independientes). Tras estos pasos, se aplica normalización L2 de QK y una temperatura de clave aprendible $\beta$, RoPE se aplica \emph{directamente en el latente} (sin cabeza RoPE separada), y se computa la atención softmax estándar.
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 \[
 \tilde{q}_{\text{pre}} = \tilde{W}_Q\, x, \qquad \tilde{k}_{\text{pre}} = \tilde{W}_K\, x, \qquad \tilde{e} = E / C.
 \]
@@ -340,7 +340,7 @@ Para hacer viable la atención en el latente comprimido, CCA introduce tres inno
 \mathbf{Y} = \tilde{W}_O\, \text{atencion}.
 \]
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 \cdot d / C)$ (atención en latente comprimido, $C{\times}$ menos FLOPs que MHA).
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token, espacio de caché KV $\mathcal{O}(\tilde{e} \cdot n)$.
@@ -349,7 +349,7 @@ Para hacer viable la atención en el latente comprimido, CCA introduce tres inno
     \item \textbf{Limitaciones}: No elimina la cuadrática $S^2$ (sólo la divide por $C$); conv/qk-mean/v-shift añaden sesgo inductivo; se necesita kernel fusionado para la aceleración teórica.
 \end{itemize}
 
-\subsection{Atención Convolucional Comprimida por Consultas Agrupadas (CCGQA)}
+\subsubsection{Atención Convolucional Comprimida por Consultas Agrupadas (CCGQA)}
 
 \begin{figure}[H]
 \centering
@@ -359,7 +359,7 @@ Para hacer viable la atención en el latente comprimido, CCA introduce tres inno
 \end{figure}
 La Atención Convolucional Comprimida por Consultas Agrupadas (CCGQA, por sus siglas en inglés) \citep{figliola_cca_2025} extiende CCA con compartición de cabezas clave/valor estilo GQA aplicada \emph{dentro} del latente comprimido, y \textbf{desacopla} las tasas de compresión de query y KV: las consultas se comprimen por $C_1$ y las claves/valores por $C_2 \geq C_1$. La dimensión latente por cabeza $d_h$ debe coincidir entre cabezas de query y clave, imponiendo la restricción $C_2 / C_1 = n_h / n_{kv}$. Las cabezas KV se comparten por grupo (replicadas para coincidir con las cabezas de query), y el sesgo qk-mean usa operadores de broadcast/reducción $B_{\text{group}}$ (replicar cabezas KV a cabezas query) y $E_{\text{group}}$ (promediar cabezas query dentro de cada grupo). CCGQA logra la mejor pérdida reportada a 8$\times$ reducción de caché KV sin pérdida de calidad frente a MHA.
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(n^2 \cdot d / C_1)$ (el término $S^2$ escala por $1/C_1$; los términos de proyección por $1/C_1 + 1/C_2$).
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(n)$ por token, espacio de caché KV $\mathcal{O}(\tilde{e}_{kv} \cdot n)$ (comprimido por $C_2$, compartido por grupo).
@@ -370,7 +370,7 @@ La Atención Convolucional Comprimida por Consultas Agrupadas (CCGQA, por sus si
 
 La familia latente muestra una progresión clara a lo largo de dos ejes: (i) \textbf{compresión de rango}, pasando de cabezas completas (MHA) a un latente compartido (MLA) a sub-cabezas latentes particionadas (MLRA), y (ii) \textbf{adaptividad de despliegue}, pasando de una sola ruta de decodificación a despacho adaptativo al hardware (GQLA) y fusión temporal de caché (MTLA). La Atención Tucker proporciona el marco algebraico unificador: MHA, GQA y MLA son todos casos especiales de una factorización Tucker con elecciones de rango apropiadas. CCA y CCGQA toman un enfoque fundamentalmente diferente: en lugar de comprimir el caché KV y luego up-proyectar para atención a ancho completo (MLA/GQLA/MLRA), realizan atención \emph{completamente dentro} del espacio latente comprimido, reduciendo no sólo el caché sino también los FLOPs de atención por el factor de compresión. CCGQA además desacopla las tasas de compresión de query y KV, logrando la mejor pérdida reportada a 8$\times$ reducción de caché KV. La Atención de Mezcla Gaussiana (GMA) cambia la filosofía de enrutamiento por completo: en lugar de un cuello de botella lineal de rango bajo, enruta a través de $K$ componentes Gaussianos probabilísticos aprendidos, logrando mezcla de secuencias en tiempo lineal $\mathcal{O}(NK)$ para $K$ fijo manteniendo una interpretación de atención normalizada.
 
-\subsection{Atención de Mezcla Gaussiana (GMA)}
+\subsubsection{Atención de Mezcla Gaussiana (GMA)}
 
 \begin{figure}[H]
 \centering
@@ -380,7 +380,7 @@ La familia latente muestra una progresión clara a lo largo de dos ejes: (i) \te
 \end{figure}
 La Atención de Mezcla Gaussiana (GMA, por sus siglas en inglés) \citep{huang_gma_2026} reemplaza la interacción pareada explícita $QK^\top$ de la atención de producto punto estándar con enrutamiento probabilístico a través de $K$ componentes de mezcla Gaussiana aprendidos por cabeza. Las consultas y claves se mapean a vectores de \emph{responsabilidad} posteriores sobre un espacio de enrutamiento latente compartido; su solapamiento define una afinidad implícita en el espacio de responsabilidades, mientras que los valores se escriben y leen de una memoria latente de $K$ slots. Al explotar la asociatividad de la multiplicación matricial, GMA evita materializar la matriz de afinidad $N \times N$ inducida y en su lugar usa dos matrices de responsabilidad $N \times K$ cuyo almacenamiento de activaciones dominante escala como $\mathcal{O}(NK)$ en lugar de $\mathcal{O}(N^2)$ para $K$ fijo. Los parámetros de la mezcla Gaussiana---medias de componentes $\mu$, covarianzas diagonales (reparametrizadas vía $\sigma^2 = \text{softplus}(\omega) + \epsilon_\sigma$) y logits de prior de mezcla $\alpha$ (con $\pi = \text{softmax}(\alpha)$)---son parámetros aprendibles totalmente diferenciables optimizados por retropropagación estándar, sin bucle EM ni pérdida auxiliar de clustering.
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 Por cabeza, con dimensión de enrutamiento $d_r$ y dimensión de valor $d_v$:
 \[
 Q_X = X W_Q \in \mathbb{R}^{N \times d_r}, \quad
@@ -400,7 +400,7 @@ O = \frac{\Gamma^Q \tilde V}{\Gamma^Q Z + \epsilon},
 \]
 que nunca materializa la afinidad normalizada implícita $A^{\text{GMA}}_{ij} = \frac{\sum_k \gamma^Q_{i,k} \gamma^K_{j,k}}{\sum_\ell \sum_k \gamma^Q_{i,k} \gamma^K_{\ell,k} + \epsilon}$. Para modelado autorregresivo, las estadísticas de escritura globales se reemplazan por sumas acumuladas restringidas al prefijo $\tilde V^{(i)}_k = \sum_{j \le i} \gamma^K_{j,k} V_{X,j}$ y $Z^{(i)}_k = \sum_{j \le i} \gamma^K_{j,k}$, imponiendo causalidad preservando el escalado lineal de $K$ fijo.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} estado oculto $X \in \mathbb{R}^{N \times d}$, $K$ componentes, dim. de enrutamiento $d_r$, dim. de valor $d_v$, params $\{\mu_k, \omega_k, \alpha_k\}_{k=1}^{K}$
 \State $Q_X \gets X W_Q$, \quad $K_X \gets X W_K$, \quad $V_X \gets X W_V$ \Comment{proyecciones por cabeza}
@@ -416,7 +416,7 @@ que nunca materializa la afinidad normalizada implícita $A^{\text{GMA}}_{ij} = 
 \State \textbf{Salida:} $\mathbf{Y} = O W_O$
 \end{algorithmic}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(N K d_r + N K d_v)$ para $K$ fijo, lineal en la longitud de secuencia $N$.
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(K)$ por token (responsabilidades + lectura latente), almacenamiento de activaciones $\mathcal{O}(NK)$.
@@ -424,7 +424,7 @@ que nunca materializa la afinidad normalizada implícita $A^{\text{GMA}}_{ij} = 
     \item \textbf{Fortalezas}: Mezcla de secuencias en tiempo lineal con $K$ fijo; enrutamiento probabilístico interpretable; variantes bidireccional y causal; interpretación de afinidad de rango bajo no negativa $A^{\text{GMA}} = \mathrm{diag}(d)^{-1} \Gamma^Q (\Gamma^K)^\top$.
     \item \textbf{Limitaciones}: La calidad depende de $K$ y la dimensión de enrutamiento $d_r$; la GMA causal queda por debajo de SDPA optimizada y modelos de espacio de estados en WikiText-103 en la implementación actual del paper; no es un reemplazo universal para la atención softmax.
 \end{itemize}
-\subsection{Atención de Producto de Kronecker (KPA)}
+\subsubsection{Atención de Producto de Kronecker (KPA)}
 \label{sec:kpa-es}
 
 \begin{figure}[tbp]
@@ -436,7 +436,7 @@ que nunca materializa la afinidad normalizada implícita $A^{\text{GMA}}_{ij} = 
 
 La Atención de Producto de Kronecker (KPA) \citep{nikpour_kpa_2026} es un mixer de compresión de KV que factoriza las matrices de clave, valor y consulta por token como sumas normalizadas de productos de Kronecker de factores contextuales compactos. A diferencia de Tensor Product Attention (TPA), cuya descomposición CP opera sobre vectores, KPA actúa sobre matrices y por tanto codifica estructura tanto a nivel de cabeza como de características; la factorización CP de rango uno se recupera como la partición degenerada $h_1=h, d_1=1, h_2=1, d_2=d_h$, de modo que KPA generaliza estrictamente a TPA con el mismo presupuesto de parámetros.
 
-\subsubsection{Fundamento Matemático}
+\paragraph{Fundamento Matemático}
 Sea $h = h_1 h_2$ el número de cabezas y $d_h = d_1 d_2$ el ancho de cabeza. Para un token con estado oculto $x_t \in \mathbb{R}^{d_{\text{model}}}$, el producto de Kronecker satisface la identidad de producto mixto
 \[
 (M \otimes N)(P \otimes Q) = (MP) \otimes (NQ),
@@ -460,7 +460,7 @@ C_{\mathrm{KPA}} = \frac{2h_1h_2d_1d_2}{(R_K+R_V)(h_1d_1+h_2d_2)},
 \]
 que aumenta con la asimetría de los factores.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} estado oculto $X\in\mathbb{R}^{n\times d}$, particiones $h_1 h_2 = H$, $d_1 d_2 = d_h$, rangos $R_Q, R_K, R_V$
 \State $A^Q \gets \texttt{reshape}(X W^{A^Q}, n, R_Q, h_1, d_1)$, \quad $B^Q \gets \texttt{reshape}(X W^{B^Q}, n, R_Q, h_2, d_2)$
@@ -474,7 +474,7 @@ que aumenta con la asimetría de los factores.
 \State $O \gets \texttt{softmax}(S)\,V$; \quad \textbf{Salida:} $Y = O W_O$
 \end{algorithmic}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: atención $\mathcal{O}(n^2 d)$ más proyecciones de factores $\mathcal{O}\big(n\,d\,(R_Q+R_K+R_V)(h_1d_1+h_2d_2)\big)$.
     \item \textbf{Complejidad de inferencia}: atención $\mathcal{O}(n\,h\,d_h)$ por paso y estado cacheado $\mathcal{O}\big((R_K+R_V)(h_1d_1+h_2d_2)\big)$ por token; compresión de KV de $6.4\times$--$10\times$ en el paper.
@@ -483,7 +483,7 @@ que aumenta con la asimetría de los factores.
     \item \textbf{Limitaciones}: el paper fija $d_1=d_2=8$ y evalúa solo modelos de lenguaje causales; un kernel de decodificación factorizada eficiente y la evaluación en contextos largos quedan como trabajo futuro; materializar las sumas de Kronecker es cuadrático en la longitud de secuencia, como la atención densa.
 \end{itemize}
 
-\subsection{Atención de Producto Tensorial (TPA)}
+\subsubsection{Atención de Producto Tensorial (TPA)}
 \label{sec:tpa-es}
 
 \begin{figure}[tbp]
@@ -495,7 +495,7 @@ que aumenta con la asimetría de los factores.
 
 La Atención de Producto Tensorial (TPA) \citep{zhang_tpa_2025} es la descomposición tensorial canónica en el espacio de activaciones: en lugar de factorizar los pesos de proyección (como hace Tucker Attention), factoriza las propias activaciones de consulta, clave y valor por token en productos externos de rango uno de vectores contextuales. Es el caso vectorial (CP) especial de KPA \citep{nikpour_kpa_2026}, recuperado con $h_1=h$, $d_1=1$, $h_2=1$, $d_2=d_h$.
 
-\subsubsection{Fundamento Matemático}
+\paragraph{Fundamento Matemático}
 Con $h$ cabezas, ancho de cabeza $d_h$ y rangos CP $R_Q,R_K,R_V$, la rebanada de cada token es
 \[
 Q_t = \frac{1}{R_Q}\sum_{r=1}^{R_Q} a^Q_r(x_t)\otimes b^Q_r(x_t),\quad
@@ -521,7 +521,7 @@ y el conteo de parámetros de la capa de atención (Tabla~1 del paper) es
 P_{\mathrm{TPA}} = d_{\text{model}}\,(R_Q+R_K+R_V)(h+d_h) + d_{\text{model}}\,h\,d_h .
 \]
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} estado oculto $X\in\mathbb{R}^{n\times d}$, $h$ cabezas, ancho $d_h$, rangos $R_Q,R_K,R_V$
 \State $A^Q\gets\texttt{reshape}(XW^{aQ}, n, R_Q, h)$, \quad $B^Q\gets\texttt{reshape}(XW^{bQ}, n, R_Q, d_h)$
@@ -535,7 +535,7 @@ P_{\mathrm{TPA}} = d_{\text{model}}\,(R_Q+R_K+R_V)(h+d_h) + d_{\text{model}}\,h\
 \end{algorithmic}
 Una variante fusionada en el espacio de factores (FlashTPA, Apéndice~A del paper) calcula primero los productos en características compartidos por cabeza $P[b,q,k,r,s]=\langle B^Q_{q,r},B^K_{k,s}\rangle$, los mezcla con $A^Q,A^K$ para obtener los logits y agrega los valores mediante $A^V,B^V$ sin materializar $Q,K,V$; reduce FLOPs siempre que $R_QR_KD + hR_QR_K + hR_VE < 2hd_h$. Esta implementación usa la ruta materializada y deja la variante en espacio de factores como optimización de kernel.
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: atención $\mathcal{O}(n^2 d)$ más proyecciones de factores $\mathcal{O}\big(n\,d\,(R_Q+R_K+R_V)(h+d_h)\big)$; la ruta especializada es $\mathcal{O}(n^2R_QR_Kd_h + n^2hR_QR_K + n^2hR_Vd_h)$.
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(M R_QR_Kd_h + MhR_QR_K + MhR_Vd_h)$ por paso de decodificación con un caché de longitud $M$; $(R_K+R_V)(h+d_h)$ flotantes cacheados por token, un orden de magnitud por debajo de MHA con $R_K,R_V\le 2$.
@@ -544,7 +544,7 @@ Una variante fusionada en el espacio de factores (FlashTPA, Apéndice~A del pape
     \item \textbf{Limitaciones}: hiperparámetros de rango adicionales ($R_Q,R_K,R_V$) y un coste de factorización en la ruta materializada; la calidad depende de la elección de rango; el paper evalúa solo modelos de lenguaje causales; la aceleración completa requiere el kernel FlashTPA.
 \end{itemize}
 
-\subsection{Atención de Factorización Multimatriz (MFA)}
+\subsubsection{Atención de Factorización Multimatriz (MFA)}
 \label{sec:mfa-es}
 
 \begin{figure}[tbp]
@@ -556,7 +556,7 @@ Una variante fusionada en el espacio de factores (FlashTPA, Apéndice~A del pape
 
 La Atención de Factorización Multimatriz (MFA) \citep{hu_mfa_2025} es la contraparte orientada a capacidad de MLA: en lugar de comprimir un par clave--valor multicabeza completo en un latente, mantiene muchas cabezas de rango alto sobre una \emph{única} cabeza de clave/valor compartida. El artículo interpreta cada variante de MHA como una factorización de bajo rango de la Atención Bilineal Totalmente Parametrizada (FPBA) y muestra que el número de cabezas y el rango por cabeza, y no solo el rango de compresión, determinan la capacidad. MFA factoriza el circuito QK como $W_c\approx S_qQ_cS_k^{\top}$ y el circuito VO como $U_c\approx S_vO_c^{\top}$, con $S_q,S_k,S_v$ compartidas entre cabezas y solo $Q_c,O_c$ específicas por cabeza. El Rango Efectivo Total es $mC$ mientras que la Dimensión del Subespacio Latente Compartido permanece en $C$, así que escalar el número de cabezas cuesta unos $CH$ parámetros por cabeza y no afecta a la caché.
 
-\subsubsection{Fundamento Matemático}
+\paragraph{Fundamento Matemático}
 Las formas de inferencia y de factorización del artículo son
 \[
 O_i=\sum_{c=1}^{m}\Big(\sum_{j=1}^{i}\phi\Big(\frac{x_iS_qQ_c\,(x_jS_k)^{\top}}{\sqrt{d}}\Big)x_jS_v\Big)O_c^{\top}
@@ -581,7 +581,7 @@ P_{\mathrm{MFA\text{-}KR}}=2HC+mC^{2}+mCH+C^{2}+C .
 \]
 Como $S_k$ y $S_v$ son proyecciones ordinarias de una sola cabeza, RoPE se aplica fila a fila directamente a las consultas y claves de dimensión $C$; a diferencia de MLA no hay rama rotatoria desacoplada, y el artículo valida tanto RoPE como ALiBi (Tabla~5).
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} estado oculto $X\in\mathbb{R}^{n\times H}$, $m$ cabezas, rango de factorización $C$, bandera de reúso de clave
 \State $K\gets XS_k$, \quad $V\gets XS_v$ (o $V\gets K(I+\mathrm{diag}(\alpha)N)$ con reúso de clave) \Comment{única cabeza compartida}
@@ -594,7 +594,7 @@ Como $S_k$ y $S_v$ son proyecciones ordinarias de una sola cabeza, RoPE se aplic
 \end{algorithmic}
 En decodificación, $k_t$ y $v_t$ se añaden a la caché compartida (solo $k_t$ con MFA-KR), y el coste por paso es $\mathcal{O}(m\,T\,C)$ frente a una caché de ancho $C$.
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: atención $\mathcal{O}(n^{2}mC)$ más proyecciones $\mathcal{O}(nH(3C+mC))$.
     \item \textbf{Complejidad de inferencia}: $\mathcal{O}(mTC)$ por paso de decodificación; $2C$ flotantes cacheados por token ($C$ con MFA-KR), independientemente del número de cabezas.

@@ -1,13 +1,13 @@
-\section{Convolution-Augmented Attention: Conformer and Fast Conformer}
+\subsection{Convolution-Augmented Attention: Conformer and Fast Conformer}
 \label{sec:annex-conformer}
 
-\subsection{Executive Summary}
+\subsubsection{Executive Summary}
 
 The Conformer block \citep{Gulati2020} is the toolkit's convolution-augmented sequence mixer, exposed as \texttt{conformer}. It keeps the global receptive field of scaled dot-product attention and adds a depthwise-convolution branch that models local, narrow-band structure---the inductive bias speech recognition needs and the one plain self-attention lacks. The block sandwiches multi-head self-attention (MHSA) with relative sinusoidal positional encodings between two Macaron-style half-step feed-forward layers \citep{Lu2019}, and inserts the convolution module between the attention and the second FFN. In the reference recipe it reaches $1.9\%$/$3.9\%$ WER on LibriSpeech \emph{test-clean}/\emph{test-other} without an external language model (Conformer-L, 118.8M parameters), and it is the mixer recommended for the audio model class of Appendix~\ref{sec:annex-audio}. Its long-form sibling, Fast Conformer \citep{rekesh_fastconformer_2023}, keeps the convolution module and the block layout but replaces global self-attention with limited-context attention---a fixed local window plus a global token pinned at the sequence head---so hours-long audio decodes with bounded memory; it is documented below. The toolkit runs both feed-forward layers at full step (the paper's ``full-step'' variant of its Table~5) and lets the outer layer own the second one; Table~\ref{tab:conformer-mapping} lists the deviations.
 
 The mixers are available to every model class: the text encoder, the causal decoder (where depthwise padding is shifted to stay streaming-safe), the Vision Transformer, and \texttt{frankenstein\_audio}. Because the blocks live inside \texttt{HybridLayer}, they compose with all 48 other mixers, the 6 norms, the 4 residual strategies, MoE, Mixture-of-Depths, mHC, AttnRes, BitNet and the 38 optimizer families.
 
-\subsection{Conformer: Convolution-augmented Attention}
+\subsubsection{Conformer: Convolution-augmented Attention}
 
 \begin{figure}[H]
 \centering
@@ -16,7 +16,7 @@ The mixers are available to every model class: the text encoder, the causal deco
 \label{fig:mixer-conformer}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 For a block input $x \in \mathbb{R}^{B \times n \times d}$ the reference block of Fig.~1 of \citet{Gulati2020} is
 \begin{align}
@@ -69,7 +69,7 @@ where $\odot$ is the elementwise product (a GLU that halves the $2d$ channels ba
 \end{equation}
 In decoder mode the sum in Equation~\ref{eq:conformer-depthwise} is shifted to $z_t = \sum_{k=0}^{K-1} w_k \tilde{h}_{t-K+1+k}$, so that no future frame enters the convolution; encoder and ViT modes keep the symmetric ``same'' padding of the paper.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{Conformer block (\texttt{conformer})}
@@ -92,7 +92,7 @@ In decoder mode the sum in Equation~\ref{eq:conformer-depthwise} is shifted to $
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Implementation Mapping and Deviations}
+\paragraph{Implementation Mapping and Deviations}
 
 Table~\ref{tab:conformer-mapping} maps the paper block onto the toolkit. The substantive deviations are the two residual scalings and the second feed-forward layer: the paper keeps both $\tfrac12$ Macaron coefficients and wraps $\mathrm{FFN}_2$ in the block, whereas \texttt{conformer} uses full steps and returns the state after the convolution module, letting the outer \texttt{HybridLayer} apply its shared $\mathrm{norm}_2 + \mathrm{FFN}$ (also at full step). The decomposition is deliberate---it keeps MoE routing, Mixture-of-Depths, mHC/Hyperloop streams, AttnRes, FlashNorm fusion, BitNet projections and the per-parameter-group optimizer routing available for the second FFN, none of which would survive a private FFN inside the mixer.
 
@@ -118,7 +118,7 @@ Dropout ($p=0.1$) & \texttt{model.dims.dropout} & global, per-block \\
 
 \paragraph{Why the full-step FFN is safe.} Dropping the Macaron $\tfrac12$ changes the per-branch residual scale, not the expressive form of the block: the full-step variant is exactly what \citet{Gulati2020} ablate in their Table~5, where it moves dev-clean/dev-other WER from $1.9/4.4$ (half step) to $1.9/4.5$ (full step), i.e.\ one tenth of a point. The toolkit therefore uses full steps for both feed-forward layers; the first stays private to the mixer, and the second is the shared one, which preserves the composability described above.
 
-\subsection{Published Ablations}
+\subsubsection{Published Ablations}
 
 Table~\ref{tab:conformer-ablations} summarizes the ablations that motivate the default configuration. Values are the ones reported by \citet{Gulati2020}; the qualitative ordering is what the defaults encode.
 
@@ -140,7 +140,7 @@ Conv placement & after MHSA, before $\mathrm{FFN}_2$ & reference order retained;
 \label{tab:conformer-ablations}
 \end{table}
 
-\subsection{Reuse of Existing Infrastructure}
+\subsubsection{Reuse of Existing Infrastructure}
 
 Because \texttt{ConformerAttention} returns a delta and inherits the \texttt{mixer(config, pos\_encoder=...)} constructor, the entire stack is reused without special cases:
 
@@ -152,7 +152,7 @@ Because \texttt{ConformerAttention} returns a delta and inherits the \texttt{mix
     \item \textbf{KV cache:} \texttt{conformer} is registered as \emph{not} cacheable (\texttt{supported=False}), because the depthwise-convolution state and the BatchNorm running statistics would have to be carried across steps. \texttt{generate()} falls back to the full-recompute path, which is exact.
 \end{itemize}
 
-\subsection{When to Use It}
+\subsubsection{When to Use It}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Speech:} the default mixer for \texttt{asr} and \texttt{audio\_classification}; at 40\,ms frames after $4\times$ subsampling the kernel of 32 spans $\sim$1.28\,s of context, roughly the width of a phone sequence.
@@ -160,7 +160,7 @@ Because \texttt{ConformerAttention} returns a delta and inherits the \texttt{mix
     \item \textbf{Streaming decoding:} usable in \texttt{mode: decoder} with causal convolution padding, but without the incremental cache of Appendix~\ref{sec:annex-kv-cache}; the depthwise recurrence is the missing piece.
 \end{itemize}
 
-\subsection{Fast Conformer: Limited-Context Attention with a Head-Pinned Global Token}
+\subsubsection{Fast Conformer: Limited-Context Attention with a Head-Pinned Global Token}
 
 \begin{figure}[H]
 \centering
@@ -169,7 +169,7 @@ Because \texttt{ConformerAttention} returns a delta and inherits the \texttt{mix
 \label{fig:mixer-fastconformer}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 Fast Conformer \citep{rekesh_fastconformer_2023} attacks the quadratic cost of Conformer self-attention in two ways: it raises the front-end downsampling to $8\times$, and, for long-form inputs, it replaces global attention with \emph{limited-context} attention. The paper describes the mixer in prose rather than in display equations: ``we use a single global attention token, which attends to all other tokens and has all other tokens attend to it, using a separate set of query, key and value linear projections, while others attend in a fixed-size window surrounding each token'' (\S2.2), while the evaluated long-form model ``has shared query, key and value projection layers that are used for global and local attention'' (\S3.4) and sets ``the size of the limited context \ldots to 128 steps on each side of a token''. This implementation encodes exactly that description and inherits the global-attention dataflow from Longformer \citep{beltagy_longformer_2020}, which the paper explicitly cites for the mechanism and for its overlapping-chunk kernel.
 
@@ -205,7 +205,7 @@ z_{ij} = \frac{\mathbf{q}_i \cdot \tilde{\mathbf{k}}_j}{\sqrt{d}}, \qquad
 \]
 In the separate variant a global query row is computed with the global projections over the whole causal prefix, $\mathbf{o}_i = \sum_{j \le i} \operatorname{softmax}_j(\mathbf{q}^{g}_i \cdot \mathbf{k}^{g}_j/\sqrt{d})\,\mathbf{v}^{g}_j$, matching Longformer's global-attention design. With shared projections all three cases collapse to one $\mathbf{Q}/\mathbf{K}/\mathbf{V}$ set: the global tokens are simply positions with unmasked rows and columns.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{Fast Conformer limited-context attention (masked-dense reference form)}
@@ -236,7 +236,7 @@ In the separate variant a global query row is computed with the global projectio
 
 In incremental decoding the retained state is a bounded ring: the pinned head region covers $\mathcal{G}$ and the ring keeps the last $w/2+1$ keys, so each step costs $\mathcal{O}(w+g)$. The exact pattern is evaluated against the cached absolute positions (unlike a retention-equals-pattern shortcut, because a spaced global prefix may contain non-global positions).
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: $\mathcal{O}(n\,(w+g)\,d)$ training and $\mathcal{O}(w+g)$ per decoded token with the paper's overlapping-chunk kernel; the reference implementation here masks a dense score matrix, which is mathematically identical but $\mathcal{O}(n^2)$ in compute. Memory is bounded by $w+g$.

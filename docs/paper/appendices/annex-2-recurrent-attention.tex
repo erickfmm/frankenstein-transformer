@@ -1,7 +1,7 @@
-\section{Dense, Recurrent, and Memory-Augmented Transformers}
+\section{Sequence Mixer Families}
 \label{sec:annex-transformer}
 
-This annex synthesizes the dense, recurrent, and memory-augmented transformer families. The field has evolved toward several primary paradigms: dense global attention with variants, key-value head compression via grouped-query attention, recurrent state compression with decay, selective state-space models, continuous-depth numerical integration, token-indexed value memory, and memory-augmented architectures. Understanding this taxonomy illuminates fundamental tradeoffs between expressiveness, computational cost, memory footprint, and deployment simplicity.
+This section synthesizes the dense, recurrent, and memory-augmented transformer families; the remaining mixer families---latent, sparse, gated, geometric-field (SSOG), fast-weight, and convolution-augmented---follow in Sections~\ref{sec:annex-latent} through~\ref{sec:annex-conformer}. The field has evolved toward several primary paradigms: dense global attention with variants, key-value head compression via grouped-query attention, recurrent state compression with decay, selective state-space models, continuous-depth numerical integration, token-indexed value memory, and memory-augmented architectures. Understanding this taxonomy illuminates fundamental tradeoffs between expressiveness, computational cost, memory footprint, and deployment simplicity.
 
 \subsection{Dense Attention Baselines: Standard, Sigmoid, Continuum, Exclusive, and Multi-Token}
 
@@ -219,7 +219,7 @@ so attention maps can be combined across heads (a post-softmax $2\times2$ mixing
 
 \subsection{Memory Attention}
 
-The memory family groups Titans (the attention window implemented here), Engram (Appendix~\ref{sec:annex-runtime}) and Memory Attention; this annex covers the attention-side members.
+The memory family groups Titans (the attention window implemented here), Engram (Appendix~\ref{sec:annex-runtime}) and Memory Attention; this section covers the attention-side members.
 
 \begin{figure}[H]
 \centering

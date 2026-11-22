@@ -1,9 +1,9 @@
-\section{Fast-Weight Attention for Continual Learning}
+\subsection{Fast-Weight Attention for Continual Learning}
 \label{sec:annex-fast-weight}
 
-This annex covers the Falcon family \citep{zhang_falcon_2026}, a fast-weight attention framework that treats the recurrent fast-weight state transition as an \textbf{online continual-learning rule} under \emph{read-after-write} (RAW) autoregressive semantics. The framework's central observation is one of temporal alignment: for the prefix-prediction objective, the local fast-memory example revealed at step $t$ is the \textbf{prefix-aligned pair} $(x_t, y_t) = (\phi(k_{t-1}),\, v_t)$ --- one step shifted relative to the same-step association $(\phi(k_t), v_t)$ used by DeltaNet and standard linear attention. The same-step pairing remains causal, but it optimizes a different internal objective. The framework derives \textbf{normalized first-order updates} for two objectives (squared-error regression and negative inner product) and three step-size structures (scalar, per-column, sliding window), giving six variants: Falcon-1/2/3 (regression family) and Falcon-1A/2A/3A (inner-product family). All six are implemented in the codebase under \texttt{model.attention.falcon} with a shared configuration block, each providing both a recurrent reference scan and an SSD-style chunk-parallel kernel.
+This section covers the Falcon family \citep{zhang_falcon_2026}, a fast-weight attention framework that treats the recurrent fast-weight state transition as an \textbf{online continual-learning rule} under \emph{read-after-write} (RAW) autoregressive semantics. The framework's central observation is one of temporal alignment: for the prefix-prediction objective, the local fast-memory example revealed at step $t$ is the \textbf{prefix-aligned pair} $(x_t, y_t) = (\phi(k_{t-1}),\, v_t)$ --- one step shifted relative to the same-step association $(\phi(k_t), v_t)$ used by DeltaNet and standard linear attention. The same-step pairing remains causal, but it optimizes a different internal objective. The framework derives \textbf{normalized first-order updates} for two objectives (squared-error regression and negative inner product) and three step-size structures (scalar, per-column, sliding window), giving six variants: Falcon-1/2/3 (regression family) and Falcon-1A/2A/3A (inner-product family). All six are implemented in the codebase under \texttt{model.attention.falcon} with a shared configuration block, each providing both a recurrent reference scan and an SSD-style chunk-parallel kernel.
 
-\subsection{Preliminaries: Alignment, Normalization, and Stability}
+\subsubsection{Preliminaries: Alignment, Normalization, and Stability}
 
 \paragraph{Read-after-write semantics.} With feature maps $\phi(k_t)$ (QK-RMSNorm by default, $\ell_2$ norm optional), the prefix-aligned stream sets $x_t = \phi(k_{t-1})$ for $t \ge 2$ with boundary sentinel $x_1 = 0$; the readout is $o_t = S_t^\top \phi(q_t)$. The write at step $t$ therefore updates the memory \emph{before} the query at step $t+1$ reads it, so no token's key ever associates with its own value.
 
@@ -15,7 +15,7 @@ where the statistic is the squared key energy $\|x_t\|^2$ (Falcon-1/1A/2/2A), th
 
 \paragraph{Positive-decay renormalization.} When $\lambda_t > 0$, the per-step shrinkage $\alpha_t = \min(\eta_t \lambda_t,\, 1 - \varepsilon_\gamma)$ must be applied stably. The implementation clamps $\alpha_t$ strictly below $1$, computes chunk-local log-prefixes in fp32 via $\log(1 - \alpha_t)$ and cumulative sums, rescales the drivers to the no-decay domain ($\tilde{\eta}_t = \eta_t / \gamma_t$, $\tilde{v}_t = v_t / c_{t-1}$ with $c_{t-1} = \prod_{r \le t-1} \gamma_r$), and rescales outputs and the emitted state back by the accumulated $\delta$. Boundary sentinels are $(\alpha_1, \gamma_1) = (0, 1)$ and $\eta_1 = 0$, so the first step is a pure read.
 
-\subsection{The Regression Family (Falcon-1/2/3)}
+\subsubsection{The Regression Family (Falcon-1/2/3)}
 
 The squared-error objective on the shifted pair is
 \[
@@ -78,7 +78,7 @@ S_t = (1 - \eta_t \lambda_t)\, S_{t-1} + \frac{\eta_t}{B_t} \sum_{j \in \mathcal
 \]
 with $\mathcal{I}_t = \{\max(2, t - B + 1), \dots, t\}$. Window-averaging keeps the update magnitude invariant to $B$: each pair is replayed in exactly $B$ consecutive updates at weight $1/B$, so its cumulative injection is $\eta$-independent of $B$. The state alone is \emph{not} Markov: exact continuation requires a FIFO tail of the last $B - 1$ pairs, and the chunk kernels gather an extended slice with $|\mathcal{J}| \le C + B - 1$. The chunk-parallel form is a rank-$B$ affine recurrence solved by block forward substitution over the (time $\times$ rank) extended index space, with same-time rank components uncoupled (Algorithm~3).
 
-\subsection{The Inner-Product Family (Falcon-1A/2A/3A)}
+\subsubsection{The Inner-Product Family (Falcon-1A/2A/3A)}
 
 The negative inner-product objective
 \[
@@ -138,7 +138,7 @@ S_t = \gamma_t S_{t-1} + \eta_t\, \bar{N}_t^{(B)} .
 }
 The window-banded decay mask factors as $M = D \cdot \operatorname{Diag}(\boldsymbol{\eta}) \cdot A$, where $A$ is the $B$-banded window operator and $D$ the causal decay kernel, evaluated over the extended slice (Algorithm~4).
 
-\subsection{Configuration Interface}
+\subsubsection{Configuration Interface}
 
 All six variants share one nested block, \texttt{model.attention.falcon}, selected through the \texttt{layer\_pattern} entries \texttt{falcon1}, \texttt{falcon2}, \texttt{falcon3}, \texttt{falcon1a}, \texttt{falcon2a}, \texttt{falcon3a}:
 
@@ -165,7 +165,7 @@ All six variants share one nested block, \texttt{model.attention.falcon}, select
 
 Implementation notes: the recurrent and chunk-parallel kernels are verified numerically equivalent (chunk $\equiv$ recurrent to $\le 3.6 \times 10^{-7}$ across all six variants, including decay, multi-chunk, and windowed paths); gradients flow through the fp32 triangular-solve islands (feature drivers take only $\sqrt{\tilde{\eta}}$ while value targets take $\sqrt{\tilde{\eta}}\, e^{-u_{t-1}}$, with the square root clamped at $10^{-12}$ for NaN-free backward at the $\eta = 0$ boundary); positive exponents are clamped at $80$.
 
-\subsection{Published Results}
+\subsubsection{Published Results}
 
 \begin{table}[H]
 \centering
@@ -186,7 +186,7 @@ Falcon-1.3 & 33.00 & 48.70 & \textbf{17.10} & \textbf{49.18} \\
 \label{tab:falcon-results}
 \end{table}
 
-\subsection{Relation to Prior Work}
+\subsubsection{Relation to Prior Work}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{DeltaNet}: the delta rule is the squared-error one-gradient-descent step with the same-step pairing; Falcon recovers it with the critical index shift plus objective-matched normalization and explicit $\lambda_t$ shrinkage.

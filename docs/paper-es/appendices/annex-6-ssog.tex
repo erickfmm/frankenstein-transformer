@@ -1,7 +1,7 @@
-\section{SSOG: Atención Separable Sum of Gaussians}
+\subsection{SSOG: Atención Separable Sum of Gaussians}
 \label{sec:annex-ssog}
 
-Este anexo cubre SSOG (Separable Sum of Gaussians), un mixer de atención de campo geométrico. SSOG \citep{pisoni_ssog_2026} reemplaza la interacción puntuada por contenido de la atención de producto escalado por una mezcla aprendida de Gaussianas sobre \emph{posición relativa}: cada cabeza posee un puñado de átomos Gaussianos---cinco números por átomo, un desplazamiento de centro $(\mu_y, \mu_x)$, un ancho por eje $(\sigma_y, \sigma_x)$ y un peso de mezcla $\lambda$---que forman un campo fijo sobre el desplazamiento entre tokens. No hay productos punto consulta--clave en ninguna parte: el contenido nunca puntúa al contenido, solo \emph{dirige} el campo mediante residuos pequeños y acotados.
+Esta sección cubre SSOG (Separable Sum of Gaussians), un mixer de atención de campo geométrico. SSOG \citep{pisoni_ssog_2026} reemplaza la interacción puntuada por contenido de la atención de producto escalado por una mezcla aprendida de Gaussianas sobre \emph{posición relativa}: cada cabeza posee un puñado de átomos Gaussianos---cinco números por átomo, un desplazamiento de centro $(\mu_y, \mu_x)$, un ancho por eje $(\sigma_y, \sigma_x)$ y un peso de mezcla $\lambda$---que forman un campo fijo sobre el desplazamiento entre tokens. No hay productos punto consulta--clave en ninguna parte: el contenido nunca puntúa al contenido, solo \emph{dirige} el campo mediante residuos pequeños y acotados.
 
 Dado que una Gaussiana 2D se factoriza en un producto de dos Gaussianas 1D, aplicar el campo son dos pasadas de filtro 1D por átomo (filas y luego columnas de un raster de tokens de $\sqrt{N} \times \sqrt{N}$) seguidas de una contracción de mezcla $\lambda$. La matriz de atención $N \times N$ inducida nunca existe, por lo que el costo específico de atención es $\mathcal{O}(R \cdot N \sqrt{N} \cdot d)$ para $R$ átomos en lugar de $\mathcal{O}(N^2 \cdot d)$. SSOG también omite por completo las proyecciones de consulta y clave, pagando $2d^2$ de proyecciones por capa en lugar de los $4d^2$ de SDPA. En la receta de referencia, el mecanismo completo supera a su gemelo SDPA igualado en ImageNet-1k (65{,}28\% vs 64{,}34\% con $\sim$3M de parámetros; 72{,}02\% vs 71{,}84\% con $\sim$12M) siendo $\sim$20\% más pequeño y $\sim$30\% más barato por pasada, y por +17 puntos en CIFAR-100 con receta igualada.
 
@@ -12,7 +12,7 @@ Dado que una Gaussiana 2D se factoriza en un producto de dos Gaussianas 1D, apli
 \caption{Flujo de datos de SSOG: los valores pasan por pasadas separables de filtrado gaussiano por filas y columnas para cada átomo, con direccionamiento opcional de los parámetros del átomo por contenido.}
 \label{fig:mixer-ssog}
 \end{figure}
-\subsection{Formulación Matemática}
+\subsubsection{Formulación Matemática}
 Sea el raster row-major de una rejilla $G_h \times G_w$ los tokens. El peso de atención del token $p$ al token $q$ es el log-sum-exp con softmax y temperatura de los log-pesos de los átomos evaluados en su desplazamiento:
 \[
 A(p, q) = \operatorname{softmax}_q\!\left( \tfrac{1}{\tau}\, s(p, q) \right),
@@ -32,7 +32,7 @@ es decir, tres contracciones einsum por capa. Con direccionamiento por contenido
 \]
 con $m$ el desplazamiento máximo en celdas de rejilla y escalas de compuerta $s_\bullet = \operatorname{softplus}(\cdot)$ inicializadas en $-8$ ($\approx 3 \times 10^{-4}$), de modo que el modelo comienza como un campo geométrico congelado y aprende cuánto abrir cada toma de contenido. Los anchos se reparametrizan como $\sigma = \operatorname{softplus}(\omega) + \epsilon + \sigma_{\text{piso}}$ para mantenerse estrictamente positivos.
 
-\subsection{Pseudocódigo Algorítmico}
+\subsubsection{Pseudocódigo Algorítmico}
 \begin{algorithmic}[1]
 \State \textbf{Entrada:} estado oculto $x \in \mathbb{R}^{B \times N \times d}$ como raster $G_h \times G_w$, átomos $\{\mu_r, \omega_r, \log \lambda_r\}_{r=1}^{R}$ por cabeza, temperatura $\tau$
 \State $V \gets x W_V$ reorganizado a $(B, G_h, G_w, H, d_h)$ \Comment{sin proyecciones Q/K}
@@ -45,7 +45,7 @@ con $m$ el desplazamiento máximo en celdas de rejilla y escalas de compuerta $s
 \State \textbf{Salida:} $\mathbf{Y} W_O$ reorganizado a $(B, N, d)$
 \end{algorithmic}
 
-\subsection{Características Clave}
+\subsubsection{Características Clave}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad de entrenamiento}: $\mathcal{O}(R \cdot N \sqrt{N} \cdot d)$ para $R$ átomos fijos---casi lineal solo por geometría, no por aproximación de kernels.
     \item \textbf{Complejidad de inferencia}: mismo costo por pasada; solo encoder (el campo separable no tiene formulación causal), por lo que no hay semánticas de caché KV.

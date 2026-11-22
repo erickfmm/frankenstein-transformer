@@ -1,11 +1,11 @@
-\section{Comprehensive Sparse Attention Mechanisms}
+\subsection{Comprehensive Sparse Attention Mechanisms}
 \label{sec:annex-sparse}
 
-\subsection{Executive Summary}
+\subsubsection{Executive Summary}
 
-Sparse attention mechanisms address the prohibitive $\mathcal{O}(n^2)$ computational and memory complexity of standard scaled dot-product attention by restricting the set of attended key-value pairs. Modern sparse attention spans a rich design space distinguished by four orthogonal dimensions: (i) \textbf{sparsity pattern} (fixed geometric, data-dependent, or frequency-based), (ii) \textbf{trainability} (end-to-end trained or inference-only), (iii) \textbf{sparsity unit} (individual tokens, local windows, or blocks), and (iv) \textbf{mechanism} (masking, selection, filtering, or compression). This annex synthesizes eleven major sparse attention methods---Sparse Transformer, Longformer, SWA with attention sinks, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, SparDA, and LSA---providing mathematical formulations, algorithmic pseudocode, and comprehensive architectural comparisons. Fast Conformer, the limited-context variant of the convolution-augmented Conformer block, belongs to the convolution-augmented family and is documented alongside the Conformer in Appendix~\ref{sec:annex-conformer}.
+Sparse attention mechanisms address the prohibitive $\mathcal{O}(n^2)$ computational and memory complexity of standard scaled dot-product attention by restricting the set of attended key-value pairs. Modern sparse attention spans a rich design space distinguished by four orthogonal dimensions: (i) \textbf{sparsity pattern} (fixed geometric, data-dependent, or frequency-based), (ii) \textbf{trainability} (end-to-end trained or inference-only), (iii) \textbf{sparsity unit} (individual tokens, local windows, or blocks), and (iv) \textbf{mechanism} (masking, selection, filtering, or compression). This section synthesizes eleven major sparse attention methods---Sparse Transformer, Longformer, SWA with attention sinks, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, SparDA, and LSA---providing mathematical formulations, algorithmic pseudocode, and comprehensive architectural comparisons. Fast Conformer, the limited-context variant of the convolution-augmented Conformer block, belongs to the convolution-augmented family and is documented alongside the Conformer in Appendix~\ref{sec:annex-conformer}.
 
-\subsection{Sparse Transformer: Factorized Strided and Fixed Patterns}
+\subsubsection{Sparse Transformer: Factorized Strided and Fixed Patterns}
 
 \begin{figure}[H]
 \centering
@@ -14,7 +14,7 @@ Sparse attention mechanisms address the prohibitive $\mathcal{O}(n^2)$ computati
 \label{fig:mixer-sparse-transformer}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 The Sparse Transformer \citep{child_sparse_transformer_2019} reduces quadratic complexity to $\mathcal{O}(n\sqrt{n})$ by factorizing sparse attention into two complementary sparse heads. Let $n$ be the sequence length and $l = \lfloor\sqrt{n}\rfloor$ be the stride.
 
@@ -36,7 +36,7 @@ The attention computation for each head $h$ follows standard scaled dot-product 
 
 The key insight is that with the two factorized heads operating in parallel across a depth of $L$ transformer layers, every position can reach every other position through a path of length at most $L + 1$, preserving long-range reachability with a fraction of dense attention cost.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{Sparse Transformer Attention: Strided + Fixed Dual Heads}
@@ -64,7 +64,7 @@ The key insight is that with the two factorized heads operating in parallel acro
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: $\mathcal{O}(n\sqrt{n} \cdot d)$ during training; $\mathcal{O}(n)$ per token during generation.
@@ -74,7 +74,7 @@ The key insight is that with the two factorized heads operating in parallel acro
     \item \textbf{Limitation}: Fixed patterns may miss important but non-contiguous relationships; requires custom CUDA kernels for practical efficiency.
 \end{itemize}
 
-\subsection{Longformer: Sliding Window, Dilation, and Global Tokens}
+\subsubsection{Longformer: Sliding Window, Dilation, and Global Tokens}
 
 \begin{figure}[H]
 \centering
@@ -83,7 +83,7 @@ The key insight is that with the two factorized heads operating in parallel acro
 \label{fig:mixer-longformer}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 Longformer \citep{beltagy_longformer_2020} achieves linear $\mathcal{O}(n \cdot w)$ complexity by combining three complementary attention patterns.
 
@@ -107,7 +107,7 @@ Longformer \citep{beltagy_longformer_2020} achieves linear $\mathcal{O}(n \cdot 
 
 The three patterns are applied via separate projections. The local and global attention can use either the same projections or task-specific separate ones.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{Longformer: Sliding Window + Dilated + Global}
@@ -130,7 +130,7 @@ The three patterns are applied via separate projections. The local and global at
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: $\mathcal{O}(n \cdot w)$ where $w$ is the window size (linear when $w \ll n$).
@@ -140,7 +140,7 @@ The three patterns are applied via separate projections. The local and global at
     \item \textbf{Limitation}: Window size remains a design hyperparameter; suboptimal for tasks requiring dense attention patterns.
 \end{itemize}
 
-\subsection{SWA with Attention Sinks: Sliding Window Plus a Sink Prefix}
+\subsubsection{SWA with Attention Sinks: Sliding Window Plus a Sink Prefix}
 
 \begin{figure}[H]
 \centering
@@ -149,7 +149,7 @@ The three patterns are applied via separate projections. The local and global at
 \label{fig:mixer-swa}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 SWA with attention sinks \citep{jolicoeur_sliding_window_2026} is the simplest KV-cache eviction policy: instead of compressing the cache or replacing attention with a recurrent state, it restricts every query to a small, fixed set of keys. Write the window size as $w$ and the number of sinks as $s$, i.e.\ $\mathrm{SWA}(w,s)$. In decoder mode, query $i$ attends to
 \[
@@ -163,7 +163,7 @@ so each query sees at most $w$ keys. The causal clip $j \leq i$ on the sink term
 
 Because the intervention is a pure attention-mask change, it requires no additional parameters and no new QKV math: the standard projections $W_q, W_k, W_v, W_o$ are reused. It can be applied to a pretrained checkpoint at inference time with zero training tokens, or trained from scratch as a normal mixer.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{SWA with Attention Sinks: Mask Construction and Attention}
@@ -182,7 +182,7 @@ Because the intervention is a pure attention-mask change, it requires no additio
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: $\mathcal{O}(n \cdot w \cdot d)$ time and $\mathcal{O}(w)$ KV storage per layer at inference (fixed once the sequence exceeds $w$).
@@ -192,7 +192,7 @@ Because the intervention is a pure attention-mask change, it requires no additio
     \item \textbf{Limitation}: The horizon is fixed and task-dependent---$w=64$ suffices for log-likelihood benchmarks but collapses on generative math, where $w=512$ is needed; there is no content-adaptive selection.
 \end{itemize}
 
-\subsection{BigBird: Random, Local, and Global Sparse Graph}
+\subsubsection{BigBird: Random, Local, and Global Sparse Graph}
 
 \begin{figure}[H]
 \centering
@@ -201,7 +201,7 @@ Because the intervention is a pure attention-mask change, it requires no additio
 \label{fig:mixer-bigbird}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 BigBird \citep{zaheer_bigbird_2020} preserves universal approximation and Turing completeness using a principled mix of three sparsity patterns.
 
@@ -230,11 +230,11 @@ M_{ij} = \mathbf{1}[j \in \mathcal{A}_i^{(\text{random})} \cup \mathcal{A}_i^{(\
 
 In practice, BigBird groups tokens into blocks of size $b$ and applies the sparsity decision at the block level, enabling efficient block-sparse implementations.
 
-\subsubsection{Theoretical Guarantee}
+\paragraph{Theoretical Guarantee}
 
 The authors prove that with $O(1)$ random connections and global tokens, the sparse graph maintains the same universal approximation and Turing completeness properties as dense attention. Formally, any computable function can be represented and any sequence of operations can be simulated within the BigBird connectivity graph.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{BigBird: Random + Local + Global Block-Sparse Attention}
@@ -259,7 +259,7 @@ The authors prove that with $O(1)$ random connections and global tokens, the spa
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: $\mathcal{O}(n)$ or near-linear in optimal block-sparse implementation.
@@ -269,7 +269,7 @@ The authors prove that with $O(1)$ random connections and global tokens, the spa
     \item \textbf{Limitation}: Random sampling introduces variance and non-determinism; tuning of $r, w, g$ hyperparameters remains task-dependent.
 \end{itemize}
 
-\subsection{SparseK Attention: Differentiable \texorpdfstring{Top-$k$}{Top-k} Selection}
+\subsubsection{SparseK Attention: Differentiable \texorpdfstring{Top-$k$}{Top-k} Selection}
 
 \begin{figure}[H]
 \centering
@@ -278,7 +278,7 @@ The authors prove that with $O(1)$ random connections and global tokens, the spa
 \label{fig:mixer-sparsek}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 SparseK \citep{lou_sparsek_2024} enables learnable sparsity via a \textbf{differentiable top-$k$ operator}. A scoring network $\phi_\theta$ evaluates key-value pair importance:
 
@@ -300,7 +300,7 @@ m_j = \text{SparseK}(u, k)_j, \quad \text{Attn}_i = \text{softmax}\left(\frac{\m
 
 where $K_{\text{sel}}, V_{\text{sel}}$ contain only the top-$k$ entries (those with $m_j > 0$).
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{SparseK: Differentiable Top-$k$ Attention}
@@ -327,7 +327,7 @@ where $K_{\text{sel}}, V_{\text{sel}}$ contain only the top-$k$ entries (those w
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: $\mathcal{O}(n \cdot d)$ during training (linear in sequence length); $\mathcal{O}(k)$ per token during generation.
@@ -337,7 +337,7 @@ where $K_{\text{sel}}, V_{\text{sel}}$ contain only the top-$k$ entries (those w
     \item \textbf{Limitation}: Scattered memory access from top-$k$ selection may limit cache efficiency on some hardware; scoring network adds overhead.
 \end{itemize}
 
-\subsection{NSA (Native Sparse Attention): Hardware-Aligned Hierarchical Branches}
+\subsubsection{NSA (Native Sparse Attention): Hardware-Aligned Hierarchical Branches}
 
 \begin{figure}[H]
 \centering
@@ -346,7 +346,7 @@ where $K_{\text{sel}}, V_{\text{sel}}$ contain only the top-$k$ entries (those w
 \label{fig:mixer-nsa}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 NSA \citep{yuan_nsa_2025} decomposes sparse attention into three parallel branches that are combined through learned gates.
 
@@ -378,7 +378,7 @@ p_t^{\text{cmp}} = \text{softmax}(q_t^\top \tilde{K}_t^{\text{cmp}} / \sqrt{d}),
 y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \tilde{V}^{\text{cmp}}) + \alpha_t^{(\text{sel})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{sel}}, \tilde{V}^{\text{sel}}) + \alpha_t^{(\text{win})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{win}}, \tilde{V}^{\text{win}})
 \]
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{NSA: Compressed + Selected + Window Branches with Learned Gating}
@@ -407,7 +407,7 @@ y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \ti
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: $\mathcal{O}(t/d + n \cdot l + w)$ tokens attended per step (significantly reduced versus $\mathcal{O}(t)$ for dense).
@@ -417,7 +417,7 @@ y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \ti
     \item \textbf{Limitation}: Requires custom Triton/CUDA kernels; complex multi-branch architecture increases engineering overhead.
 \end{itemize}
 
-\subsection{FASA: Frequency-Aware Sparse Attention}
+\subsubsection{FASA: Frequency-Aware Sparse Attention}
 
 \begin{figure}[H]
 \centering
@@ -426,7 +426,7 @@ y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \ti
 \label{fig:mixer-fasa}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 FASA \citep{wang_fasa_2026} is a \textbf{training-free inference-time method} that exploits rotary position embedding (RoPE) structure. Under RoPE, the token embedding is rotated by $\theta_i = B^{-2(i-1)/d}$, decomposing the $d$-dimensional space into $d/2$ frequency chunks (FCs).
 
@@ -452,7 +452,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 \hat{\alpha}_{\text{FAC}} = \text{softmax}\left(\frac{\mathbf{q}_t \mathbf{K}_{\mathcal{T}_t}^\top}{\sqrt{d}}\right), \quad \mathbf{o}_t = \hat{\alpha}_{\text{FAC}} \mathbf{V}_{\mathcal{T}_t}
 \]
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{FASA: Frequency-Aware Sparse Attention (Inference-Time)}
@@ -480,7 +480,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: TIP is $\mathcal{O}(t \cdot N_{\text{tip}})$; FAC is $\mathcal{O}(N_{\text{fac}} \cdot d)$.
@@ -492,7 +492,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 
 \paragraph{Implementation note (training vs.\ inference).} In this repository the sparse TIP/FAC path is inference-only. While the model is in training mode, the enclosing hybrid layer substitutes standard dense attention over the same $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$ projections, so the mixer can be trained from scratch and the weights optimized during training are exactly the ones the sparse path reads at evaluation.
 
-\subsection{SpargeAttn: Two-Stage Block-Level Filtering}
+\subsubsection{SpargeAttn: Two-Stage Block-Level Filtering}
 
 \begin{figure}[H]
 \centering
@@ -501,7 +501,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 \label{fig:mixer-sparge}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 SpargeAttn \citep{zhang_spargeattn_2025} is a \textbf{universal training-free method} that predicts which blocks of the attention matrix will contain negligible values and skips computation for those blocks.
 
@@ -521,7 +521,7 @@ Common predictors include block-mean similarity or self-similarity statistics.
 
 where $m_{\text{old}}, m_{\text{new}}$ are online softmax running maxima (computed via FlashAttention-style numerics).
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{SpargeAttn: Two-Stage Block-Sparse Filtering}
@@ -555,7 +555,7 @@ where $m_{\text{old}}, m_{\text{new}}$ are online softmax running maxima (comput
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: Empirical $\mathcal{O}(n^2 \cdot s)$ where $s$ is the fraction of non-skipped blocks (typically 0.2--0.5).
@@ -567,7 +567,7 @@ where $m_{\text{old}}, m_{\text{new}}$ are online softmax running maxima (comput
 
 \paragraph{Implementation note (training vs.\ inference).} In this repository the two-stage block filter is inference-only. While the model is in training mode, the enclosing hybrid layer substitutes standard dense attention over the same $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$ projections, so the mixer can be trained from scratch and the weights optimized during training are exactly the ones the sparse path reads at evaluation.
 
-\subsection{MSA (MiniMax Sparse Attention): Blockwise Sparse Attention with Lightweight Index Branch}
+\subsubsection{MSA (MiniMax Sparse Attention): Blockwise Sparse Attention with Lightweight Index Branch}
 
 \begin{figure}[H]
 \centering
@@ -576,7 +576,7 @@ where $m_{\text{old}}, m_{\text{new}}$ are online softmax running maxima (comput
 \label{fig:mixer-msa}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 MSA \citep{lai_minimax_2026} is a blockwise sparse attention mechanism built on grouped-query attention (GQA) that combines a lightweight \textbf{Index Branch} for block selection with a \textbf{Main Branch} for exact block-sparse softmax attention over the selected blocks. Let $N$ be the sequence length, $B_k = 128$ the block size, and $k = 16$ the number of blocks selected per query (yielding a fixed per-query budget of $k \cdot B_k = 2048$ tokens regardless of $N$).
 
@@ -594,7 +594,7 @@ The index input is \textbf{detached} (stop-gradient), so gradients do not flow b
 \]
 where $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ gather the full-precision key/value tensors of the selected blocks. Selection is performed independently per GQA group, so different query groups within the same layer may attend to different block subsets.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{MSA: MiniMax Sparse Attention with Index + Main Branches}
@@ -618,7 +618,7 @@ where $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ gather the full-p
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: Index branch $\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}} \cdot N^2)$; Main branch $\mathcal{O}(H_q \cdot d_h \cdot N \cdot k \cdot B_k)$. Per-query budget fixed at $k \cdot B_k = 2048$ tokens regardless of $N$.
@@ -628,7 +628,7 @@ where $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ gather the full-p
     \item \textbf{Limitation}: Selection granularity is fixed at the block level ($B_k = 128$); the forced local block and per-group independent selection increase engineering complexity and require custom block-sparse kernels.
 \end{itemize}
 
-\subsection{SparDA (Sparse Decoupled Attention): Forecast-Guided Lookahead Block Selection}
+\subsubsection{SparDA (Sparse Decoupled Attention): Forecast-Guided Lookahead Block Selection}
 
 \begin{figure}[H]
 \centering
@@ -637,7 +637,7 @@ where $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ gather the full-p
 \label{fig:mixer-sparda}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 SparDA \citep{fu_sparda_2026} introduces a \textbf{decoupled} sparse attention scheme that augments the standard per-layer projections $Q, K, V$ with a fourth projection, the \textbf{Forecast}, which predicts the KV blocks that will be needed by the \emph{next} layer. This lookahead enables overlapping CPU-to-GPU prefetch of the next layer's selected blocks with the current layer's execution, hiding the offload latency that plagues sparse-attention deployments on memory-constrained hardware.
 
@@ -657,7 +657,7 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
 \]
 \paragraph{Training}: SparDA adds fewer than $0.5\%$ additional parameters. Only the Forecast projections are trained, by matching the original (frozen) sparse selector's attention distribution---a lightweight distillation that preserves the base model's behaviour while enabling lookahead prefetch.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{SparDA: Sparse Decoupled Attention with Forecast Prefetch}
@@ -677,7 +677,7 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: Forecast $\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot N_{\text{blocks}})$; Main attention $\mathcal{O}(H_q \cdot d_h \cdot N \cdot k \cdot B_k)$.
@@ -686,7 +686,7 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
     \item \textbf{Limitation}: Requires a CPU--GPU offload pipeline and a frozen base selector; the lookahead benefit is contingent on next-layer block demand being predictable from the current Forecast.
 \end{itemize}
 
-\subsection{LSA (Latent Sparse Attention): Semantic Key Clustering with Top-k Selection}
+\subsubsection{LSA (Latent Sparse Attention): Semantic Key Clustering with Top-k Selection}
 
 \begin{figure}[H]
 \centering
@@ -695,7 +695,7 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
 \label{fig:mixer-lsa}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 Latent Sparse Attention \citep{kubicek_lsa_2026} replaces the per-key (or per-block) scan of a sparse indexer with \textbf{semantic clustering}: keys are clustered by content in a learned latent space, and each query scores the bucket centroids instead of every key. The paper defines two trainable variants: Distilled-LSA (D-LSA), which adds small index projections to a frozen pre-trained model, and \textbf{Native-LSA (N-LSA)}, trained from scratch on the next-token loss alone. The implementation in this codebase follows N-LSA.
 
@@ -729,7 +729,7 @@ z_{i,j} = \frac{\mathbf{q}_i \cdot \mathbf{k}_j}{\sqrt{d_h}}, \qquad
 \]
 where the softmax is renormalised per head over the shared selection. N-LSA \textbf{adds no parameters}, uses \textbf{no positional encoding} (RoPE could be supported by clustering only the RoPE-free part of the keys), and \textbf{stops the gradient through the selection}: the clustering, centroid scoring and expansion run without gradients, so the next-token loss trains the attention projections only through the keys each query attends to.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{N-LSA: Ward clustering of one cluster block and flat semantic search}
@@ -757,7 +757,7 @@ where the softmax is renormalised per head over the shared selection. N-LSA \tex
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: Flat search scores $\mathcal{O}(T/\bar{n}_b)$ centroids per query, i.e.\ $\mathcal{O}(T^2/\bar{n}_b + T(k+n_w+n_{\text{sink}})d_h)$ for prefill and $\mathcal{O}(T/\bar{n}_b + k+n_w+n_{\text{sink}})$ per decoded token; the tree variant of the paper makes the indexer $\mathcal{O}(T \log T)$.
@@ -766,7 +766,7 @@ where the softmax is renormalised per head over the shared selection. N-LSA \tex
     \item \textbf{Limitation}: The flat indexer remains quadratic in context length (with a $1/\bar{n}_b$ constant); tree search is left to future work. The paper's single index list assumes a single shared KV head ($n_{kv}=1$), and N-LSA deliberately uses no positional encoding.
 \end{itemize}
 
-\subsection{ProbSparse Attention: Query-Sparsity Top-$u$ Selection}
+\subsubsection{ProbSparse Attention: Query-Sparsity Top-$u$ Selection}
 
 \begin{figure}[H]
 \centering
@@ -775,7 +775,7 @@ where the softmax is renormalised per head over the shared selection. N-LSA \tex
 \label{fig:mixer-probsparse}
 \end{figure}
 
-\subsubsection{Mathematical Formulation}
+\paragraph{Mathematical Formulation}
 
 ProbSparse self-attention \citep{wu_deep_sparse_conformer_2022}, adapted from Informer \citep{zhou_informer_2021}, attacks the quadratic cost from the \emph{query} side instead of the key side. For a sequence of length $L$ it keeps a same-shape tensor $\bar{\mathbf{Q}}$ containing only the top-$u$ \emph{dominant} queries under a sparsity measure $\mathcal{M}(\mathbf{q}, \mathbf{K})$, so that every key is attended to by only those queries:
 \begin{equation}
@@ -805,7 +805,7 @@ where $\mathbf{X}_P\in\mathbb{R}^{b\times L_K\times d}$ encodes the keys' positi
 
 \paragraph{Decoder mode}: The selection is a block-global decision, and filling discarded rows with a bidirectional statistic would leak future tokens. Decoder mode therefore scores every query causally with the same $\mathbf{U}_1$, $\mathbf{U}_2$ and $W_P$ terms, and caches K/V like standard attention; because sparsity is query-side, single-query decoding makes the top-$u$ rule degenerate, so attending the full cached prefix is exact.
 
-\subsubsection{Algorithmic Pseudocode}
+\paragraph{Algorithmic Pseudocode}
 
 \begin{algorithm}[H]
 \caption{ProbSparse self-attention (training / parallel form)}
@@ -824,7 +824,7 @@ where $\mathbf{X}_P\in\mathbb{R}^{b\times L_K\times d}$ encodes the keys' positi
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Key Characteristics}
+\paragraph{Key Characteristics}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complexity}: $\mathcal{O}(L_Q L_K d)$ for the max--mean probe over sampled keys plus $\mathcal{O}(L'_Q L_K d)$ for the selected rows, i.e.\ $\mathcal{O}(L\log L)$ time and memory; $\mathcal{O}(n_{\text{ctx}})$ per decoded token over the KV cache.
@@ -833,7 +833,7 @@ where $\mathbf{X}_P\in\mathbb{R}^{b\times L_K\times d}$ encodes the keys' positi
     \item \textbf{Limitation}: The sparsity is query-side, so it does not reduce the key-side cost of a \emph{single} query---decoding a token still attends the whole cache. The paper defines the mechanism for bidirectional encoders only; the paper's second ingredient, DeepNorm ($\alpha_{1..4}=0.81(N^4M)^{1/16}$), is a residual-scaling strategy that lives in the residual family of this codebase, not in this mixer.
 \end{itemize}
 
-\subsection{Design Space and Selection Criteria}
+\subsubsection{Design Space and Selection Criteria}
 
 The twelve sparse attention methods occupy complementary positions in a multidimensional design space:
 

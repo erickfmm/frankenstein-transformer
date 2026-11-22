@@ -1,11 +1,11 @@
-\section{Mecanismos de Atención Dispersa Exhaustivos}
+\subsection{Mecanismos de Atención Dispersa Exhaustivos}
 \label{sec:annex-sparse}
 
-\subsection{Resumen Ejecutivo}
+\subsubsection{Resumen Ejecutivo}
 
-Los mecanismos de atención dispersa abordan la prohibitiva complejidad computacional y de memoria $\mathcal{O}(n^2)$ de la atención de producto punto escalado estándar al restringir el conjunto de pares clave-valor atendidos. La atención dispersa moderna abarca un rico espacio de diseño distinguido por cuatro dimensiones ortogonales: (i) \textbf{patrón de dispersidad} (geométrico fijo, dependiente de datos o basado en frecuencia), (ii) \textbf{capacidad de entrenamiento} (entrenado de extremo a extremo o solo inferencia), (iii) \textbf{unidad de dispersidad} (tokens individuales, ventanas locales o bloques), y (iv) \textbf{mecanismo} (enmascaramiento, selección, filtrado o compresión). Este anexo sintetiza doce métodos principales de atención dispersa---Sparse Transformer, Longformer, SWA con sumideros de atención, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, SparDA, LSA y ProbSparse---proporcionando formulaciones matemáticas, pseudocódigo algorítmico y comparaciones arquitectónicas exhaustivas. Fast Conformer, la variante de contexto limitado del bloque Conformer aumentado con convolución, pertenece a la familia aumentada con convolución y se documenta junto al Conformer en el Anexo~\ref{sec:annex-conformer}.
+Los mecanismos de atención dispersa abordan la prohibitiva complejidad computacional y de memoria $\mathcal{O}(n^2)$ de la atención de producto punto escalado estándar al restringir el conjunto de pares clave-valor atendidos. La atención dispersa moderna abarca un rico espacio de diseño distinguido por cuatro dimensiones ortogonales: (i) \textbf{patrón de dispersidad} (geométrico fijo, dependiente de datos o basado en frecuencia), (ii) \textbf{capacidad de entrenamiento} (entrenado de extremo a extremo o solo inferencia), (iii) \textbf{unidad de dispersidad} (tokens individuales, ventanas locales o bloques), y (iv) \textbf{mecanismo} (enmascaramiento, selección, filtrado o compresión). Esta sección sintetiza doce métodos principales de atención dispersa---Sparse Transformer, Longformer, SWA con sumideros de atención, BigBird, SparseK, NSA, FASA, SpargeAttn, MSA, SparDA, LSA y ProbSparse---proporcionando formulaciones matemáticas, pseudocódigo algorítmico y comparaciones arquitectónicas exhaustivas. Fast Conformer, la variante de contexto limitado del bloque Conformer aumentado con convolución, pertenece a la familia aumentada con convolución y se documenta junto al Conformer en el Anexo~\ref{sec:annex-conformer}.
 
-\subsection{Sparse Transformer: Patrones Estrideados y Fijos Factorizados}
+\subsubsection{Sparse Transformer: Patrones Estrideados y Fijos Factorizados}
 
 \begin{figure}[H]
 \centering
@@ -14,7 +14,7 @@ Los mecanismos de atención dispersa abordan la prohibitiva complejidad computac
 \label{fig:mixer-sparse-transformer}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 Sparse Transformer \citep{child_sparse_transformer_2019} reduce la complejidad cuadrática a $\mathcal{O}(n\sqrt{n})$ factorizando la atención dispersa en dos cabezas dispersas complementarias. Sea $n$ la longitud de la secuencia y $l = \lfloor\sqrt{n}\rfloor$ el stride.
 
@@ -36,7 +36,7 @@ El cálculo de atención para cada cabeza $h$ sigue las reglas estándar de prod
 
 La idea clave es que con las dos cabezas factorizadas operando en paralelo a través de una profundidad de $L$ capas transformer, cada posición puede alcanzar cualquier otra posición a través de un camino de longitud máxima $L + 1$, preservando la alcanzabilidad de largo alcance con una fracción del costo de la atención densa.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{Atención Sparse Transformer: Cabezas Duales Estrideada + Fija}
@@ -64,7 +64,7 @@ La idea clave es que con las dos cabezas factorizadas operando en paralelo a tra
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: $\mathcal{O}(n\sqrt{n} \cdot d)$ durante el entrenamiento; $\mathcal{O}(n)$ por token durante la generación.
@@ -74,7 +74,7 @@ La idea clave es que con las dos cabezas factorizadas operando en paralelo a tra
     \item \textbf{Limitación}: Los patrones fijos pueden pasar por alto relaciones importantes pero no contiguas; requiere kernels CUDA personalizados para eficiencia práctica.
 \end{itemize}
 
-\subsection{Longformer: Ventana Deslizante, Dilatación y Tokens Globales}
+\subsubsection{Longformer: Ventana Deslizante, Dilatación y Tokens Globales}
 
 \begin{figure}[H]
 \centering
@@ -83,7 +83,7 @@ La idea clave es que con las dos cabezas factorizadas operando en paralelo a tra
 \label{fig:mixer-longformer}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 Longformer \citep{beltagy_longformer_2020} logra una complejidad lineal $\mathcal{O}(n \cdot w)$ combinando tres patrones de atención complementarios.
 
@@ -107,7 +107,7 @@ Longformer \citep{beltagy_longformer_2020} logra una complejidad lineal $\mathca
 
 Los tres patrones se aplican mediante proyecciones separadas. La atención local y global pueden usar las mismas proyecciones o unas separadas específicas para cada tarea.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{Longformer: Ventana Deslizante + Dilatada + Global}
@@ -130,7 +130,7 @@ Los tres patrones se aplican mediante proyecciones separadas. La atención local
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: $\mathcal{O}(n \cdot w)$ donde $w$ es el tamaño de ventana (lineal cuando $w \ll n$).
@@ -140,7 +140,7 @@ Los tres patrones se aplican mediante proyecciones separadas. La atención local
     \item \textbf{Limitación}: El tamaño de ventana sigue siendo un hiperparámetro de diseño; subóptimo para tareas que requieren patrones de atención densos.
 \end{itemize}
 
-\subsection{SWA con Sumideros de Atención: Ventana Deslizante Más un Prefijo Sumidero}
+\subsubsection{SWA con Sumideros de Atención: Ventana Deslizante Más un Prefijo Sumidero}
 
 \begin{figure}[H]
 \centering
@@ -149,7 +149,7 @@ Los tres patrones se aplican mediante proyecciones separadas. La atención local
 \label{fig:mixer-swa}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 SWA con sumideros de atención \citep{jolicoeur_sliding_window_2026} es la política de desalojo de caché KV más simple: en lugar de comprimir la caché o reemplazar la atención por un estado recurrente, restringe cada consulta a un conjunto pequeño y fijo de claves. Denotemos el tamaño de ventana $w$ y el número de sumideros $s$, es decir $\mathrm{SWA}(w,s)$. En modo decoder, la consulta $i$ atiende a
 \[
@@ -163,7 +163,7 @@ de modo que cada consulta ve como máximo $w$ claves. El recorte causal $j \leq 
 
 Como la intervención es un cambio puro de máscara de atención, no requiere parámetros adicionales ni matemática QKV nueva: se reutilizan las proyecciones estándar $W_q, W_k, W_v, W_o$. Puede aplicarse a un checkpoint preentrenado en inferencia con cero tokens de entrenamiento, o entrenarse desde cero como un mixer normal.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{SWA con Sumideros de Atención: Construcción de Máscara y Atención}
@@ -182,7 +182,7 @@ Como la intervención es un cambio puro de máscara de atención, no requiere pa
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: $\mathcal{O}(n \cdot w \cdot d)$ en tiempo y $\mathcal{O}(w)$ de almacenamiento KV por capa en inferencia (fijo una vez que la secuencia supera $w$).
@@ -192,7 +192,7 @@ Como la intervención es un cambio puro de máscara de atención, no requiere pa
     \item \textbf{Limitación}: El horizonte es fijo y depende de la tarea---$w=64$ basta para benchmarks de verosimilitud pero colapsa en matemáticas generativas, donde se necesita $w=512$; no hay selección adaptativa al contenido.
 \end{itemize}
 
-\subsection{BigBird: Grafo Disperso Aleatorio, Local y Global}
+\subsubsection{BigBird: Grafo Disperso Aleatorio, Local y Global}
 
 \begin{figure}[H]
 \centering
@@ -201,7 +201,7 @@ Como la intervención es un cambio puro de máscara de atención, no requiere pa
 \label{fig:mixer-bigbird}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 BigBird \citep{zaheer_bigbird_2020} preserva la aproximación universal y la completitud de Turing utilizando una combinación fundamentada de tres patrones de dispersidad.
 
@@ -230,11 +230,11 @@ M_{ij} = \mathbf{1}[j \in \mathcal{A}_i^{(\text{aleatoria})} \cup \mathcal{A}_i^
 
 En la práctica, BigBird agrupa tokens en bloques de tamaño $b$ y aplica la decisión de dispersidad a nivel de bloque, permitiendo implementaciones eficientes de bloques dispersos.
 
-\subsubsection{Garantía Teórica}
+\paragraph{Garantía Teórica}
 
 Los autores demuestran que con $O(1)$ conexiones aleatorias y tokens globales, el grafo disperso mantiene las mismas propiedades de aproximación universal y completitud de Turing que la atención densa. Formalmente, cualquier función computable puede representarse y cualquier secuencia de operaciones puede simularse dentro del grafo de conectividad de BigBird.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{BigBird: Atención Dispersa por Bloques Aleatoria + Local + Global}
@@ -259,7 +259,7 @@ Los autores demuestran que con $O(1)$ conexiones aleatorias y tokens globales, e
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: $\mathcal{O}(n)$ o casi lineal en implementación óptima de bloques dispersos.
@@ -269,7 +269,7 @@ Los autores demuestran que con $O(1)$ conexiones aleatorias y tokens globales, e
     \item \textbf{Limitación}: El muestreo aleatorio introduce varianza y no determinismo; el ajuste de los hiperparámetros $r, w, g$ sigue dependiendo de la tarea.
 \end{itemize}
 
-\subsection{Atención SparseK: Selección Diferencial \texorpdfstring{Top-$k$}{Top-k}}
+\subsubsection{Atención SparseK: Selección Diferencial \texorpdfstring{Top-$k$}{Top-k}}
 
 \begin{figure}[H]
 \centering
@@ -278,7 +278,7 @@ Los autores demuestran que con $O(1)$ conexiones aleatorias y tokens globales, e
 \label{fig:mixer-sparsek}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 SparseK \citep{lou_sparsek_2024} permite dispersidad aprendible mediante un \textbf{operador top-$k$ diferenciable}. Una red de puntuación $\phi_\theta$ evalúa la importancia de cada par clave-valor:
 
@@ -300,7 +300,7 @@ m_j = \text{SparseK}(u, k)_j, \quad \text{Attn}_i = \text{softmax}\left(\frac{\m
 
 donde $K_{\text{sel}}, V_{\text{sel}}$ contienen solo las entradas top-$k$ (aquellas con $m_j > 0$).
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{SparseK: Atención Top-$k$ Diferenciable}
@@ -327,7 +327,7 @@ donde $K_{\text{sel}}, V_{\text{sel}}$ contienen solo las entradas top-$k$ (aque
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: $\mathcal{O}(n \cdot d)$ durante el entrenamiento (lineal en la longitud de la secuencia); $\mathcal{O}(k)$ por token durante la generación.
@@ -337,7 +337,7 @@ donde $K_{\text{sel}}, V_{\text{sel}}$ contienen solo las entradas top-$k$ (aque
     \item \textbf{Limitación}: El acceso a memoria disperso de la selección top-$k$ puede limitar la eficiencia de caché en algunos hardwares; la red de puntuación añade sobrecarga.
 \end{itemize}
 
-\subsection{NSA (Native Sparse Attention): Ramas Jerárquicas Alineadas con el Hardware}
+\subsubsection{NSA (Native Sparse Attention): Ramas Jerárquicas Alineadas con el Hardware}
 
 \begin{figure}[H]
 \centering
@@ -346,7 +346,7 @@ donde $K_{\text{sel}}, V_{\text{sel}}$ contienen solo las entradas top-$k$ (aque
 \label{fig:mixer-nsa}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 NSA \citep{yuan_nsa_2025} descompone la atención dispersa en tres ramas paralelas que se combinan mediante compuertas aprendidas.
 
@@ -378,7 +378,7 @@ p_t^{\text{cmp}} = \text{softmax}(q_t^\top \tilde{K}_t^{\text{cmp}} / \sqrt{d}),
 y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \tilde{V}^{\text{cmp}}) + \alpha_t^{(\text{sel})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{sel}}, \tilde{V}^{\text{sel}}) + \alpha_t^{(\text{win})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{win}}, \tilde{V}^{\text{win}})
 \]
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{NSA: Ramas Comprimida + Seleccionada + Ventana con Compuertas Aprendidas}
@@ -407,7 +407,7 @@ y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \ti
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: $\mathcal{O}(t/d + n \cdot l + w)$ tokens atendidos por paso (significativamente reducido frente a $\mathcal{O}(t)$ para densa).
@@ -417,7 +417,7 @@ y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \ti
     \item \textbf{Limitación}: Requiere kernels Triton/CUDA personalizados; la arquitectura multi-rama compleja aumenta la sobrecarga de ingeniería.
 \end{itemize}
 
-\subsection{FASA: Atención Dispersa Consciente de la Frecuencia}
+\subsubsection{FASA: Atención Dispersa Consciente de la Frecuencia}
 
 \begin{figure}[H]
 \centering
@@ -426,7 +426,7 @@ y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \ti
 \label{fig:mixer-fasa}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 FASA \citep{wang_fasa_2026} es un \textbf{método en tiempo de inferencia sin entrenamiento} que explota la estructura del embedding de posición rotatorio (RoPE). Bajo RoPE, el embedding del token se rota por $\theta_i = B^{-2(i-1)/d}$, descomponiendo el espacio $d$-dimensional en $d/2$ fragmentos de frecuencia (FC).
 
@@ -452,7 +452,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 \hat{\alpha}_{\text{FAC}} = \text{softmax}\left(\frac{\mathbf{q}_t \mathbf{K}_{\mathcal{T}_t}^\top}{\sqrt{d}}\right), \quad \mathbf{o}_t = \hat{\alpha}_{\text{FAC}} \mathbf{V}_{\mathcal{T}_t}
 \]
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{FASA: Atención Dispersa Consciente de la Frecuencia (en Tiempo de Inferencia)}
@@ -480,7 +480,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: TIP es $\mathcal{O}(t \cdot N_{\text{tip}})$; FAC es $\mathcal{O}(N_{\text{fac}} \cdot d)$.
@@ -492,7 +492,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 
 \paragraph{Nota de implementación (entrenamiento vs.\ inferencia).} En este repositorio la ruta dispersa TIP/FAC es solo de inferencia. Mientras el modelo está en modo entrenamiento, la capa híbrida contenedora sustituye atención estándar densa sobre las mismas proyecciones $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$, de modo que el mixer puede entrenarse desde cero y los pesos optimizados durante el entrenamiento son exactamente los que lee la ruta dispersa en evaluación.
 
-\subsection{SpargeAttn: Filtrado de Dos Etapas a Nivel de Bloques}
+\subsubsection{SpargeAttn: Filtrado de Dos Etapas a Nivel de Bloques}
 
 \begin{figure}[H]
 \centering
@@ -501,7 +501,7 @@ S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q
 \label{fig:mixer-sparge}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 SpargeAttn \citep{zhang_spargeattn_2025} es un \textbf{método universal sin entrenamiento} que predice qué bloques de la matriz de atención contendrán valores insignificantes y omite el cálculo para esos bloques.
 
@@ -521,7 +521,7 @@ Los predictores comunes incluyen similitud de media de bloque o estadísticas de
 
 donde $m_{\text{antiguo}}, m_{\text{nuevo}}$ son máximos del softmax en línea en ejecución (calculados mediante numéricos estilo FlashAttention).
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{SpargeAttn: Filtrado Disperso de Dos Etapas por Bloques}
@@ -555,7 +555,7 @@ donde $m_{\text{antiguo}}, m_{\text{nuevo}}$ son máximos del softmax en línea 
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: Empírica $\mathcal{O}(n^2 \cdot s)$ donde $s$ es la fracción de bloques no omitidos (típicamente 0.2--0.5).
@@ -567,7 +567,7 @@ donde $m_{\text{antiguo}}, m_{\text{nuevo}}$ son máximos del softmax en línea 
 
 \paragraph{Nota de implementación (entrenamiento vs.\ inferencia).} En este repositorio el filtro de bloques en dos etapas es solo de inferencia. Mientras el modelo está en modo entrenamiento, la capa híbrida contenedora sustituye atención estándar densa sobre las mismas proyecciones $\mathbf{q}/\mathbf{k}/\mathbf{v}/\mathbf{o}$, de modo que el mixer puede entrenarse desde cero y los pesos optimizados durante el entrenamiento son exactamente los que lee la ruta dispersa en evaluación.
 
-\subsection{MSA (MiniMax Sparse Attention): Atención Dispersa por Bloques con Rama de Índice Ligera}
+\subsubsection{MSA (MiniMax Sparse Attention): Atención Dispersa por Bloques con Rama de Índice Ligera}
 
 \begin{figure}[H]
 \centering
@@ -576,7 +576,7 @@ donde $m_{\text{antiguo}}, m_{\text{nuevo}}$ son máximos del softmax en línea 
 \label{fig:mixer-msa}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 MSA \citep{lai_minimax_2026} es un mecanismo de atención dispersa por bloques construido sobre atención agrupada por consultas (GQA) que combina una \textbf{Rama de Índice} ligera para la selección de bloques con una \textbf{Rama Principal} para atención softmax dispersa por bloques exacta sobre los bloques seleccionados. Sea $N$ la longitud de la secuencia, $B_k = 128$ el tamaño de bloque, y $k = 16$ el número de bloques seleccionados por consulta (lo que yield un presupuesto fijo por consulta de $k \cdot B_k = 2048$ tokens independientemente de $N$).
 
@@ -594,7 +594,7 @@ La entrada del índice está \textbf{desconectada} (stop-gradient), de modo que 
 \]
 donde $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ reúnen los tensores de clave/valor de precisión completa de los bloques seleccionados. La selección se realiza independientemente por grupo GQA, de modo que diferentes grupos de consulta dentro de la misma capa pueden atender a diferentes subconjuntos de bloques.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{MSA: Atención Dispersa MiniMax con Ramas de Índice + Principal}
@@ -618,7 +618,7 @@ donde $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ reúnen los tenso
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: Rama de índice $\mathcal{O}(H_{\text{kv}} \cdot d_{\text{idx}} \cdot N^2)$; Rama principal $\mathcal{O}(H_q \cdot d_h \cdot N \cdot k \cdot B_k)$. Presupuesto por consulta fijo en $k \cdot B_k = 2048$ tokens independientemente de $N$.
@@ -628,7 +628,7 @@ donde $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ reúnen los tenso
     \item \textbf{Limitación}: La granularidad de selección es fija a nivel de bloque ($B_k = 128$); el bloque local forzado y la selección independiente por grupo aumentan la complejidad de ingeniería y requieren kernels personalizados de bloques dispersos.
 \end{itemize}
 
-\subsection{SparDA (Atención Dispersa Desacoplada): Selección de Bloques Anticipada Guiada por Pronóstico}
+\subsubsection{SparDA (Atención Dispersa Desacoplada): Selección de Bloques Anticipada Guiada por Pronóstico}
 
 \begin{figure}[H]
 \centering
@@ -637,7 +637,7 @@ donde $\mathbf{K}_{\mathcal{I}_t}, \mathbf{V}_{\mathcal{I}_t}$ reúnen los tenso
 \label{fig:mixer-sparda}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 SparDA \citep{fu_sparda_2026} introduce un esquema de atención dispersa \textbf{desacoplado} que aumenta las proyecciones estándar por capa $Q, K, V$ con una cuarta proyección, el \textbf{Pronóstico}, que predice los bloques KV que serán necesarios en la \emph{siguiente} capa. Esta anticipación permite solapar el prefetch CPU-a-GPU de los bloques seleccionados de la siguiente capa con la ejecución de la capa actual, ocultando la latencia de offload que afecta a las implementaciones de atención dispersa en hardware con memoria limitada.
 
@@ -657,7 +657,7 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
 \]
 \paragraph{Entrenamiento}: SparDA añade menos del $0.5\%$ de parámetros adicionales. Solo las proyecciones de Pronóstico se entrenan, emparejando la distribución de atención del selector disperso original (congelado)---una destilación ligera que preserva el comportamiento del modelo base mientras habilita el prefetch anticipado.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{SparDA: Atención Dispersa Desacoplada con Prefetch de Pronóstico}
@@ -677,7 +677,7 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: Pronóstico $\mathcal{O}(H_{\text{kv}} \cdot d_f \cdot N \cdot N_{\text{bloques}})$; Atención principal $\mathcal{O}(H_q \cdot d_h \cdot N \cdot k \cdot B_k)$.
@@ -686,7 +686,7 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
     \item \textbf{Limitación}: Requiere un pipeline de offload CPU--GPU y un selector base congelado; el beneficio anticipado depende de que la demanda de bloques de la siguiente capa sea predecible a partir del Pronóstico actual.
 \end{itemize}
 
-\subsection{LSA (Atención Dispersa Latente): Clustering Semántico de Claves con Selección Top-k}
+\subsubsection{LSA (Atención Dispersa Latente): Clustering Semántico de Claves con Selección Top-k}
 
 \begin{figure}[H]
 \centering
@@ -695,7 +695,7 @@ S_{i,b} = \mathbf{F}_i \cdot \mathbf{r}_b, \qquad \mathcal{I}_i = \mathrm{TopK}(
 \label{fig:mixer-lsa}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 La Atención Dispersa Latente \citep{kubicek_lsa_2026} reemplaza el escaneo por clave (o por bloque) de un indexador disperso por \textbf{clustering semántico}: las claves se agrupan por contenido en un espacio latente aprendido y cada consulta puntúa los centroides de los buckets en lugar de todas las claves. El paper define dos variantes entrenables: Distilled-LSA (D-LSA), que añade pequeñas proyecciones índice a un modelo preentrenado congelado, y \textbf{Native-LSA (N-LSA)}, entrenada desde cero solo con la pérdida del siguiente token. La implementación de este código sigue N-LSA.
 
@@ -729,7 +729,7 @@ z_{i,j} = \frac{\mathbf{q}_i \cdot \mathbf{k}_j}{\sqrt{d_h}}, \qquad
 \]
 donde el softmax se renormaliza por cabeza sobre la selección compartida. N-LSA \textbf{no añade parámetros}, \textbf{no usa codificación posicional} (RoPE podría soportarse clusterizando solo la parte libre de RoPE de las claves) y \textbf{detiene el gradiente a través de la selección}: el clustering, la puntuación de centroides y la expansión se ejecutan sin gradientes, de modo que la pérdida del siguiente token entrena las proyecciones de atención solo a través de las claves a las que cada consulta atiende.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{N-LSA: clustering Ward de un bloque y búsqueda semántica plana}
@@ -757,7 +757,7 @@ donde el softmax se renormaliza por cabeza sobre la selección compartida. N-LSA
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: La búsqueda plana puntúa $\mathcal{O}(T/\bar{n}_b)$ centroides por consulta, es decir, $\mathcal{O}(T^2/\bar{n}_b + T(k+n_w+n_{\text{sink}})d_h)$ en prefill y $\mathcal{O}(T/\bar{n}_b + k+n_w+n_{\text{sink}})$ por token decodificado; la variante de árbol del paper hace el indexador $\mathcal{O}(T \log T)$.
@@ -766,7 +766,7 @@ donde el softmax se renormaliza por cabeza sobre la selección compartida. N-LSA
     \item \textbf{Limitación}: El indexador plano sigue siendo cuadrático en la longitud de contexto (con una constante $1/\bar{n}_b$); la búsqueda en árbol queda para trabajo futuro. La lista de índices única del paper asume una sola cabeza KV compartida ($n_{kv}=1$), y N-LSA usa deliberadamente ausencia de codificación posicional.
 \end{itemize}
 
-\subsection{Atención ProbSparse: selección top-$u$ por dispersidad de consultas}
+\subsubsection{Atención ProbSparse: selección top-$u$ por dispersidad de consultas}
 
 \begin{figure}[H]
 \centering
@@ -775,7 +775,7 @@ donde el softmax se renormaliza por cabeza sobre la selección compartida. N-LSA
 \label{fig:mixer-probsparse-es}
 \end{figure}
 
-\subsubsection{Formulación Matemática}
+\paragraph{Formulación Matemática}
 
 La atención ProbSparse \citep{wu_deep_sparse_conformer_2022}, adaptada de Informer \citep{zhou_informer_2021}, ataca el costo cuadrático desde el lado de las \emph{consultas} en lugar del de las claves. Para una secuencia de longitud $L$ conserva un tensor $\bar{\mathbf{Q}}$ de la misma forma que contiene solo las $u$ consultas \emph{dominantes} bajo una medida de dispersidad $\mathcal{M}(\mathbf{q}, \mathbf{K})$, de modo que cada clave es atendida solo por esas consultas:
 \begin{equation}
@@ -805,7 +805,7 @@ donde $\mathbf{X}_P\in\mathbb{R}^{b\times L_K\times d}$ codifica las posiciones 
 
 \paragraph{Modo decoder}: La selección es una decisión global del bloque, y rellenar las filas descartadas con una estadística bidireccional filtraría tokens futuros. Por ello el modo decoder puntúa todas las consultas de forma causal con los mismos términos $\mathbf{U}_1$, $\mathbf{U}_2$ y $W_P$, y cachea K/V como la atención estándar; como la dispersidad es del lado de las consultas, la decodificación de una sola consulta hace degenerada la regla top-$u$, por lo que atender todo el prefijo cacheado es exacto.
 
-\subsubsection{Pseudocódigo Algorítmico}
+\paragraph{Pseudocódigo Algorítmico}
 
 \begin{algorithm}[H]
 \caption{Atención auto-ProbSparse (forma de entrenamiento / paralela)}
@@ -824,7 +824,7 @@ donde $\mathbf{X}_P\in\mathbb{R}^{b\times L_K\times d}$ codifica las posiciones 
 \end{algorithmic}
 \end{algorithm}
 
-\subsubsection{Características Clave}
+\paragraph{Características Clave}
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Complejidad}: $\mathcal{O}(L_Q L_K d)$ para la sonda max--mean sobre claves muestreadas más $\mathcal{O}(L'_Q L_K d)$ para las filas seleccionadas, es decir $\mathcal{O}(L\log L)$ en tiempo y memoria; $\mathcal{O}(n_{\text{ctx}})$ por token decodificado sobre la caché KV.
@@ -833,7 +833,7 @@ donde $\mathbf{X}_P\in\mathbb{R}^{b\times L_K\times d}$ codifica las posiciones 
     \item \textbf{Limitación}: La dispersidad es del lado de las consultas, así que no reduce el costo del lado de las claves de una \emph{única} consulta---decodificar un token sigue atendiendo toda la caché. El paper define el mecanismo solo para encoders bidireccionales; su segundo ingrediente, DeepNorm ($\alpha_{1..4}=0.81(N^4M)^{1/16}$), es una estrategia de escalado de residuales que vive en la familia de residuales de este código, no en este mezclador.
 \end{itemize}
 
-\subsection{Espacio de Diseño y Criterios de Selección}
+\subsubsection{Espacio de Diseño y Criterios de Selección}
 
 Los doce métodos de atención dispersa ocupan posiciones complementarias en un espacio de diseño multidimensional:
 
