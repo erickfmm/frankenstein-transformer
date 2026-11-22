@@ -1,5 +1,5 @@
 \subsection{Línea Base Estándar y Optimizadores Adaptativos}
-\paragraph{SGD Vainilla (Descenso de Gradiente por Mini-lotes).}
+\subsubsection{SGD Vainilla (Descenso de Gradiente por Mini-lotes)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/sgd-es.pdf}}
@@ -42,7 +42,7 @@ donde $\eta$ es el único hiperparámetro del método. La receta de ajuste de la
 \item Completamente determinista dado el orden de los lotes; el punto de referencia contra el que se mide cada otra entrada.
 \end{itemize}
 
-\paragraph{SGD con Momentum.}
+\subsubsection{SGD con Momentum}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/sgd-momentum-es.pdf}}
@@ -87,7 +87,7 @@ donde $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controla la decadencia
 \item Fuerte generalización cuando se ajusta cuidadosamente, y una actualización simple de implementar.
 \end{itemize}
 
-\paragraph{RMSProp.}
+\subsubsection{RMSProp}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/rmsprop-es.pdf}}
@@ -132,7 +132,7 @@ donde $g_t = \partial E/\partial w(t)$, la división $0.9/0.1$ es el decaimiento
 \item El escalado por coordenada mantiene el paso robusto frente a magnitudes de gradiente heterogéneas entre capas.
 \end{itemize}
 
-\paragraph{Adam y AdamW.}
+\subsubsection{Adam y AdamW}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/adamw-es.pdf}}
@@ -180,7 +180,7 @@ AdamW introduce una modificación crucial: la decadencia de peso se aplica direc
 \item El decaimiento de pesos desacoplado mantiene la fuerza de la regularización independiente del escalado adaptativo.
 \end{itemize}
 
-\paragraph{RAdam (Adam Rectificado).}
+\subsubsection{RAdam (Adam Rectificado)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/radam-es.pdf}}
@@ -234,7 +234,7 @@ Cuando $\rho_t \leq 4$, RAdam retrocede a SGD con momentum: $\theta_{t+1} = \the
 \end{itemize}
 
 
-\paragraph{LaProp.}
+\subsubsection{LaProp}
 LaProp ataca un acoplamiento innecesario en Adam en lugar de un nuevo
 precondicionador~\citep{ziyin_laprop_2021}. Escribiendo la familia adaptativa
 como $\theta_{t+1} = \theta_t - \lambda_t G_t \nabla\ell(\theta_t) + \mu_t K_t(\theta_t - \theta_{t-1})$,

@@ -1,5 +1,5 @@
 \subsection{Standard Baseline and Adaptive Optimizers}
-\paragraph{Vanilla SGD (Mini-Batch Gradient Descent).}
+\subsubsection{Vanilla SGD (Mini-Batch Gradient Descent)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/sgd.pdf}}
@@ -42,7 +42,7 @@ where $\eta$ is the only hyperparameter of the method. The deck's own tuning rec
 \item Fully deterministic given the batch order; the reference point against which every other entry is measured.
 \end{itemize}
 
-\paragraph{SGD with Momentum.}
+\subsubsection{SGD with Momentum}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/sgd-momentum.pdf}}
@@ -87,7 +87,7 @@ where $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controls the momentum 
 \item Strong generalization when tuned carefully, and a simple update to implement.
 \end{itemize}
 
-\paragraph{RMSProp.}
+\subsubsection{RMSProp}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/rmsprop.pdf}}
@@ -132,7 +132,7 @@ where $g_t = \partial E/\partial w(t)$, the $0.9/0.1$ split is the exponential d
 \item Per-coordinate scaling keeps the step robust to heterogeneous gradient magnitudes across layers.
 \end{itemize}
 
-\paragraph{Adam and AdamW.}
+\subsubsection{Adam and AdamW}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/adamw.pdf}}
@@ -180,7 +180,7 @@ AdamW introduces a crucial modification: weight decay is applied directly to par
 \item Decoupled weight decay keeps the regularization strength independent of the adaptive scaling.
 \end{itemize}
 
-\paragraph{RAdam (Rectified Adam).}
+\subsubsection{RAdam (Rectified Adam)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/radam.pdf}}
@@ -234,7 +234,7 @@ When $\rho_t \leq 4$, RAdam falls back to SGD with momentum: $\theta_{t+1} = \th
 \end{itemize}
 
 
-\paragraph{LaProp.}
+\subsubsection{LaProp}
 LaProp targets an unnecessary coupling in Adam rather than a new
 preconditioner~\citep{ziyin_laprop_2021}. Writing the adaptive family as
 $\theta_{t+1} = \theta_t - \lambda_t G_t \nabla\ell(\theta_t) + \mu_t K_t(\theta_t - \theta_{t-1})$,

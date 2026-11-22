@@ -1,5 +1,5 @@
 \subsection{Large-Batch, Memory-Efficient, and Parameter-Free Optimizers}
-\paragraph{LAMB (Layer-wise Adaptive Moments optimizer for Batch training).}
+\subsubsection{LAMB (Layer-wise Adaptive Moments optimizer for Batch training)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/lamb.pdf}}
@@ -52,7 +52,7 @@ The \textbf{trust ratio} $\phi^L = \|\theta^L\|_2 / \|u_{\text{adam}}^L\|_2$ nor
 \item Preserves small-batch generalization benefits while scaling the batch.
 \end{itemize}
 
-\paragraph{Schedule-Free AdamW.}
+\subsubsection{Schedule-Free AdamW}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/schedulefree.pdf}}
@@ -101,7 +101,7 @@ The averaging coefficient $c_t = 1/(t+1)$ implements an implicit learning-rate s
 \item State-of-the-art convergence across convex optimization, large-scale deep learning, and reinforcement learning.
 \end{itemize}
 
-\paragraph{Adafactor.}
+\subsubsection{Adafactor}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/adafactor.pdf}}
@@ -149,7 +149,7 @@ U_t &= \frac{G_t}{\sqrt{\hat{V}_t}+\epsilon} \quad\text{(normalized adaptive ste
 \item Most attractive when VRAM is dominated by optimizer state rather than activations.
 \end{itemize}
 
-\paragraph{GaLore (Gradient Low-Rank Projection).}
+\subsubsection{GaLore (Gradient Low-Rank Projection)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/galore.pdf}}
@@ -200,7 +200,7 @@ By projecting into a rank-$r$ subspace (typically $r \ll \min(m,n)$), optimizer 
 \item Works synergistically with other techniques and has shown strong results on billion-parameter models.
 \end{itemize}
 
-\paragraph{APOLLO, APOLLO-Mini, and Q-APOLLO.}
+\subsubsection{APOLLO, APOLLO-Mini, and Q-APOLLO}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/apollo.pdf}}
@@ -258,7 +258,7 @@ where $\alpha$ is the extra scale factor used to stabilize highly compressed var
 \item Unusually tolerant to extreme compression: even APOLLO-Mini, which keeps only rank-1 auxiliary state, remains competitive with or better than AdamW while approaching SGD-level memory.
 \end{itemize}
 
-\paragraph{APOLLO-Mini.}
+\subsubsection{APOLLO-Mini}
 APOLLO-Mini is the family member optimized for \textbf{extreme memory efficiency}. The paper motivates it by arguing that, in a rank-1 compact space, channel-wise scaling becomes too noisy, so the update is coarsened further to a single tensor-wise scale. The loss of granularity is partially offset by the explicit scaling factor $\alpha$ (the paper discusses values such as $128$ in this regime), giving a useful point on the optimization Pareto frontier: very small state, no SVD overhead, and still strong pre-training behavior.
 
 \paragraph{Cons.}
@@ -273,7 +273,7 @@ APOLLO-Mini is the family member optimized for \textbf{extreme memory efficiency
 \item Strong pre-training behavior at near-SGD memory cost.
 \end{itemize}
 
-\paragraph{Q-APOLLO.}
+\subsubsection{Q-APOLLO}
 The APOLLO paper also stresses that the family combines naturally with \textbf{quantization} for ultra-low-memory training. This repository turns that systems observation into a concrete optimizer variant, \texttt{q\_apollo}. In the implementation, APOLLO's low-rank first and second moments are stored in quantized form together with per-tensor scales and offsets, and are dequantized only when needed for the next step. Q-APOLLO therefore preserves APOLLO's projected-gradient logic while reducing the precision of the remaining optimizer state.
 
 \paragraph{Cons.}
@@ -288,7 +288,7 @@ The APOLLO paper also stresses that the family combines naturally with \textbf{q
 \item Most aggressive memory-saving member of the local optimizer stack while preserving APOLLO's projected-gradient logic.
 \end{itemize}
 
-\paragraph{AdamPM (Pooled-Moment Adam).}
+\subsubsection{AdamPM (Pooled-Moment Adam)}
 AdamPM~\citep{ji_adampm_2026} is a \textbf{minimal, model-agnostic modification of
 Adam}: it keeps the element-wise first moment untouched and compresses only the
 second moment by \textbf{group-mean pooling of adjacent entries} along each row
@@ -380,7 +380,7 @@ denominator.
       preconditioned updates grow more similar to Adam's as model scale grows.
 \end{itemize}
 
-\paragraph{Anon (Adaptivity Non-restricted Optimizer with Novel convergence technique).}
+\subsubsection{Anon (Adaptivity Non-restricted Optimizer with Novel convergence technique)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/anon.pdf}}
@@ -441,7 +441,7 @@ Unlike standard adaptive optimizers, IDU updates the preconditioner only at powe
 \item IDU provably attains $\mathcal{O}(\sqrt{T})$ regret for convex problems and $\mathcal{O}(\ln T / \sqrt{T})$ for non-convex settings.
 \end{itemize}
 
-\paragraph{Prodigy (Approximating the Distance Estimate).}
+\subsubsection{Prodigy (Approximating the Distance Estimate)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/prodigy.pdf}}

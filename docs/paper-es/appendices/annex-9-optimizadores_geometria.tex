@@ -1,5 +1,5 @@
 \subsection{Optimizadores de Segundo Orden, Geométricos y de Ortogonalidad}
-\paragraph{Shampoo (Precondicionamiento Matricial mediante Productos de Kronecker).}
+\subsubsection{Shampoo (Precondicionamiento Matricial mediante Productos de Kronecker)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/shampoo-es.pdf}}
@@ -51,7 +51,7 @@ Shampoo aproxima el precondicionador de matriz completa de Adagrad $H^{-1/2}$ (d
 \item Demostrado efectivo a escala de producción y adecuado para matrices transformer de alto rango, con mejor condicionamiento y convergencia acelerada.
 \end{itemize}
 
-\paragraph{SOAP (Shampoo with Adam in eigenbasis).}
+\subsubsection{SOAP (Shampoo with Adam in eigenbasis)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/soap-es.pdf}}
@@ -105,7 +105,7 @@ La idea clave: todo el seguimiento de momento ocurre en la base de eigenvectores
 \item A menudo más limpio y estable que Shampoo completo, con eigendescomposiciones amortizadas cada $K$ pasos.
 \end{itemize}
 
-\paragraph{Lion (EvoLved Sign Momentum).}
+\subsubsection{Lion (EvoLved Sign Momentum)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/lion-es.pdf}}
@@ -149,7 +149,7 @@ Todas las operaciones de escalado elemento a elemento se reemplazan con \texttt{
 \item Opción de alto rendimiento y baja memoria para regímenes de lotes grandes donde domina la memoria de activaciones.
 \end{itemize}
 
-\paragraph{Sophia (Second-Order Hessian Information with Optimized Approximation).}
+\subsubsection{Sophia (Second-Order Hessian Information with Optimized Approximation)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/sophia-es.pdf}}
@@ -199,7 +199,7 @@ donde $\hat{h}_t$ es una estimación diagonal (e.g., estimador de traza de Hutch
 \item Los pasos recortados evitan explosiones y funcionan particularmente bien en el ajuste fino de segunda pasada.
 \end{itemize}
 
-\paragraph{Muon (Ortogonalización de Newton-Schulz).}
+\subsubsection{Muon (Ortogonalización de Newton-Schulz)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/muon-es.pdf}}
@@ -254,7 +254,7 @@ Siguiendo la receta híbrida de \citet{shen_convergence_2025}, la actualización
 \item Resultados prometedores en entrenamiento a gran escala con una geometría de actualización fundamentalmente mejor condicionada.
 \end{itemize}
 
-\paragraph{Turbo-Muon (Ortogonalización Precondicionada con AOL).}
+\subsubsection{Turbo-Muon (Ortogonalización Precondicionada con AOL)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/turbo-muon-es.pdf}}
@@ -302,7 +302,7 @@ Turbo-Muon añade un paso de \textbf{precondicionamiento casi-ortogonal} (AOL) a
 \item Conserva la geometría de actualización ortogonalizada con menor costo de iteraciones.
 \end{itemize}
 
-\paragraph{AF-Muon (Muon sin AdamW para Vocabulario Atado).}
+\subsubsection{AF-Muon (Muon sin AdamW para Vocabulario Atado)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/af-muon-es.pdf}}
@@ -361,7 +361,7 @@ donde la escala por fila $\tau_i$ se obtiene por bisección en FP32 sobre fragme
 \item Mejora la pérdida de validación y la perplejidad medias frente a Hybrid Muon y a un extremo Sign estilo SCION en nueve configuraciones de vocabulario atado que abarcan texto, tokens de imagen, proteínas, MoE y modelos encoder-decoder.
 \end{itemize}
 
-\paragraph{AdaMuon (Muon Adaptativo).}
+\subsubsection{AdaMuon (Muon Adaptativo)}
 AdaMuon es una \textbf{extensión adaptativa de Muon} que conserva la actualización espectral (polar) y añade normalización de varianza por coordenada. Muon ortogonaliza la matriz de momentum en una actualización puramente direccional, lo que elimina el escalado anisotrópico pero asigna la misma magnitud a todas las coordenadas; AdaMuon aborda el desajuste resultante entre coordenadas ruidosas e informativas siguiendo la varianza por elemento de la dirección \emph{ortogonalizada}, en lugar de la del gradiente crudo o la del momentum. Como el factor polar es globalmente invariante a escala, la transformación de signo aplicada antes de la ortogonalización preserva la dirección de la actualización mientras estabiliza sus magnitudes por elemento; el artículo demuestra que $\operatorname{sign}$ es la única aplicación elemental que es libre de escala, consistente con el signo, impar y acotada (Teorema~1). La estimación de segundo momento ve así una señal estable, y su versión normalizada por varianza se reescala a un RMS de $0.2$, igualando la escala empírica de actualización de Adam para reutilizar sin ajuste los schedules de tasa de aprendizaje existentes.
 
 Para un peso $W_t \in \mathbb{R}^{n \times m}$, búfer de momentum $M_t$, momentum $\beta$, pasos de Newton--Schulz $T$ y constante pequeña $\varepsilon$:
@@ -409,7 +409,7 @@ El mapa de Newton--Schulz usa $X_0 = \operatorname{sign}(M_t)/\|\operatorname{si
 \item La alineación RMS iguala la escala de actualización de Adam, lo que permite reutilizar directamente los schedules de tasa de aprendizaje; los autores reportan hasta aproximadamente un 40\% de ganancia en eficiencia de entrenamiento frente a AdamW y mejoras consistentes frente a Muon en GPT-2 (125M--1.5B) y Qwen2.5 (1.5B, 7B).
 \end{itemize}
 
-\paragraph{Dion3 (Ortogonalización Fraccional con Gram-Newton-Schulz).}
+\subsubsection{Dion3 (Ortogonalización Fraccional con Gram-Newton-Schulz)}
 Dion3~\citep{amsel_dion3_2026} es una \textbf{revisión de Muon} que reduce el costo del paso de ortogonalización a nivel algorítmico. Reemplaza Newton--Schulz estándar por \emph{Gram Newton--Schulz}, una iteración matemáticamente equivalente que opera sobre la pequeña matriz de Gram simétrica $XX^{\mathsf T}$, y ortogonaliza solo una fracción $f \in (0,1]$ de las filas del momentum en cada paso, actualizando únicamente esas filas de la matriz de pesos. El \emph{error feedback} decae solo las filas seleccionadas del búfer de momentum, de modo que las filas no seleccionadas siguen acumulándose y terminan siendo elegidas. Con $f = 1$ la actualización se reduce a Muon en aritmética exacta (o a NorMuon con la normalización por filas opcional). Para un peso $W \in \mathbb{R}^{n \times m}$ (operando sobre la dimensión menor, $n \le m$), fracción $f$, $k = \lceil f n \rceil$, momentum $\mu$, tasa de aprendizaje $\eta$ y weight decay $\lambda$:
 \begin{align}
 M_t &= M_{t-1} + G_t \quad\text{(acumulación de momentum; amortiguamiento diferido)} \\
@@ -463,7 +463,7 @@ y devuelve $Q_T X$. Un \emph{reinicio} tras la iteración~2 ($X \gets Q_2 X$, $R
 \item Con $f = 1$ la actualización se reduce a Muon (o NorMuon), y basta un único búfer de momentum por parámetro matricial; el error feedback permite que las filas ignoradas participen eventualmente.
 \end{itemize}
 
-\paragraph{ROOT (Optimizador Ortogonalizado Robusto).}
+\subsubsection{ROOT (Optimizador Ortogonalizado Robusto)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/root-es.pdf}}
@@ -544,7 +544,7 @@ Siguiendo la receta híbrida de Muon, solo las matrices 2-D de capas ocultas tom
 \item El mismo único búfer de momentum por parámetro matricial que Muon, y los interruptores \texttt{softthresh}/\texttt{ada\_newton} exponen directamente las ablaciones del artículo.
 \end{itemize}
 
-\paragraph{Muon² (Ortogonalización con Precondicionamiento de Segundo Momento).}
+\subsubsection{Muon² (Ortogonalización con Precondicionamiento de Segundo Momento)}
 Muon$^2$~\citep{liu_muon2_2026} generaliza Muon al precondicionar el momentum con un
 \textbf{EMA de segundo momento estilo Adam antes de la ortogonalización de
 Newton--Schulz}. El artículo muestra que el cuello de botella práctico de la aproximación
@@ -634,7 +634,7 @@ con la misma pérdida.
 $\sim$0.3\% de Muon conservando la mayor parte del beneficio.
 \end{itemize}
 
-\paragraph{NorMuon (Muon Normalizado por Neurona).}
+\subsubsection{NorMuon (Muon Normalizado por Neurona)}
 NorMuon~\citep{li_normuon_2025} conserva la actualización ortogonalizada de Muon y añade
 sobre ella una \textbf{tasa de aprendizaje adaptativa por neurona (por fila)}. La
 iteración Newton--Schulz de Muon iguala los valores singulares de la actualización, pero
@@ -727,7 +727,7 @@ mitad del estado del optimizador de Adam, y el sobrecosto por paso es de unos po
 ciento.
 \end{itemize}
 
-\paragraph{Conda (Adam Normalizado por Columnas).}
+\subsubsection{Conda (Adam Normalizado por Columnas)}
 Conda~\citep{wang_conda_2025} conserva la adaptividad por coordenada de Adam y añade una
 \textbf{normalización espectral más suave y específica por columna}. Los autores
 reformulan primero Muon como un método de primer/segundo momento cuyo segundo momento es
@@ -830,7 +830,7 @@ no hay exclusión de embeddings/pos/heads como en Muon --- mientras que todo par
   perezosa hace que el refresco del subespacio sea casi gratuito en tiempo de reloj.
 \end{itemize}
 
-\paragraph{TUON (Optimización Consciente de Tensores vía T-SVD y Polarización).}
+\subsubsection{TUON (Optimización Consciente de Tensores vía T-SVD y Polarización)}
 TUON~\citep{tang_tuon_2026} eleva la ortogonalización por capa de Muon a
 \textbf{tensores entre capas} mediante un álgebra tensorial basada en transformaciones,
 derivada del Tensor-SVD. Los mapas polares por capa descartan las correlaciones entre
@@ -950,7 +950,7 @@ $\mathcal{O}(Kmn\min(m,n) + K^2 mn)$, el mismo término dominante que Muon.
   donde los optimizadores tensoriales previos no se transfieren.
 \end{itemize}
 
-\paragraph{NAMO (Estimación Adaptativa de Momentos Basada en Normas con Momentum Ortogonalizado).}
+\subsubsection{NAMO (Estimación Adaptativa de Momentos Basada en Normas con Momentum Ortogonalizado)}
 NAMO~\citep{zhang_namo_2026} conserva la dirección de actualización ortogonalizada de
 Muon y le añade una \textbf{adaptación al ruido tipo Adam basada en normas}. La
 ortogonalización de matrices es una operación no acotada que puede amplificar el ruido
@@ -1040,7 +1040,7 @@ define ninguno de ellos, así que este módulo sigue el artículo.
   AdamW y Muon en GPT-2 (124M/355M) en un rango estable de tasas más amplio.
 \end{itemize}
 
-\paragraph{NAMO-D (Extensión Diagonal de NAMO).}
+\subsubsection{NAMO-D (Extensión Diagonal de NAMO)}
 NAMO-D~\citep{zhang_namo_2026} sustituye el único escalar adaptativo de NAMO por una
 matriz diagonal que multiplica por la derecha el momentum ortogonalizado, de modo que
 cada neurona recibe su propio paso adaptativo. El escalado por columna se alinea con la

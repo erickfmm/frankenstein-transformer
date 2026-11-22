@@ -1,5 +1,5 @@
 \subsection{Second-Order, Geometric, and Orthogonality Optimizers}
-\paragraph{Shampoo (Matrix Preconditioning via Kronecker Products).}
+\subsubsection{Shampoo (Matrix Preconditioning via Kronecker Products)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/shampoo.pdf}}
@@ -51,7 +51,7 @@ Shampoo approximates the full-matrix Adagrad preconditioner $H^{-1/2}$ (where $H
 \item Proven effective at production scale and well suited to high-rank transformer matrices, with improved conditioning and accelerated convergence.
 \end{itemize}
 
-\paragraph{SOAP (Shampoo with Adam in eigenbasis).}
+\subsubsection{SOAP (Shampoo with Adam in eigenbasis)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/soap.pdf}}
@@ -105,7 +105,7 @@ The key insight: all momentum tracking occurs in the well-conditioned eigenbasis
 \item Often cleaner and more stable than full Shampoo, with eigendecompositions amortized every $K$ steps.
 \end{itemize}
 
-\paragraph{Lion (EvoLved Sign Momentum).}
+\subsubsection{Lion (EvoLved Sign Momentum)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/lion.pdf}}
@@ -149,7 +149,7 @@ All element-wise scaling operations are replaced with \texttt{sign()}, which out
 \item High-throughput, low-memory option for large-batch regimes where activation memory dominates.
 \end{itemize}
 
-\paragraph{Sophia (Second-Order Hessian Information with Optimized Approximation).}
+\subsubsection{Sophia (Second-Order Hessian Information with Optimized Approximation)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/sophia.pdf}}
@@ -199,7 +199,7 @@ where $\hat{h}_t$ is a diagonal estimate (e.g., Hutchinson-trace estimator) and 
 \item Clipped steps prevent explosions and work particularly well in second-pass fine-tuning.
 \end{itemize}
 
-\paragraph{Muon (Newton-Schulz Orthogonalization).}
+\subsubsection{Muon (Newton-Schulz Orthogonalization)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/muon.pdf}}
@@ -254,7 +254,7 @@ Following the hybrid recipe of \citet{shen_convergence_2025}, the orthogonalized
 \item Promising results on large-scale training with fundamentally better-conditioned update geometry.
 \end{itemize}
 
-\paragraph{Turbo-Muon (AOL-Preconditioned Orthogonalization).}
+\subsubsection{Turbo-Muon (AOL-Preconditioned Orthogonalization)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/turbo-muon.pdf}}
@@ -302,7 +302,7 @@ Turbo-Muon adds an \textbf{almost-orthogonal preconditioning} (AOL) step before 
 \item Retains orthogonalized update geometry at lower iteration cost.
 \end{itemize}
 
-\paragraph{AF-Muon (AdamW-Free Tied-Embedding Muon).}
+\subsubsection{AF-Muon (AdamW-Free Tied-Embedding Muon)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/af-muon.pdf}}
@@ -361,7 +361,7 @@ where the per-row scale $\tau_i$ is obtained by bisection in FP32 over complete-
 \item Improves mean validation loss and perplexity over both Hybrid Muon and a SCION-style Sign endpoint across nine tied-token settings spanning text, image-token, protein, MoE, and encoder-decoder models.
 \end{itemize}
 
-\paragraph{AdaMuon (Adaptive Muon).}
+\subsubsection{AdaMuon (Adaptive Muon)}
 AdaMuon is an \textbf{adaptive extension of Muon} that keeps the spectral (polar) update while adding coordinate-wise variance normalization. Muon orthogonalizes the momentum matrix into a direction-only update, which removes anisotropic scaling but assigns the same magnitude to every coordinate; AdaMuon addresses the resulting mismatch between noisy and informative coordinates by tracking the element-wise variance of the \emph{orthogonalized} direction rather than of the raw gradient or of the momentum. Because the polar factor is globally scale-invariant, the sign transform applied before orthogonalization preserves the update direction while stabilizing its element-wise magnitudes; the paper proves that $\operatorname{sign}$ is the unique element-wise map that is scale-free, sign-consistent, odd and bounded (Theorem~1). The second-moment estimate therefore sees a stable signal, and its variance-normalized version is rescaled to an RMS of $0.2$, matching Adam's empirical update scale so that existing learning-rate schedules are reused without tuning.
 
 For a weight $W_t \in \mathbb{R}^{n \times m}$, momentum buffer $M_t$, momentum $\beta$, Newton--Schulz steps $T$ and small constant $\varepsilon$:
@@ -409,7 +409,7 @@ The Newton--Schulz map uses $X_0 = \operatorname{sign}(M_t)/\|\operatorname{sign
 \item RMS alignment matches Adam's update scale, allowing direct reuse of learning-rate schedules; the authors report up to roughly 40\% training-efficiency gains over AdamW and consistent wins over Muon on GPT-2 (125M--1.5B) and Qwen2.5 (1.5B, 7B).
 \end{itemize}
 
-\paragraph{Dion3 (Fractional Gram-Newton-Schulz Orthogonalization).}
+\subsubsection{Dion3 (Fractional Gram-Newton-Schulz Orthogonalization)}
 Dion3~\citep{amsel_dion3_2026} is a \textbf{revision of Muon} that reduces the cost of the orthogonalization step at the algorithmic level. It replaces standard Newton--Schulz with \emph{Gram Newton--Schulz}, a mathematically equivalent iteration that runs on the small symmetric Gram matrix $XX^{\mathsf T}$, and it orthogonalizes only a fraction $f \in (0,1]$ of the momentum rows at each step, updating only those rows of the weight matrix. \emph{Error feedback} decays only the selected rows of the momentum buffer, so rows that were not selected keep accumulating and are eventually chosen. At $f = 1$ the update reduces to Muon in exact arithmetic (or to NorMuon with the optional row-wise normalization). For a weight $W \in \mathbb{R}^{n \times m}$ (operating on the smaller dimension, $n \le m$), fraction $f$, $k = \lceil f n \rceil$, momentum $\mu$, learning rate $\eta$ and weight decay $\lambda$:
 \begin{align}
 M_t &= M_{t-1} + G_t \quad\text{(momentum accumulation; damping deferred)} \\
@@ -463,7 +463,7 @@ returning $Q_T X$. A \emph{restart} after iteration~2 ($X \gets Q_2 X$, $R_2 \ge
 \item At $f = 1$ the update reduces to Muon (or NorMuon), and a single momentum buffer per matrix parameter suffices; error feedback lets ignored rows participate eventually.
 \end{itemize}
 
-\paragraph{ROOT (Robust Orthogonalized Optimizer).}
+\subsubsection{ROOT (Robust Orthogonalized Optimizer)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/root.pdf}}
@@ -544,7 +544,7 @@ Following the hybrid recipe of Muon, only hidden-layer 2-D matrices take the ROO
 \item Same single momentum buffer per matrix parameter as Muon, and the \texttt{softthresh}/\texttt{ada\_newton} toggles expose the paper's ablations directly.
 \end{itemize}
 
-\paragraph{Muon² (Second-Moment Preconditioned Orthogonalization).}
+\subsubsection{Muon² (Second-Moment Preconditioned Orthogonalization)}
 Muon$^2$~\citep{liu_muon2_2026} generalizes Muon by preconditioning the momentum with an
 \textbf{Adam-style second-moment EMA before the Newton--Schulz orthogonalization}. The
 paper shows that the practical bottleneck of Muon's polar approximation is the
@@ -628,7 +628,7 @@ to 13B parameters, with up to a quarter of training time saved at matched loss.
 $\sim$0.3\% of Muon while preserving most of the benefit.
 \end{itemize}
 
-\paragraph{NorMuon (Neuron-wise Normalized Muon).}
+\subsubsection{NorMuon (Neuron-wise Normalized Muon)}
 NorMuon~\citep{li_normuon_2025} keeps Muon's orthogonalized update and adds a
 \textbf{neuron-wise (row-wise) adaptive learning rate} on top of it. Muon's
 Newton--Schulz iteration equalizes the singular values of the update, but the $L_2$ norm
@@ -715,7 +715,7 @@ so Adam learning-rate schedules apply without retuning.
 optimizer state, and the per-step overhead is a few percent.
 \end{itemize}
 
-\paragraph{Conda (Column-Normalized Adam).}
+\subsubsection{Conda (Column-Normalized Adam)}
 Conda~\citep{wang_conda_2025} keeps Adam's coordinate-wise adaptivity and adds a
 \textbf{milder, column-specific spectral normalization}. The authors first reformulate
 Muon as a first/second-moment method whose second moment is the row-constant matrix
@@ -812,7 +812,7 @@ while every non-2-D parameter is trained with decoupled AdamW.
   subspace refresh nearly free in wall-clock terms.
 \end{itemize}
 
-\paragraph{TUON (Tensor-Aware Optimization via T-SVD and Polarization).}
+\subsubsection{TUON (Tensor-Aware Optimization via T-SVD and Polarization)}
 TUON~\citep{tang_tuon_2026} lifts Muon's layer-wise orthogonalization to
 \textbf{cross-layer tensors} using a transform-based tensor algebra derived from the
 Tensor-SVD. Layer-wise polar maps discard cross-layer correlations, while
@@ -925,7 +925,7 @@ complexity is $\mathcal{O}(Kmn\min(m,n) + K^2 mn)$, the same dominant term as Mu
   tensor-aware optimizers fail to transfer.
 \end{itemize}
 
-\paragraph{NAMO (Norm-Based Adaptive Moment Estimation with Orthogonalized Momentum).}
+\subsubsection{NAMO (Norm-Based Adaptive Moment Estimation with Orthogonalized Momentum)}
 NAMO~\citep{zhang_namo_2026} keeps Muon's orthogonalized update direction and adds an
 Adam-type \textbf{norm-based noise adaptation} on top of it. Matrix orthogonalization is
 an unbounded operation that can amplify stochastic noise, so Muon's effective stepsize
@@ -1012,7 +1012,7 @@ paper defines none of these, so this module follows the paper.
   AdamW and Muon on GPT-2 (124M/355M) over a wider stable learning-rate range.
 \end{itemize}
 
-\paragraph{NAMO-D (Diagonal Extension of NAMO).}
+\subsubsection{NAMO-D (Diagonal Extension of NAMO)}
 NAMO-D~\citep{zhang_namo_2026} replaces NAMO's single adaptive scalar with a diagonal
 matrix that right-multiplies the orthogonalized momentum, so every neuron receives its
 own adaptive stepsize. Column-wise scaling aligns with the near block-diagonal Hessian

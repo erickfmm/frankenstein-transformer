@@ -1,5 +1,5 @@
 \subsection{Advanced Momentum and Variance Reduction (2024--2025)}
-\paragraph{Adan (Adaptive Nesterov Momentum).}
+\subsubsection{Adan (Adaptive Nesterov Momentum)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/adan.pdf}}
@@ -49,7 +49,7 @@ The \textbf{Nesterov Momentum Estimation} (NME) term $\bar{g}_t = g_t + (1-\beta
 \item Fast convergence across diverse architectures (CNNs, GANs, transformers).
 \end{itemize}
 
-\paragraph{ADOPT (Adam with Optimal Pruned Tuning).}
+\subsubsection{ADOPT (Adam with Optimal Pruned Tuning)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/adopt.pdf}}
@@ -96,7 +96,7 @@ m_t &= \beta_1 m_{t-1} + (1-\beta_1)\frac{g_t}{\sqrt{v_{t-1}}+\epsilon} \quad\te
 \item Drop-in Adam replacement with comparable or superior empirical performance across vision, NLP, RL, and generative modeling.
 \end{itemize}
 
-\paragraph{AdEMAMix (Exponential Moving Average Mixture).}
+\subsubsection{AdEMAMix (Exponential Moving Average Mixture)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/ademamix.pdf}}
@@ -148,7 +148,7 @@ The mixture weight $\alpha_t$ typically increases during training, allowing the 
 \item A 1.3B model on 101B tokens matches AdamW on 197B tokens (95\% data-efficiency gain), suggesting reduced forgetting.
 \end{itemize}
 
-\paragraph{MARS (Make Adaptive learning Rates Shine).}
+\subsubsection{MARS (Make Adaptive learning Rates Shine)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/mars.pdf}}
@@ -199,7 +199,7 @@ where $\gamma \in [0.01, 0.1]$ controls how much historical gradient information
 \item MARS-AdamW consistently outperforms bare AdamW by significant margins on GPT-2 pretraining.
 \end{itemize}
 
-\paragraph{Cautious Optimizers (Cautious AdamW, Cautious Lion).}
+\subsubsection{Cautious Optimizers (Cautious AdamW, Cautious Lion)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{figures/optimizers/cautious.pdf}}

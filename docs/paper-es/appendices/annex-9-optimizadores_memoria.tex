@@ -1,5 +1,5 @@
 \subsection{Optimizadores de Lote Grande, Eficientes en Memoria y Sin Tasa de Aprendizaje}
-\paragraph{LAMB (Layer-wise Adaptive Moments optimizer for Batch training).}
+\subsubsection{LAMB (Layer-wise Adaptive Moments optimizer for Batch training)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/lamb-es.pdf}}
@@ -52,7 +52,7 @@ La \textbf{razón de confianza} $\phi^L = \|\theta^L\|_2 / \|u_{\text{adam}}^L\|
 \item Preserva los beneficios de generalización de lotes pequeños mientras escala el lote.
 \end{itemize}
 
-\paragraph{Schedule-Free AdamW.}
+\subsubsection{Schedule-Free AdamW}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/schedulefree-es.pdf}}
@@ -101,7 +101,7 @@ El coeficiente de promediado $c_t = 1/(t+1)$ implementa una programación de tas
 \item Convergencia de última generación en optimización convexa, aprendizaje profundo a gran escala y aprendizaje por refuerzo.
 \end{itemize}
 
-\paragraph{Adafactor.}
+\subsubsection{Adafactor}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/adafactor-es.pdf}}
@@ -149,7 +149,7 @@ U_t &= \frac{G_t}{\sqrt{\hat{V}_t}+\epsilon} \quad\text{(paso adaptativo normali
 \item Más atractivo cuando la VRAM está dominada por el estado del optimizador en lugar de las activaciones.
 \end{itemize}
 
-\paragraph{GaLore (Gradient Low-Rank Projection).}
+\subsubsection{GaLore (Gradient Low-Rank Projection)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/galore-es.pdf}}
@@ -200,7 +200,7 @@ Al proyectar en un subespacio de rango $r$ (típicamente $r \ll \min(m,n)$), el 
 \item Funciona sinérgicamente con otras técnicas y ha mostrado resultados sólidos en modelos de miles de millones de parámetros.
 \end{itemize}
 
-\paragraph{APOLLO, APOLLO-Mini, y Q-APOLLO.}
+\subsubsection{APOLLO, APOLLO-Mini, y Q-APOLLO}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/apollo-es.pdf}}
@@ -258,7 +258,7 @@ donde $\alpha$ es el factor de escala adicional usado para estabilizar variantes
 \item Inusualmente tolerante a la compresión extrema: incluso APOLLO-Mini, que solo mantiene estado auxiliar de rango 1, sigue siendo competitivo o mejor que AdamW mientras se acerca al costo de memoria de SGD.
 \end{itemize}
 
-\paragraph{APOLLO-Mini.}
+\subsubsection{APOLLO-Mini}
 APOLLO-Mini es el miembro de la familia optimizado para \textbf{eficiencia de memoria extrema}. El artículo lo motiva argumentando que, en un espacio compacto de rango 1, el escalado por canales se vuelve demasiado ruidoso, por lo que la actualización se simplifica aún más a un único escalar por tensor. La pérdida de granularidad se compensa parcialmente con el factor de escala explícito $\alpha$ (el artículo discute valores como $128$ en este régimen), proporcionando un punto útil en la frontera de Pareto de optimización: estado muy pequeño, sin sobrecarga de SVD, y aún un comportamiento sólido en preentrenamiento.
 
 \paragraph{Contras.}
@@ -273,7 +273,7 @@ APOLLO-Mini es el miembro de la familia optimizado para \textbf{eficiencia de me
 \item Comportamiento sólido en preentrenamiento con un costo de memoria cercano a SGD.
 \end{itemize}
 
-\paragraph{Q-APOLLO.}
+\subsubsection{Q-APOLLO}
 El artículo de APOLLO también enfatiza que la familia se combina naturalmente con \textbf{cuantización} para entrenamiento con memoria ultra-baja. Este repositorio convierte esa observación de sistemas en una variante concreta del optimizador, \texttt{q\_apollo}. En la implementación, los momentos de primer y segundo orden de bajo rango de APOLLO se almacenan en forma cuantizada junto con escalas y desplazamientos por tensor, y se descuantizan solo cuando es necesario para el siguiente paso. Q-APOLLO preserva, por tanto, la lógica de gradiente proyectado de APOLLO mientras reduce la precisión del estado restante del optimizador.
 
 \paragraph{Contras.}
@@ -288,7 +288,7 @@ El artículo de APOLLO también enfatiza que la familia se combina naturalmente 
 \item Miembro más agresivo en ahorro de memoria de la pila local, preservando la lógica de gradiente proyectado de APOLLO.
 \end{itemize}
 
-\paragraph{AdamPM (Adam con momentos agrupados).}
+\subsubsection{AdamPM (Adam con momentos agrupados)}
 AdamPM~\citep{ji_adampm_2026} es una \textbf{modificación mínima y agnóstica al
 modelo de Adam}: conserva el primer momento por elemento y comprime únicamente
 el segundo momento mediante el \textbf{promedio por grupo de entradas
@@ -388,7 +388,7 @@ correcciones de sesgo y el denominador.
       Adam a medida que crece la escala del modelo.
 \end{itemize}
 
-\paragraph{Anon (Adaptivity Non-restricted Optimizer with Novel convergence technique).}
+\subsubsection{Anon (Adaptivity Non-restricted Optimizer with Novel convergence technique)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/anon-es.pdf}}
@@ -449,7 +449,7 @@ A diferencia de los optimizadores adaptativos estándar, IDU actualiza el precon
 \item IDU alcanza demostrablemente regret $\mathcal{O}(\sqrt{T})$ para problemas convexos y $\mathcal{O}(\ln T/\sqrt{T})$ para entornos no convexos.
 \end{itemize}
 
-\paragraph{Prodigy (Approximating the Distance Estimate).}
+\subsubsection{Prodigy (Approximating the Distance Estimate)}
 \begin{figure}[H]
 \centering
 \fitfigure{\includegraphics{../paper/figures/optimizers/prodigy-es.pdf}}
